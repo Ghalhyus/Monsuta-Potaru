@@ -19,19 +19,21 @@ public sealed class ParkServiceTests : IDisposable
     public ParkServiceTests()
     {
         PokemonSprites.Load(RealSavesTests.WebRootWithImages()); // sprites Donjon Mystère : qui peut aller au parc
+        ParkHabitats.Load(RealSavesTests.WebRoot()); // types de cases des cartes : humeur des Pokémon
         _park = new ParkService(_db.Factory, NullLogger<ParkService>.Instance);
         _inventory = _db.Inventory();
     }
 
     public void Dispose() => _db.Dispose();
 
-    private int Add(ushort species, string owner = "sacha", bool egg = false, bool shiny = false)
+    private int Add(ushort species, string owner = "sacha", bool egg = false, bool shiny = false, MoveType type = MoveType.Normal)
     {
         using var db = _db.NewContext();
         var entry = new BankPokemon
         {
             OwnerId = owner, Species = species, SpeciesName = $"Espèce {species}", Nickname = $"N{species}", Level = 10,
             IsEgg = egg, IsShiny = shiny, Nature = 0, DepositedAt = DateTime.UtcNow, Data = [1],
+            Type1 = (byte)type, Type2 = (byte)type,
         };
         db.BankPokemon.Add(entry);
         db.SaveChanges();
@@ -51,6 +53,19 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Null(await _park.GetMemberAsync("sacha", mew)); // numéro envoyé par un navigateur modifié
         Assert.Null(await _park.GetMemberAsync("sacha", misty)); // dans un autre parc
         Assert.Null(await _park.GetMemberAsync("ondine", pikachu));
+    }
+
+    [Fact]
+    public async Task List_GivesEachPokemonsMood_InTheParkOfItsSize()
+    {
+        var eevee = Add(133); // Normal : aime la végétation (69 à 80 % des cartes actuelles)
+        var roggenrola = Add(524, type: MoveType.Rock); // Roche : ne l'aime pas
+        var snorunt = Add(361, type: MoveType.Ice); // Glace : seul le volcan lui déplaît
+        Assert.True((await _park.SetAsync("sacha", [eevee, roggenrola, snorunt])).Ok);
+        var moods = (await _park.ListAsync("sacha")).ToDictionary(p => p.Id, p => p.Mood);
+        Assert.Equal("happy", moods[eevee]);
+        Assert.Equal("sad", moods[roggenrola]);
+        Assert.Equal("normal", moods[snorunt]);
     }
 
     private async Task SetWallet(string owner, long money)

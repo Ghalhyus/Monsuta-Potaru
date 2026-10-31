@@ -105,6 +105,11 @@ else
                     {
                         <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RemoveSelected" disabled="@busy">Retirer du parc</button>
                     }
+                    @if (debug && !Visitor)
+                    {
+                        @* Mode debug : il attaque le Pokémon le plus proche, quel que soit son bonheur (parc.js) *@
+                        <button type="button" class="btn btn-outline-warning btn-sm" @onclick="AttackSelected">Attaquer (debug)</button>
+                    }
                     <button type="button" class="btn btn-secondary btn-sm ms-auto" @onclick="CloseDetail">Fermer</button>
                 </div>
                 </ChildContent>
@@ -406,6 +411,17 @@ else
         selectedPortrait = PokemonSprites.DonjonPortraitUrl(entry, selectedMood.Portrait);
         StateHasChanged();
     });
+
+    /// <summary>Mode debug : la fiche se ferme et le Pokémon attaque le plus proche (dans le navigateur seulement).</summary>
+    private async Task AttackSelected()
+    {
+        if (!debug || Visitor || selected is null || engine is null)
+            return;
+        var id = selected.Id;
+        CloseDetail();
+        if (!await engine.InvokeAsync<bool>("attack", id))
+            Show("Aucun autre Pokémon à attaquer.", true);
+    }
 
     private void CloseDetail()
     {

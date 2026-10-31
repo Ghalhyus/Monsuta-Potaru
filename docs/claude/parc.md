@@ -148,6 +148,22 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   attend aussi une image (`tick`).
 
 ## Animation et comportement (`parc.js`)
+- **Malheureux** (demande du 2026-10-31) : humeur dans `ParkPokemon.Mood` (« happy », « normal », « sad »,
+  `ParkService.ListAsync` d'après la carte de sa taille), mise à jour des Pokémon gardés par `setPokemon`. Réglages `SAD`
+  (attaque toutes les 45 à 90 s, nouvel essai après 5 à 10 s sans cible à portée `reach` = 8 cases, boude toutes les 30
+  à 50 s : fréquence « modérée » choisie par l'utilisateur), `STRIKE_RANGE`, `FLEE`. Cibles (`preyOf`) : éveillées **ou
+  endormies** (choix de l'utilisateur), pas sa famille, ni portées, ni déjà frappées ou en fuite. `charge` → marche
+  (intent « attack », ×1,3) → `strike` (suit la proie 3 fois au plus si elle a bougé) → `play("attack")` et
+  `prey.hit` (a mal au milieu de l'attaque) → `hurt` → `play("hurt", flee)` → intent « flee » (×2, sans pause en
+  chemin). États joués une fois : `ONCE` (`play`, dernière image gardée, `then` ensuite). Soulever un Pokémon annule
+  `prey`, `hit` et `then`. Debug : `attack(id)` (le plus proche, famille comprise, quel que soit le bonheur), bouton
+  de la fiche dans `Park.razor`. Planches Attack / Hurt absentes : Idle (`OPTIONAL`).
+- **Cache du navigateur** (2026-10-31, « les animations ne se jouent pas ») : `/images` n'avait aucun `Cache-Control`,
+  le navigateur gardait l'ancien `AnimData.xml` (sans Attack ni Hurt) des Pokémon déjà vus, et jouait Idle. Depuis :
+  `loadSheets` demande `AnimData.xml?animations=<ANIMATIONS>` (nouvelle adresse dès que la liste change) et `Program.cs`
+  met `no-cache` sur les `.xml` et `.json` de `/images` (middleware : en développement, c'est `MapStaticAssets` qui sert
+  ces fichiers, `OnPrepareResponse` de `UseStaticFiles` n'est pas appelé). Une animation ajoutée : vérifier dans les
+  requêtes réseau que ses planches sont demandées pour un Pokémon **déjà vu** avant.
 - Unités : pixels de la carte (16 par tuile). Réglages en tête du fichier (`ENERGY`, `WALK_SPEED`...) et dans `decide` /
   `update` ; distances divisées par 1,5 lors du passage à la carte (anciennes unités : 1,5 par pixel).
 - `Ground` : cases libres, `nearestFree`, `path` (A* 8 directions sans couper les coins, lissé en lignes droites,

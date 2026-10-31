@@ -46,9 +46,16 @@ const LONG_PRESS = 300; // ms d'appui sans bouger, au doigt, pour soulever un Po
 const LIFT = 8; // hauteur (pixels de la carte) d'un Pokémon soulevé au-dessus de son ombre
 const HELD_DEPTH = 3.5; // un Pokémon soulevé passe devant tout (feuillages, brouillard), sous la nuit (4)
 const EDGE_SCROLL = { margin: 48, speed: 420 }; // en le portant près du bord (pixels CSS) : la vue défile (pixels CSS / s)
-const ANIMATIONS = ["Idle", "Walk", "Sleep", "Charge"];
-const OPTIONAL = new Set(["Charge"]); // planche absente (images d'avant, sprite incomplet) : Idle à la place
-const ANIMATION_OF = { idle: "Idle", walk: "Walk", sleep: "Sleep", held: "Charge" }; // selon l'état du Pokémon
+const ANIMATIONS = ["Idle", "Walk", "Sleep", "Charge", "Attack", "Hurt"];
+const OPTIONAL = new Set(["Charge", "Attack", "Hurt"]); // planche absente (images d'avant, sprite incomplet) : Idle à la place
+// Selon l'état du Pokémon ; « attack » et « hurt » sont joués une fois (play)
+const ANIMATION_OF = { idle: "Idle", walk: "Walk", sleep: "Sleep", held: "Charge", attack: "Attack", hurt: "Hurt" };
+const ONCE = new Set(["attack", "hurt"]);
+// Pokémon malheureux (habitats du parc : Services/ParkHabitats.cs) : de temps en temps, il attaque un Pokémon proche
+// (secondes entre deux attaques ; sans cible à portée, il réessaie un peu plus tard) et boude (Hurt joué seul, immobile)
+const SAD = { attackEvery: [45, 90], retry: [5, 10], reach: 128, sulkEvery: [30, 50] };
+const STRIKE_RANGE = 26; // distance (pixels de la carte) d'où il frappe
+const FLEE = { speed: 2, distance: [96, 160] }; // le Pokémon frappé s'enfuit plus vite, à 6 à 10 cases de l'attaquant
 // Énergie (par seconde) : 3 à 5 minutes d'activité le jour avant une sieste d'environ une minute ; la nuit, ils
 // s'endorment plus tôt et récupèrent lentement (longues nuits).
 const ENERGY = { walk: 0.004, idle: 0.0012, sleepDay: 0.012, sleepNight: 0.004 };
@@ -68,7 +75,9 @@ const sheets = new Map();
 function loadSheets(folder) {
     if (!sheets.has(folder)) {
         sheets.set(folder, (async () => {
-            const response = await fetch(folder + "AnimData.xml");
+            // La liste des animations dans l'adresse : une copie gardée par le navigateur d'avant l'ajout d'une animation
+            // (sans elle) ne sert plus
+            const response = await fetch(`${folder}AnimData.xml?animations=${ANIMATIONS.join(",")}`);
             if (!response.ok) throw new Error(`Sprites absents : ${folder}`);
             const xml = new DOMParser().parseFromString(await response.text(), "text/xml");
             const defs = new Map([...xml.querySelectorAll("Anim")].map(a => [a.querySelector("Name").textContent, a]));
@@ -80,6 +89,8 @@ function loadSheets(folder) {
             result.Walk ??= result.Idle;
             result.Sleep ??= result.Idle;
             result.Charge ??= result.Idle; // soulevé
+            result.Attack ??= result.Idle;
+            result.Hurt ??= result.Idle;
             return result;
         })());
     }
@@ -329,6 +340,12 @@ class Pokemon {
         this.zzz = 0;
         this.vx = 0; // vitesse actuelle : accélère, tourne et freine progressivement
         this.vy = 0;
+        this.mood = info.mood ?? "normal"; // « sad » : attaque les autres et boude de temps en temps
+        this.nextAttack = random(...SAD.attackEvery);
+        this.nextSulk = random(...SAD.sulkEvery);
+        this.prey = null; // Pokémon qu'il va attaquer
+        this.hit = null; // frappé : { by, delay } (il a mal un instant après le début de l'attaque)
+        this.then = null; // après une animation jouée une fois
     }
 
     get anim() { return this.anims[ANIMATION_OF[this.state]]; }
@@ -379,12 +396,22 @@ class Pokemon {
 
     face(other) { this.dir = directionOf(other.x - this.x, other.y - this.y); }
 
+    /** Joue une fois une animation (« attack », « hurt »), sur place, puis <then> (sinon il se repose). */
+    play(state, then) {
+        Object.assign(this, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, then: then ?? null });
+        this.setState(state);
+        this.frame = 0;
+        this.frameTime = 0;
+        this.timer = Math.max(0.6, this.anim.durations.reduce((a, b) => a + b, 0) / 1000);
+    }
+
     /** Avance l'animation ; la marche joue au rythme de la vitesse (les pieds ne glissent pas, ne patinent pas). */
     advanceFrame(dtMs, size) {
         const anim = this.anim;
         const rate = this.state === "walk" ? clamp(Math.hypot(this.vx, this.vy) / (WALK_ANIMATION_SPEED * size), 0.35, 1.4) : 1;
         this.frameTime += dtMs * rate;
         while (this.frameTime >= anim.durations[this.frame % anim.durations.length]) {
+            if (ONCE.has(this.state) && this.frame >= anim.durations.length - 1) { this.frameTime = 0; break; } // reste sur la dernière image
             this.frameTime -= anim.durations[this.frame % anim.durations.length];
             this.frame = (this.frame + 1) % anim.durations.length;
         }
@@ -698,8 +725,8 @@ export async function create(container, component, options) {
     function pickUp(p, pointer) {
         camera.getWorldPoint(pointer.x, pointer.y, spot);
         held = { p, from: { x: p.x, y: p.y }, dx: p.x - spot.x, dy: p.y - spot.y, pointer };
-        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT });
-        p.setState("held"); // un dormeur se réveille
+        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, then: null });
+        p.setState("held"); // un dormeur se réveille (une attaque prévue n'a pas lieu)
         drag = null;
         hovered = null;
         cursor();
@@ -834,6 +861,65 @@ export async function create(container, component, options) {
     // ---------- Comportement ----------
     const friendsOf = p => pokemon.filter(o => o !== p && o.family === p.family);
 
+    // ---------- Attaques d'un Pokémon malheureux ----------
+    /**
+     * Pokémon que <p> peut attaquer, le plus proche : éveillé ou endormi, ni porté, ni déjà frappé ou en fuite ; sauf <any>
+     * (mode debug), pas de sa famille et à portée.
+     */
+    const preyOf = (p, any) => pokemon
+        .filter(o => o !== p && o.state !== "held" && o.state !== "hurt" && o.intent !== "flee" && !o.hit
+            && (any || (o.family !== p.family && distance(p, o) < SAD.reach)))
+        .sort((a, b) => distance(p, a) - distance(p, b))[0];
+
+    /** Part attaquer <prey> (il marche jusqu'à lui). */
+    function charge(p, prey) {
+        Object.assign(p, { prey, tries: 0, then: null, hit: null });
+        approach(p);
+    }
+
+    /** Marche jusqu'à côté de sa proie, du côté où il arrive. */
+    function approach(p) {
+        const angle = Math.atan2(p.y - p.prey.y, p.x - p.prey.x);
+        p.walkTo(p.prey.x + Math.cos(angle) * 18, p.prey.y + Math.sin(angle) * 12, "attack");
+    }
+
+    /** Arrivé : il frappe si sa proie est assez près, sinon la suit encore un peu (elle a pu bouger), puis abandonne. */
+    function strike(p) {
+        const prey = p.prey;
+        if (!prey || !pokemon.includes(prey) || prey.state === "held" || distance(p, prey) > SAD.reach * 1.5) {
+            p.prey = null;
+            p.rest(random(1, 3));
+            return;
+        }
+        if (distance(p, prey) > STRIKE_RANGE) {
+            if (++p.tries > 3) { p.prey = null; p.rest(random(1, 3)); }
+            else approach(p);
+            return;
+        }
+        p.prey = null;
+        p.face(prey);
+        p.play("attack");
+        prey.hit = { by: p, delay: p.timer * 0.5 }; // il a mal au milieu de l'attaque
+    }
+
+    /** Frappé par <by> : réveillé s'il dormait, il a mal (Hurt), puis s'enfuit loin de lui. */
+    function hurt(p, by) {
+        p.face(by);
+        p.play("hurt", () => flee(p, by));
+    }
+
+    /** S'enfuit à l'opposé de <from> (à peu près), vers l'endroit libre le plus éloigné de lui parmi quelques essais. */
+    function flee(p, from) {
+        const angle = Math.atan2(p.y - from.y, p.x - from.x);
+        let best = null;
+        for (let tries = 0; tries < 8; tries++) {
+            const a = angle + random(-0.7, 0.7), d = random(...FLEE.distance);
+            const spot = ground.nearestFree(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d);
+            if (!best || distance(spot, from) > distance(best, from)) best = spot;
+        }
+        p.walkTo(best.x, best.y, "flee");
+    }
+
     /** Nouvelle intention quand le Pokémon a fini ce qu'il faisait. */
     function decide(p, night) {
         const { activity, sleepy, sociable, curious } = p.personality;
@@ -848,6 +934,16 @@ export async function create(container, component, options) {
                 p.sleep();
             }
             return;
+        }
+        if (p.mood === "sad" && p.nextAttack <= 0) {
+            // Malheureux : de temps en temps, il s'en prend à un Pokémon proche (pas de sa famille), même endormi.
+            const prey = preyOf(p, false);
+            if (prey) {
+                p.nextAttack = random(...SAD.attackEvery);
+                charge(p, prey);
+                return;
+            }
+            p.nextAttack = random(...SAD.retry);
         }
         if (mouse && distance(p, mouse) < 133 && Math.random() < 0.6 * curious) {
             // Curieux : il vient voir le pointeur de près, puis le regarde.
@@ -895,6 +991,23 @@ export async function create(container, component, options) {
     function update(p, dt, night) {
         const { activity, curious } = p.personality;
         if (p.state === "held") return; // porté : suit le pointeur
+        if (p.hit && (p.hit.delay -= dt) <= 0) { // frappé (même endormi) : il a mal, puis s'enfuit
+            const by = p.hit.by;
+            p.hit = null;
+            hurt(p, by);
+            return;
+        }
+        if (ONCE.has(p.state)) { // animation jouée une fois (attaque, douleur), puis la suite
+            p.timer -= dt;
+            if (p.timer <= 0) {
+                const then = p.then;
+                p.then = null;
+                if (then) then();
+                else p.rest(random(1, 3));
+            }
+            return;
+        }
+        if (p.mood === "sad" && p.state !== "sleep") { p.nextAttack -= dt; p.nextSulk -= dt; }
         if (p.state === "sleep") {
             p.energy = Math.min(1, p.energy + dt * (night > 0.5 ? ENERGY.sleepNight : ENERGY.sleepDay));
             p.zzz += dt;
@@ -922,6 +1035,11 @@ export async function create(container, component, options) {
                 p.dir = Math.random() < 0.25 ? FRONT : (p.dir + (Math.random() < 0.5 ? 1 : 7)) % 8;
                 p.lookTimer = random(1.2, 3.5);
             }
+            if (p.mood === "sad" && p.nextSulk <= 0) { // malheureux : il boude un instant
+                p.nextSulk = random(...SAD.sulkEvery);
+                p.play("hurt");
+                return;
+            }
             if (p.timer <= 0) decide(p, night);
             return;
         }
@@ -931,9 +1049,11 @@ export async function create(container, component, options) {
         while (p.path.length > 1 && distance(p, p.path[0]) < 4) p.path.shift();
         const remaining = p.remaining();
         // Ralentit en approchant de sa cible (pas d'arrêt net).
-        const speed = WALK_SPEED * activity * (p.intent === "sleep" ? 0.7 : 1) * clamp(remaining / 12, 0.35, 1);
+        const pace = p.intent === "sleep" ? 0.7 : p.intent === "flee" ? FLEE.speed : p.intent === "attack" ? 1.3 : 1;
+        const speed = WALK_SPEED * activity * pace * clamp(remaining / 12, 0.35, 1);
         if (remaining < 1.7) {
-            if (p.intent === "sleep") p.sleep();
+            if (p.intent === "attack") strike(p);
+            else if (p.intent === "sleep") p.sleep();
             else {
                 if (p.intent === "curious" && mouse) p.face(mouse);
                 if (p.intent === "visit" || p.intent === "stroll") {
@@ -976,7 +1096,7 @@ export async function create(container, component, options) {
             if (p.progress.distance - remaining < 7) { p.rest(random(1, 2)); return; }
             p.progress = { time: 0, distance: remaining };
         }
-        if (p.intent !== "sleep" && remaining > 27 && chance(0.04, dt)) {
+        if (p.intent !== "sleep" && p.intent !== "flee" && remaining > 27 && chance(0.04, dt)) {
             const target = p.target, intent = p.intent;
             p.rest(random(0.4, 1.2));
             p.timer = random(0.4, 1.2);
@@ -1112,6 +1232,7 @@ export async function create(container, component, options) {
         async setPokemon(list) {
             const call = ++lists;
             const kept = pokemon.filter(p => list.some(i => i.id === p.id));
+            for (const p of kept) p.mood = list.find(i => i.id === p.id).mood ?? "normal";
             for (const p of pokemon) if (!kept.includes(p)) removeFromScene(p);
             // Retirés de la liste dessinée avant d'attendre les planches des nouveaux : dessiner un Pokémon détruit lève une
             // erreur qui arrête la boucle de Phaser (parc figé, vu sous Firefox en retirant et ajoutant d'un coup).
@@ -1167,8 +1288,16 @@ export async function create(container, component, options) {
             const level = hour === undefined ? nightLevel() : nightLevel(new Date(2000, 0, 1, Math.floor(hour), (hour % 1) * 60));
             for (let t = 0; t < seconds; t += 1 / 30) step(1 / 30, level);
             draw(level);
-            return pokemon.map(p => ({ id: p.id, species: p.species, state: p.state, intent: p.intent, x: Math.round(p.x),
+            return pokemon.map(p => ({ id: p.id, species: p.species, mood: p.mood, state: p.state, intent: p.intent, x: Math.round(p.x),
                 y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100, free: ground.isFree(p.x, p.y) }));
+        },
+        /** Mode debug : ce Pokémon attaque le plus proche, quel que soit son bonheur ; false s'il n'y en a pas. */
+        attack(id) {
+            const p = pokemon.find(o => o.id === id);
+            const prey = p && p.state !== "held" ? preyOf(p, true) : null;
+            if (!prey) return false;
+            charge(p, prey);
+            return true;
         },
         /** Pour les essais : pose un Pokémon à un endroit (pixels de la carte), immobile un long moment. */
         place(id, x, y) {

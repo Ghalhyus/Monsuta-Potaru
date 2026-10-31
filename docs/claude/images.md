@@ -7,7 +7,9 @@ README : « Images des Pokémon », « Mise en ligne » (Images), « Lancer en l
   à chaque déploiement de la CD et par `deploy\images-serveur.cmd`), copiées en local par `outils\recuperer-images.cmd`
   (SSH : c'est l'utilisateur qui le lance). Ne jamais les remettre dans Git.
 - Servies depuis le disque par `UseStaticFiles` (`Program.cs`) : `MapStaticAssets` ne connaît que les fichiers de la
-  compilation, d'où aussi `Content Remove` dans le `.csproj`.
+  compilation, d'où aussi `Content Remove` dans le `.csproj` (en développement, `MapStaticAssets` les sert pourtant :
+  ETag en base64). Les `.xml` et `.json` de `/images` ont `Cache-Control: no-cache` (middleware de `Program.cs`) : sans
+  lui, le navigateur gardait un ancien `AnimData.xml` (voir `parc.md`, « Cache du navigateur »).
 - Rien n'est chargé depuis GitHub par le navigateur.
 - Exception : `parc/tuiles/` (planches de la carte du parc, pack Cute Fantasy acheté) ne vient pas de `images.py` mais de
   `outils/carte-parc.py`, envoyé par `deploy\fond-parc.cmd` (voir `parc.md`).
@@ -27,11 +29,11 @@ README : « Images des Pokémon », « Mise en ligne » (Images), « Lancer en l
   sans lister les dossiers des dépôts.
 - Sprites animés Donjon Mystère (SpriteCollab, CC BY-NC 4.0) : `wwwroot/images/donjon/`, dossiers de SpriteCollab
   (`<espèce sur 4 chiffres>/<forme>/<chromatique 0001>/<femelle 0002>`), `python outils/images.py donjon` (~16 000
-  fichiers, 164 Mo). Seules Idle, Walk, Sleep et Charge (`DONJON_ANIMATIONS`), avec les animations qu'elles copient
-  (`<CopyOf>`) ; `AnimData.xml` réduit à ces animations, avec `animations="Idle,Walk,Sleep,Charge"` sur sa racine : une
+  fichiers, 164 Mo). Seules Idle, Walk, Sleep, Charge, Attack et Hurt (`DONJON_ANIMATIONS`), avec les animations
+  qu'elles copient (`<CopyOf>`) ; `AnimData.xml` réduit à ces animations, avec `animations="Idle,Walk,Sleep,Charge,Attack,Hurt"` sur sa racine : une
   liste qui ne correspond plus à `DONJON_ANIMATIONS` (animation ajoutée) fait reprendre le fichier de SpriteCollab (sinon
   l'animation ajoutée n'y serait jamais). Portraits (`DONJON_PORTRAITS` : Normal, Happy, Sad, d'après `portrait_files` du
-  `tracker.json`) dans `donjon/portraits/<dossier>/`, ajoutés le 2026-10-31 (8 578 fichiers de 40 × 40 px). Charge ajoutée le 2026-10-31 (3 234 planches, +37 Mo) ; le serveur les prend au
+  `tracker.json`) dans `donjon/portraits/<dossier>/`, ajoutés le 2026-10-31 (8 578 fichiers de 40 × 40 px). Charge ajoutée le 2026-10-31 (3 234 planches, +37 Mo), Attack et Hurt le même jour (attaques des malheureux au parc) ; le serveur les prend au
   prochain déploiement (la CD lance `images.py`) ou par `deploy\images-serveur.cmd`. `credits.txt` : auteurs.
 
 ## Choix de l'image (`PokemonSprites`)

@@ -8,8 +8,10 @@ namespace MonsutaPotaru.Services;
 /// <param name="SpriteFolder">Dossier de ses sprites Donjon Mystère (« images/donjon/0025/0000/0001/ » : chromatique).</param>
 /// <param name="Family">Espèce de base de sa famille d'évolution (Pikachu et Raichu : Pichu), pour les affinités.</param>
 /// <param name="Nature">Nature (index PKHeX), qui donne son caractère : plus actif, plus dormeur...</param>
+/// <param name="Mood">Humeur selon les habitats du parc (<see cref="ParkHabitats.MoodOf"/>) : « happy », « normal » ou
+/// « sad » (un malheureux attaque les autres de temps en temps, parc.js).</param>
 public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
-    string SpriteFolder, int Family, byte Nature);
+    string SpriteFolder, int Family, byte Nature, string Mood = "normal");
 
 /// <summary>Pokémon proposé dans la fenêtre « Choisir les Pokémon » (sans les œufs).</summary>
 /// <param name="HasSprites">SpriteCollab a ses sprites Donjon Mystère : sinon, grisé (64 espèces récentes n'en ont pas encore).</param>
@@ -101,11 +103,13 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             .Where(m => m.OwnerId == ownerId)
             .OrderBy(m => m.AddedAt).ThenBy(m => m.BankPokemonId)
             .Select(m => m.BankPokemon!)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.Nature })
+            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.Nature, p.Type1, p.Type2 })
             .ToListAsync();
+        // Humeur selon les habitats de la carte de sa taille
+        var map = ParkHabitats.Map(await db.Users.Where(u => u.Id == ownerId).Select(u => u.ParkExpansions).FirstOrDefaultAsync() + 1);
         return members.Select(p => new ParkPokemon(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
             PokemonSprites.DonjonFolder(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0),
-            Family(p.Species), p.Nature ?? 0)).ToList();
+            Family(p.Species), p.Nature ?? 0, ParkHabitats.MoodOf(p.Type1, p.Type2, map).Mood.ToString().ToLowerInvariant())).ToList();
     }
 
     /// <summary>
