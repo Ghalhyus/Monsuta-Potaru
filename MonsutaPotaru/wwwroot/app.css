@@ -115,6 +115,11 @@ h1:focus {
 .slot .marker { position: absolute; top: 0; right: 2px; font-size: .65rem; line-height: 1; }
 
 .pokemon-card img { image-rendering: pixelated; }
+.pokemon-card-portrait { margin: 8px; border-radius: .5rem; } /* 80 px dans la place des 96 du sprite */
+/* Humeur d'un Pokémon du parc, sous son nom dans la fiche */
+.park-mood-happy { color: var(--bs-success-text-emphasis); }
+.park-mood-sad { color: var(--bs-danger-text-emphasis); }
+.park-mood-normal { color: var(--bs-secondary-color); }
 
 /* ---------- Glisser-déposer ---------- */
 .slot[draggable=true] { cursor: grab; }
@@ -311,7 +316,9 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
    aussi : pas de défilement de la page depuis le parc). */
 .park { position: relative; width: 100%; }
 .park-stage { position: relative; width: 100%; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 4px #4e8f4a, 0 .5rem 1rem rgba(0, 0, 0, .2); background: #33984b; }
-.park-stage:fullscreen { width: 100%; height: 100%; border-radius: 0; box-shadow: none; background: #132a1c; }
+/* Plein écran : le bloc du parc (carte et fiche d'un Pokémon), la carte sur tout l'écran */
+.park:fullscreen { width: 100%; height: 100%; }
+.park:fullscreen .park-stage { width: 100%; height: 100%; border-radius: 0; box-shadow: none; background: #132a1c; }
 /* Boutons sur la carte (zoom, plein écran), en haut à gauche */
 .park-controls { position: absolute; top: .5rem; left: .5rem; z-index: 1; display: flex; gap: .25rem; }
 .park-controls button {

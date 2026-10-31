@@ -574,8 +574,9 @@ la carte, arrondis à un nombre entier de pixels d'écran (×2 quand la carte es
 sans pixels de tailles inégales. **Zoom et plein écran** : boutons **−**, **+** et **plein écran** en haut à gauche de la
 carte (visiteurs compris). Le zoom va par crans entiers, du zoom de départ (le plus grand) jusqu'à ×1 ; les sprites
 suivent en arrondi (à ×2 et ×1 ils sont un peu plus gros par rapport à la carte). Dézoomé au-delà des bords, la carte
-est centrée (la forêt continue jusqu'au bord de la carte). En plein écran, la hauteur de l'écran donne le zoom de départ (×4 sur un écran de 1440), la **molette**
-zoome autour du pointeur (hors plein écran, elle fait défiler la page) ; Échap ou le même bouton en sort. Sur téléphone,
+est centrée (la forêt continue jusqu'au bord de la carte). La **molette** zoome autour du pointeur quand la souris est sur le parc (la page ne défile pas tant qu'elle y est). En
+plein écran (la carte et la fiche d'un Pokémon cliqué), la hauteur de l'écran donne le zoom de départ (×4 sur un écran de
+1440) ; Échap ou le même bouton en sort. Sur téléphone,
 **pincement** à deux doigts (pas de plein écran sur iPhone : bouton caché). Le zoom n'est pas retenu d'une visite à
 l'autre. **Nouvelle carte** : la dessiner dans Tiled (vue orthogonale, tuiles de 16 px, taille
 fixe, jeux de tuiles incorporés, mêmes calques ; un feuillage dans « Devant » au-dessus de son tronc, posé dans
@@ -589,16 +590,25 @@ actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont faites par
 `python outils/generer-parc.py <dossier Cute_Fantasy du pack> <dossier de sortie>` (Python avec Pillow ; mêmes tirages
 à chaque fois : relancé sans changement, il redonne les mêmes cartes ; le parc entier est tiré une fois, chaque taille en
 garde sa zone), puis passées une à une par `outils/carte-parc.py`.
-**Types de cases** (pour le bonheur des Pokémon, à venir) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
+**Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
 aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
 eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, volcan, donjons) et les écrit dans le champ
 `habitats` de la carte (une chaîne par ligne, un chiffre par case). Une case prend le type de sa tuile de « Sol », qu'une
 planche de sol dans « Décors » remplace ; objets, arbres et fleurs gardent le type du dessous. Une planche sans règle
 arrête le script. Ce que chaque type de Pokémon **aime ou non** vient de la feuille « Habitat » de l'utilisateur, recopiée
-dans `ParkHabitats` (par exemple Eau : aime l'eau, pas le volcan ; Roche : aime cave et volcan, pas le sable, la
+dans `ParkHabitats` (par exemple Eau : aime l'eau, aucun autre habitat ; Roche : aime cave et volcan, pas le sable, la
 végétation ni l'eau). `ParkHabitats.Map(taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
 (cartes lues au démarrage) ; dans le navigateur, `habitatAt(x, y)` de `parc.js`. En **mode debug**, le bouton
 « Habitats (debug) » colore chaque case selon son type, avec la légende et le nombre de cases de chaque type.
+**Bonheur** (`ParkHabitats.MoodOf`) : d'après les types du Pokémon, ce qu'il aime ou non (un double type aime un habitat
+si l'un de ses types l'aime, même si l'autre le déteste). Il est **malheureux** si un habitat qu'il n'aime pas couvre
+50 % ou plus de la zone « Parc » (toutes ses cases : chemins, eau et forêt de la lisière comprises), sinon **heureux** si
+un habitat qu'il aime en couvre plus de 50 %, sinon **normal**. Le parc compte selon sa taille. La fiche d'un Pokémon du
+parc montre son **portrait** Donjon Mystère Happy, Normal ou Sad (SpriteCollab, dans le dossier le plus proche de sa
+forme, chromatique, femelle ; sinon son portrait Normal ; sans portrait : le sprite) à la place du sprite, et la raison
+sous son nom (« Heureux : aime la végétation (80 % du parc). »). Avec les cartes actuelles (69 à 80 % de végétation) :
+les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
+autres normaux.
 Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
 Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
 pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
@@ -898,7 +908,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles) ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes du parc, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
-| `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage) |
+| `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`) |
 | `MonsutaPotaru/Services/ParkService.cs` | Pokémon du parc : liste, choix (30 au plus, avec des sprites Donjon Mystère), retrait, vidage, famille d'évolution |
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (supprimée avec le Pokémon) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
@@ -930,8 +940,8 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
-| `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles |
-| `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; `credits.txt` (auteurs) |
+| `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
+| `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
 | `deploy/images-serveur.cmd` (`images-serveur.ps1`) | Remplit ou met à jour les images du serveur (`~/monsuta-potaru-images`) et redémarre le site |
 | `outils/images.py` | Rassemble ces images (PokéAPI ; pour les objets, puis pokesprite et PKHeX par numéro d'objet) ; à relancer pour en ajouter |
@@ -1082,7 +1092,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [PokéAPI sprites](https://github.com/PokeAPI/sprites) | Images des Pokémon (normales et chromatiques, formes, femelles, Méga-Évolutions, Gigamax), de la plupart des objets et des CT (`wwwroot/images`) ; sprites de Rouge / Bleu, Jaune, Or, Argent, Cristal, Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille, Diamant / Perle, Platine, HeartGold / SoulSilver et Noire / Blanche des living dex, formes comprises (`versions/generation-i` à `generation-v`, `wwwroot/images/livingdex`) ; sprites de dos et chromatiques de Rubis / Saphir, Émeraude et Rouge Feu / Vert Feuille des combats (`back/`, `shiny/`) | CC0 1.0 pour le dépôt ; images © The Pokémon Company |
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
-| [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep et Charge (`wwwroot/images/donjon`, par `outils/images.py donjon`) ; auteurs de chaque sprite dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
+| [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep et Charge, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
 | [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles de la carte du « Parc » (herbe, chemins, eau, arbres, décors ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |

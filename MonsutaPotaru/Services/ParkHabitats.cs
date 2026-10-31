@@ -22,6 +22,26 @@ public enum Habitat : byte
 /// <summary>Avis d'un type de Pokémon sur un type de case (« o » et « x » de la feuille « Habitat »).</summary>
 public enum HabitatOpinion { Neutral, Likes, Dislikes }
 
+/// <summary>Humeur d'un Pokémon au parc (portraits Normal, Happy et Sad de SpriteCollab).</summary>
+public enum ParkMood { Normal, Happy, Sad }
+
+/// <summary>
+/// Humeur d'un Pokémon au parc, avec l'habitat qui la décide et sa part du parc (en %) ; <see cref="Habitat.None"/> pour
+/// une humeur normale. <see cref="Message"/> : la raison, prête à afficher.
+/// </summary>
+public sealed record ParkMoodResult(ParkMood Mood, Habitat Habitat, int Percent)
+{
+    public string Message => Mood switch
+    {
+        ParkMood.Happy => $"Heureux : aime {ParkHabitats.WithArticle(Habitat)} ({Percent} % du parc).",
+        ParkMood.Sad => $"Malheureux : n'aime pas {ParkHabitats.WithArticle(Habitat)} ({Percent} % du parc).",
+        _ => "Ni heureux ni malheureux : aucun habitat qu'il aime ou déteste ne couvre la moitié du parc.",
+    };
+
+    /// <summary>Nom du portrait de SpriteCollab (Normal.png, Happy.png, Sad.png).</summary>
+    public string Portrait => Mood.ToString();
+}
+
 /// <summary>Types de cases d'une carte du parc, et leur nombre dans sa zone « Parc » (là où vivent les Pokémon).</summary>
 public sealed class ParkHabitatMap(int width, int height, Habitat[] cells, (int X, int Y, int W, int H) area)
 {
@@ -71,6 +91,19 @@ public static class ParkHabitats
         _ => "Aucun",
     };
 
+    /// <summary>Nom avec son article, pour une phrase (« aime la végétation », « n'aime pas l'eau »).</summary>
+    public static string WithArticle(Habitat habitat) => habitat switch
+    {
+        Habitat.Sand => "le sable",
+        Habitat.Cave => "les caves",
+        Habitat.Cliff => "les falaises",
+        Habitat.Vegetation => "la végétation",
+        Habitat.Water => "l'eau",
+        Habitat.Dungeon => "les donjons",
+        Habitat.Volcano => "le volcan",
+        _ => "rien",
+    };
+
     /// <summary>Couleur de la case dans l'affichage des types (mode debug du parc).</summary>
     public static string Color(Habitat habitat) => habitat switch
     {
@@ -94,7 +127,7 @@ public static class ParkHabitats
         [MoveType.Ground]   = "oo..x..",
         [MoveType.Bug]      = "...o..x",
         [MoveType.Steel]    = "x..oxox",
-        [MoveType.Water]    = "....o.x",
+        [MoveType.Water]    = "xxxxoxx",
         [MoveType.Electric] = "...ox.x",
         [MoveType.Ice]      = "......x",
         [MoveType.Dark]     = ".o...o.",
@@ -119,6 +152,40 @@ public static class ParkHabitats
 
     /// <summary>Types de cases que n'aime pas le type de Pokémon.</summary>
     public static IEnumerable<Habitat> Disliked(byte type) => All.Where(h => OpinionOf(type, h) == HabitatOpinion.Dislikes);
+
+    /// <summary>
+    /// Avis d'un Pokémon à un ou deux types (comme <c>BankPokemon.Type1</c> et <c>Type2</c> : deux fois le même pour un
+    /// seul type) : il aime un habitat si l'un de ses types l'aime, même si l'autre le déteste (choix de l'utilisateur).
+    /// </summary>
+    public static HabitatOpinion OpinionOf(byte type1, byte type2, Habitat habitat)
+    {
+        HabitatOpinion first = OpinionOf(type1, habitat), second = OpinionOf(type2, habitat);
+        return first == HabitatOpinion.Likes || second == HabitatOpinion.Likes ? HabitatOpinion.Likes
+            : first == HabitatOpinion.Dislikes || second == HabitatOpinion.Dislikes ? HabitatOpinion.Dislikes
+            : HabitatOpinion.Neutral;
+    }
+
+    /// <summary>
+    /// Humeur d'un Pokémon dans un parc, d'après la part de chaque habitat dans la zone « Parc » (toutes ses cases) :
+    /// malheureux si un habitat qu'il n'aime pas en couvre la moitié ou plus, sinon heureux si un habitat qu'il aime en
+    /// couvre plus de la moitié, sinon normal. Sans carte (types de cases absents) : normal.
+    /// </summary>
+    public static ParkMoodResult MoodOf(byte type1, byte type2, ParkHabitatMap? map)
+    {
+        var total = map is null ? 0 : map.Area.W * map.Area.H;
+        if (map is null || total == 0)
+            return new(ParkMood.Normal, Habitat.None, 0);
+        // L'habitat le plus présent de ceux qui comptent (une seule possibilité, sauf deux habitats à 50 % pile)
+        ParkMoodResult? Find(HabitatOpinion opinion, Func<int, bool> enough) => All
+            .Where(h => OpinionOf(type1, type2, h) == opinion && enough(map.Counts[h]))
+            .OrderByDescending(h => map.Counts[h])
+            .Select(h => new ParkMoodResult(opinion == HabitatOpinion.Likes ? ParkMood.Happy : ParkMood.Sad, h,
+                (int)Math.Round(100.0 * map.Counts[h] / total)))
+            .FirstOrDefault();
+        return Find(HabitatOpinion.Dislikes, count => count * 2 >= total)
+            ?? Find(HabitatOpinion.Likes, count => count * 2 > total)
+            ?? new(ParkMood.Normal, Habitat.None, 0);
+    }
 
     private static Dictionary<int, ParkHabitatMap> _maps = [];
 

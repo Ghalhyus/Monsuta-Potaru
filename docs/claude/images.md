@@ -30,7 +30,8 @@ README : « Images des Pokémon », « Mise en ligne » (Images), « Lancer en l
   fichiers, 164 Mo). Seules Idle, Walk, Sleep et Charge (`DONJON_ANIMATIONS`), avec les animations qu'elles copient
   (`<CopyOf>`) ; `AnimData.xml` réduit à ces animations, avec `animations="Idle,Walk,Sleep,Charge"` sur sa racine : une
   liste qui ne correspond plus à `DONJON_ANIMATIONS` (animation ajoutée) fait reprendre le fichier de SpriteCollab (sinon
-  l'animation ajoutée n'y serait jamais). Charge ajoutée le 2026-10-31 (3 234 planches, +37 Mo) ; le serveur les prend au
+  l'animation ajoutée n'y serait jamais). Portraits (`DONJON_PORTRAITS` : Normal, Happy, Sad, d'après `portrait_files` du
+  `tracker.json`) dans `donjon/portraits/<dossier>/`, ajoutés le 2026-10-31 (8 578 fichiers de 40 × 40 px). Charge ajoutée le 2026-10-31 (3 234 planches, +37 Mo) ; le serveur les prend au
   prochain déploiement (la CD lance `images.py`) ou par `deploy\images-serveur.cmd`. `credits.txt` : auteurs.
 
 ## Choix de l'image (`PokemonSprites`)

@@ -4,8 +4,17 @@
 <div class="card pokemon-card">
     <div class="card-body">
         <div class="d-flex align-items-center gap-3">
-            <img src="@Pokemon.SpriteUrl" alt="@Pokemon.SpeciesName" width="96" height="96"
-                 data-remplacement="images/pokemon/inconnu.png" />
+            @if (Portrait is not null)
+            {
+                @* Portrait Donjon Mystère (40 × 40 px) doublé, à la place du sprite *@
+                <img class="pokemon-card-portrait" src="@Portrait" alt="@Pokemon.SpeciesName" title="@PortraitTitle" width="80" height="80"
+                     data-remplacement="@Pokemon.SpriteUrl" />
+            }
+            else
+            {
+                <img src="@Pokemon.SpriteUrl" alt="@Pokemon.SpeciesName" width="96" height="96"
+                     data-remplacement="images/pokemon/inconnu.png" />
+            }
             <div>
                 <h5 class="mb-1">
                     @Pokemon.Nickname @Pokemon.Gender
@@ -22,6 +31,7 @@
                 {
                     <span class="badge bg-danger" title="Selon l'analyse de légalité de PKHeX">Illégal</span>
                 }
+                @Summary
             </div>
         </div>
 
@@ -44,6 +54,13 @@
 @code {
     [Parameter, EditorRequired] public PokemonView Pokemon { get; set; } = default!;
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Image affichée à la place du sprite (portrait de son humeur au parc) ; sans elle, le sprite.</summary>
+    [Parameter] public string? Portrait { get; set; }
+    [Parameter] public string? PortraitTitle { get; set; }
+
+    /// <summary>Sous le nom et les badges (humeur au parc).</summary>
+    [Parameter] public RenderFragment? Summary { get; set; }
 
     /// <summary>Sans l'ID du dresseur : fiche vue par un autre joueur (Multijoueurs).</summary>
     [Parameter] public bool HideTrainerId { get; set; }

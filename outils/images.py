@@ -12,7 +12,9 @@ Rassemble les images servies par le site, dans MonsutaPotaru/wwwroot/images/ :
   [/<femelle>]]]/ (donjon/0025/ Pikachu, donjon/0025/0000/0001/ chromatique, donjon/0025/0000/0000/0002/ femelle...).
   Chaque dossier a ses planches <Animation>-Anim.png et un AnimData.xml réduit à ces animations (taille des images,
   durées) ; donjon/credits.txt liste les auteurs de chaque dossier (licence CC BY-NC 4.0 : à citer), donjon/formes.json
-  le dossier de chaque forme par espèce (« 0026 » : {« Alola » : « 0001 », « Mega_X » : « 0002 »...}) ;
+  le dossier de chaque forme par espèce (« 0026 » : {« Alola » : « 0001 », « Mega_X » : « 0002 »...}) ; portraits de
+  SpriteCollab (têtes de 40 × 40 px, humeur du Pokémon au « Parc ») dans donjon/portraits/<même dossier>/Normal.png,
+  Happy.png, Sad.png (DONJON_PORTRAITS, ceux que SpriteCollab a) ;
 - (parc/tuiles/, planches de la carte du « Parc », ne viennent pas d'ici : outils/carte-parc.py les copie depuis le pack
   Cute Fantasy, deploy/fond-parc.cmd les envoie sur le serveur) ;
 - livingdex/ : sprites des jeux de chaque living dex (livingdex/rouge-bleu/<numéro>.png : Super Game Boy, livingdex/jaune/ :
@@ -68,6 +70,7 @@ POKESPRITE = "https://raw.githubusercontent.com/msikma/pokesprite/master"
 SPRITECOLLAB = "https://raw.githubusercontent.com/PMDCollab/SpriteCollab/master"
 BULBAGARDEN = "https://archives.bulbagarden.net/w/api.php"  # Bulbagarden Archives (jaquettes)
 DONJON_ANIMATIONS = ["Idle", "Walk", "Sleep", "Charge"]  # animations gardées de SpriteCollab (il y en a une quarantaine)
+DONJON_PORTRAITS = ["Normal", "Happy", "Sad"]  # portraits gardés (il y en a une vingtaine d'expressions)
 TYPES = ["normal", "fighting", "flying", "poison", "ground", "rock", "bug", "ghost", "steel", "fire", "water", "grass",
          "electric", "psychic", "ice", "dragon", "dark", "fairy"]
 
@@ -174,11 +177,14 @@ def donjon_jobs():
         if len(parts) >= 2:
             names[parts[1]] = parts[0]
     folders = []  # (dossier, nom, auteurs)
+    portraits = []  # (dossier, nom, auteurs, portraits présents)
+    def authors_of(credit):
+        return [names.get(a, a) for a in [credit.get("primary", "")] + credit.get("secondary", []) if a]
     def walk(node, path, title):
         if node.get("sprite_complete", 0) > 0 and any(a in node.get("sprite_files", {}) for a in DONJON_ANIMATIONS):
-            credit = node.get("sprite_credit", {})
-            authors = [credit.get("primary", "")] + credit.get("secondary", [])
-            folders.append((path, title, [names.get(a, a) for a in authors if a]))
+            folders.append((path, title, authors_of(node.get("sprite_credit", {}))))
+        if node.get("portrait_complete", 0) > 0 and (kept := [p for p in DONJON_PORTRAITS if p in node.get("portrait_files", {})]):
+            portraits.append((path, title, authors_of(node.get("portrait_credit", {})), kept))
         for key, child in node.get("subgroups", {}).items():
             walk(child, f"{path}/{key}", f"{title} {child.get('name', '')}".strip())
     for number, node in tracker.items():
@@ -225,6 +231,9 @@ def donjon_jobs():
                 continue
             for name in needed:
                 jobs[f"donjon/{folder}/{name}-Anim.png"] = [f"{SPRITECOLLAB}/sprite/{folder}/{name}-Anim.png"]
+    for folder, _, _, kept in portraits:
+        for name in kept:
+            jobs[f"donjon/portraits/{folder}/{name}.png"] = [f"{SPRITECOLLAB}/portrait/{folder}/{name}.png"]
 
     # Formes de chaque espèce (nom SpriteCollab → dossier), pour que le site retrouve le sprite d'une forme (PokemonSprites).
     forms = {number: {child.get("name", ""): key for key, child in node.get("subgroups", {}).items() if child.get("name")}
@@ -236,6 +245,8 @@ def donjon_jobs():
     lines = ["Sprites animés : SpriteCollab (PMD Collab, https://sprites.pmdcollab.org), licence CC BY-NC 4.0.",
              "Auteurs de chaque dossier de sprites (animations Idle, Walk, Sleep et Charge) :", ""]
     lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors in folders]
+    lines += ["", f"Auteurs de chaque dossier de portraits (donjon/portraits/ : {', '.join(DONJON_PORTRAITS)}) :", ""]
+    lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors, _ in portraits]
     (OUT / "donjon").mkdir(parents=True, exist_ok=True)
     (OUT / "donjon" / "credits.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return jobs, missing

@@ -394,10 +394,12 @@ class Pokemon {
 /**
  * Parc dans <container> ; <component> (Park.razor) est prévenu d'un clic sur un Pokémon. Options : canMove (le
  * propriétaire peut soulever ses Pokémon et les poser ailleurs ; rien n'est enregistré), size (taille du parc, de 1 à 4 :
- * sa carte).
+ * sa carte), fullscreen (élément mis en plein écran, qui contient <container> et les fenêtres de la page, comme la fiche
+ * d'un Pokémon ; sans lui, <container>).
  */
 export async function create(container, component, options) {
     const canMove = options?.canMove === true;
+    const fullscreenTarget = options?.fullscreen ?? container; // plein écran : lui, pour que la fiche d'un Pokémon s'y affiche aussi
     const size = Math.max(1, Math.floor(Number(options?.size) || 1));
     let data = null;
     try { data = await (await fetch(MAP_URL(size))).json(); }
@@ -420,7 +422,7 @@ export async function create(container, component, options) {
     // pixels d'écran (chaque pixel de la carte et des sprites couvre autant de pixels d'écran : dessin net), le plus grand
     // qui tient dans la hauteur visible sous le parc (sur un téléphone : pas plus que la zone entière en largeur). En plein
     // écran : tout l'écran, et le plus grand zoom où la zone « Départ » tient en hauteur ----------
-    const isFullscreen = () => document.fullscreenElement === container;
+    const isFullscreen = () => document.fullscreenElement === fullscreenTarget;
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
         if (isFullscreen()) {
@@ -496,7 +498,7 @@ export async function create(container, component, options) {
     const zoomInButton = button("Zoomer", ICONS.plus, () => zoomTo(k + 1));
     const fullscreenButton = button("Plein écran", ICONS.expand, () => {
         if (isFullscreen()) document.exitFullscreen().catch(() => { });
-        else container.requestFullscreen().catch(() => { });
+        else fullscreenTarget.requestFullscreen().catch(() => { });
     });
     fullscreenButton.hidden = !document.fullscreenEnabled; // iPhone : pas de plein écran pour une page
     container.appendChild(controls);
@@ -508,10 +510,11 @@ export async function create(container, component, options) {
         resize();
     };
     document.addEventListener("fullscreenchange", onFullscreen);
-    // Molette : zoom en plein écran seulement, autour du pointeur (sinon elle fait défiler la page)
+    // Molette sur le parc : zoom autour du pointeur, en plein écran ou non (la page ne défile pas tant que la souris est
+    // sur le parc)
     let wheel = 0;
     const onWheel = e => {
-        if (!isFullscreen() || !scene) return;
+        if (!scene) return;
         e.preventDefault();
         wheel += e.deltaMode === 0 ? e.deltaY : Math.sign(e.deltaY) * 100; // pavé tactile : petits pas cumulés
         if (Math.abs(wheel) < 100) return;

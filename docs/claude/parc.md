@@ -73,7 +73,7 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
 - `ParkMapTests` : calques en CSV, jeux de tuiles incorporés avec un simple nom de fichier, « Départ » dans la carte,
   toutes ses cases libres reliées (même règle de diagonale que `parc.js`).
 
-## Types de cases (bonheur, à venir)
+## Types de cases et bonheur
 - Feuille Google « Gestion du parc » de l'utilisateur (id `1m_jWFdXRigcS3tdz2UUDggTtE8cK-1avN_mBvMoYoOE`, connecteur
   Google Sheets), onglet « Habitat » : 7 types de cases × 18 types de Pokémon, « o » aime, « x » n'aime pas. Recopiée
   dans `ParkHabitats.Sheet` (une chaîne par type, colonnes dans l'ordre de la feuille) : la feuille change → la
@@ -86,8 +86,20 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   d'après les noms**, pas encore vues sur une carte : les vérifier avec « Habitats (debug) » à leur première utilisation.
 - Champ `habitats` du JSON (pas un calque : Phaser l'ignore) : une chaîne par ligne, chiffres 0 aucun, 1 sable, 2 cave,
   3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan = enum `Habitat` = `Ground.habitats` de `parc.js`.
-- L'eau est bloquée : aucun Pokémon ne s'y tient. Le bonheur devra compter ce qu'il y a dans le parc
-  (`ParkHabitatMap.Counts`, cases bloquées comprises) ou autour du Pokémon, pas seulement sa case.
+- L'eau est bloquée : aucun Pokémon ne s'y tient. D'où un bonheur selon ce que contient le parc
+  (`ParkHabitatMap.Counts`, cases bloquées et sans type comprises : choix de l'utilisateur), pas selon sa case.
+- `ParkHabitats.MoodOf(type1, type2, map)` (règles de l'utilisateur, 2026-10-31) : malheureux si un habitat détesté
+  couvre ≥ 50 % de la zone, sinon heureux si un habitat aimé couvre > 50 % (seuils asymétriques voulus), sinon normal ;
+  les deux à la fois (50/50 pile) : malheureux. Double type : « aime » l'emporte sur « n'aime pas » (choix de
+  l'utilisateur, pas d'annulation). Types : `BankPokemon.Type1`/`Type2` (deux fois le même pour un seul type).
+- Fiche (`Park.razor`, `OnPokemonClicked`) : `PokemonCard` avec `Portrait` (remplace le sprite, 40 px doublés,
+  `data-remplacement` = le sprite) et `Summary` (la raison, `ParkMoodResult.Message`). Ma collection et la Living dex ne
+  passent ni l'un ni l'autre. Visiteur : même humeur (parc du joueur, sa taille).
+- Portraits : `images/donjon/portraits/<dossier SpriteCollab>/{Normal,Happy,Sad}.png` (`DONJON_PORTRAITS` de
+  `images.py`, 8 578 fichiers le 2026-10-31). `PokemonSprites.DonjonPortraitUrl` : premier dossier de
+  `DonjonCandidates` (comme `DonjonFolder`) qui a l'expression ou Normal (un dossier de forme sans Happy donne son
+  Normal, pas le Happy de l'espèce). Testé avec une liste de fichiers (`ChoosePortrait`) : la CI n'a les portraits
+  qu'après le déploiement suivant.
 - Coût : cartes lues une fois au démarrage (`ParkHabitats.Load` dans `Program.cs`), comptes faits une fois ; dans le
   navigateur un `Uint8Array`, `habitatAt` sans déchets ; couche de debug (`showHabitats(colors)`, profondeur 3,2)
   dessinée une fois dans une `RenderTexture`, redonnée par `Park.razor` après chaque redémarrage du parc.
@@ -107,11 +119,14 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   caméra recalculées à chaque zoom : Phaser colle la carte à gauche quand la vue est plus large qu'elle (`clampX`), d'où
   des limites élargies et centrées. Hors carte : `OUTSIDE` (couleur de fond) ; sous la carte : rectangle `GRASS`.
 - Boutons `.park-controls` créés par `parc.js` dans le conteneur (DOM, pas Blazor ; icônes SVG de Bootstrap Icons en
-  `innerHTML`, pas de script : CSP respectée). Plein écran : `requestFullscreen` sur le conteneur (`.park-stage:fullscreen`),
-  `fullscreenchange` → `resize` (zoom de départ recalculé sur la hauteur de l'écran). Molette : seulement en plein écran,
-  cumulée par 100 (pavé tactile). Pincement : `activePointers: 2`, un cran par écart ×1,35.
+  `innerHTML`, pas de script : CSP respectée). Plein écran : `requestFullscreen` sur le bloc `.park` (option `fullscreen` de
+  `create`, `parkBlock` de `Park.razor`) et non sur le conteneur de la carte : la fiche d'un Pokémon (`.collection-dialog`,
+  rendue dans `.park`) y reste visible (demande du 2026-10-31 : hors du bloc, elle était cachée en plein écran). CSS
+  `.park:fullscreen .park-stage`. `fullscreenchange` → `resize` (zoom de départ recalculé sur la hauteur de l'écran).
+  Molette : zoom dès que la souris est sur le canvas, en plein écran ou non (demande de l'utilisateur ; la page ne défile
+  plus sous la souris), cumulée par 100 (pavé tactile). Pincement : `activePointers: 2`, un cran par écart ×1,35.
 - **Le panneau de navigateur de l'app refuse le plein écran** (« Permissions check failed », même sur un vrai clic) : pour
-  l'essayer, simuler (`Object.defineProperty(document, "fullscreenElement", …)`, conteneur en `position: fixed; inset: 0`,
+  l'essayer, simuler (`Object.defineProperty(document, "fullscreenElement", …)` sur le bloc `.park`, mis en `position: fixed; inset: 0`,
   puis événement `fullscreenchange`), ou demander à l'utilisateur.
 - Textures : planches de SpriteCollab ajoutées à Phaser (`textures.addImage`, une image par case) ; textes à
   `resolution: k` (nets à la caméra).

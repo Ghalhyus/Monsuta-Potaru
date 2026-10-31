@@ -74,7 +74,7 @@ else
     </div>
 }
 
-<div class="park">
+<div class="park" @ref="parkBlock">
     <div class="park-stage" @ref="stage"></div>
     @if (loaded && members.Count == 0)
     {
@@ -84,6 +84,31 @@ else
             {
                 <button type="button" class="btn btn-light" @onclick="OpenChooser">Choisir des Pokémon</button>
             }
+        </div>
+    }
+    @* ---------- Fiche du Pokémon cliqué : dans le bloc du parc, pour rester visible en plein écran ---------- *@
+    @if (selected is not null && selectedView is not null)
+    {
+        <div class="collection-backdrop" @onclick="CloseDetail"></div>
+        <div class="collection-dialog" role="dialog" aria-modal="true" aria-label="@selectedView.Nickname">
+            <PokemonCard Pokemon="@selectedView" HideTrainerId="Visitor" Portrait="@selectedPortrait"
+                         PortraitTitle="@selectedMood?.Message">
+                <Summary>
+                    @if (selectedMood is not null)
+                    {
+                        <div class="small mt-1 park-mood park-mood-@selectedMood.Mood.ToString().ToLowerInvariant()">@selectedMood.Message</div>
+                    }
+                </Summary>
+                <ChildContent>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    @if (!Visitor)
+                    {
+                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RemoveSelected" disabled="@busy">Retirer du parc</button>
+                    }
+                    <button type="button" class="btn btn-secondary btn-sm ms-auto" @onclick="CloseDetail">Fermer</button>
+                </div>
+                </ChildContent>
+            </PokemonCard>
         </div>
     }
 </div>
@@ -217,22 +242,6 @@ else
     </div>
 }
 
-@* ---------- Fiche du Pokémon cliqué ---------- *@
-@if (selected is not null && selectedView is not null)
-{
-    <div class="collection-backdrop" @onclick="CloseDetail"></div>
-    <div class="collection-dialog" role="dialog" aria-modal="true" aria-label="@selectedView.Nickname">
-        <PokemonCard Pokemon="@selectedView" HideTrainerId="Visitor">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                @if (!Visitor)
-                {
-                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RemoveSelected" disabled="@busy">Retirer du parc</button>
-                }
-                <button type="button" class="btn btn-secondary btn-sm ms-auto" @onclick="CloseDetail">Fermer</button>
-            </div>
-        </PokemonCard>
-    </div>
-}
 }
 
 @code {
@@ -259,6 +268,7 @@ else
     private bool messageIsError;
 
     private ElementReference stage;
+    private ElementReference parkBlock; // mis en plein écran (carte et fiche d'un Pokémon)
     private IJSObjectReference? module;
     private IJSObjectReference? engine;
     private DotNetObjectReference<Park>? selfRef;
@@ -276,6 +286,8 @@ else
 
     private BankPokemon? selected;
     private PokemonView? selectedView;
+    private ParkMoodResult? selectedMood; // humeur du Pokémon de la fiche, selon les habitats du parc (ParkHabitats)
+    private string? selectedPortrait; // son portrait Donjon Mystère (Normal, Happy, Sad), à la place du sprite
 
     protected override async Task OnInitializedAsync()
     {
@@ -318,7 +330,7 @@ else
             engine = null;
         }
         // Seul le propriétaire peut déplacer ses Pokémon (dans son navigateur seulement : rien n'est enregistré)
-        engine = await module!.InvokeAsync<IJSObjectReference>("create", stage, selfRef, new { canMove = !Visitor, size = expansions + 1 });
+        engine = await module!.InvokeAsync<IJSObjectReference>("create", stage, selfRef, new { canMove = !Visitor, size = expansions + 1, fullscreen = parkBlock });
         await engine.InvokeVoidAsync("setPokemon", members);
         if (showHabitats)
             await engine.InvokeVoidAsync("showHabitats", HabitatColors());
@@ -389,6 +401,9 @@ else
             return;
         selected = entry;
         selectedView = Info.Describe(pk, entry.IsLegal);
+        // Humeur selon les types de cases de ce parc (sa taille : ses agrandissements)
+        selectedMood = ParkHabitats.MoodOf(entry.Type1, entry.Type2, ParkHabitats.Map(expansions + 1));
+        selectedPortrait = PokemonSprites.DonjonPortraitUrl(entry, selectedMood.Portrait);
         StateHasChanged();
     });
 
@@ -396,6 +411,8 @@ else
     {
         selected = null;
         selectedView = null;
+        selectedMood = null;
+        selectedPortrait = null;
     }
 
     private async Task RemoveSelected()

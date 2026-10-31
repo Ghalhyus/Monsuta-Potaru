@@ -48,7 +48,33 @@ public static partial class PokemonSprites
     /// Méga-Évolution s'il tient sa gemme (comme son image dans la collection), sinon celui de l'espèce ; chromatique et
     /// femelle quand ils existent.
     /// </summary>
-    public static string DonjonFolder(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem)
+    public static string DonjonFolder(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem) =>
+        $"images/donjon/{DonjonCandidates(species, form, context, shiny, female, heldItem).FirstOrDefault(DonjonExists) ?? $"{species:0000}"}/";
+
+    /// <summary>
+    /// Portrait Donjon Mystère d'un Pokémon (« images/donjon/portraits/0025/Happy.png », têtes de 40 × 40 px de
+    /// SpriteCollab) : dans le dossier le plus proche qui a des portraits (forme, chromatique, femelle, comme
+    /// <see cref="DonjonFolder"/>), l'expression demandée (Normal, Happy, Sad), sinon Normal ; null sans aucun portrait.
+    /// </summary>
+    public static string? DonjonPortraitUrl(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem,
+        string expression) =>
+        ChoosePortrait(DonjonCandidates(species, form, context, shiny, female, heldItem), expression,
+            path => _webRoot is not null && File.Exists(Path.Combine(_webRoot, "images", "donjon", "portraits", path)));
+
+    /// <summary>
+    /// Choix du portrait parmi des dossiers SpriteCollab (du plus précis à l'espèce) : le premier dossier qui a
+    /// l'expression ou Normal ; <paramref name="exists"/> dit si « dossier/Expression.png » existe.
+    /// </summary>
+    public static string? ChoosePortrait(IEnumerable<string> folders, string expression, Func<string, bool> exists) =>
+        folders.SelectMany(folder => new[] { $"{folder}/{expression}.png", $"{folder}/Normal.png" })
+            .FirstOrDefault(exists) is { } path ? $"images/donjon/portraits/{path}" : null;
+
+    /// <summary>Portrait d'un Pokémon enregistré (voir l'autre surcharge).</summary>
+    public static string? DonjonPortraitUrl(Data.BankPokemon p, string expression) =>
+        DonjonPortraitUrl(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0, expression);
+
+    /// <summary>Dossiers SpriteCollab possibles d'un Pokémon, du plus précis (forme chromatique femelle) à l'espèce.</summary>
+    private static IEnumerable<string> DonjonCandidates(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem)
     {
         var dex = $"{species:0000}";
         var (shown, names) = MegaForm(species, form, heldItem) is { } mega ? (mega, MegaContext) : (form, context);
@@ -60,7 +86,7 @@ public static partial class PokemonSprites
             shiny && female ? $"{dex}/0000/0001/0002" : null, shiny ? $"{dex}/0000/0001" : null,
             female ? $"{dex}/0000/0000/0002" : null, dex,
         ];
-        return $"images/donjon/{candidates.OfType<string>().FirstOrDefault(DonjonExists) ?? dex}/";
+        return candidates.OfType<string>();
     }
 
     private static bool DonjonExists(string folder) =>
