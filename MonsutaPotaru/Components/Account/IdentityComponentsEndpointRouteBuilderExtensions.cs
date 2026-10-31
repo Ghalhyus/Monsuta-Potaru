@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MonsutaPotaru.Data;
+using MonsutaPotaru.Services;
 
 namespace Microsoft.AspNetCore.Routing;
 
@@ -19,8 +20,11 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         accountGroup.MapPost("/Logout", async (
             ClaimsPrincipal user,
             [FromServices] SignInManager<ApplicationUser> signInManager,
+            [FromServices] DebugMode debugMode,
             [FromForm] string returnUrl) =>
         {
+            if (user.FindFirstValue(ClaimTypes.NameIdentifier) is { } userId)
+                debugMode.Set(userId, false); // le mode debug s'arrête à la déconnexion
             await signInManager.SignOutAsync();
             return TypedResults.LocalRedirect($"~/{returnUrl}");
         });

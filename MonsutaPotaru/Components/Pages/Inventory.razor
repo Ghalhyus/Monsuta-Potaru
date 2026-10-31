@@ -12,6 +12,7 @@
 @inject IJSRuntime JS
 @inject PokemonInfo Info
 @inject PlayerService Players
+@inject DebugService Debug
 @implements IAsyncDisposable
 
 <PageTitle>@(!Visitor ? "Inventaire" : player is null ? "Joueur introuvable" : $"Inventaire de {player.Pseudo}")</PageTitle>
@@ -70,6 +71,20 @@ else
             @if (!Visitor)
             {
                 <button class="btn btn-primary" @onclick="OpenWithdraw">Retirer de l'argent d'une sauvegarde</button>
+            }
+            @if (debug && !Visitor)
+            {
+                @* Mode debug (page « Administration ») : montants fixes, revérifiés par DebugService *@
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-warning">Mode debug</span>
+                    @foreach (var value in DebugService.MoneyAmounts)
+                    {
+                        var v = value;
+                        <button class="btn btn-sm btn-outline-warning" @onclick="() => AddDebugMoney(v)" disabled="@busy">
+                            + @InventoryService.FormatMoney(v)
+                        </button>
+                    }
+                </div>
             }
         </div>
     </div>
@@ -519,6 +534,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
     private MoneySource? chosen;
     private long? amount;
     private bool busy;
+    private bool debug; // mode debug du compte (page « Administration »)
 
     private string? message;
     private bool messageIsError;
@@ -540,8 +556,25 @@ else if (panel == SidePanel.Detail && detail is { } d)
             userId = player.Id;
         }
         else
+        {
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            debug = await Debug.IsActiveAsync(userId);
+        }
         await LoadWallet();
+    }
+
+    private async Task AddDebugMoney(long value)
+    {
+        if (Visitor)
+            return;
+        busy = true;
+        var result = await Debug.AddMoneyAsync(userId, value);
+        message = result.Message;
+        messageIsError = !result.Ok;
+        debug = await Debug.IsActiveAsync(userId); // coupé si le compte n'est plus administrateur
+        await LoadWallet();
+        await Wallet.RefreshAsync(userId); // solde du menu
+        busy = false;
     }
 
     protected override void OnParametersSet()
@@ -864,6 +897,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
         WalletOperationKind.WithdrawItemsFromSave => "Objets retirés d'une sauvegarde",
         WalletOperationKind.DepositItemsToSave => "Objets déposés dans une sauvegarde",
         WalletOperationKind.ExpandPark => "Agrandissement du parc",
+        WalletOperationKind.DebugCredit => "Argent ajouté (mode debug)",
         _ => kind.ToString(),
     };
 

@@ -14,6 +14,7 @@
 @inject PokemonInfo Info
 @inject IJSRuntime JS
 @inject PlayerService Players
+@inject DebugService Debug
 
 <PageTitle>@(!Visitor ? "Parc" : player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}")</PageTitle>
 
@@ -50,6 +51,14 @@ else
             @if (expansions < ParkService.MaxExpansions)
             {
                 <button type="button" class="btn btn-outline-success" @onclick="OpenExpand" disabled="@busy">Agrandir le parc</button>
+            }
+            @if (debug)
+            {
+                @* Mode debug (page « Administration ») : gratuit, revérifié par DebugService *@
+                <button type="button" class="btn btn-outline-warning" @onclick="() => Resize(true)"
+                        disabled="@(busy || expansions >= ParkService.MaxExpansions)">+ taille (debug)</button>
+                <button type="button" class="btn btn-outline-warning" @onclick="() => Resize(false)"
+                        disabled="@(busy || expansions <= 0)">− taille (debug)</button>
             }
         }
     </Actions>
@@ -227,6 +236,7 @@ else
     private int expansions; // agrandissements achetés : la taille du parc (sa carte) et sa capacité
     private int Capacity => ParkService.CapacityOf(expansions);
     private long? expandBalance; // fenêtre « Agrandir le parc » ouverte : le solde du porte-monnaie
+    private bool debug; // mode debug du compte (page « Administration ») : boutons « + taille » et « − taille »
     private bool loaded;
     private bool busy;
     private string? message;
@@ -262,7 +272,10 @@ else
             userId = player.Id;
         }
         else
+        {
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            debug = await Debug.IsActiveAsync(userId);
+        }
         members = await Parks.ListAsync(userId);
         expansions = await Parks.GetExpansionsAsync(userId);
         loaded = true;
@@ -312,6 +325,25 @@ else
         if (result.Ok)
         {
             await Wallet.RefreshAsync(userId); // solde du menu
+            if (module is not null)
+                await StartEngine();
+        }
+        busy = false;
+    }
+
+    /// <summary>Mode debug : une taille de plus ou de moins, gratuitement (réduit : les derniers arrivés repartent).</summary>
+    private async Task Resize(bool grow)
+    {
+        if (Visitor)
+            return;
+        busy = true;
+        var result = await Debug.ResizeParkAsync(userId, grow);
+        Show(result.Message, !result.Ok);
+        debug = await Debug.IsActiveAsync(userId); // coupé si le compte n'est plus administrateur
+        if (result.Ok)
+        {
+            expansions = result.Expansions;
+            members = await Parks.ListAsync(userId);
             if (module is not null)
                 await StartEngine();
         }

@@ -326,6 +326,14 @@ ceux qui gèrent le site, avec tout ce que peut un Standard en plus. Page « Adm
 - **Premier administrateur** : le compte du pseudo `Bank:AdminPseudo` (`ADMIN_PSEUDO` du `.env`), **tant que le site n'en
   a aucun** : au démarrage s'il existe déjà, sinon à son inscription ou quand il choisit son pseudo. Une fois qu'il y a
   un administrateur, le réglage est ignoré (un rôle retiré ne revient pas au redémarrage).
+- **Mode debug**, pour tester le site avec son propre compte (`Services/DebugService.cs`) : bouton « Activer /
+  Désactiver ». Gardé **en mémoire** (`DebugMode`, rien en base) : il vaut pour tous les onglets du compte jusqu'à sa
+  **déconnexion** ou au redémarrage du serveur, et ne change rien pour les autres comptes. Chaque action revérifie en
+  base que le compte est encore administrateur (sinon le mode est coupé). Il ajoute :
+  - dans « Inventaire », sous le porte-monnaie : **+10 000, +100 000 et +1 000 000 ₽** (montants fixes, tout autre
+    refusé), crédités comme un retrait et écrits au journal (« Argent ajouté (mode debug) ») ;
+  - dans « Parc », sous le titre : **« + taille »** et **« − taille »**, gratuits et hors journal, de 25 à 100 Pokémon.
+    Réduit, le parc garde ses premiers arrivés : les derniers retournent dans la collection (le message dit combien).
 - L'administrateur ne change pas les mots de passe (pas encore d'outil pour un mot de passe oublié).
 
 ### Sauvegardes stockées (consultation)
@@ -828,6 +836,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 |---|---|
 | `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX) |
 | `MonsutaPotaru/Services/AdminService.cs` | Administration : rôles (donner, retirer, garde-fous), liste des comptes, code d'invitation (lecture, régénération), initialisation au démarrage (code, premier administrateur) |
+| `MonsutaPotaru/Services/DebugService.cs` | Mode debug d'un administrateur : comptes actifs en mémoire (`DebugMode`, coupé à la déconnexion), argent ajouté (montants fixes, journal), parc agrandi ou réduit gratuitement |
 | `MonsutaPotaru/Components/Pages/Admin.razor` | Page « Administration » : code d'invitation, comptes et rôles |
 | `MonsutaPotaru/Services/PlayerService.cs` | Multijoueurs : recherche par pseudo, joueur consultable selon sa visibilité et le lien avec le visiteur, visibilité du profil |
 | `MonsutaPotaru/Services/FriendService.cs` | Amis : code ami, demandes (par pseudo ou par code), acceptation, refus, annulation, retrait, listes, compteur du menu |

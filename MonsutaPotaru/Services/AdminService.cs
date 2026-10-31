@@ -107,7 +107,7 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
         return await IsAdminAsync(db, userId);
     }
 
-    private static Task<bool> IsAdminAsync(ApplicationDbContext db, string userId) =>
+    internal static Task<bool> IsAdminAsync(ApplicationDbContext db, string userId) =>
         db.UserRoles.AnyAsync(r => r.UserId == userId && r.RoleId == SiteRoles.AdminId);
 
     /// <summary>Code d'invitation, pour un administrateur (null sinon).</summary>

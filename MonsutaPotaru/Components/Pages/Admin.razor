@@ -5,6 +5,7 @@
 @using MonsutaPotaru.Data
 @using MonsutaPotaru.Services
 @inject AdminService Administration
+@inject DebugService Debug
 
 <PageTitle>Administration</PageTitle>
 
@@ -47,6 +48,18 @@ else
                 </div>
             </div>
         }
+    </Block>
+
+    <Block Title="Mode debug">
+        <p class="small text-muted">
+            Pour tester le site avec ton compte : des boutons pour ajouter de l'argent (page « Inventaire ») et pour agrandir
+            ou réduire ton parc gratuitement (page « Parc »). Il reste actif jusqu'à ta déconnexion ou au redémarrage du
+            serveur, et ne change rien pour les autres comptes.
+        </p>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="badge @(debugActive ? "text-bg-warning" : "text-bg-secondary")">@(debugActive ? "Activé" : "Désactivé")</span>
+            <button class="btn btn-outline-primary" @onclick="ToggleDebug" disabled="@busy">@(debugActive ? "Désactiver" : "Activer")</button>
+        </div>
     </Block>
 
     <Block Title="Comptes">
@@ -103,6 +116,7 @@ else
     private string? inviteCode; // null : pas (ou plus) administrateur
     private List<AdminAccount> accounts = [];
     private bool confirmRegenerate;
+    private bool debugActive; // mode debug de ce compte (DebugService)
 
     protected override async Task OnInitializedAsync()
     {
@@ -115,7 +129,15 @@ else
     {
         inviteCode = await Administration.InviteCodeAsync(userId);
         accounts = await Administration.ListAccountsAsync(userId);
+        debugActive = await Debug.IsActiveAsync(userId);
     }
+
+    private Task ToggleDebug() =>
+        RunBusy(async () =>
+        {
+            var result = await Debug.SetActiveAsync(userId, !debugActive);
+            Show(result.Message, !result.Ok);
+        });
 
     private Task Regenerate() =>
         RunBusy(async () =>

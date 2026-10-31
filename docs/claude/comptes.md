@@ -28,6 +28,10 @@ README : « Comptes », « Administration », « Thèmes ».
 - Rôles exclusifs Standard / Administrateur (`SiteRoles`). `AdminService` revérifie le rôle en base à chaque action (le
   cookie peut le garder 30 minutes).
 - Code d'invitation en base (`SiteSettings`) : `Bank:InviteCode` ne sert qu'au premier démarrage.
+- Mode debug (`DebugService`, README « Administration ») : choix de l'utilisateur, **session seulement** (en mémoire,
+  `DebugMode` singleton ; `Account/Logout` le coupe). Toute nouvelle action debug passe par `DebugService.IsActiveAsync`
+  (revérifie le rôle) et prend des valeurs fixes côté serveur (`MoneyAmounts`), jamais un montant libre venu du navigateur.
+  En test : `--Bank:AdminPseudo=<pseudo>` sur une base neuve, puis « Activer » dans « Administration ».
 - EF ne traduit pas `Guid.NewGuid()` dans un `ExecuteUpdate` : calculer la valeur avant.
 
 ## Thèmes

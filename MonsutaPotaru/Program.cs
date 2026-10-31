@@ -49,6 +49,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(AccountService.ConfigureIdenti
     .AddErrorDescriber<FrenchIdentityErrorDescriber>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddSingleton<DebugMode>(); // comptes en mode debug, en mémoire (jusqu'à la déconnexion)
+builder.Services.AddScoped<DebugService>();
 builder.Services.AddSingleton<AccountLimiter>(); // envois des formulaires de connexion et d'inscription par adresse IP
 
 // Clés qui chiffrent les cookies (connexion, formulaires) : gardées avec les données (volume Docker),
