@@ -33,6 +33,8 @@ const FOG = { color: 0x0b1222, alpha: 0.18, steps: 4 };
 // Entre 2 et 3 : au-dessus de la carte (0) et des ombres (1,9), sous le brouillard (3) et la nuit (4).
 const depthOf = y => 2 + y / 10000;
 const NIGHT = { color: 0x101848, alpha: 0.38 };
+const HABITAT_DEPTH = 3.2; // types de cases (mode debug) : devant le brouillard, sous un Pokémon soulevé et la nuit
+const HABITAT_ALPHA = 0.45;
 // Taille d'un pixel de sprite par rapport à un pixel de la carte (deux tiers : ×2 quand la carte est à ×3), arrondie à un
 // nombre entier de pixels d'écran (dessin net), jamais moins de 2 pixels d'écran tant que la carte en a autant.
 const SPRITE_SIZE = 2 / 3;
@@ -155,6 +157,15 @@ class Ground {
                 this.free.push(i);
             }
         }
+        // Type de chaque case (« habitats » de la carte, écrit par outils/carte-parc.py : un chiffre par case, 0 aucun,
+        // 1 sable, 2 cave, 3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan ; comme Services/ParkHabitats.cs)
+        this.habitats = new Uint8Array(this.columns * this.lines);
+        (data?.habitats ?? []).forEach((row, y) => {
+            for (let x = 0; x < this.columns && x < row.length && y < this.lines; x++) {
+                const h = row.charCodeAt(x) - 48;
+                if (h >= 0 && h <= 7) this.habitats[y * this.columns + x] = h;
+            }
+        });
         // Recherche de chemin : tableaux gardés d'une recherche à l'autre (pas de déchets à chaque décision)
         const n = this.columns * this.lines;
         this.cost = new Float64Array(n);
@@ -172,6 +183,10 @@ class Ground {
 
     tileFree(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && this.walkable[ty * this.columns + tx] === 1; }
     isFree(x, y) { return this.tileFree(Math.floor(x / TILE), Math.floor(y / TILE)); }
+    /** Type de la case (cases de la carte) ; hors de la carte : 0 (aucun). */
+    habitatOfTile(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines ? this.habitats[ty * this.columns + tx] : 0; }
+    /** Type de la case sous le point (pixels de la carte). */
+    habitatAt(x, y) { return this.habitatOfTile(Math.floor(x / TILE), Math.floor(y / TILE)); }
     center(i) { return { x: (i % this.columns) * TILE + TILE / 2, y: Math.floor(i / this.columns) * TILE + TILE / 2 }; }
 
     /** Endroit libre au hasard (un peu décalé du centre de sa case). */
@@ -399,6 +414,7 @@ export async function create(container, component, options) {
     let spriteScale = SPRITE_SIZE; // pixels de la carte par pixel de sprite
     let scene = null, camera = null, night = null, label = null, labelText = null, marker = null;
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
+    let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
 
     // ---------- Taille : toute la largeur du conteneur ; en hauteur, un nombre entier de fois la zone « Départ » en
     // pixels d'écran (chaque pixel de la carte et des sprites couvre autant de pixels d'écran : dessin net), le plus grand
@@ -1117,6 +1133,28 @@ export async function create(container, component, options) {
             }
             pokemon = placed;
             if (hovered && !pokemon.includes(hovered)) hovered = null;
+        },
+        /** Type de la case sous le point (pixels de la carte) : 0 aucun, 1 sable ... 7 volcan (Services/ParkHabitats.cs). */
+        habitatAt(x, y) { return ground.habitatAt(x, y); },
+        /**
+         * Mode debug : colore chaque case selon son type (colors[type] : couleur « #rrggbb », « transparent » pour rien) ; null
+         * cache les couleurs. Dessiné une seule fois, dans une image comme la carte.
+         */
+        showHabitats(colors) {
+            habitatLayer?.destroy();
+            habitatLayer = null;
+            if (!colors) return;
+            const shapes = scene.add.graphics();
+            for (let ty = 0; ty < ground.lines; ty++) {
+                for (let tx = 0; tx < ground.columns; tx++) {
+                    const css = colors[ground.habitatOfTile(tx, ty)];
+                    if (!css?.startsWith("#")) continue; // « transparent » : aucun type
+                    shapes.fillStyle(Phaser.Display.Color.HexStringToColor(css).color, HABITAT_ALPHA).fillRect(tx * TILE, ty * TILE, TILE, TILE);
+                }
+            }
+            habitatLayer = scene.add.renderTexture(0, 0, ground.width, ground.height).setOrigin(0).setDepth(HABITAT_DEPTH);
+            habitatLayer.draw(shapes);
+            shapes.destroy();
         },
         /**
          * Pour les essais : fait vivre le parc <seconds> secondes d'un coup (sans dessin), à l'heure <hour> (sinon l'heure

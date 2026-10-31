@@ -97,6 +97,7 @@ using (var scope = app.Services.CreateScope())
     await PokemonFingerprint.FillAsync(db); // empreinte (doublons) des Pokémon plus anciens
 }
 PokemonSprites.Load(app.Environment.WebRootPath); // images des Pokémon et de leurs formes
+ParkHabitats.Load(app.Environment.WebRootPath); // types de cases des cartes du parc
 
 // En-têtes de sécurité (nosniff, Referrer-Policy, CSP stricte : aucun script écrit dans la page) : SecurityHeaders.cs.
 app.UseSecurityHeaders(app.Environment.IsDevelopment());

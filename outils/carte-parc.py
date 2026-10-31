@@ -13,6 +13,12 @@ au-dessus de leur tronc) et « Collisions » (une tuile quelconque = case où l'
 rectangle « Départ » (vue de départ : sa hauteur remplit l'écran) et un rectangle « Parc » qui le contient : la partie de la
 carte où vivent les Pokémon (le reste est assombri). Sans « Parc », c'est « Départ ».
 
+Types de cases (feuille « Habitat » de l'utilisateur, pour le bonheur des Pokémon) : déduits des planches (HABITAT_RULES)
+et écrits dans « habitats » : une chaîne par ligne de la carte, un chiffre par case (0 aucun, 1 sable, 2 cave, 3 falaise,
+4 végétation, 5 eau, 6 donjon, 7 volcan ; même ordre que Services/ParkHabitats.cs). Une case prend le type de sa tuile
+de « Sol », que « Décors » remplace seulement par une planche de sol (les objets, arbres et fleurs gardent le type du
+dessous) ; « Devant » ne compte pas. Une planche sans règle arrête le script : lui ajouter une ligne.
+
 Lancement (Python 3 seul) :
   python outils/carte-parc.py <carte .tmx ou .tmj> [--nom parc-1-1] [--tiled <chemin de tiled.exe>]
 Un .tmx est d'abord exporté en JSON par Tiled lui-même (en ligne de commande). Nom par défaut : celui du fichier en
@@ -20,6 +26,7 @@ minuscules, « _ » remplacés par « - » (Parc_1-2.tmx → parc-1-2.json : par
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -43,6 +50,49 @@ WWWROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Monsut
 MAP_OUT = os.path.join(WWWROOT, "parc", NAME + ".json")
 TILES_OUT = os.path.join(WWWROOT, "images", "parc", "tuiles")
 LAYERS = ["Sol", "Décors", "Devant", "Collisions"]
+
+# ---------- Types de cases : la première règle dont le motif se trouve dans le chemin de la planche (« / » partout) ----------
+HABITATS = ["Aucun", "Sable", "Cave", "Falaise", "Végétation", "Eau", "Donjon", "Volcan"]
+DECOR = None  # objet posé sur le sol : la case garde le type de la tuile du dessous
+# Planches d'herbe à bords (16 × 10 tuiles) : herbe, sauf le chemin de terre (bas à gauche) et les flancs des hauteurs
+GRASS_TILES = {**{i: "Aucun" for i in (80, 81, 82, 96, 97, 98, 112, 113, 114, 128, 129, 144, 145)},
+               **{r * 16 + c: "Falaise" for r in (2, 3, 4, 6, 7, 8) for c in range(8, 16)},
+               **{i: "Aucun" for i in (6, 7, 22, 23, 86, 87, 102, 103)}}  # escaliers des hauteurs
+HABITAT_RULES = [
+    (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),
+    (r"Cute_Fantasy/Tiles/Grass/Path_", "Aucun"),
+    (r"Cute_Fantasy/Tiles/Grass/", "Végétation"),
+    (r"Cute_Fantasy/Tiles/Hedge_", "Végétation"),
+    (r"Cute_Fantasy/Tiles/(Water|Waterfall)/", "Eau"),
+    (r"Cute_Fantasy/Tiles/Cliff/", "Falaise"),
+    (r"Cute_Fantasy/Tiles/Cave/Cave_Water", "Eau"),
+    (r"Cute_Fantasy/Tiles/Cave/", "Cave"),
+    (r"Cute_Fantasy/Tiles/Beach/", "Sable"),
+    (r"Cute_Fantasy/Tiles/(Bridge/|Cobble_Road/|Pavement_|Wooden_Deck_)", "Aucun"),
+    (r"Cute_Fantasy/Tiles/Picnic_", DECOR),
+    (r"Cute_Fantasy/(Outdoor decoration|Trees|Buildings|Crops|Animals|Other)/", DECOR),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_(Water|Cliff_Waterfall)", "Eau"),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_Cliff", "Falaise"),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_Grass", "Végétation"),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_Bridge", "Aucun"),
+    (r"Cute_Fantasy_Desert/Tiles/", "Sable"),
+    (r"Cute_Fantasy_Desert/", DECOR),
+    (r"Cute_Fantasy_Volcano/Tiles/Volcano_Bridge", "Aucun"),
+    (r"Cute_Fantasy_Volcano/", "Volcan"),
+    (r"Cute_Fantasy_Dungeons/Objects/", DECOR),
+    (r"Cute_Fantasy_Dungeons/", "Donjon"),
+    (r"Cute_Fantasy_ShroomLands/Tiles/.*Waterfall", "Eau"),
+    (r"Cute_Fantasy_ShroomLands/Tiles/.*Cliff", "Falaise"),
+    (r"Cute_Fantasy_ShroomLands/Tiles/", "Végétation"),
+]
+HABITAT_LAYERS = ["Sol", "Décors"]  # dans l'ordre : une tuile de sol de « Décors » remplace celle de « Sol »
+
+
+def habitat_rule(path):
+    """Règle de la planche (chemin complet) : type, (type, {tuile: type}), DECOR ; False si aucune règle."""
+    path = path.replace("\\", "/")
+    return next((rule for pattern, rule in HABITAT_RULES if re.search(pattern, path)), False)
+
 
 # ---------- Lecture (un .tmx passe d'abord par l'export JSON de Tiled) ----------
 if SOURCE.lower().endswith(".tmx"):
@@ -107,6 +157,34 @@ for tileset in data["tilesets"]:
         sys.exit(f"Deux planches différentes s'appellent « {file_name} » : renommer l'une des deux.")
     shutil.copyfile(image, os.path.join(TILES_OUT, file_name))
     tileset["image"] = file_name  # le parc la cherche dans images/parc/tuiles/
+    tileset["_habitat"] = habitat_rule(image)
+
+# ---------- Types de cases ----------
+FLIP_BITS = 0x1FFFFFFF  # bits de retournement des tuiles de Tiled
+tilesets = sorted(data["tilesets"], key=lambda t: t["firstgid"])
+width, height = data["width"], data["height"]
+cells = [0] * (width * height)
+missing = set()
+for name in HABITAT_LAYERS:
+    for i, gid in enumerate(layers[name]["data"]):
+        gid &= FLIP_BITS
+        if not gid:
+            continue
+        tileset = next(t for t in reversed(tilesets) if t["firstgid"] <= gid)
+        rule = tileset["_habitat"]
+        if rule is False:
+            missing.add(tileset["image"])
+            continue
+        if isinstance(rule, tuple):
+            rule = rule[1].get(gid - tileset["firstgid"], rule[0])
+        if rule is not DECOR:
+            cells[i] = HABITATS.index(rule)
+for tileset in data["tilesets"]:
+    del tileset["_habitat"]
+if missing:
+    sys.exit("Planches sans type de case (ajouter une règle à HABITAT_RULES dans outils/carte-parc.py) : "
+             + ", ".join(sorted(missing)))
+data["habitats"] = ["".join(str(c) for c in cells[y * width:(y + 1) * width]) for y in range(height)]
 
 # ---------- Carte : seulement ce que le parc lit, sur une ligne ----------
 os.makedirs(os.path.dirname(MAP_OUT), exist_ok=True)
@@ -115,4 +193,6 @@ with open(MAP_OUT, "w", encoding="utf-8", newline="\n") as f:
     f.write("\n")
 print(f"Carte écrite : {os.path.normpath(MAP_OUT)} ({data['width']} × {data['height']} tuiles, départ "
       f"{int(start['width']) // 16} × {int(start['height']) // 16}, parc {int(park['width']) // 16} × {int(park['height']) // 16})")
+counts = {HABITATS[h]: cells.count(h) for h in range(len(HABITATS)) if cells.count(h)}
+print("Types de cases : " + ", ".join(f"{name} {n}" for name, n in counts.items()))
 print(f"{len(copied)} planches copiées dans {os.path.normpath(TILES_OUT)} (à envoyer sur le serveur : deploy\\fond-parc.cmd)")

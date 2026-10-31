@@ -59,6 +59,8 @@ else
                         disabled="@(busy || expansions >= ParkService.MaxExpansions)">+ taille (debug)</button>
                 <button type="button" class="btn btn-outline-warning" @onclick="() => Resize(false)"
                         disabled="@(busy || expansions <= 0)">− taille (debug)</button>
+                <button type="button" class="btn @(showHabitats ? "btn-warning" : "btn-outline-warning")"
+                        @onclick="ToggleHabitats" aria-pressed="@(showHabitats ? "true" : "false")">Habitats (debug)</button>
             }
         }
     </Actions>
@@ -85,6 +87,19 @@ else
         </div>
     }
 </div>
+@if (showHabitats && ParkHabitats.Map(expansions + 1) is { } habitatMap)
+{
+    @* Mode debug : légende des couleurs des cases, et leur nombre dans la zone du parc (ParkHabitats, côté serveur) *@
+    <div class="park-habitats small mt-2">
+        @foreach (var habitat in ParkHabitats.All.Prepend(Habitat.None))
+        {
+            <span class="park-habitat">
+                <span class="park-habitat-color" style="background: @ParkHabitats.Color(habitat)"></span>
+                @ParkHabitats.Name(habitat) : @habitatMap.Counts[habitat]
+            </span>
+        }
+    </div>
+}
 
 @* ---------- Choix des Pokémon du parc ---------- *@
 @if (candidates is not null)
@@ -236,7 +251,8 @@ else
     private int expansions; // agrandissements achetés : la taille du parc (sa carte) et sa capacité
     private int Capacity => ParkService.CapacityOf(expansions);
     private long? expandBalance; // fenêtre « Agrandir le parc » ouverte : le solde du porte-monnaie
-    private bool debug; // mode debug du compte (page « Administration ») : boutons « + taille » et « − taille »
+    private bool debug; // mode debug du compte (page « Administration ») : boutons « + taille », « − taille », « Habitats »
+    private bool showHabitats; // mode debug : types de cases colorés sur la carte
     private bool loaded;
     private bool busy;
     private string? message;
@@ -304,6 +320,19 @@ else
         // Seul le propriétaire peut déplacer ses Pokémon (dans son navigateur seulement : rien n'est enregistré)
         engine = await module!.InvokeAsync<IJSObjectReference>("create", stage, selfRef, new { canMove = !Visitor, size = expansions + 1 });
         await engine.InvokeVoidAsync("setPokemon", members);
+        if (showHabitats)
+            await engine.InvokeVoidAsync("showHabitats", HabitatColors());
+    }
+
+    /// <summary>Couleur de chaque type de case, dans l'ordre des chiffres de la carte (0 : aucun).</summary>
+    private static string[] HabitatColors() => [.. Enum.GetValues<Habitat>().Select(ParkHabitats.Color)];
+
+    /// <summary>Mode debug : affiche ou cache les types de cases sur la carte.</summary>
+    private async Task ToggleHabitats()
+    {
+        showHabitats = debug && !showHabitats;
+        if (engine is not null)
+            await engine.InvokeVoidAsync("showHabitats", showHabitats ? HabitatColors() : null);
     }
 
     private async Task OpenExpand()
@@ -340,6 +369,7 @@ else
         var result = await Debug.ResizeParkAsync(userId, grow);
         Show(result.Message, !result.Ok);
         debug = await Debug.IsActiveAsync(userId); // coupé si le compte n'est plus administrateur
+        showHabitats &= debug;
         if (result.Ok)
         {
             expansions = result.Expansions;

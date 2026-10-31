@@ -73,6 +73,25 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
 - `ParkMapTests` : calques en CSV, jeux de tuiles incorporés avec un simple nom de fichier, « Départ » dans la carte,
   toutes ses cases libres reliées (même règle de diagonale que `parc.js`).
 
+## Types de cases (bonheur, à venir)
+- Feuille Google « Gestion du parc » de l'utilisateur (id `1m_jWFdXRigcS3tdz2UUDggTtE8cK-1avN_mBvMoYoOE`, connecteur
+  Google Sheets), onglet « Habitat » : 7 types de cases × 18 types de Pokémon, « o » aime, « x » n'aime pas. Recopiée
+  dans `ParkHabitats.Sheet` (une chaîne par type, colonnes dans l'ordre de la feuille) : la feuille change → la
+  recopier, et `ParkHabitatsTests.Sheet_MatchesTheSpreadsheet`. Autres onglets : « Taille », « IA » (à venir).
+- Détection **par planche** (choix de l'utilisateur, pas de calque peint) : `HABITAT_RULES` de `outils/carte-parc.py`,
+  première règle dont le motif est dans le chemin de la planche ; `DECOR` (objets, arbres, fleurs) = garde le type du
+  dessous ; « Sol » puis « Décors », pas « Devant ». Planches d'herbe à bords (`Grass_Tiles_n`) : chemin de terre
+  (80-82, 96-98, 112-114, 128, 129, 144, 145) et escaliers = aucun, flancs des hauteurs = falaise. Chemins = aucun (choix
+  de l'utilisateur). Les règles des extensions (désert, volcan, donjons, ShroomLands) et des plages sont **devinées
+  d'après les noms**, pas encore vues sur une carte : les vérifier avec « Habitats (debug) » à leur première utilisation.
+- Champ `habitats` du JSON (pas un calque : Phaser l'ignore) : une chaîne par ligne, chiffres 0 aucun, 1 sable, 2 cave,
+  3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan = enum `Habitat` = `Ground.habitats` de `parc.js`.
+- L'eau est bloquée : aucun Pokémon ne s'y tient. Le bonheur devra compter ce qu'il y a dans le parc
+  (`ParkHabitatMap.Counts`, cases bloquées comprises) ou autour du Pokémon, pas seulement sa case.
+- Coût : cartes lues une fois au démarrage (`ParkHabitats.Load` dans `Program.cs`), comptes faits une fois ; dans le
+  navigateur un `Uint8Array`, `habitatAt` sans déchets ; couche de debug (`showHabitats(colors)`, profondeur 3,2)
+  dessinée une fois dans une `RenderTexture`, redonnée par `Park.razor` après chaque redémarrage du parc.
+
 ## Affichage (Phaser 3.90.0, `wwwroot/lib/phaser/phaser.esm.min.js`)
 - Importé par `parc.js` (module ES, CSP : rien à ajouter ; `img-src blob:` déjà permis pour le chargeur de Phaser ; son
   `new Function("return this")` est dans un `try`). Phaser 4 existe (4.2.1 le 2026-10-30), pas adopté.
@@ -80,6 +99,8 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   (hauteur = `k × 320`, la zone « Départ ») : chez l'utilisateur `k` = 3. Sprites : `spriteK = round(k × 2/3)` pixels
   d'écran par pixel de sprite (jamais moins de 2 si `k` ≥ 2), positions arrondies au pixel d'écran (`snap`). Il a voulu
   les sprites 20 % plus petits que ×3 ; 2,4 n'étant pas net, il a choisi ×2. Ne pas revenir à un étirement.
+- Tous les Pokémon à la même taille : des tailles selon l'espèce (ratio de 1 à 4 d'après la taille réelle, feuille
+  Google de l'utilisateur) ont été essayées puis abandonnées le 2026-10-31 (« ça ne me plaît pas »). Ne pas les reproposer.
 - Glisser : au-delà de 6 px CSS, un appui devient un glissement (pas de clic) ; `pointerupoutside` aussi ; vue bornée par
   la caméra à la zone « Parc » plus `VIEW_MARGIN` (6) cases de forêt (`applyZoom`). `touch-action: none` sur le canvas ; `.park-empty` laisse passer les appuis (sauf son bouton).
 - Zoom (`zoomTo`, `applyZoom`) : crans entiers de ×1 à `maxZoom` (zoom de départ), point visé gardé fixe. Limites de la

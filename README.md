@@ -589,6 +589,16 @@ actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont faites par
 `python outils/generer-parc.py <dossier Cute_Fantasy du pack> <dossier de sortie>` (Python avec Pillow ; mêmes tirages
 à chaque fois : relancé sans changement, il redonne les mêmes cartes ; le parc entier est tiré une fois, chaque taille en
 garde sa zone), puis passées une à une par `outils/carte-parc.py`.
+**Types de cases** (pour le bonheur des Pokémon, à venir) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
+aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
+eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, volcan, donjons) et les écrit dans le champ
+`habitats` de la carte (une chaîne par ligne, un chiffre par case). Une case prend le type de sa tuile de « Sol », qu'une
+planche de sol dans « Décors » remplace ; objets, arbres et fleurs gardent le type du dessous. Une planche sans règle
+arrête le script. Ce que chaque type de Pokémon **aime ou non** vient de la feuille « Habitat » de l'utilisateur, recopiée
+dans `ParkHabitats` (par exemple Eau : aime l'eau, pas le volcan ; Roche : aime cave et volcan, pas le sable, la
+végétation ni l'eau). `ParkHabitats.Map(taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
+(cartes lues au démarrage) ; dans le navigateur, `habitatAt(x, y)` de `parc.js`. En **mode debug**, le bouton
+« Habitats (debug) » colore chaque case selon son type, avec la légende et le nombre de cases de chaque type.
 Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
 Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
 pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
@@ -887,7 +897,8 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles) ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
-| `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes du parc, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc ») |
+| `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes du parc, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
+| `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage) |
 | `MonsutaPotaru/Services/ParkService.cs` | Pokémon du parc : liste, choix (30 au plus, avec des sprites Donjon Mystère), retrait, vidage, famille d'évolution |
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (supprimée avec le Pokémon) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
@@ -916,9 +927,10 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/images/` | Hors du dépôt Git (voir « Lancer en local ») ; images servies par le site : `pokemon/<numéro d'espèce>.png`, `pokemon/<numéro>-<forme>.png` (`19-alola.png`, `6-mega-x.png`, `6-gmax.png`), `pokemon/femelle/`, `pokemon/chromatique/` (mêmes sous-dossiers), `objets/<numéro d'objet>.png`, `objets/ct-<type>.png` pour les CT/DT, un `inconnu.png` dans chaque dossier |
 | `MonsutaPotaru/wwwroot/images/parc/tuiles/` | Planches du pack Cute Fantasy utilisées par la carte du parc (hors Git : copiées par `outils/carte-parc.py`, envoyées par `deploy/fond-parc.cmd`) |
 | `outils/generer-parc.py` | Génère la carte du parc (`Parc_1.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
-| `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
+| `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
+| `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
 | `deploy/images-serveur.cmd` (`images-serveur.ps1`) | Remplit ou met à jour les images du serveur (`~/monsuta-potaru-images`) et redémarre le site |
