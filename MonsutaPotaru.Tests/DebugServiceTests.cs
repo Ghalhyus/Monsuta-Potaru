@@ -94,12 +94,12 @@ public sealed class DebugServiceTests : IDisposable
     public async Task ShrinkPark_LastArrivalsGoBackToTheCollection()
     {
         await _debug.SetActiveAsync("sacha", true);
-        await _debug.ResizeParkAsync("sacha", grow: true); // 50 Pokémon
+        await _debug.ResizeParkAsync("sacha", grow: true); // 40 Pokémon
         var start = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
         int[] ids;
         await using (var db = _db.NewContext())
         {
-            var pokemon = Enumerable.Range(0, 30).Select(i => new BankPokemon
+            var pokemon = Enumerable.Range(0, 25).Select(i => new BankPokemon
             {
                 OwnerId = "sacha", Species = 25, SpeciesName = "Pikachu", Nickname = $"P{i}", Level = 10,
                 DepositedAt = start, Data = [1],
@@ -119,6 +119,6 @@ public sealed class DebugServiceTests : IDisposable
         await using var check = _db.NewContext();
         var kept = await check.ParkMembers.Select(m => m.BankPokemonId).ToListAsync();
         Assert.Equal(ids.Skip(5).Order(), kept.Order()); // les 5 premiers numéros sont les derniers arrivés
-        Assert.Equal(30, await check.BankPokemon.CountAsync()); // toujours dans la collection
+        Assert.Equal(25, await check.BankPokemon.CountAsync()); // toujours dans la collection
     }
 }

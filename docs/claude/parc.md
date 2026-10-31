@@ -5,12 +5,12 @@ README : « Parc ». Page `Park.razor`, service `ParkService`, affichage et anim
 Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md`.
 
 ## Agrandissements (`ParkService`)
-- Capacité `CapacityOf(ParkExpansions)` = 25 + 25 par agrandissement, `MaxExpansions` = 3 (colonne
+- Capacité `CapacityOf(ParkExpansions)` = 20 + 20 par agrandissement, `MaxExpansions` = 3 (colonne
   `AspNetUsers.ParkExpansions`, migration `ParkExpansions`). `ExpandAsync` : dans une transaction, `ExecuteUpdate`
   conditionnel sur la taille (`< MaxExpansions`) puis débit conditionnel du porte-monnaie ; débit refusé : `RollbackAsync`
   (la taille revient). Ligne de journal `WalletOperationKind.ExpandPark` (libellé dans `Inventory.razor`).
 - `SetAsync` au-dessus de la capacité : accepté seulement si les Pokémon voulus sont tous déjà au parc (anciens parcs de
-  30). La fenêtre de choix suit la même règle (`!c.InPark`).
+  30 ou de 25). La fenêtre de choix suit la même règle (`!c.InPark`).
 - Après l'achat, `Park.razor` rafraîchit `WalletState` (solde du menu) et redémarre le parc (`StartEngine` : `dispose`
   puis `create` avec `size = ParkExpansions + 1`).
 - **Planches gardées par le module** (`sheets`) d'un jeu de Phaser à l'autre : une texture doit être recréée dans chaque

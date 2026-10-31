@@ -332,7 +332,7 @@ ceux qui gèrent le site, avec tout ce que peut un Standard en plus. Page « Adm
   base que le compte est encore administrateur (sinon le mode est coupé). Il ajoute :
   - dans « Inventaire », sous le porte-monnaie : **+10 000, +100 000 et +1 000 000 ₽** (montants fixes, tout autre
     refusé), crédités comme un retrait et écrits au journal (« Argent ajouté (mode debug) ») ;
-  - dans « Parc », sous le titre : **« + taille »** et **« − taille »**, gratuits et hors journal, de 25 à 100 Pokémon.
+  - dans « Parc », sous le titre : **« + taille »** et **« − taille »**, gratuits et hors journal, de 20 à 80 Pokémon.
     Réduit, le parc garde ses premiers arrivés : les derniers retournent dans la collection (le message dit combien).
 - L'administrateur ne change pas les mots de passe (pas encore d'outil pour un mot de passe oublié).
 
@@ -546,14 +546,14 @@ Dissuasif, pas infaillible : rien n'oblige le joueur à remplacer réellement sa
 ### Parc
 
 Le menu « Parc » (`/parc`) est une carte en pixel art (forêt tout autour, chemins, étangs, prairie fleurie) qui prend
-toute la largeur de la page, où vivent jusqu'à **25 Pokémon** de la
+toute la largeur de la page, où vivent jusqu'à **20 Pokémon** de la
 collection, stockage interne ou sauvegardes stockées, de **toutes les générations** (hors œufs ; `ParkService.BaseCapacity`).
-**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **50 000 ₽** du porte-monnaie pour **25 Pokémon de
-plus**, trois fois au plus pour l'instant (**100 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
+**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **40 000 ₽** du porte-monnaie pour **20 Pokémon de
+plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
 solde (bouton grisé s'il manque de l'argent, avec un lien vers « Inventaire ») ; la taille et le débit sont vérifiés dans
 les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
-journal de l'inventaire (« Agrandissement du parc », « Parc : 25 → 50 Pokémon »), et le parc se recharge avec sa nouvelle
-carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements) les garde : on peut en
+journal de l'inventaire (« Agrandissement du parc », « Parc : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
+carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite) les garde : on peut en
 retirer, pas en ajouter tant qu'il dépasse.
 « Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
 type, forme...) et le compteur. Les espèces dont SpriteCollab n'a pas encore les sprites (64, surtout de 9e génération)
@@ -909,7 +909,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Services/PokemonFingerprint.cs` | Empreinte d'un Pokémon et recherche de ses doublons dans le compte (vieille copie d'une sauvegarde) |
 | `MonsutaPotaru/Services/PokemonInfo.cs` | Noms français (dont « Rouge / Bleu », « Or / Argent », « Diamant / Perle », « Or HeartGold / Argent SoulSilver » pour les groupes de jeux : une sauvegarde de ces jeux ne dit pas lequel des deux ; migrations `GameNames` et `GameGroupNames` pour les noms déjà enregistrés), sprites, légalité |
 | `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Transfert et stockage interne » (`/transfert`) : boîtes, glisser-déposer, sélection multiple |
-| `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 25 à 100 Pokémon, « Agrandir le parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer »), « Vider le parc », fiche au clic |
+| `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, « Agrandir le parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer »), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles) ; `simulate` et `view` pour les essais |

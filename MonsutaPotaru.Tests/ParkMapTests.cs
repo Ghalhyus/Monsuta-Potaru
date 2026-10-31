@@ -82,7 +82,7 @@ public sealed class ParkMapTests
         var freeTiles = FreeTiles(map);
         bool Free(int x, int y) => freeTiles.Contains((x, y));
         var free = freeTiles.Order().ToList();
-        // Place pour ses Pokémon : 25 par taille, une quinzaine de cases chacun au moins
+        // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins
         var capacity = ParkService.CapacityOf(size - 1);
         Assert.True(free.Count >= capacity * 14, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
 

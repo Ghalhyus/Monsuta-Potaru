@@ -7,7 +7,7 @@ using MonsutaPotaru.Services;
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
-/// « Parc » : choix des Pokémon (25 au plus, avec des sprites), agrandissements payés avec le porte-monnaie, départ avec le
+/// « Parc » : choix des Pokémon (20 au plus, avec des sprites), agrandissements payés avec le porte-monnaie, départ avec le
 /// Pokémon, sprites Donjon Mystère.
 /// </summary>
 public sealed class ParkServiceTests : IDisposable
@@ -89,8 +89,8 @@ public sealed class ParkServiceTests : IDisposable
             (await _park.SetAsync("sacha", [pikachu, simisear])).Message);
         Assert.False((await _park.SetAsync("sacha", [egg])).Ok);
         Assert.False((await _park.SetAsync("sacha", [misty])).Ok); // pas le sien
-        var many = Enumerable.Range(0, 26).Select(_ => Add(19)).ToList();
-        Assert.Equal("Le parc accueille 25 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", many)).Message);
+        var many = Enumerable.Range(0, 21).Select(_ => Add(19)).ToList();
+        Assert.Equal("Le parc accueille 20 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", many)).Message);
         Assert.Empty(await _park.ListAsync("sacha"));
 
         var result = await _park.SetAsync("sacha", [mew, pikachu, chikorita]);
@@ -109,47 +109,47 @@ public sealed class ParkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Expanding_DebitsTheWallet_AndAddsTwentyFivePokemon_ThreeTimesAtMost()
+    public async Task Expanding_DebitsTheWallet_AndAddsTwentyPokemon_ThreeTimesAtMost()
     {
-        await SetWallet("sacha", 160_000);
+        await SetWallet("sacha", 130_000);
         await SetWallet("ondine", 1_000_000);
-        var many = Enumerable.Range(0, 51).Select(_ => Add(19)).ToList();
+        var many = Enumerable.Range(0, 41).Select(_ => Add(19)).ToList();
 
         var first = await _park.ExpandAsync("sacha");
         Assert.True(first.Ok, first.Message);
-        Assert.Equal((1, 110_000L), (first.Expansions, first.Balance));
-        Assert.StartsWith("Parc agrandi : il accueille maintenant 50 Pokémon.", first.Message);
-        Assert.True((await _park.SetAsync("sacha", many[..50])).Ok);
-        Assert.Equal("Le parc accueille 50 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", many)).Message);
+        Assert.Equal((1, 90_000L), (first.Expansions, first.Balance));
+        Assert.StartsWith("Parc agrandi : il accueille maintenant 40 Pokémon.", first.Message);
+        Assert.True((await _park.SetAsync("sacha", many[..40])).Ok);
+        Assert.Equal("Le parc accueille 40 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", many)).Message);
 
         Assert.True((await _park.ExpandAsync("sacha")).Ok);
         var third = await _park.ExpandAsync("sacha");
         Assert.Equal((true, 3, 10_000L), (third.Ok, third.Expansions, third.Balance));
-        Assert.Equal(100, ParkService.CapacityOf(await _park.GetExpansionsAsync("sacha")));
+        Assert.Equal(80, ParkService.CapacityOf(await _park.GetExpansionsAsync("sacha")));
 
         var fourth = await _park.ExpandAsync("sacha"); // la plus grande taille pour l'instant
         Assert.False(fourth.Ok);
-        Assert.Equal("Ton parc a déjà sa plus grande taille (100 Pokémon).", fourth.Message);
+        Assert.Equal("Ton parc a déjà sa plus grande taille (80 Pokémon).", fourth.Message);
         Assert.Equal(3, await _park.GetExpansionsAsync("sacha"));
         Assert.Equal(10_000, await _inventory.GetBalanceAsync("sacha"));
 
         var operations = await _inventory.ListOperationsAsync("sacha"); // les plus récentes d'abord
-        Assert.All(operations, op => Assert.Equal((WalletOperationKind.ExpandPark, -50_000L), (op.Kind, op.Amount)));
-        Assert.Equal(["Parc : 75 → 100 Pokémon", "Parc : 50 → 75 Pokémon", "Parc : 25 → 50 Pokémon"], operations.Select(o => o.Details));
+        Assert.All(operations, op => Assert.Equal((WalletOperationKind.ExpandPark, -40_000L), (op.Kind, op.Amount)));
+        Assert.Equal(["Parc : 60 → 80 Pokémon", "Parc : 40 → 60 Pokémon", "Parc : 20 → 40 Pokémon"], operations.Select(o => o.Details));
         Assert.Equal(0, await _park.GetExpansionsAsync("ondine")); // l'achat de Sacha ne touche pas Ondine
         Assert.Equal(1_000_000, await _inventory.GetBalanceAsync("ondine"));
     }
 
     [Theory]
     [InlineData(0L)]      // pas de porte-monnaie
-    [InlineData(49_999L)]
+    [InlineData(39_999L)]
     public async Task Expanding_IsRefused_WithoutEnoughMoney(long money)
     {
         if (money > 0) await SetWallet("sacha", money);
 
         var result = await _park.ExpandAsync("sacha");
         Assert.False(result.Ok);
-        Assert.Contains($"il manque {InventoryService.FormatMoney(50_000 - money)}", result.Message);
+        Assert.Contains($"il manque {InventoryService.FormatMoney(40_000 - money)}", result.Message);
         Assert.Equal(0, await _park.GetExpansionsAsync("sacha")); // taille remise comme avant (transaction annulée)
         Assert.Equal(money, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
@@ -167,11 +167,11 @@ public sealed class ParkServiceTests : IDisposable
         }
         var newcomer = Add(25);
 
-        Assert.True((await _park.SetAsync("sacha", old[..29])).Ok); // en retirer un : permis, même au-dessus de 25
-        Assert.Equal("Le parc accueille 25 Pokémon au plus : retires-en 4.", (await _park.SetAsync("sacha", [.. old[..28], newcomer])).Message);
+        Assert.True((await _park.SetAsync("sacha", old[..29])).Ok); // en retirer un : permis, même au-dessus de 20
+        Assert.Equal("Le parc accueille 20 Pokémon au plus : retires-en 9.", (await _park.SetAsync("sacha", [.. old[..28], newcomer])).Message);
         Assert.False((await _park.SetAsync("sacha", old)).Ok); // celui retiré ne revient pas tant que le parc dépasse
         Assert.Equal(29, (await _park.ListAsync("sacha")).Count);
-        Assert.True((await _park.SetAsync("sacha", [.. old[..24], newcomer])).Ok); // revenu à 25 : de nouveau ouvert
+        Assert.True((await _park.SetAsync("sacha", [.. old[..19], newcomer])).Ok); // revenu à 20 : de nouveau ouvert
     }
 
     [Fact]

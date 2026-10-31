@@ -32,12 +32,12 @@ public sealed record ParkExpansionResult(bool Ok, string Message, int Expansions
 public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactory, ILogger<ParkService> logger)
 {
     /// <summary>Pokémon accueillis sans agrandissement.</summary>
-    public const int BaseCapacity = 25;
+    public const int BaseCapacity = 20;
     /// <summary>Pokémon de plus à chaque agrandissement.</summary>
-    public const int ExpansionCapacity = 25;
-    /// <summary>Agrandissements possibles pour l'instant (100 Pokémon) : une carte par taille, de 1 à MaxExpansions + 1.</summary>
+    public const int ExpansionCapacity = 20;
+    /// <summary>Agrandissements possibles pour l'instant (80 Pokémon) : une carte par taille, de 1 à MaxExpansions + 1.</summary>
     public const int MaxExpansions = 3;
-    public const long ExpansionPrice = 50_000;
+    public const long ExpansionPrice = 40_000;
 
     public static int CapacityOf(int expansions) => BaseCapacity + ExpansionCapacity * expansions;
 
@@ -149,7 +149,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     /// <summary>
     /// Remplace les Pokémon du parc par <paramref name="ids"/> (choix de la fenêtre « Ajouter des Pokémon ») : ceux qui y
     /// restent gardent leur place, les nouveaux arrivent après. Un parc qui a plus de Pokémon que sa capacité (30 avant les
-    /// agrandissements, 25 depuis) les garde : on peut en retirer, pas en ajouter tant qu'il dépasse.
+    /// agrandissements, 25 ensuite, 20 depuis) les garde : on peut en retirer, pas en ajouter tant qu'il dépasse.
     /// </summary>
     public async Task<ParkResult> SetAsync(string ownerId, IReadOnlyCollection<int> ids)
     {

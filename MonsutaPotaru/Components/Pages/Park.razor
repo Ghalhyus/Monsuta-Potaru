@@ -18,7 +18,7 @@
 
 <PageTitle>@(!Visitor ? "Parc" : player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}")</PageTitle>
 
-@* De 25 à 100 Pokémon de la collection (selon les agrandissements achetés) se promènent sur une carte faite dans Tiled
+@* De 20 à 80 Pokémon de la collection (selon les agrandissements achetés) se promènent sur une carte faite dans Tiled
    (wwwroot/parc/parc-1-{taille}.json, outils/generer-parc.py et carte-parc.py) : l'affichage (Phaser) et leur comportement
    sont dans wwwroot/js/parc.js, la page ne gère que la liste, l'agrandissement et les fenêtres.
    Parc d'un autre joueur (Multijoueurs, /joueurs/{pseudo}/parc) : on le regarde, sans choisir ni retirer de Pokémon. *@

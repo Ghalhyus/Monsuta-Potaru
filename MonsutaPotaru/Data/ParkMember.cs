@@ -1,7 +1,7 @@
 namespace MonsutaPotaru.Data;
 
 /// <summary>
-/// Pokémon de la collection installé dans le « Parc » de son dresseur (25 à 100 selon ses agrandissements, voir
+/// Pokémon de la collection installé dans le « Parc » de son dresseur (20 à 80 selon ses agrandissements, voir
 /// <see cref="Services.ParkService"/>).
 /// Supprimé avec le Pokémon : retiré de la collection, ou recréé par la mise à jour de sa sauvegarde stockée, il quitte le parc.
 /// </summary>
