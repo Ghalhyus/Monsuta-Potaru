@@ -28,7 +28,10 @@ README : « Combats ».
 - Page : `PlayAsync` ne fait rien quand il n'y a pas d'étape nouvelle (un simple « l'autre a choisi » refermerait le menu
   ouvert sous le clic du joueur).
 - Résultats : `BattleRecorder` (service hébergé) écoute `BattleHub.Finished` et écrit `BattleRecords` à côté du fil du
-  simulateur. Tests : `BattleRecorder.RecordAsync` appelé directement.
+  simulateur. Tests : `BattleRecorder.RecordAsync` appelé directement. `Recorder_WritesEachFinishedBattle` attend le
+  signal `SavedChanges` de son contexte (`SignalingFactory`) au lieu d'interroger la base : `TestDatabase` n'a qu'une
+  connexion SQLite, que deux fils ne doivent jamais utiliser en même temps (échecs au hasard en CI, « SQLite Error 5:
+  'not an error' » dans `CreateFunction`, le 2026-11-01).
 
 ## Sprites (`BattleSprites`)
 - Ceux du jeu **de celui qui regarde** (sa sauvegarde, connue quand son équipe est acceptée : `BattleTeamResult.Sprites`),

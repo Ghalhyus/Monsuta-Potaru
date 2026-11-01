@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using MonsutaPotaru.Data;
 using MonsutaPotaru.Services;
@@ -223,19 +224,33 @@ public sealed class BattleHubTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Fabrique qui prévient quand un de ses contextes a enregistré. La base de test n'a qu'une connexion SQLite, que deux
+    /// fils ne doivent pas utiliser en même temps : interroger la base pendant que le BattleRecorder y écrit (sur un autre
+    /// fil) échouait de temps en temps en CI (« SQLite Error 5 » dans CreateFunction).
+    /// </summary>
+    private sealed class SignalingFactory(IDbContextFactory<ApplicationDbContext> inner) : IDbContextFactory<ApplicationDbContext>
+    {
+        public TaskCompletionSource Saved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ApplicationDbContext CreateDbContext()
+        {
+            var context = inner.CreateDbContext();
+            context.SavedChanges += (_, _) => Saved.TrySetResult();
+            return context;
+        }
+    }
+
     [Fact]
     public async Task Recorder_WritesEachFinishedBattle()
     {
         using var db = new TestDatabase("sacha", "ondine");
-        var recorder = new BattleRecorder(_hub, db.Factory, NullLogger<BattleRecorder>.Instance);
+        var factory = new SignalingFactory(db.Factory);
+        var recorder = new BattleRecorder(_hub, factory, NullLogger<BattleRecorder>.Instance);
         await recorder.StartAsync(CancellationToken.None);
         var session = Fighting();
         _hub.Forfeit(session, "sacha");
-        WaitUntil(() =>
-        {
-            using var context = db.NewContext();
-            return context.BattleRecords.Any();
-        }, "combat enregistré");
+        await factory.Saved.Task.WaitAsync(TimeSpan.FromSeconds(15)); // combat enregistré, sans lire la base pendant l'écriture
         await recorder.StopAsync(CancellationToken.None);
         await using var check = db.NewContext();
         Assert.Equal("ondine", check.BattleRecords.Single().WinnerId);
