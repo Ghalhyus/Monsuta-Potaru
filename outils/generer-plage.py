@@ -2,10 +2,12 @@
 # Fantasy (+ Desert pour les palmiers) : une côte, le sable au nord et la mer au sud, bords automatiques, criques, pointes,
 # îlots, ponton et barque, palmiers, rochers, et le calque « Collisions » qui va avec. Tirages fixés : relancé sans
 # changement, il redonne les mêmes cartes.
-# Environ 65 % de mer et 35 % de sable dans la zone de chaque taille (choix de l'utilisateur : les types Eau y sont
+# Environ 65 % de mer et 35 % de sable dans la zone des tailles 2 à 4 (choix de l'utilisateur : les types Eau y sont
 # heureux, Feu, Roche, Acier, Électrik, Sol et Fée malheureux ; voir ParkHabitats) : la côte passe vers le tiers haut de
-# chaque zone. La mer est bloquée : les zones sont plus grandes que celles du parc 1 pour garder ~14 cases libres par
-# Pokémon. Ce qui n'est pas encore acheté est caché par une cocoteraie dense côté plage et des rochers serrés côté mer.
+# chaque zone ; la taille 1 est la vue de départ, moitié plage moitié mer (52,5 % de mer). La mer est bloquée : ~8 cases
+# de sable libres par Pokémon aux tailles 1 et 2 (zones choisies par l'utilisateur dans Tiled le 2026-11-01, les types Eau
+# nagent en plus dans la mer). Ce qui n'est pas encore acheté est caché par une cocoteraie dense côté plage et des
+# rochers serrés côté mer.
 # Le bord du sable (écume) est bloqué : un Pokémon n'y aurait pas les pieds au sec.
 # Ensuite, pour chacune : python outils/carte-parc.py <Plage_1-1.tmx>. Aperçus (plage-1.png, plage-1_collisions.png...)
 # dans le dossier de sortie, ou dans le troisième. Moteur commun avec le parc 1 : parc_carte.py.
@@ -17,9 +19,10 @@ from parc_carte import Carte, bordure, bruit, dans, ecrire, morceaux_de, nettoye
 PACK, SORTIE = sys.argv[1], sys.argv[2]
 L, H = 80, 60
 # Zone de chaque taille (x, y, largeur, hauteur, en tuiles) : 20, 40, 60 puis 80 Pokémon (ParkService). La côte est vers
-# la ligne 22 : chaque zone en a environ un tiers au-dessus (le sable), deux tiers au-dessous (la mer).
-ZONES = [(20, 10, 40, 31), (12, 7, 56, 43), (5, 4, 70, 53), (0, 0, L, H)]
+# la ligne 22 : les zones 2 et 3 en ont environ un tiers au-dessus (le sable), deux tiers au-dessous (la mer). La zone 1
+# est la vue de départ (mêmes tailles que le parc 1 : 24 × 20, puis 40 × 31 et 56 × 43).
 DEPART = (28, 10, 24, 20)  # vue de départ (même hauteur que le parc 1 : même zoom), moitié plage, moitié mer
+ZONES = [DEPART, (20, 10, 40, 31), (12, 7, 56, 43), (0, 0, L, H)]
 COTE = 20
 carte = Carte(PACK, L, H, 11)
 rng, jeu, t, dedans, tache = carte.rng, carte.jeu, carte.t, carte.dedans, carte.tache
@@ -77,10 +80,14 @@ sable = nettoyer_cote(sable)
 terre = plus_grand_morceau(sable)  # la côte ; le reste : les îlots
 ilots = [m for m in morceaux_de(sable - terre)]
 
-# Bordure d'origine (carte entière) : cocoteraie le long du haut et des côtés à terre, rochers le long des bords en mer
+# Bordure d'origine (carte entière) : cocoteraie le long du haut et des côtés à terre, rochers le long des bords en mer.
+# EPAISSEUR : 3,5 à 5,3 cases cachées, pour deux rangées de palmiers et 2 à 3 cases de rochers au moins à la dernière
+# taille (demande de l'utilisateur, 2026-11-01 ; 2,4 avant : une seule rangée, avec des trous)
+EPAISSEUR = 4.4
 haut, gauche, droite, bas = (bruit(n, 0.9, 5, g) for n, g in ((L, 41), (H, 42), (H, 43), (L, 44)))
 bordure_carte = {(x, y) for y in range(H) for x in range(L)
-                 if y < 2.4 + haut[x] or x < 2.4 + gauche[y] or x >= L - 2.4 + droite[y] or y >= H - 2.4 + bas[x]}
+                 if y < EPAISSEUR + haut[x] or x < EPAISSEUR + gauche[y] or x >= L - EPAISSEUR + droite[y]
+                 or y >= H - EPAISSEUR + bas[x]}
 carte.lisiere = lisiere = set(bordure_carte)
 
 

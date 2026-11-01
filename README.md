@@ -607,11 +607,14 @@ précédente). Les cartes actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont fait
 garde sa zone), puis passées une à une par `outils/carte-parc.py`.
 **Plage** (deuxième paysage, à acheter) : `Plage_1-1.tmx` à
 `Plage_1-4.tmx` (`plage-1-1.json` à `plage-1-4.json`), faites par `outils/generer-plage.py` (mêmes arguments). Une côte,
-le sable au nord, la mer au sud : environ **65 % de mer et 35 % de sable** dans la zone de chaque taille (les types Eau y
-sont heureux ; Feu, Roche, Acier, Électrik, Sol et Fée malheureux), îlots, ponton et barque, palmiers (extension Desert du
-pack), rochers. La mer et le bord du sable (écume) sont bloqués, d'où des zones plus grandes que celles du parc 1 (40 × 31
-au départ). Ce qui n'est pas acheté est caché par une cocoteraie dense côté plage et un récif de gros rochers côté mer ;
-les îlots pas encore achetés n'apparaissent pas. `ParkMapTests` vérifie aussi la part de mer (60 à 70 %) à chaque taille.
+le sable au nord, la mer au sud : environ **65 % de mer et 35 % de sable** dans la zone des tailles 2 à 4 (les types Eau
+y sont heureux ; Feu, Roche, Acier, Électrik, Sol et Fée malheureux), îlots, ponton et barque, palmiers (extension Desert
+du pack), rochers. Zones : la vue de départ (24 × 20, moitié plage moitié mer : 52,5 % de mer, les Eau encore heureux),
+40 × 31, 56 × 43, puis toute la carte. La mer et le bord du sable (écume) sont bloqués : 8 à 10 cases de sable libres par
+Pokémon aux trois premières tailles (le test en exige 7 pour la plage), les types Eau nagent en plus dans la mer. Ce qui
+n'est pas acheté est caché par une cocoteraie dense côté plage et un récif de gros rochers côté mer ; les îlots pas encore
+achetés n'apparaissent pas. `ParkMapTests` vérifie aussi la part de mer (60 à 70 % des tailles 2 à 4, un peu plus de la
+moitié à la taille 1).
 Les deux générateurs partagent leur moteur (`outils/parc_carte.py`).
 **Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
 aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
@@ -977,7 +980,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/images/` | Hors du dépôt Git (voir « Lancer en local ») ; images servies par le site : `pokemon/<numéro d'espèce>.png`, `pokemon/<numéro>-<forme>.png` (`19-alola.png`, `6-mega-x.png`, `6-gmax.png`), `pokemon/femelle/`, `pokemon/chromatique/` (mêmes sous-dossiers), `objets/<numéro d'objet>.png`, `objets/ct-<type>.png` pour les CT/DT, un `inconnu.png` dans chaque dossier |
 | `MonsutaPotaru/wwwroot/images/parc/tuiles/` | Planches du pack Cute Fantasy utilisées par la carte du parc (hors Git : copiées par `outils/carte-parc.py`, envoyées par `deploy/fond-parc.cmd`) |
 | `outils/generer-parc.py` | Génère les cartes du parc 1 (`Parc_1-1.tmx` à `Parc_1-4.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
-| `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer à chaque taille |
+| `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
 | `outils/parc_carte.py` | Moteur commun des deux générateurs : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` et aperçus |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |

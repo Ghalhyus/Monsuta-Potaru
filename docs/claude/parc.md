@@ -19,6 +19,11 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   pas. »). `ParkServiceTests.ParkOfAnotherPlayer_IsRefused`.
 - Nouveau paysage : une valeur de `ParkLandscape`, ses cartes `{MapName}-{taille}.json`, une ligne dans chaque méthode de
   `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes.
+- **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
+  cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
+  Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage : `EPAISSEUR` = 4,4 ± 0,9 dans
+  `generer-plage.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
+  un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
 - Capacité `CapacityOf(Park.Expansions)` = 20 + 20 par agrandissement, `MaxExpansions` = 3, par parc. `ExpandAsync` :
@@ -98,16 +103,24 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 ## Plage (`outils/generer-plage.py`, `ParkLandscape.Beach`)
 - `Plage_1-1.tmx` à `Plage_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `plage-1-{taille}.json` (le nom vient
   du fichier). Mêmes arguments que `generer-parc.py` ; aperçus `plage-<n>.png` et `plage-<n>_collisions.png`.
-- Types de cases vus sur le site le 2026-11-01 (taille 1) : 806 eau, 418 sable, 16 aucun (le ponton), sur 40 × 31.
-- **65 % de mer, 35 % de sable** dans la zone de chaque taille (choix de l'utilisateur, 2026-11-01 ; tolérance de
+- Types de cases vus sur le site le 2026-11-01 (zone de 40 × 31, la taille 2 depuis) : 806 eau, 418 sable, 16 aucun (le
+  ponton).
+- **65 % de mer, 35 % de sable** dans la zone des tailles 2 à 4 (choix de l'utilisateur, 2026-11-01 ; tolérance de
   `ParkMapTests.Beach_IsAboutTwoThirdsSea_AtEverySize` : 60-70 % de mer, 30-40 % de sable ; Eau heureux, Feu malheureux,
-  Normal normal). Le script affiche les parts : 33,7 / 34,9 / 36,2 / 37,0 % de sable. Réglages : `COTE` (ligne de la
+  Normal normal). Taille 1 = la vue de départ, moitié plage moitié mer : 52,5 % de mer (test : 51-55 %, les Eau encore
+  heureux, plus de 50 %). Le script affiche les parts : 44,2 / 33,7 / 34,9 / 37,0 % de sable. Réglages : `COTE` (ligne de la
   côte, 20), `ZONES` (le haut de chaque zone placé pour que la côte en soit au tiers), anses aux deux bouts (moins de sable
   dans la dernière taille, que la bordure haute de palmiers enrichit en sable). Une ligne de `COTE` = ~1 à 3 points de
   sable selon la taille.
-- La mer et l'écume (bord du sable, tuiles de bordure de `Beach_Tiles`) sont bloquées : zones plus grandes que le parc 1
-  (40 × 31, 56 × 43, 70 × 53, 80 × 60) pour 15 à 16 cases libres par Pokémon (le test en exige 14). « Départ » reste
-  24 × 20 (même zoom), moitié plage moitié mer.
+- La mer et l'écume (bord du sable, tuiles de bordure de `Beach_Tiles`) sont bloquées. **Zones choisies par
+  l'utilisateur** (dans Tiled, 2026-11-01, puis reportées dans `ZONES`) : « Départ » (24 × 20), 40 × 31, 56 × 43, toute
+  la carte, soit 8,2 / 8,0 / 10,2 / 13,2 cases de sable libres par Pokémon (le test en exige 7 pour la plage, 14 pour la
+  forêt ; les types Eau nagent en plus dans la mer). Une zone déplacée dans Tiled : la reporter dans `ZONES` (arrondie à
+  la case) et régénérer, sinon le sable et la mer hors de la nouvelle zone restent visibles et libres.
+- Bordure de la carte entière (`bordure_carte`, visible à la taille 4) : `EPAISSEUR` = 4,4 ± 0,9 cases (2,4 avant le
+  2026-11-01 : une seule rangée de palmiers, trouée). Une case de bordure sans palmier ni rocher reste du sable libre, et
+  un palmier ou un gros rocher demande deux cases de profondeur : il faut ~4 cases pour en voir 2 à 3. Elle sert aussi de
+  lisière aux objets : la changer déplace quelques objets à toutes les tailles.
 - Bords du sable : le sable est la forme (`PLAGE`, premier des six groupes de `Beach_Tiles`, les autres sont des variantes
   de l'écume), prolongée hors de la carte (`hors_carte` : pas de bordure le long du bord). `nettoyer_cote` nettoie le
   sable puis la mer jusqu'à ce que rien ne change. Sol tiré case par case (`tirage`) : le même à chaque taille.

@@ -92,9 +92,11 @@ public sealed class ParkMapTests
         var freeTiles = FreeTiles(map);
         bool Free(int x, int y) => freeTiles.Contains((x, y));
         var free = freeTiles.Order().ToList();
-        // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins
+        // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins ; à la plage, la mer est bloquée et
+        // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer)
         var capacity = ParkService.CapacityOf(size - 1);
-        Assert.True(free.Count >= capacity * 14, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
+        var perPokemon = park == "plage-1" ? 7 : 14;
+        Assert.True(free.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
 
         // Comme parc.js : en diagonale seulement si les deux côtés sont libres
         var reached = new HashSet<(int x, int y)> { free[0] };
@@ -132,12 +134,13 @@ public sealed class ParkMapTests
     [InlineData(4)]
     public void Beach_IsAboutTwoThirdsSea_AtEverySize(int size)
     {
-        // Choix de l'utilisateur : environ 65 % de mer et 35 % de sable, les types Eau y sont heureux, Feu malheureux
+        // Choix de l'utilisateur : environ 65 % de mer et 35 % de sable, les types Eau y sont heureux, Feu malheureux. La
+        // taille 1 est la vue de départ, moitié plage moitié mer : un peu plus de la moitié de mer, les Eau heureux quand même.
         var map = ParkHabitats.Read(Json("plage-1", size))!;
         var total = map.Area.W * map.Area.H;
         int sea = map.Counts[Habitat.Water] * 100 / total, sand = map.Counts[Habitat.Sand] * 100 / total;
-        Assert.InRange(sea, 60, 70);
-        Assert.InRange(sand, 30, 40);
+        Assert.InRange(sea, size == 1 ? 51 : 60, size == 1 ? 55 : 70);
+        Assert.InRange(sand, 30, size == 1 ? 48 : 40);
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, map).Mood);
         Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, map).Mood);
         Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, map).Mood);
