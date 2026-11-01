@@ -204,9 +204,6 @@ namespace MonsutaPotaru.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("ParkExpansions")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("PasswordHash")
                         .HasColumnType("TEXT");
 
@@ -499,6 +496,30 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("OwnedItems");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.Park", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Expansions")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Landscape")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "Landscape")
+                        .IsUnique();
+
+                    b.ToTable("Parks");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.ParkMember", b =>
                 {
                     b.Property<int>("BankPokemonId")
@@ -511,9 +532,14 @@ namespace MonsutaPotaru.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("ParkId")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("BankPokemonId");
 
                     b.HasIndex("OwnerId");
+
+                    b.HasIndex("ParkId");
 
                     b.ToTable("ParkMembers");
                 });
@@ -943,6 +969,17 @@ namespace MonsutaPotaru.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.Park", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.ParkMember", b =>
                 {
                     b.HasOne("MonsutaPotaru.Data.BankPokemon", "BankPokemon")
@@ -951,7 +988,15 @@ namespace MonsutaPotaru.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("MonsutaPotaru.Data.Park", "Park")
+                        .WithMany()
+                        .HasForeignKey("ParkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("BankPokemon");
+
+                    b.Navigation("Park");
                 });
 
             modelBuilder.Entity("MonsutaPotaru.Data.StoredSave", b =>

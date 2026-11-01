@@ -19,8 +19,9 @@
 <PageTitle>@(!Visitor ? "Parc" : player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}")</PageTitle>
 
 @* De 20 à 80 Pokémon de la collection (selon les agrandissements achetés) se promènent sur une carte faite dans Tiled
-   (wwwroot/parc/parc-1-{taille}.json, outils/generer-parc.py et carte-parc.py) : l'affichage (Phaser) et leur comportement
-   sont dans wwwroot/js/parc.js, la page ne gère que la liste, l'agrandissement et les fenêtres.
+   (wwwroot/parc/{carte}-{taille}.json, outils/generer-parc.py, generer-plage.py et carte-parc.py) : l'affichage (Phaser)
+   et leur comportement sont dans wwwroot/js/parc.js, la page ne gère que la liste, les achats et les fenêtres. Un parc par
+   paysage (la Forêt, puis ceux achetés), choisi dans la liste déroulante.
    Parc d'un autre joueur (Multijoueurs, /joueurs/{pseudo}/parc) : on le regarde, sans choisir ni retirer de Pokémon. *@
 
 @if (Visitor && player is null)
@@ -43,6 +44,15 @@ else
         fais glisser la carte pour explorer les alentours.
     </Description>
     <Actions>
+        @if (parks.Count > 1)
+        {
+            <select class="form-select w-auto park-choice" aria-label="Parc affiché" value="@ParkId" @onchange="ChangePark" disabled="@busy">
+                @foreach (var p in parks)
+                {
+                    <option value="@p.Id">@p.Name (@p.Count / @p.Capacity)</option>
+                }
+            </select>
+        }
         @if (!Visitor)
         {
             <button type="button" class="btn btn-outline-danger" @onclick="() => confirmClear = true"
@@ -51,6 +61,10 @@ else
             @if (expansions < ParkService.MaxExpansions)
             {
                 <button type="button" class="btn btn-outline-success" @onclick="OpenExpand" disabled="@busy">Agrandir le parc</button>
+            }
+            @if (Purchasable.Count > 0)
+            {
+                <button type="button" class="btn btn-outline-success" @onclick="OpenBuy" disabled="@busy">Acheter un parc</button>
             }
             @if (debug)
             {
@@ -117,7 +131,7 @@ else
         </div>
     }
 </div>
-@if (showHabitats && ParkHabitats.Map(expansions + 1) is { } habitatMap)
+@if (showHabitats && current is not null && ParkHabitats.Map(current.Landscape, expansions + 1) is { } habitatMap)
 {
     @* Mode debug : légende des couleurs des cases, et leur nombre dans la zone du parc (ParkHabitats, côté serveur) *@
     <div class="park-habitats small mt-2">
@@ -138,10 +152,14 @@ else
     <div class="dialog-backdrop" @onclick="CloseChooser"></div>
     <div class="dialog-panel card" role="dialog" aria-modal="true" aria-label="Pokémon du parc">
         <div class="card-body">
-            <h5>Pokémon du parc <small class="text-muted">· @chosen.Count / @Capacity</small></h5>
+            <h5>Pokémon du parc@(parks.Count > 1 ? $" « {current?.Name} »" : "") <small class="text-muted">· @chosen.Count / @Capacity</small></h5>
             <p class="small text-muted">
                 Tes Pokémon du stockage interne et de tes sauvegardes stockées (💾) : clique pour en ajouter ou en retirer.
                 Ceux dont les sprites n'existent pas encore (🔒) ne peuvent pas venir.
+                @if (parks.Count > 1)
+                {
+                    @($"Ceux d'un autre parc ({string.Join(", ", parks.Where(p => p.Id != ParkId).Select(p => $"{ParkLandscapes.Icon(p.Landscape)} {ParkLandscapes.Where(p.Landscape)}"))}) le quittent pour venir ici.")
+                }
             </p>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <input type="search" class="form-control form-control-sm flex-grow-1 w-auto" placeholder="Rechercher (espèce ou surnom)…"
@@ -170,10 +188,10 @@ else
                     {
                         var c = candidate;
                         <PokemonSlot Sprite="@c.SpriteUrl"
-                                     Title="@($"{c.Nickname} ({c.SpeciesName}) N.{c.Level}{(c.StoredSaveId is null ? "" : " — sauvegarde stockée")}{(c.HasSprites ? "" : " — pas encore de sprite")}")"
+                                     Title="@($"{c.Nickname} ({c.SpeciesName}) N.{c.Level}{(c.StoredSaveId is null ? "" : " — sauvegarde stockée")}{(c.OtherPark is { } other ? $" — vit {ParkLandscapes.Where(other)}" : "")}{(c.HasSprites ? "" : " — pas encore de sprite")}")"
                                      Level="c.Level"
                                      Shiny="c.IsShiny"
-                                     Marker="@(c.StoredSaveId is null ? null : "💾")"
+                                     Marker="@Marker(c)"
                                      Locked="@(!c.HasSprites)"
                                      Selected="@chosen.Contains(c.Id)"
                                      OnClick="() => Toggle(c)" />
@@ -222,7 +240,7 @@ else
         <div class="card-body">
             <h5>Agrandir le parc ?</h5>
             <p>
-                La forêt recule et dévoile une nouvelle partie du parc : il accueille alors
+                @ParkLandscapes.Expansion(current?.Landscape ?? ParkLandscape.Forest) : il accueille alors
                 <strong>@ParkService.CapacityOf(expansions + 1) Pokémon</strong> au lieu de @Capacity
                 (agrandissement @(expansions + 1) sur @ParkService.MaxExpansions).
             </p>
@@ -247,6 +265,54 @@ else
     </div>
 }
 
+@* ---------- Achat d'un nouveau parc (un paysage pas encore acheté) ---------- *@
+@if (buyBalance is { } wallet && !Visitor)
+{
+    var canPay = wallet >= ParkService.ParkPrice;
+    <div class="dialog-backdrop" @onclick="() => buyBalance = null"></div>
+    <div class="dialog-panel card" role="dialog" aria-modal="true" aria-label="Acheter un parc">
+        <div class="card-body">
+            <h5>Acheter un parc ?</h5>
+            <p>
+                Un nouveau parc, avec ses propres Pokémon : il en accueille @ParkService.CapacityOf(0) et s'agrandit à part
+                (@ParkService.MaxExpansions fois). Un Pokémon ne vit que dans un parc à la fois.
+            </p>
+            <fieldset class="mb-3">
+                <legend class="fs-6 fw-semibold">Paysage</legend>
+                @foreach (var landscape in Purchasable)
+                {
+                    var l = landscape;
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="parkLandscape" id="landscape-@((int)l)"
+                               checked="@(buyChoice == l)" @onchange="() => buyChoice = l" />
+                        <label class="form-check-label" for="landscape-@((int)l)">
+                            <strong>@ParkLandscapes.Name(l)</strong>
+                            <span class="d-block small text-muted">@ParkLandscapes.Description(l)</span>
+                        </label>
+                    </div>
+                }
+            </fieldset>
+            <p class="mb-0">
+                Prix : <strong>@InventoryService.FormatMoney(ParkService.ParkPrice)</strong>, payé avec ton porte-monnaie
+                (@InventoryService.FormatMoney(wallet)).
+                @if (!canPay)
+                {
+                    <span class="text-danger">
+                        Il manque @InventoryService.FormatMoney(ParkService.ParkPrice - wallet) : retire de l'argent d'une
+                        sauvegarde depuis <a href="inventaire">« Inventaire »</a>.
+                    </span>
+                }
+            </p>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn btn-outline-secondary" @onclick="() => buyBalance = null">Annuler</button>
+                <button type="button" class="btn btn-success" @onclick="Buy" disabled="@(busy || !canPay || buyChoice is null)">
+                    Payer @InventoryService.FormatMoney(ParkService.ParkPrice)
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 }
 
 @code {
@@ -261,10 +327,16 @@ else
     private bool engineStarted;
 
     private string userId = "";
+    private List<ParkInfo> parks = []; // parcs du joueur (liste déroulante), la Forêt d'abord
+    private ParkInfo? current; // parc affiché
+    private int ParkId => current?.Id ?? 0;
     private List<ParkPokemon> members = [];
-    private int expansions; // agrandissements achetés : la taille du parc (sa carte) et sa capacité
+    private int expansions => current?.Expansions ?? 0; // agrandissements achetés : la taille du parc (sa carte) et sa capacité
     private int Capacity => ParkService.CapacityOf(expansions);
+    private List<ParkLandscape> Purchasable => [.. ParkLandscapes.All.Except(parks.Select(p => p.Landscape))];
     private long? expandBalance; // fenêtre « Agrandir le parc » ouverte : le solde du porte-monnaie
+    private long? buyBalance; // fenêtre « Acheter un parc » ouverte : le solde du porte-monnaie
+    private ParkLandscape? buyChoice; // paysage choisi dans cette fenêtre
     private bool debug; // mode debug du compte (page « Administration ») : boutons « + taille », « − taille », « Habitats »
     private bool showHabitats; // mode debug : types de cases colorés sur la carte
     private bool loaded;
@@ -309,9 +381,32 @@ else
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             debug = await Debug.IsActiveAsync(userId);
         }
-        members = await Parks.ListAsync(userId);
-        expansions = await Parks.GetExpansionsAsync(userId);
+        await LoadParks(null);
+        members = await Parks.ListAsync(userId, ParkId);
         loaded = true;
+    }
+
+    /// <summary>Relit les parcs (taille, nombre de Pokémon) ; affiche <paramref name="parkId"/>, sinon le même, sinon la Forêt.</summary>
+    private async Task LoadParks(int? parkId)
+    {
+        var id = parkId ?? current?.Id;
+        parks = await Parks.ListParksAsync(userId);
+        current = parks.FirstOrDefault(p => p.Id == id) ?? parks.FirstOrDefault();
+    }
+
+    /// <summary>Liste déroulante : un autre parc du joueur (le numéro vient du navigateur : le service le revérifie).</summary>
+    private async Task ChangePark(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var id) || parks.FirstOrDefault(p => p.Id == id) is not { } park || park.Id == ParkId)
+            return;
+        busy = true;
+        current = park;
+        CloseDetail();
+        message = null;
+        members = await Parks.ListAsync(userId, park.Id);
+        if (module is not null)
+            await StartEngine();
+        busy = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -325,7 +420,10 @@ else
         await StartEngine();
     }
 
-    /// <summary>Démarre le parc dans le navigateur, avec la carte de sa taille (redémarré après un agrandissement).</summary>
+    /// <summary>
+    /// Démarre le parc dans le navigateur, avec la carte de son paysage et de sa taille (redémarré après un agrandissement,
+    /// un achat ou un changement de parc).
+    /// </summary>
     private async Task StartEngine()
     {
         if (engine is not null)
@@ -335,7 +433,13 @@ else
             engine = null;
         }
         // Seul le propriétaire peut déplacer ses Pokémon (dans son navigateur seulement : rien n'est enregistré)
-        engine = await module!.InvokeAsync<IJSObjectReference>("create", stage, selfRef, new { canMove = !Visitor, size = expansions + 1, fullscreen = parkBlock });
+        engine = await module!.InvokeAsync<IJSObjectReference>("create", stage, selfRef, new
+        {
+            canMove = !Visitor,
+            map = ParkLandscapes.MapName(current?.Landscape ?? ParkLandscape.Forest),
+            size = expansions + 1,
+            fullscreen = parkBlock,
+        });
         await engine.InvokeVoidAsync("setPokemon", members);
         if (showHabitats)
             await engine.InvokeVoidAsync("showHabitats", HabitatColors());
@@ -364,13 +468,42 @@ else
         if (Visitor)
             return;
         busy = true;
-        var result = await Parks.ExpandAsync(userId);
+        var result = await Parks.ExpandAsync(userId, ParkId);
         expandBalance = null;
-        expansions = result.Expansions == 0 ? expansions : result.Expansions;
+        Show(result.Message, !result.Ok);
+        await LoadParks(null); // nouvelle taille (ou celle d'un achat fait dans un autre onglet)
+        if (result.Ok)
+        {
+            await Wallet.RefreshAsync(userId); // solde du menu
+            if (module is not null)
+                await StartEngine();
+        }
+        busy = false;
+    }
+
+    private async Task OpenBuy()
+    {
+        if (Visitor)
+            return;
+        buyChoice = Purchasable.Count == 1 ? Purchasable[0] : null;
+        buyBalance = await InventoryStore.GetBalanceAsync(userId);
+    }
+
+    /// <summary>Achète le paysage choisi (revérifié par le service) et l'affiche : vide, prêt pour « Choisir les Pokémon ».</summary>
+    private async Task Buy()
+    {
+        if (Visitor || buyChoice is not { } landscape)
+            return;
+        busy = true;
+        var result = await Parks.BuyAsync(userId, landscape);
+        buyBalance = null;
         Show(result.Message, !result.Ok);
         if (result.Ok)
         {
             await Wallet.RefreshAsync(userId); // solde du menu
+            CloseDetail();
+            await LoadParks(result.ParkId);
+            members = await Parks.ListAsync(userId, ParkId);
             if (module is not null)
                 await StartEngine();
         }
@@ -383,14 +516,14 @@ else
         if (Visitor)
             return;
         busy = true;
-        var result = await Debug.ResizeParkAsync(userId, grow);
+        var result = await Debug.ResizeParkAsync(userId, ParkId, grow);
         Show(result.Message, !result.Ok);
         debug = await Debug.IsActiveAsync(userId); // coupé si le compte n'est plus administrateur
         showHabitats &= debug;
         if (result.Ok)
         {
-            expansions = result.Expansions;
-            members = await Parks.ListAsync(userId);
+            await LoadParks(null);
+            members = await Parks.ListAsync(userId, ParkId);
             if (module is not null)
                 await StartEngine();
         }
@@ -401,13 +534,13 @@ else
     [JSInvokable]
     public Task OnPokemonClicked(int id) => InvokeAsync(async () =>
     {
-        var entry = await Parks.GetMemberAsync(userId, id);
-        if (entry is null || BankService.ToPkm(entry) is not { } pk)
+        var entry = await Parks.GetMemberAsync(userId, ParkId, id);
+        if (entry is null || current is null || BankService.ToPkm(entry) is not { } pk)
             return;
         selected = entry;
         selectedView = Info.Describe(pk, entry.IsLegal);
-        // Humeur selon les types de cases de ce parc (sa taille : ses agrandissements)
-        selectedMood = ParkHabitats.MoodOf(entry.Type1, entry.Type2, ParkHabitats.Map(expansions + 1));
+        // Humeur selon les types de cases de ce parc (son paysage, sa taille : ses agrandissements)
+        selectedMood = ParkHabitats.MoodOf(entry.Type1, entry.Type2, ParkHabitats.Map(current.Landscape, expansions + 1));
         selectedPortrait = PokemonSprites.DonjonPortraitUrl(entry, selectedMood.Portrait);
         StateHasChanged();
     });
@@ -449,7 +582,7 @@ else
         if (Visitor)
             return;
         busy = true;
-        var result = await Parks.ClearAsync(userId);
+        var result = await Parks.ClearAsync(userId, ParkId);
         confirmClear = false;
         CloseDetail();
         await Reload();
@@ -468,7 +601,7 @@ else
         parkOnly = null;
         criteria = PokemonCriteria.None;
         abilities = await BankStore.ListAbilitiesAsync(userId);
-        candidates = await Parks.ListCandidatesAsync(userId);
+        candidates = await Parks.ListCandidatesAsync(userId, ParkId);
         chosen = candidates.Where(c => c.InPark).Select(c => c.Id).ToHashSet();
     }
 
@@ -476,7 +609,14 @@ else
     private async Task CriteriaChanged(PokemonCriteria value)
     {
         criteria = value;
-        candidates = await Parks.ListCandidatesAsync(userId, value);
+        candidates = await Parks.ListCandidatesAsync(userId, ParkId, value);
+    }
+
+    /// <summary>Pictogrammes d'un Pokémon de la fenêtre de choix : sauvegarde stockée (💾), autre parc (🏝️, 🌳).</summary>
+    private static string? Marker(ParkCandidate c)
+    {
+        var marker = (c.StoredSaveId is null ? "" : "💾") + (c.OtherPark is { } other ? ParkLandscapes.Icon(other) : "");
+        return marker.Length == 0 ? null : marker;
     }
 
     private void CloseChooser() => candidates = null;
@@ -522,7 +662,7 @@ else
         if (Visitor)
             return;
         busy = true;
-        var result = await Parks.SetAsync(userId, chosen);
+        var result = await Parks.SetAsync(userId, ParkId, chosen);
         busy = false;
         if (!result.Ok)
         {
@@ -536,7 +676,8 @@ else
 
     private async Task Reload()
     {
-        members = await Parks.ListAsync(userId);
+        await LoadParks(null); // nombre de Pokémon de chaque parc (liste déroulante)
+        members = await Parks.ListAsync(userId, ParkId);
         if (engine is not null)
             await engine.InvokeVoidAsync("setPokemon", members);
     }

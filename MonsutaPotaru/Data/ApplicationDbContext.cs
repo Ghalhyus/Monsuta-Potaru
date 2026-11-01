@@ -11,6 +11,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<WalletOperation> WalletOperations => Set<WalletOperation>();
     public DbSet<OwnedItem> OwnedItems => Set<OwnedItem>();
+    public DbSet<Park> Parks => Set<Park>();
     public DbSet<ParkMember> ParkMembers => Set<ParkMember>();
     public DbSet<SyncDevice> SyncDevices => Set<SyncDevice>();
     public DbSet<SyncPairingCode> SyncPairingCodes => Set<SyncPairingCode>();
@@ -96,12 +97,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(i => i.Owner).WithMany().HasForeignKey(i => i.OwnerId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<Park>(e =>
+        {
+            e.HasIndex(p => new { p.OwnerId, p.Landscape }).IsUnique(); // un parc par paysage
+            e.HasOne(p => p.Owner).WithMany().HasForeignKey(p => p.OwnerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<ParkMember>(e =>
         {
-            e.HasKey(m => m.BankPokemonId); // un Pokémon est au parc ou n'y est pas
+            e.HasKey(m => m.BankPokemonId); // un Pokémon est dans un parc (un seul) ou dans aucun
             e.HasIndex(m => m.OwnerId);
+            e.HasIndex(m => m.ParkId);
             // Le Pokémon disparaît (retiré, sauvegarde mise à jour ou supprimée) : il quitte le parc.
             e.HasOne(m => m.BankPokemon).WithOne().HasForeignKey<ParkMember>(m => m.BankPokemonId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.Park).WithMany().HasForeignKey(m => m.ParkId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<SyncDevice>(e =>

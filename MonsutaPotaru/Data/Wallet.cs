@@ -23,6 +23,8 @@ public enum WalletOperationKind
     ExpandPark = 5,
     /// <summary>Pokédollars ajoutés par un administrateur en mode debug (Services.DebugService).</summary>
     DebugCredit = 6,
+    /// <summary>Achat d'un nouveau parc (un autre paysage), payé avec le porte-monnaie.</summary>
+    BuyPark = 7,
 }
 
 /// <summary>Ligne du journal des opérations de l'inventaire : argent et objets (jamais modifiée ni supprimée).</summary>

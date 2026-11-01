@@ -40,8 +40,9 @@ Faire du parc un **refuge de Pokémon** :
    de ce qu'il reste à débloquer ; même zoom, on fait glisser la vue (README, « Parc »).
    *Plusieurs parcs, fait le 1er novembre 2026 :* cartes de la plage (`outils/generer-plage.py`, `plage-1-{taille}.json`,
    pas encore branchées sur le site) : côte, environ 65 % de mer et 35 % de sable à chaque taille (choix de
-   l'utilisateur), cocoteraie côté plage et récif côté mer pour cacher ce qui n'est pas acheté. *Reste :* plusieurs parcs
-   par joueur en base, choix de la carte dans la page.
+   l'utilisateur), cocoteraie côté plage et récif côté mer pour cacher ce qui n'est pas acheté. *Fait le même jour :*
+   plusieurs parcs par joueur en base (un par paysage : la Forêt, puis la Plage achetée 40 000 ₽, chacun sa taille), liste
+   déroulante dans la page, un Pokémon dans un seul parc (le choisir ailleurs l'y fait venir).
 3. **IA par espèce** : profils tirés des types et des groupes d'œufs, à partir d'un fichier de comportements fourni par
    l'utilisateur.
 4. *(Idée lointaine)* **Construction par les joueurs**.

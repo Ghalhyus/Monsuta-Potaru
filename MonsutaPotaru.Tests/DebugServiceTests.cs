@@ -25,6 +25,10 @@ public sealed class DebugServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    /// <summary>La Forêt du joueur (créée à sa première visite de la page « Parc »).</summary>
+    private async Task<int> Forest(string owner = "sacha") =>
+        (await new ParkService(_db.Factory, NullLogger<ParkService>.Instance).ListParksAsync(owner)).Single().Id;
+
     [Fact]
     public async Task OnlyAnAdmin_CanActivate()
     {
@@ -52,13 +56,13 @@ public sealed class DebugServiceTests : IDisposable
     public async Task Inactive_RefusesEverything()
     {
         Assert.False((await _debug.AddMoneyAsync("sacha", 10_000)).Ok);
-        Assert.False((await _debug.ResizeParkAsync("sacha", grow: true)).Ok);
+        Assert.False((await _debug.ResizeParkAsync("sacha", await Forest(), grow: true)).Ok);
         _mode.Set("ondine", true); // mode resté actif pour un compte qui n'est pas administrateur
         Assert.False((await _debug.AddMoneyAsync("ondine", 10_000)).Ok);
 
         await using var db = _db.NewContext();
         Assert.False(await db.Wallets.AnyAsync());
-        Assert.Equal(0, await db.Users.Where(u => u.Id == "sacha").Select(u => u.ParkExpansions).FirstAsync());
+        Assert.Equal(0, await db.Parks.Where(p => p.OwnerId == "sacha").Select(p => p.Expansions).FirstAsync());
     }
 
     [Fact]
@@ -80,13 +84,16 @@ public sealed class DebugServiceTests : IDisposable
     public async Task ResizePark_FreeAndBounded()
     {
         await _debug.SetActiveAsync("sacha", true);
-        Assert.False((await _debug.ResizeParkAsync("sacha", grow: false)).Ok); // déjà la plus petite taille
+        var forest = await Forest();
+        Assert.False((await _debug.ResizeParkAsync("sacha", forest, grow: false)).Ok); // déjà la plus petite taille
         for (var i = 1; i <= ParkService.MaxExpansions; i++)
-            Assert.Equal(i, (await _debug.ResizeParkAsync("sacha", grow: true)).Expansions);
-        Assert.False((await _debug.ResizeParkAsync("sacha", grow: true)).Ok); // déjà la plus grande
+            Assert.Equal(i, (await _debug.ResizeParkAsync("sacha", forest, grow: true)).Expansions);
+        Assert.False((await _debug.ResizeParkAsync("sacha", forest, grow: true)).Ok); // déjà la plus grande
+        Assert.Equal("Ce parc n'existe pas.", (await _debug.ResizeParkAsync("sacha", await Forest("ondine"), grow: true)).Message);
 
         await using var db = _db.NewContext();
-        Assert.Equal(ParkService.MaxExpansions, await db.Users.Where(u => u.Id == "sacha").Select(u => u.ParkExpansions).FirstAsync());
+        Assert.Equal(ParkService.MaxExpansions, await db.Parks.Where(p => p.Id == forest).Select(p => p.Expansions).FirstAsync());
+        Assert.Equal(0, await db.Parks.Where(p => p.OwnerId == "ondine").Select(p => p.Expansions).FirstAsync());
         Assert.False(await db.WalletOperations.AnyAsync()); // gratuit, rien dans le journal
     }
 
@@ -94,7 +101,8 @@ public sealed class DebugServiceTests : IDisposable
     public async Task ShrinkPark_LastArrivalsGoBackToTheCollection()
     {
         await _debug.SetActiveAsync("sacha", true);
-        await _debug.ResizeParkAsync("sacha", grow: true); // 40 Pokémon
+        var forest = await Forest();
+        await _debug.ResizeParkAsync("sacha", forest, grow: true); // 40 Pokémon
         var start = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
         int[] ids;
         await using (var db = _db.NewContext())
@@ -108,11 +116,11 @@ public sealed class DebugServiceTests : IDisposable
             await db.SaveChangesAsync();
             ids = pokemon.Select(p => p.Id).ToArray();
             // Arrivés dans l'ordre inverse de leur numéro : c'est la date d'arrivée qui compte
-            db.ParkMembers.AddRange(ids.Select((id, i) => new ParkMember { BankPokemonId = id, OwnerId = "sacha", AddedAt = start.AddMinutes(-i) }));
+            db.ParkMembers.AddRange(ids.Select((id, i) => new ParkMember { BankPokemonId = id, OwnerId = "sacha", ParkId = forest, AddedAt = start.AddMinutes(-i) }));
             await db.SaveChangesAsync();
         }
 
-        var result = await _debug.ResizeParkAsync("sacha", grow: false);
+        var result = await _debug.ResizeParkAsync("sacha", forest, grow: false);
         Assert.True(result.Ok);
         Assert.Contains("5 derniers arrivés", result.Message);
 

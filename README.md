@@ -552,9 +552,24 @@ collection, stockage interne ou sauvegardes stockées, de **toutes les générat
 plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
 solde (bouton grisé s'il manque de l'argent, avec un lien vers « Inventaire ») ; la taille et le débit sont vérifiés dans
 les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
-journal de l'inventaire (« Agrandissement du parc », « Parc : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
+journal de l'inventaire (« Agrandissement du parc », « Forêt : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
 carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite) les garde : on peut en
 retirer, pas en ajouter tant qu'il dépasse.
+**Plusieurs parcs**, un par **paysage** (`ParkLandscape`, table `Parks`, index unique sur le compte et le paysage) : la
+**Forêt** d'abord (créée à la première visite de la page ; la migration `ParkLandscapes` a fait du parc de chaque compte sa
+Forêt, avec ses agrandissements et ses Pokémon), puis **« Acheter un parc »** (sous le titre, tant qu'il reste un paysage
+à acheter) : une fenêtre propose les paysages pas encore achetés (aujourd'hui la **Plage**), au prix d'un agrandissement
+(**40 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
+venue du navigateur), insère le parc (`INSERT OR IGNORE` : un paysage déjà acheté est refusé, même pour deux achats
+simultanés) et débite dans la même transaction ; journal : « Achat d'un parc », « Nouveau parc : Plage ». Le nouveau parc
+s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à part (3 fois). Une **liste déroulante**
+(« Forêt (8 / 20) », « Plage (2 / 20) ») apparaît sous le titre dès le deuxième parc, pour le propriétaire comme pour les
+visiteurs (sans adresse propre à chaque parc : on arrive sur la Forêt). « Agrandir », « Choisir », « Vider » et les
+boutons debug agissent sur le parc affiché ; chaque méthode du service revérifie que le parc (numéro venu du navigateur)
+est bien à ce joueur. **Un Pokémon vit dans un seul parc** : dans la fenêtre de choix, ceux d'un autre parc portent son
+pictogramme (🌳 forêt, 🏝️ plage, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
+quitter (« Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc. »). Nom, carte et textes de chaque paysage :
+`ParkLandscapes` (un nouveau paysage : une valeur de l'énumération, ses quatre cartes, une ligne par méthode).
 « Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
 type, forme...) et le compteur. Les espèces dont SpriteCollab n'a pas encore les sprites (64, surtout de 9e génération)
 y sont grisées (🔒) et refusées ; elles viendront quand il les aura (relancer `outils/images.py donjon`, puis
@@ -590,7 +605,7 @@ précédente). Les cartes actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont fait
 `python outils/generer-parc.py <dossier Cute_Fantasy du pack> <dossier de sortie>` (Python avec Pillow ; mêmes tirages
 à chaque fois : relancé sans changement, il redonne les mêmes cartes ; le parc entier est tiré une fois, chaque taille en
 garde sa zone), puis passées une à une par `outils/carte-parc.py`.
-**Plage** (cartes prêtes, pas encore sur le site : elles viendront avec les parcs multiples) : `Plage_1-1.tmx` à
+**Plage** (deuxième paysage, à acheter) : `Plage_1-1.tmx` à
 `Plage_1-4.tmx` (`plage-1-1.json` à `plage-1-4.json`), faites par `outils/generer-plage.py` (mêmes arguments). Une côte,
 le sable au nord, la mer au sud : environ **65 % de mer et 35 % de sable** dans la zone de chaque taille (les types Eau y
 sont heureux ; Feu, Roche, Acier, Électrik, Sol et Fée malheureux), îlots, ponton et barque, palmiers (extension Desert du
@@ -605,18 +620,18 @@ eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, vo
 planche de sol dans « Décors » remplace ; objets, arbres et fleurs gardent le type du dessous. Une planche sans règle
 arrête le script. Ce que chaque type de Pokémon **aime ou non** vient de la feuille « Habitat » de l'utilisateur, recopiée
 dans `ParkHabitats` (par exemple Eau : aime l'eau, aucun autre habitat ; Roche : aime cave et volcan, pas le sable, la
-végétation ni l'eau). `ParkHabitats.Map(taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
+végétation ni l'eau). `ParkHabitats.Map(paysage, taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
 (cartes lues au démarrage) ; dans le navigateur, `habitatAt(x, y)` de `parc.js`. En **mode debug**, le bouton
 « Habitats (debug) » colore chaque case selon son type, avec la légende et le nombre de cases de chaque type.
 **Bonheur** (`ParkHabitats.MoodOf`) : d'après les types du Pokémon, ce qu'il aime ou non (un double type aime un habitat
 si l'un de ses types l'aime, même si l'autre le déteste). Il est **malheureux** si un habitat qu'il n'aime pas couvre
 50 % ou plus de la zone « Parc » (toutes ses cases : chemins, eau et forêt de la lisière comprises), sinon **heureux** si
-un habitat qu'il aime en couvre plus de 50 %, sinon **normal**. Le parc compte selon sa taille. La fiche d'un Pokémon du
+un habitat qu'il aime en couvre plus de 50 %, sinon **normal**. Le parc compte selon son paysage et sa taille. La fiche d'un Pokémon du
 parc montre son **portrait** Donjon Mystère Happy, Normal ou Sad (SpriteCollab, dans le dossier le plus proche de sa
 forme, chromatique, femelle ; sinon son portrait Normal ; sans portrait : le sprite) à la place du sprite, et la raison
-sous son nom (« Heureux : aime la végétation (80 % du parc). »). Avec les cartes actuelles (69 à 80 % de végétation) :
+sous son nom (« Heureux : aime la végétation (80 % du parc). »). Dans la Forêt (69 à 80 % de végétation) :
 les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
-autres normaux.
+autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux.
 Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
 Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
 pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
@@ -924,16 +939,18 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Services/PokemonFingerprint.cs` | Empreinte d'un Pokémon et recherche de ses doublons dans le compte (vieille copie d'une sauvegarde) |
 | `MonsutaPotaru/Services/PokemonInfo.cs` | Noms français (dont « Rouge / Bleu », « Or / Argent », « Diamant / Perle », « Or HeartGold / Argent SoulSilver » pour les groupes de jeux : une sauvegarde de ces jeux ne dit pas lequel des deux ; migrations `GameNames` et `GameGroupNames` pour les noms déjà enregistrés), sprites, légalité |
 | `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Transfert et stockage interne » (`/transfert`) : boîtes, glisser-déposer, sélection multiple |
-| `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, « Agrandir le parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer »), « Vider le parc », fiche au clic |
+| `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol) ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
-| `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille (pas encore sur le site), même format |
-| `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes du parc, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
+| `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
+| `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes de la forêt, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
 | `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`), façon de se déplacer (`MovementOf` : nage, vol) |
-| `MonsutaPotaru/Services/ParkService.cs` | Pokémon du parc : liste, choix (30 au plus, avec des sprites Donjon Mystère), retrait, vidage, famille d'évolution |
-| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (supprimée avec le Pokémon) |
+| `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution |
+| `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage) : nom, carte, pictogramme et textes de la page |
+| `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
+| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
 | `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu, ou Master Ball / Charme Chroma pour les globaux |

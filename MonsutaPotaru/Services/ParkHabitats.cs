@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PKHeX.Core;
+using MonsutaPotaru.Data;
 
 namespace MonsutaPotaru.Services;
 
@@ -72,7 +73,7 @@ public sealed class ParkHabitatMap(int width, int height, Habitat[] cells, (int 
 
 /// <summary>
 /// Types de cases du parc : ce que chaque type de Pokémon aime ou non (feuille « Habitat », pour son bonheur), et ceux de
-/// chaque carte (wwwroot/parc/parc-1-{taille}.json), lus au démarrage par <see cref="Load"/>.
+/// chaque carte (wwwroot/parc/{carte}-{taille}.json), lus au démarrage par <see cref="Load"/>.
 /// </summary>
 public static class ParkHabitats
 {
@@ -197,26 +198,27 @@ public static class ParkHabitats
             ?? new(ParkMood.Normal, Habitat.None, 0);
     }
 
-    private static Dictionary<int, ParkHabitatMap> _maps = [];
+    private static Dictionary<(ParkLandscape, int), ParkHabitatMap> _maps = [];
 
     /// <summary>
-    /// Lit les types de cases des cartes du parc (une par taille) ; une carte absente ou sans « habitats » n'en a pas
-    /// (<see cref="Map"/> rend null).
+    /// Lit les types de cases des cartes des parcs (une par paysage et par taille) ; une carte absente ou sans « habitats »
+    /// n'en a pas (<see cref="Map"/> rend null).
     /// </summary>
     public static void Load(string webRoot)
     {
-        var maps = new Dictionary<int, ParkHabitatMap>();
-        for (var size = 1; size <= ParkService.MaxExpansions + 1; size++)
-        {
-            var path = Path.Combine(webRoot, "parc", $"parc-1-{size}.json");
-            if (File.Exists(path) && Read(File.ReadAllText(path)) is { } map)
-                maps[size] = map;
-        }
+        var maps = new Dictionary<(ParkLandscape, int), ParkHabitatMap>();
+        foreach (var landscape in ParkLandscapes.All)
+            for (var size = 1; size <= ParkService.MaxExpansions + 1; size++)
+            {
+                var path = Path.Combine(webRoot, "parc", $"{ParkLandscapes.MapName(landscape)}-{size}.json");
+                if (File.Exists(path) && Read(File.ReadAllText(path)) is { } map)
+                    maps[(landscape, size)] = map;
+            }
         _maps = maps;
     }
 
-    /// <summary>Types de cases de la carte du parc de cette taille (1 : sans agrandissement) ; null si elle n'en a pas.</summary>
-    public static ParkHabitatMap? Map(int size) => _maps.GetValueOrDefault(size);
+    /// <summary>Types de cases de la carte de ce paysage à cette taille (1 : sans agrandissement) ; null si elle n'en a pas.</summary>
+    public static ParkHabitatMap? Map(ParkLandscape landscape, int size) => _maps.GetValueOrDefault((landscape, size));
 
     /// <summary>Lit une carte du parc (JSON de Tiled passé par outils/carte-parc.py) ; null sans « habitats ».</summary>
     public static ParkHabitatMap? Read(string json)

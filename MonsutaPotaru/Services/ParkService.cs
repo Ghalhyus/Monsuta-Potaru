@@ -16,20 +16,36 @@ public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, str
     string SpriteFolder, int Family, byte Nature, string Mood = "normal", string? Moves = null);
 
 /// <summary>Pokémon proposé dans la fenêtre « Choisir les Pokémon » (sans les œufs).</summary>
+/// <param name="InPark">Il vit dans le parc affiché.</param>
 /// <param name="HasSprites">SpriteCollab a ses sprites Donjon Mystère : sinon, grisé (64 espèces récentes n'en ont pas encore).</param>
+/// <param name="OtherPark">Paysage de l'autre parc où il vit (le choisir l'en fait partir) ; null s'il n'est dans aucun autre.</param>
 public sealed record ParkCandidate(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
-    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites);
+    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites, ParkLandscape? OtherPark = null);
+
+/// <summary>Parc d'un joueur, pour la liste déroulante de la page.</summary>
+/// <param name="Count">Pokémon qui y vivent.</param>
+public sealed record ParkInfo(int Id, ParkLandscape Landscape, int Expansions, int Count)
+{
+    public string Name => ParkLandscapes.Name(Landscape);
+    public int Capacity => ParkService.CapacityOf(Expansions);
+}
 
 public sealed record ParkResult(bool Ok, string Message);
 
 /// <param name="Expansions">Agrandissements achetés, après l'achat (0 à <see cref="ParkService.MaxExpansions"/>).</param>
 public sealed record ParkExpansionResult(bool Ok, string Message, int Expansions = 0, long Balance = 0);
 
+/// <param name="ParkId">Le parc acheté (0 si l'achat est refusé).</param>
+public sealed record ParkPurchaseResult(bool Ok, string Message, int ParkId = 0, long Balance = 0);
+
 /// <summary>
-/// « Parc » : jusqu'à <see cref="CapacityOf"/> Pokémon de la collection (stockage interne ou sauvegardes stockées), de toutes
-/// les générations, qui s'y promènent avec les sprites Donjon Mystère de leur forme (animation dans le navigateur :
-/// wwwroot/js/parc.js). Les espèces dont SpriteCollab n'a pas encore les sprites ne peuvent pas y aller. Le parc s'agrandit
-/// en payant avec le porte-monnaie (<see cref="ExpandAsync"/>) : chaque taille a sa carte (wwwroot/parc/parc-1-{taille}.json).
+/// « Parc » : des Pokémon de la collection (stockage interne ou sauvegardes stockées), de toutes les générations, qui s'y
+/// promènent avec les sprites Donjon Mystère de leur forme (animation dans le navigateur : wwwroot/js/parc.js). Les espèces
+/// dont SpriteCollab n'a pas encore les sprites ne peuvent pas y aller. Chaque joueur a la Forêt (créée à sa première
+/// visite) et achète les autres paysages (<see cref="BuyAsync"/>, un parc par paysage) ; un Pokémon vit dans un seul parc.
+/// Chaque parc accueille jusqu'à <see cref="CapacityOf"/> Pokémon et s'agrandit en payant avec le porte-monnaie
+/// (<see cref="ExpandAsync"/>) : chaque taille a sa carte (wwwroot/parc/{carte}-{taille}.json, <see cref="ParkLandscapes.MapName"/>).
+/// Le numéro d'un parc vient du navigateur (liste déroulante) : chaque méthode revérifie qu'il est à ce joueur.
 /// </summary>
 public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactory, ILogger<ParkService> logger)
 {
@@ -40,14 +56,88 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     /// <summary>Agrandissements possibles pour l'instant (80 Pokémon) : une carte par taille, de 1 à MaxExpansions + 1.</summary>
     public const int MaxExpansions = 3;
     public const long ExpansionPrice = 40_000;
+    /// <summary>Prix d'un nouveau parc : celui d'un agrandissement (choix de l'utilisateur).</summary>
+    public const long ParkPrice = ExpansionPrice;
+
+    private const string UnknownPark = "Ce parc n'existe pas.";
 
     public static int CapacityOf(int expansions) => BaseCapacity + ExpansionCapacity * expansions;
 
-    /// <summary>Agrandissements achetés par ce joueur (0 sans agrandissement).</summary>
-    public async Task<int> GetExpansionsAsync(string ownerId)
+    /// <summary>Parcs du joueur, dans l'ordre de leur achat : la Forêt d'abord (créée ici à sa première visite).</summary>
+    public async Task<List<ParkInfo>> ListParksAsync(string ownerId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.Users.Where(u => u.Id == ownerId).Select(u => u.ParkExpansions).FirstOrDefaultAsync();
+        await EnsureForestAsync(db, ownerId);
+        return await db.Parks.AsNoTracking()
+            .Where(p => p.OwnerId == ownerId)
+            .OrderBy(p => p.Id)
+            .Select(p => new ParkInfo(p.Id, p.Landscape, p.Expansions, db.ParkMembers.Count(m => m.ParkId == p.Id)))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// La Forêt, premier parc de chacun, créée à la première visite (la migration ParkLandscapes l'a créée pour les comptes
+    /// d'avant). « OR IGNORE » : deux pages ouvertes en même temps n'en créent pas deux (index unique).
+    /// </summary>
+    private static async Task EnsureForestAsync(ApplicationDbContext db, string ownerId)
+    {
+        if (await db.Parks.AnyAsync(p => p.OwnerId == ownerId && p.Landscape == ParkLandscape.Forest))
+            return;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT OR IGNORE INTO Parks (OwnerId, Landscape, Expansions) SELECT Id, {(int)ParkLandscape.Forest}, 0 FROM AspNetUsers WHERE Id = {ownerId}");
+    }
+
+    private static Task<Park?> FindAsync(ApplicationDbContext db, string ownerId, int parkId) =>
+        db.Parks.AsNoTracking().FirstOrDefaultAsync(p => p.Id == parkId && p.OwnerId == ownerId);
+
+    /// <summary>
+    /// Achète un parc de ce paysage pour <see cref="ParkPrice"/> : parc, débit et ligne du journal de l'inventaire en une
+    /// seule opération. Le paysage vient du navigateur : refusé s'il n'existe pas ou si le joueur l'a déjà (l'index unique
+    /// le vérifie aussi pour deux achats simultanés).
+    /// </summary>
+    public async Task<ParkPurchaseResult> BuyAsync(string ownerId, ParkLandscape landscape)
+    {
+        if (!Enum.IsDefined(landscape))
+            return new(false, "Ce paysage n'existe pas.");
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await EnsureForestAsync(db, ownerId);
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        var added = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT OR IGNORE INTO Parks (OwnerId, Landscape, Expansions) VALUES ({ownerId}, {(int)landscape}, 0)");
+        if (added == 0)
+            return new(false, $"Tu as déjà un parc « {ParkLandscapes.Name(landscape)} ».");
+
+        // Débit conditionnel et atomique ; sans assez d'argent, la transaction (parc compris) est annulée
+        var debited = await db.Wallets.Where(w => w.OwnerId == ownerId && w.Money >= ParkPrice)
+            .ExecuteUpdateAsync(w => w.SetProperty(x => x.Money, x => x.Money - ParkPrice));
+        if (debited == 0)
+        {
+            await tx.RollbackAsync();
+            var available = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
+            return new(false, $"Un nouveau parc coûte {InventoryService.FormatMoney(ParkPrice)}, ton porte-monnaie contient " +
+                              $"{InventoryService.FormatMoney(available)} : il manque {InventoryService.FormatMoney(ParkPrice - available)}. " +
+                              "Retire de l'argent d'une sauvegarde depuis « Inventaire ».", Balance: available);
+        }
+
+        var parkId = await db.Parks.Where(p => p.OwnerId == ownerId && p.Landscape == landscape).Select(p => p.Id).FirstAsync();
+        var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstAsync();
+        db.WalletOperations.Add(new WalletOperation
+        {
+            OwnerId = ownerId,
+            At = DateTime.UtcNow,
+            Kind = WalletOperationKind.BuyPark,
+            Amount = -ParkPrice,
+            BalanceAfter = balance,
+            Details = $"Nouveau parc : {ParkLandscapes.Name(landscape)}",
+        });
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : parc {Landscape} acheté.", ownerId, landscape);
+        return new(true, $"Nouveau parc : {ParkLandscapes.Name(landscape)}. Il accueille {CapacityOf(0)} Pokémon, choisis ceux " +
+                         $"qui s'y installent. Solde : {InventoryService.FormatMoney(balance)}.", parkId, balance);
     }
 
     /// <summary>
@@ -55,15 +145,17 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     /// du journal de l'inventaire en une seule opération. La taille et le solde sont vérifiés par les mises à jour
     /// elles-mêmes : deux achats simultanés ne dépassent ni la plus grande taille ni le solde.
     /// </summary>
-    public async Task<ParkExpansionResult> ExpandAsync(string ownerId)
+    public async Task<ParkExpansionResult> ExpandAsync(string ownerId, int parkId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        var expanded = await db.Users.Where(u => u.Id == ownerId && u.ParkExpansions < MaxExpansions)
-            .ExecuteUpdateAsync(u => u.SetProperty(x => x.ParkExpansions, x => x.ParkExpansions + 1));
+        var expanded = await db.Parks.Where(p => p.Id == parkId && p.OwnerId == ownerId && p.Expansions < MaxExpansions)
+            .ExecuteUpdateAsync(p => p.SetProperty(x => x.Expansions, x => x.Expansions + 1));
         if (expanded == 0)
-            return new(false, $"Ton parc a déjà sa plus grande taille ({CapacityOf(MaxExpansions)} Pokémon).", MaxExpansions);
+            return await FindAsync(db, ownerId, parkId) is null
+                ? new(false, UnknownPark)
+                : new(false, $"Ce parc a déjà sa plus grande taille ({CapacityOf(MaxExpansions)} Pokémon).", MaxExpansions);
 
         // Débit conditionnel et atomique ; sans assez d'argent, la transaction (taille comprise) est annulée
         var debited = await db.Wallets.Where(w => w.OwnerId == ownerId && w.Money >= ExpansionPrice)
@@ -77,7 +169,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
                               "Retire de l'argent d'une sauvegarde depuis « Inventaire ».", Balance: available);
         }
 
-        var expansions = await db.Users.Where(u => u.Id == ownerId).Select(u => u.ParkExpansions).FirstAsync();
+        var park = await db.Parks.Where(p => p.Id == parkId).Select(p => new { p.Expansions, p.Landscape }).FirstAsync();
         var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstAsync();
         db.WalletOperations.Add(new WalletOperation
         {
@@ -86,29 +178,31 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             Kind = WalletOperationKind.ExpandPark,
             Amount = -ExpansionPrice,
             BalanceAfter = balance,
-            Details = $"Parc : {CapacityOf(expansions - 1)} → {CapacityOf(expansions)} Pokémon",
+            Details = $"{ParkLandscapes.Name(park.Landscape)} : {CapacityOf(park.Expansions - 1)} → {CapacityOf(park.Expansions)} Pokémon",
         });
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
         if (logger.IsEnabled(LogLevel.Information))
-            logger.LogInformation("Utilisateur {User} : parc agrandi ({Expansions} agrandissements).", ownerId, expansions);
-        return new(true, $"Parc agrandi : il accueille maintenant {CapacityOf(expansions)} Pokémon. " +
-                         $"Solde : {InventoryService.FormatMoney(balance)}.", expansions, balance);
+            logger.LogInformation("Utilisateur {User} : parc {Landscape} agrandi ({Expansions} agrandissements).", ownerId, park.Landscape, park.Expansions);
+        return new(true, $"Parc agrandi : il accueille maintenant {CapacityOf(park.Expansions)} Pokémon. " +
+                         $"Solde : {InventoryService.FormatMoney(balance)}.", park.Expansions, balance);
     }
 
-    /// <summary>Pokémon du parc, dans l'ordre de leur arrivée.</summary>
-    public async Task<List<ParkPokemon>> ListAsync(string ownerId)
+    /// <summary>Pokémon du parc, dans l'ordre de leur arrivée (aucun si le parc n'est pas à ce joueur).</summary>
+    public async Task<List<ParkPokemon>> ListAsync(string ownerId, int parkId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
+        if (await FindAsync(db, ownerId, parkId) is not { } park)
+            return [];
         var members = await db.ParkMembers.AsNoTracking()
-            .Where(m => m.OwnerId == ownerId)
+            .Where(m => m.ParkId == parkId)
             .OrderBy(m => m.AddedAt).ThenBy(m => m.BankPokemonId)
             .Select(m => m.BankPokemon!)
             .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.Nature, p.Type1, p.Type2 })
             .ToListAsync();
-        // Humeur selon les habitats de la carte de sa taille
-        var map = ParkHabitats.Map(await db.Users.Where(u => u.Id == ownerId).Select(u => u.ParkExpansions).FirstOrDefaultAsync() + 1);
+        // Humeur selon les habitats de la carte du parc (son paysage, sa taille)
+        var map = ParkHabitats.Map(park.Landscape, park.Expansions + 1);
         return members.Select(p => new ParkPokemon(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
             PokemonSprites.DonjonFolder(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0),
             Family(p.Species), p.Nature ?? 0, ParkHabitats.MoodOf(p.Type1, p.Type2, map).Mood.ToString().ToLowerInvariant(),
@@ -116,52 +210,61 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     }
 
     /// <summary>
-    /// Fiche d'un Pokémon du parc de ce compte (clic sur le Pokémon), ou null s'il n'est pas dans ce parc. Le numéro vient
-    /// du navigateur : un visiteur ne doit pas pouvoir lire ainsi le reste de la collection du joueur.
+    /// Fiche d'un Pokémon de ce parc du joueur (clic sur le Pokémon), ou null s'il n'y est pas. Les numéros viennent du
+    /// navigateur : un visiteur ne doit pas pouvoir lire ainsi le reste de la collection du joueur.
     /// </summary>
-    public async Task<BankPokemon?> GetMemberAsync(string ownerId, int bankPokemonId)
+    public async Task<BankPokemon?> GetMemberAsync(string ownerId, int parkId, int bankPokemonId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.ParkMembers.AsNoTracking()
-            .Where(m => m.OwnerId == ownerId && m.BankPokemonId == bankPokemonId)
+            .Where(m => m.OwnerId == ownerId && m.ParkId == parkId && m.BankPokemonId == bankPokemonId)
             .Select(m => m.BankPokemon!)
             .FirstOrDefaultAsync();
     }
 
     /// <summary>
-    /// Pokémon qui peuvent aller au parc (sans les œufs), filtrés comme dans « Ma collection » (pastilles), par numéro de
-    /// Pokédex.
+    /// Pokémon qui peuvent aller dans ce parc (sans les œufs), filtrés comme dans « Ma collection » (pastilles), par numéro
+    /// de Pokédex ; ceux d'un autre parc du joueur portent son paysage.
     /// </summary>
-    public async Task<List<ParkCandidate>> ListCandidatesAsync(string ownerId, PokemonCriteria? criteria = null)
+    public async Task<List<ParkCandidate>> ListCandidatesAsync(string ownerId, int parkId, PokemonCriteria? criteria = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var inPark = db.ParkMembers.Where(m => m.OwnerId == ownerId).Select(m => m.BankPokemonId);
+        var placed = await db.ParkMembers.AsNoTracking().Where(m => m.OwnerId == ownerId)
+            .Select(m => new { m.BankPokemonId, m.ParkId, m.Park!.Landscape })
+            .ToDictionaryAsync(m => m.BankPokemonId);
         var query = Eligible(db, ownerId);
         if (criteria is not null)
             query = criteria.Apply(query);
         var candidates = await query
             .OrderBy(p => p.Species).ThenByDescending(p => p.Level).ThenBy(p => p.Id)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem,
-                p.StoredSaveId, InPark = inPark.Contains(p.Id) })
+            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.StoredSaveId })
             .ToListAsync();
-        return candidates.Select(p => new ParkCandidate(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
-            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny),
-            p.StoredSaveId, p.InPark, PokemonSprites.HasDonjonSprites(p.Species))).ToList();
+        return candidates.Select(p =>
+        {
+            var home = placed.GetValueOrDefault(p.Id);
+            return new ParkCandidate(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
+                PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny),
+                p.StoredSaveId, home?.ParkId == parkId, PokemonSprites.HasDonjonSprites(p.Species),
+                home is not null && home.ParkId != parkId ? home.Landscape : null);
+        }).ToList();
     }
 
     /// <summary>
-    /// Remplace les Pokémon du parc par <paramref name="ids"/> (choix de la fenêtre « Ajouter des Pokémon ») : ceux qui y
-    /// restent gardent leur place, les nouveaux arrivent après. Un parc qui a plus de Pokémon que sa capacité (30 avant les
-    /// agrandissements, 25 ensuite, 20 depuis) les garde : on peut en retirer, pas en ajouter tant qu'il dépasse.
+    /// Remplace les Pokémon du parc par <paramref name="ids"/> (choix de la fenêtre « Choisir les Pokémon ») : ceux qui y
+    /// restent gardent leur place, les nouveaux arrivent après ; ceux d'un autre parc du joueur le quittent pour venir ici.
+    /// Un parc qui a plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite, 20 depuis) les garde : on
+    /// peut en retirer, pas en ajouter tant qu'il dépasse.
     /// </summary>
-    public async Task<ParkResult> SetAsync(string ownerId, IReadOnlyCollection<int> ids)
+    public async Task<ParkResult> SetAsync(string ownerId, int parkId, IReadOnlyCollection<int> ids)
     {
         var wanted = ids.ToHashSet();
         await using var db = await dbFactory.CreateDbContextAsync();
-        var capacity = CapacityOf(await db.Users.Where(u => u.Id == ownerId).Select(u => u.ParkExpansions).FirstOrDefaultAsync());
+        if (await FindAsync(db, ownerId, parkId) is not { } park)
+            return new(false, UnknownPark);
+        var capacity = CapacityOf(park.Expansions);
         if (wanted.Count > capacity)
         {
-            var current = await db.ParkMembers.Where(m => m.OwnerId == ownerId).Select(m => m.BankPokemonId).ToListAsync();
+            var current = await db.ParkMembers.Where(m => m.ParkId == parkId).Select(m => m.BankPokemonId).ToListAsync();
             if (!wanted.IsSubsetOf(current))
                 return new(false, $"Le parc accueille {capacity} Pokémon au plus : retires-en {wanted.Count - capacity}.");
         }
@@ -173,32 +276,42 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             return new(false, $"{withoutSprites.SpeciesName} n'a pas encore de sprites Donjon Mystère : il ne peut pas aller au parc.");
 
         await using var tx = await db.Database.BeginTransactionAsync();
-        await db.ParkMembers.Where(m => m.OwnerId == ownerId && !wanted.Contains(m.BankPokemonId)).ExecuteDeleteAsync();
-        var present = await db.ParkMembers.Where(m => m.OwnerId == ownerId).Select(m => m.BankPokemonId).ToListAsync();
         var now = DateTime.UtcNow;
-        db.ParkMembers.AddRange(wanted.Except(present).Select(id => new ParkMember { BankPokemonId = id, OwnerId = ownerId, AddedAt = now }));
+        await db.ParkMembers.Where(m => m.ParkId == parkId && !wanted.Contains(m.BankPokemonId)).ExecuteDeleteAsync();
+        // Venus d'un autre parc : ils arrivent après ceux qui restent, comme les nouveaux
+        var moved = await db.ParkMembers.Where(m => m.OwnerId == ownerId && m.ParkId != parkId && wanted.Contains(m.BankPokemonId))
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.ParkId, parkId).SetProperty(x => x.AddedAt, now));
+        var present = await db.ParkMembers.Where(m => m.ParkId == parkId).Select(m => m.BankPokemonId).ToListAsync();
+        db.ParkMembers.AddRange(wanted.Except(present).Select(id => new ParkMember { BankPokemonId = id, OwnerId = ownerId, ParkId = parkId, AddedAt = now }));
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : parc de {Count} Pokémon.", ownerId, wanted.Count);
-        return new(true, wanted.Count == 0 ? "Le parc est vide." : $"Parc mis à jour : {wanted.Count} Pokémon.");
+        logger.LogInformation("Utilisateur {User} : parc {Park} de {Count} Pokémon ({Moved} venus d'un autre parc).", ownerId, parkId, wanted.Count, moved);
+        if (wanted.Count == 0)
+            return new(true, "Le parc est vide.");
+        return new(true, $"Parc mis à jour : {wanted.Count} Pokémon" + moved switch
+        {
+            0 => ".",
+            1 => ", dont 1 venu d'un autre parc.",
+            _ => $", dont {moved} venus d'un autre parc.",
+        });
     }
 
-    /// <summary>Retire un Pokémon du parc (il reste dans la collection).</summary>
+    /// <summary>Retire un Pokémon de son parc (il reste dans la collection).</summary>
     public async Task<bool> RemoveAsync(string ownerId, int bankPokemonId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.ParkMembers.Where(m => m.OwnerId == ownerId && m.BankPokemonId == bankPokemonId).ExecuteDeleteAsync() > 0;
     }
 
-    /// <summary>Vide le parc (bouton « Vider le parc ») : ses Pokémon restent dans la collection.</summary>
-    public async Task<ParkResult> ClearAsync(string ownerId)
+    /// <summary>Vide le parc (bouton « Vider le parc ») : ses Pokémon restent dans la collection, les autres parcs ne bougent pas.</summary>
+    public async Task<ParkResult> ClearAsync(string ownerId, int parkId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var count = await db.ParkMembers.Where(m => m.OwnerId == ownerId).ExecuteDeleteAsync();
+        var count = await db.ParkMembers.Where(m => m.OwnerId == ownerId && m.ParkId == parkId).ExecuteDeleteAsync();
         if (count == 0)
             return new(false, "Le parc est déjà vide.");
-        logger.LogInformation("Utilisateur {User} : parc vidé ({Count} Pokémon).", ownerId, count);
+        logger.LogInformation("Utilisateur {User} : parc {Park} vidé ({Count} Pokémon).", ownerId, parkId, count);
         return new(true, count == 1
             ? "Le parc est vide : son Pokémon reste dans ta collection."
             : $"Le parc est vide : ses {count} Pokémon restent dans ta collection.");

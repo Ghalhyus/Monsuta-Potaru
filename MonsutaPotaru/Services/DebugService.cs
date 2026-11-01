@@ -101,10 +101,10 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
     }
 
     /// <summary>
-    /// Agrandit (<paramref name="grow"/>) ou réduit le parc d'une taille, gratuitement et sans ligne du journal. Réduit, il
+    /// Agrandit (<paramref name="grow"/>) ou réduit ce parc d'une taille, gratuitement et sans ligne du journal. Réduit, il
     /// garde ses premiers arrivés : les derniers retournent dans la collection (ils y sont toujours).
     /// </summary>
-    public async Task<ParkExpansionResult> ResizeParkAsync(string userId, bool grow)
+    public async Task<ParkExpansionResult> ResizeParkAsync(string userId, int parkId, bool grow)
     {
         if (!await IsActiveAsync(userId))
             return new(false, NotActiveMessage);
@@ -112,26 +112,27 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
 
         await using var db = await dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
-        var changed = await db.Users
-            .Where(u => u.Id == userId && u.ParkExpansions + delta >= 0 && u.ParkExpansions + delta <= ParkService.MaxExpansions)
-            .ExecuteUpdateAsync(u => u.SetProperty(x => x.ParkExpansions, x => x.ParkExpansions + delta));
+        var changed = await db.Parks
+            .Where(p => p.Id == parkId && p.OwnerId == userId && p.Expansions + delta >= 0 && p.Expansions + delta <= ParkService.MaxExpansions)
+            .ExecuteUpdateAsync(p => p.SetProperty(x => x.Expansions, x => x.Expansions + delta));
         if (changed == 0)
-            return new(false, grow
-                ? $"Ton parc a déjà sa plus grande taille ({ParkService.CapacityOf(ParkService.MaxExpansions)} Pokémon)."
-                : $"Ton parc a déjà sa plus petite taille ({ParkService.CapacityOf(0)} Pokémon).");
+            return !await db.Parks.AnyAsync(p => p.Id == parkId && p.OwnerId == userId) ? new(false, "Ce parc n'existe pas.")
+                : new(false, grow
+                    ? $"Ce parc a déjà sa plus grande taille ({ParkService.CapacityOf(ParkService.MaxExpansions)} Pokémon)."
+                    : $"Ce parc a déjà sa plus petite taille ({ParkService.CapacityOf(0)} Pokémon).");
 
-        var expansions = await db.Users.Where(u => u.Id == userId).Select(u => u.ParkExpansions).FirstAsync();
+        var expansions = await db.Parks.Where(p => p.Id == parkId).Select(p => p.Expansions).FirstAsync();
         var capacity = ParkService.CapacityOf(expansions);
-        var leaving = await db.ParkMembers.Where(m => m.OwnerId == userId)
+        var leaving = await db.ParkMembers.Where(m => m.ParkId == parkId)
             .OrderBy(m => m.AddedAt).ThenBy(m => m.BankPokemonId) // l'ordre de ParkService.ListAsync
             .Skip(capacity).Select(m => m.BankPokemonId).ToListAsync();
         if (leaving.Count > 0)
-            await db.ParkMembers.Where(m => m.OwnerId == userId && leaving.Contains(m.BankPokemonId)).ExecuteDeleteAsync();
+            await db.ParkMembers.Where(m => m.ParkId == parkId && leaving.Contains(m.BankPokemonId)).ExecuteDeleteAsync();
         await tx.CommitAsync();
 
         if (logger.IsEnabled(LogLevel.Information))
-            logger.LogInformation("Compte {User} : parc à {Expansions} agrandissements (mode debug, {Leaving} Pokémon retirés).",
-                userId, expansions, leaving.Count);
+            logger.LogInformation("Compte {User} : parc {Park} à {Expansions} agrandissements (mode debug, {Leaving} Pokémon retirés).",
+                userId, parkId, expansions, leaving.Count);
         var message = $"Parc {(grow ? "agrandi" : "réduit")} (mode debug) : il accueille maintenant {capacity} Pokémon.";
         if (leaving.Count > 0)
             message += leaving.Count == 1

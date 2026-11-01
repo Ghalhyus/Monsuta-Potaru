@@ -11,9 +11,6 @@ public class ApplicationUser : IdentityUser
     /// </summary>
     public int CollectionLimit { get; set; } = Services.CollectionCapacity.DefaultLimit;
 
-    /// <summary>Agrandissements du « Parc » achetés (0 à <see cref="Services.ParkService.MaxExpansions"/>, voir <see cref="Services.ParkService.ExpandAsync"/>).</summary>
-    public int ParkExpansions { get; set; }
-
     /// <summary>Thème choisi dans « Mon compte » → « Thèmes » (clé de <see cref="Services.SiteThemes"/>) ; null : le thème par défaut.</summary>
     [System.ComponentModel.DataAnnotations.MaxLength(32)]
     public string? Theme { get; set; }

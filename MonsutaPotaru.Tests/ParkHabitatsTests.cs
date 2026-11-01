@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MonsutaPotaru.Data;
 using MonsutaPotaru.Services;
 using PKHeX.Core;
 
@@ -181,10 +182,16 @@ public sealed class ParkHabitatsTests
     }
 
     [Fact]
-    public void Load_ReadsEverySize()
+    public void Load_ReadsEverySize_OfEveryLandscape()
     {
         ParkHabitats.Load(RealSavesTests.WebRoot());
-        Assert.All(Enumerable.Range(1, ParkService.MaxExpansions + 1), size => Assert.NotNull(ParkHabitats.Map(size)));
-        Assert.Null(ParkHabitats.Map(ParkService.MaxExpansions + 2));
+        foreach (var landscape in ParkLandscapes.All)
+        {
+            Assert.All(Enumerable.Range(1, ParkService.MaxExpansions + 1), size => Assert.NotNull(ParkHabitats.Map(landscape, size)));
+            Assert.Null(ParkHabitats.Map(landscape, ParkService.MaxExpansions + 2));
+        }
+        // La plage : surtout de l'eau, la forêt : surtout de la végétation
+        Assert.True(ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Water] > ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Sand]);
+        Assert.True(ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Vegetation] > ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Water]);
     }
 }

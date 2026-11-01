@@ -166,6 +166,49 @@ public sealed class MigrationsTests : IDisposable
     }
 
     [Fact]
+    public async Task ParkLandscapes_TurnsEachPark_IntoAForest()
+    {
+        const string before = "20261031095313_ParkExpansions"; // juste avant ParkLandscapes
+        int pikachu, misty;
+        using (var db = NewContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync(before);
+            await AddUserAsync(db, "sacha", "Sacha");
+            await AddUserAsync(db, "ondine", "Ondine");
+            await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET ParkExpansions = 2 WHERE Id = 'sacha';");
+            var pokemon = new[] { "sacha", "ondine" }.Select(owner => new BankPokemon
+            {
+                OwnerId = owner, Species = 25, SpeciesName = "Pikachu", Nickname = "Pikachu", Level = 10, DepositedAt = DateTime.UtcNow, Data = [1],
+            }).ToList();
+            db.BankPokemon.AddRange(pokemon); // table pas modifiée depuis : le modèle actuel convient
+            await db.SaveChangesAsync();
+            (pikachu, misty) = (pokemon[0].Id, pokemon[1].Id);
+            var at = new DateTime(2026, 10, 31, 10, 0, 0, DateTimeKind.Utc);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO ParkMembers (BankPokemonId, OwnerId, AddedAt) VALUES ({pikachu}, 'sacha', {at}), ({misty}, 'ondine', {at})");
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            var parks = await db.Parks.OrderBy(p => p.OwnerId).ToListAsync();
+            Assert.Equal([("ondine", ParkLandscape.Forest, 0), ("sacha", ParkLandscape.Forest, 2)],
+                parks.Select(p => (p.OwnerId, p.Landscape, p.Expansions)));
+            Assert.Equal([(pikachu, parks[1].Id), (misty, parks[0].Id)],
+                (await db.ParkMembers.OrderBy(m => m.BankPokemonId).ToListAsync()).Select(m => (m.BankPokemonId, m.ParkId)));
+
+            // Et retour : Pikachu, parti à la plage, quitte le parc ; la Forêt redevient le parc avec ses agrandissements
+            var beach = new Park { OwnerId = "sacha", Landscape = ParkLandscape.Beach, Expansions = 1 };
+            db.Parks.Add(beach);
+            await db.SaveChangesAsync();
+            await db.ParkMembers.Where(m => m.BankPokemonId == pikachu).ExecuteUpdateAsync(m => m.SetProperty(x => x.ParkId, beach.Id));
+            await db.GetService<IMigrator>().MigrateAsync(before);
+            Assert.Equal([0, 2], await db.Database.SqlQueryRaw<int>("SELECT ParkExpansions AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+            Assert.Equal([misty], await db.Database.SqlQueryRaw<int>("SELECT BankPokemonId AS Value FROM ParkMembers").ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task Friends_TurnsPrivateProfiles_IntoNobody()
     {
         const string before = "20261026185115_ProfileVisibility"; // juste avant Friends

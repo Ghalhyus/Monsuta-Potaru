@@ -12,9 +12,10 @@
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 
 // Carte : coordonnées du parc en pixels de la carte (16 par tuile). La hauteur affichée est celle de la zone « Départ »
-// (320 pixels), à un nombre entier de pixels d'écran par pixel de carte (dessin net). Une carte par taille du parc (1 à 4,
-// agrandissements achetés + 1, ParkService), toutes de la même taille : seule la zone « Parc » et la forêt autour changent.
-const MAP_URL = size => `parc/parc-1-${size}.json`;
+// (320 pixels), à un nombre entier de pixels d'écran par pixel de carte (dessin net). Une carte par paysage (« parc-1 »,
+// « plage-1 » : ParkLandscapes.MapName) et par taille du parc (1 à 4, agrandissements achetés + 1, ParkService), toutes de
+// la même taille pour un paysage : seule la zone « Parc » et ce qui la cache autour changent.
+const MAP_URL = (map, size) => `parc/${map}-${size}.json`;
 const VIEW_MARGIN = 6; // cases de forêt qu'on peut voir au-delà de la zone « Parc » en faisant glisser la vue
 const TILES_URL = "images/parc/tuiles/"; // planches du pack, hors de Git (deploy/fond-parc.cmd)
 const TILE = 16;
@@ -492,16 +493,17 @@ class Pokemon {
 
 /**
  * Parc dans <container> ; <component> (Park.razor) est prévenu d'un clic sur un Pokémon. Options : canMove (le
- * propriétaire peut soulever ses Pokémon et les poser ailleurs ; rien n'est enregistré), size (taille du parc, de 1 à 4 :
- * sa carte), fullscreen (élément mis en plein écran, qui contient <container> et les fenêtres de la page, comme la fiche
- * d'un Pokémon ; sans lui, <container>).
+ * propriétaire peut soulever ses Pokémon et les poser ailleurs ; rien n'est enregistré), map (début du nom des cartes de
+ * son paysage : « parc-1 », « plage-1 »), size (taille du parc, de 1 à 4 : sa carte), fullscreen (élément mis en plein
+ * écran, qui contient <container> et les fenêtres de la page, comme la fiche d'un Pokémon ; sans lui, <container>).
  */
 export async function create(container, component, options) {
     const canMove = options?.canMove === true;
     const fullscreenTarget = options?.fullscreen ?? container; // plein écran : lui, pour que la fiche d'un Pokémon s'y affiche aussi
     const size = Math.max(1, Math.floor(Number(options?.size) || 1));
+    const mapName = /^[a-z0-9-]+$/.test(options?.map ?? "") ? options.map : "parc-1";
     let data = null;
-    try { data = await (await fetch(MAP_URL(size))).json(); }
+    try { data = await (await fetch(MAP_URL(mapName, size))).json(); }
     catch { /* carte illisible : un pré sans obstacle */ }
     const ground = new Ground(data);
     const viewW = ground.start.w * TILE, viewH = ground.start.h * TILE; // la zone « Départ » remplit la hauteur

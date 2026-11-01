@@ -2,17 +2,34 @@
 
 README : « Parc ». Page `Park.razor`, service `ParkService`, affichage et animation `wwwroot/js/parc.js` (Phaser).
 
-Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md`.
+Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
+
+## Plusieurs parcs (`Parks`, `ParkLandscapes`)
+- Table `Parks` (compte, `ParkLandscape`, `Expansions`), index unique (compte, paysage) ; `ParkMembers.ParkId` (clé
+  `BankPokemonId` inchangée : un Pokémon dans un seul parc). Migration `ParkLandscapes` : une Forêt par compte avec
+  l'ancienne colonne `AspNetUsers.ParkExpansions` (supprimée), ses Pokémon rattachés. Vérifiée sur une copie de la base de
+  l'utilisateur le 2026-11-01 (Forêt à 3 agrandissements, 60 Pokémon gardés).
+- **Piège de la migration** : EF reconstruit une table SQLite (clé étrangère ajoutée ou retirée) **à la fin** de la
+  migration, quel que soit l'ordre des opérations. Dans le `Down`, la reconstruction de `ParkMembers` venait après
+  `DROP TABLE Parks`, qui la vidait (cascade) : reconstruction écrite en SQL avant la suppression. Regarder le SQL avec
+  `dotnet ef migrations script <après> <avant>` dans la copie du projet.
+- La Forêt est créée à la première visite (`ListParksAsync` → `EnsureForestAsync`, `INSERT OR IGNORE`), pas à
+  l'inscription. `BuyAsync` : `INSERT OR IGNORE` (0 ligne : déjà acheté) puis débit, dans la même transaction.
+- Tout numéro de parc vient du navigateur (liste déroulante) : chaque méthode filtre sur `OwnerId` (« Ce parc n'existe
+  pas. »). `ParkServiceTests.ParkOfAnotherPlayer_IsRefused`.
+- Nouveau paysage : une valeur de `ParkLandscape`, ses cartes `{MapName}-{taille}.json`, une ligne dans chaque méthode de
+  `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes.
 
 ## Agrandissements (`ParkService`)
-- Capacité `CapacityOf(ParkExpansions)` = 20 + 20 par agrandissement, `MaxExpansions` = 3 (colonne
-  `AspNetUsers.ParkExpansions`, migration `ParkExpansions`). `ExpandAsync` : dans une transaction, `ExecuteUpdate`
-  conditionnel sur la taille (`< MaxExpansions`) puis débit conditionnel du porte-monnaie ; débit refusé : `RollbackAsync`
-  (la taille revient). Ligne de journal `WalletOperationKind.ExpandPark` (libellé dans `Inventory.razor`).
+- Capacité `CapacityOf(Park.Expansions)` = 20 + 20 par agrandissement, `MaxExpansions` = 3, par parc. `ExpandAsync` :
+  dans une transaction, `ExecuteUpdate` conditionnel sur la taille (`< MaxExpansions`) puis débit conditionnel du
+  porte-monnaie ; débit refusé : `RollbackAsync` (la taille revient). Ligne de journal `WalletOperationKind.ExpandPark`
+  (« Forêt : 20 → 40 Pokémon ») ; achat d'un parc : `BuyPark` (libellés dans `Inventory.razor`).
 - `SetAsync` au-dessus de la capacité : accepté seulement si les Pokémon voulus sont tous déjà au parc (anciens parcs de
   30 ou de 25). La fenêtre de choix suit la même règle (`!c.InPark`).
 - Après l'achat, `Park.razor` rafraîchit `WalletState` (solde du menu) et redémarre le parc (`StartEngine` : `dispose`
-  puis `create` avec `size = ParkExpansions + 1`).
+  puis `create` avec `map` = `ParkLandscapes.MapName` et `size = Expansions + 1`) ; de même après un achat ou un
+  changement de parc dans la liste.
 - **Planches gardées par le module** (`sheets`) d'un jeu de Phaser à l'autre : une texture doit être recréée dans chaque
   jeu (`shadowOf` vérifie `textures.exists`). Sans : la texture « manquante » de Phaser, un carré noir à la place des
   ombres (vu au redémarrage après un achat, et en revenant sur la page sans la recharger).
@@ -66,7 +83,7 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   la lisière reste claire). Ombres (1,9). Nuit (4, cachée le jour), nom et « z » (6).
   « Collisions » : toute tuile = case bloquée, jamais dessiné. « Zones » : « Départ » (vue de départ : sa hauteur donne
   le zoom, son centre la position) et « Parc » (`ground.area` : les Pokémon y restent ; sans lui, « Départ »).
-  `create(..., { size })` charge `parc-1-{size}.json` (`MAP_URL`).
+  `create(..., { map, size })` charge `{map}-{size}.json` (`MAP_URL` ; `parc-1` si `map` n'est pas un nom simple).
 - **Feuillages triés** (`foliage`) : une tuile de « Devant » appartient au tronc = première case sous elle (même colonne)
   qui bloque ou n'a plus de feuillage. Profondeur `depthOf(ligne du tronc × 16 + 8,5)`, comme les Pokémon
   (`depthOf(pieds)`) : pieds au-dessus du milieu du tronc = derrière. Morceaux = feuillages d'une même ligne de troncs à
@@ -78,10 +95,10 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
 - `ParkMapTests` : calques en CSV, jeux de tuiles incorporés avec un simple nom de fichier, « Départ » dans la carte,
   toutes ses cases libres reliées (même règle de diagonale que `parc.js`).
 
-## Plage (`outils/generer-plage.py`, pas encore sur le site)
+## Plage (`outils/generer-plage.py`, `ParkLandscape.Beach`)
 - `Plage_1-1.tmx` à `Plage_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `plage-1-{taille}.json` (le nom vient
-  du fichier). `MAP_URL` de `parc.js` et `ParkHabitats.Load` ne lisent encore que `parc-1` : à brancher avec les parcs
-  multiples. Mêmes arguments que `generer-parc.py` ; aperçus `plage-<n>.png` et `plage-<n>_collisions.png`.
+  du fichier). Mêmes arguments que `generer-parc.py` ; aperçus `plage-<n>.png` et `plage-<n>_collisions.png`.
+- Types de cases vus sur le site le 2026-11-01 (taille 1) : 806 eau, 418 sable, 16 aucun (le ponton), sur 40 × 31.
 - **65 % de mer, 35 % de sable** dans la zone de chaque taille (choix de l'utilisateur, 2026-11-01 ; tolérance de
   `ParkMapTests.Beach_IsAboutTwoThirdsSea_AtEverySize` : 60-70 % de mer, 30-40 % de sable ; Eau heureux, Feu malheureux,
   Normal normal). Le script affiche les parts : 33,7 / 34,9 / 36,2 / 37,0 % de sable. Réglages : `COTE` (ligne de la
