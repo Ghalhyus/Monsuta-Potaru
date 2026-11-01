@@ -35,7 +35,7 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   modifié), envoyées par `deploy\fond-parc.cmd`, rapatriées par `recuperer-images.cmd`. Sans elles : herbe unie (`GRASS`).
 - Pack : `C:\Sources\Asset_Cute_Fantasy` (+ Desert, Dungeons, ShroomLands, Volcano), tuiles 16 px. Les jeux de couleurs
   vont par numéro : `Grass_Tiles_2`, `Grass_2_Middle` et `Water_Tile_2` ont la même herbe.
-- Cartes de l'utilisateur : `C:\Sources\Parcs` (`Parc_1-1.tmx` à `Parc_1-4.tmx` = les cartes du site, sorties telles
+- Cartes de l'utilisateur : `C:\Sources\Parcs` (`Parc_1-1.tmx` à `Parc_1-4.tmx` = les cartes du site, `Plage_1-*` : la plage, sorties telles
   quelles de `outils/generer-parc.py` : les corriger dans le script, pas dans Tiled ; bordures d'eau et de chemin
   automatiques, forêt en quinconce, graine fixe ; `Parc_1.tmx` : l'ancienne carte unique). Python du système sans Pillow :
   un `venv` dans un dossier temporaire. Lancer
@@ -55,6 +55,11 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   taille d'avant ; poches d'herbe enfermées → buissons. Le script s'arrête si une taille bloque une case libre de la
   précédente (`ParkMapTests` le vérifie aussi). Libres : 362, 999, 1 784, 3 062 cases (14 à 30 par
   Pokémon).
+- **Moteur commun** `outils/parc_carte.py` (classe `Carte` : jeux de tuiles, calques, `poser`, `essayer`,
+  `boucher_poches(zone, decors, bloque, remplissage)`, `ecrire_carte`, `apercu` ; fonctions de formes). Les générateurs
+  gardent leur paysage et l'ordre de leurs tirages. Refonte du moteur : régénérer les deux parcs dans un dossier
+  temporaire et comparer avec `cmp` (`.tmx` et aperçus identiques ; seuls les chemins des planches changent si le dossier
+  de sortie change). Chemins des planches normalisés (`../Cute_Fantasy_Desert/...` pour l'extension).
 - Tiled 1.12 installé (`C:\Program Files\Tiled`, `tmxrasterizer.exe` rend une carte en PNG pour vérifier).
 - Calques lus, **dessinés une seule fois** au démarrage : « Sol » + « Décors » dans une `RenderTexture` (profondeur 0),
   brouillard hors « Parc » dans une autre (3 ; `FOG.steps` marches superposées, une par case à partir de la deuxième :
@@ -72,6 +77,33 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   d'un feuillage peut prendre le tronc d'un voisin (cases bloquées, aucun Pokémon : sans effet).
 - `ParkMapTests` : calques en CSV, jeux de tuiles incorporés avec un simple nom de fichier, « Départ » dans la carte,
   toutes ses cases libres reliées (même règle de diagonale que `parc.js`).
+
+## Plage (`outils/generer-plage.py`, pas encore sur le site)
+- `Plage_1-1.tmx` à `Plage_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `plage-1-{taille}.json` (le nom vient
+  du fichier). `MAP_URL` de `parc.js` et `ParkHabitats.Load` ne lisent encore que `parc-1` : à brancher avec les parcs
+  multiples. Mêmes arguments que `generer-parc.py` ; aperçus `plage-<n>.png` et `plage-<n>_collisions.png`.
+- **65 % de mer, 35 % de sable** dans la zone de chaque taille (choix de l'utilisateur, 2026-11-01 ; tolérance de
+  `ParkMapTests.Beach_IsAboutTwoThirdsSea_AtEverySize` : 60-70 % de mer, 30-40 % de sable ; Eau heureux, Feu malheureux,
+  Normal normal). Le script affiche les parts : 33,7 / 34,9 / 36,2 / 37,0 % de sable. Réglages : `COTE` (ligne de la
+  côte, 20), `ZONES` (le haut de chaque zone placé pour que la côte en soit au tiers), anses aux deux bouts (moins de sable
+  dans la dernière taille, que la bordure haute de palmiers enrichit en sable). Une ligne de `COTE` = ~1 à 3 points de
+  sable selon la taille.
+- La mer et l'écume (bord du sable, tuiles de bordure de `Beach_Tiles`) sont bloquées : zones plus grandes que le parc 1
+  (40 × 31, 56 × 43, 70 × 53, 80 × 60) pour 15 à 16 cases libres par Pokémon (le test en exige 14). « Départ » reste
+  24 × 20 (même zoom), moitié plage moitié mer.
+- Bords du sable : le sable est la forme (`PLAGE`, premier des six groupes de `Beach_Tiles`, les autres sont des variantes
+  de l'écume), prolongée hors de la carte (`hors_carte` : pas de bordure le long du bord). `nettoyer_cote` nettoie le
+  sable puis la mer jusqu'à ce que rien ne change. Sol tiré case par case (`tirage`) : le même à chaque taille.
+- Ce qui n'est pas acheté (`cache_de`) : cocoteraie en quinconce sur le sable (`Palm_Tree_2` de Desert, le droit 2 × 3 ou
+  le penché 2 × 2 une case plus bas) avec des buissons, **récif** de gros rochers 2 × 2 d'`Outdoor_Decor` (colonnes 4-7,
+  lignes 11-14) en quinconce dans la mer, petits rochers dans les trous et sur l'écume. Les îlots hors de la zone sont
+  retirés du sable (rien à deviner) ; chaque îlot tient dans un seul anneau entre deux zones et porte un palmier.
+- Ponton : `Wooden_Deck_Tiles` 0/1 et 5/6 (planches à cheval sur deux colonnes, fond transparent) dans « Décors » au-dessus
+  du sable, de l'écume et de la mer ; ses cases sont débloquées (`debloque`), type de case « aucun ». Poteaux du bout
+  (28/29) bloqués. Barque (`Boat`, lignes 1-2) à côté.
+- Objets : grands palmiers (`Palm_Tree_1`, 3 × 4, pied bloqué en ligne 3 colonne 1), palmiers isolés (pied colonne 0),
+  palmes tombées (2 × 2, on y marche), herbes des dunes, rochers du désert sur le sable, rochers dans la mer. Les noix de
+  coco des planches de palmiers sont à cheval sur deux tuiles : pas utilisées.
 
 ## Types de cases et bonheur
 - Feuille Google « Gestion du parc » de l'utilisateur (id `1m_jWFdXRigcS3tdz2UUDggTtE8cK-1avN_mBvMoYoOE`, connecteur
@@ -146,6 +178,34 @@ Projet à venir (refuge, plusieurs parcs, IA par espèce) : `docs/projet-parc.md
   « mobile », recharger la page, `new Touch(...)` + `TouchEvent` sur le canvas. Panneau masqué : la caméra n'est à jour
   qu'après un dessin (capture d'écran) : sans, `getWorldPoint` vise à côté et le Pokémon n'est pas pris ; l'appui long
   attend aussi une image (`tick`).
+
+## Nage et vol (`parc.js`, demande du 2026-11-01)
+- `ParkHabitats.MovementOf(type1, type2)` → `ParkPokemon.Moves` : « swim » si l'un des types est Eau, sinon « fly » si
+  l'un est Vol, sinon null (un Eau/Vol nage). Lévitation et Spectre : pas pour l'instant (à proposer si l'utilisateur
+  le demande). `setPokemon` met aussi à jour `moves` des Pokémon gardés.
+- `Ground.walkable` est un masque : `LAND` (1, terre libre), `WATER` (2, eau libre), 0 bloqué pour tous. Eau libre
+  (`openWater`, calculée au chargement, sans toucher aux cartes) : case bloquée sans tuile dans « Décors » ni « Devant »
+  et de type eau (5), plus les cases bloquées sans objet qui la touchent (8 voisines : l'écume de la plage, de type
+  sable), seulement si c'est relié par les côtés à la terre libre (pas de flaque entre les rochers du récif). Les îlots :
+  leur bord est de l'écume (on y nage), l'intérieur reste bloqué.
+- Chaque Pokémon : `pass` (cases où il passe : `LAND | WATER` s'il nage ou vole) et `reach` (où il s'arrête : l'eau
+  seulement pour un nageur). `nearestFree`, `path`, `lineFree`, `isFree` prennent un masque (`Ground.mask` garde celui
+  de la recherche en cours pour `canStep` et `smooth`, sans fonction créée). `walkTo(x, y, intent, reach)`.
+- Nageur : `SWIM.waterShare` (2/3) de ses promenades et de ses arrivées au parc dans l'eau (`randomSpot(WATER)`), y
+  dort. Volant : arrêté au-dessus de l'eau (clic, chemin barré), `decide` l'envoie d'abord se poser ; pas de petite pause
+  en chemin au-dessus de l'eau ; `FLY_OVER` (30 %) de ses promenades sont un **survol** (intent « soar » vers une case
+  d'eau, puis directement vers la terre) : sans ça, sur la plage (terre d'un seul tenant), il ne passait au-dessus de
+  l'eau que 3 s sur 900. `preyOf` : seulement une proie là où l'attaquant peut s'arrêter. `putDown` et le cadre :
+  `reach`.
+- Rendu : `wet` (0 à 1) et `altitude` (0 à `FLY_HEIGHT` = 10 px de carte) suivent en douceur dans `step`. Dans l'eau :
+  sprite descendu de `SWIM.sink` (4) pixels de sprite, `setCrop` à la ligne des pieds (hauteur `fh − wet × (fh/2 − 6 +
+  sink)`, `setCrop()` en sortant), `rippleOf` (deux ellipses claires, texture faite une fois par taille comme
+  `shadowOf`) qui pulse avec `clock`. Volant : sprite monté de `altitude`, ombre plus petite restée sur l'eau ; `at`
+  (clic) et le nom suivent l'altitude.
+- Essai (2026-11-01, 15 min simulées sur la plage taille 2, puis parc 1 tailles 1 et 4) : nageurs 61 à 83 % du temps dans
+  l'eau, volants 13 à 27 % au-dessus sans jamais s'y arrêter, marcheurs jamais, aucune case interdite (`simulate` rend
+  `moves`, `water`, et `free` selon `pass`). Charger la plage sans la brancher : remplacer `window.fetch` dans la page
+  (`parc/parc-1-N.json` → `parc/plage-1-N.json`) avant `import("/js/parc.js?v=…")`.
 
 ## Animation et comportement (`parc.js`)
 - **Malheureux** (demande du 2026-10-31) : humeur dans `ParkPokemon.Mood` (« happy », « normal », « sad »,

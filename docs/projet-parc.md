@@ -38,6 +38,10 @@ Faire du parc un **refuge de Pokémon** :
    *Fait le 31 octobre 2026 :* 20 Pokémon au départ, 40 000 ₽ pour 20 de plus, trois fois au plus (80 ; 25, 100 et 50 000 ₽ au début) ; une carte par
    taille (anneaux autour de « Départ », la dernière = toute la carte), forêt dense à lisière irrégulière autour de la zone, assombrie, rien de visible
    de ce qu'il reste à débloquer ; même zoom, on fait glisser la vue (README, « Parc »).
+   *Plusieurs parcs, fait le 1er novembre 2026 :* cartes de la plage (`outils/generer-plage.py`, `plage-1-{taille}.json`,
+   pas encore branchées sur le site) : côte, environ 65 % de mer et 35 % de sable à chaque taille (choix de
+   l'utilisateur), cocoteraie côté plage et récif côté mer pour cacher ce qui n'est pas acheté. *Reste :* plusieurs parcs
+   par joueur en base, choix de la carte dans la page.
 3. **IA par espèce** : profils tirés des types et des groupes d'œufs, à partir d'un fichier de comportements fourni par
    l'utilisateur.
 4. *(Idée lointaine)* **Construction par les joueurs**.

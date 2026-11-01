@@ -40,6 +40,17 @@ public sealed class ParkHabitatsTests
     }
 
     [Theory]
+    [InlineData(MoveType.Water, MoveType.Water, "swim")]      // Carapuce
+    [InlineData(MoveType.Normal, MoveType.Flying, "fly")]     // Roucool : le Vol en second type
+    [InlineData(MoveType.Flying, MoveType.Flying, "fly")]     // Boréas (Vol seul)
+    [InlineData(MoveType.Water, MoveType.Flying, "swim")]     // Bekipan : nage (il peut tout ce que fait un volant)
+    [InlineData(MoveType.Grass, MoveType.Water, "swim")]      // Ludicolo : l'Eau en second type
+    [InlineData(MoveType.Fire, MoveType.Fire, null)]          // Salamèche : marche seulement
+    [InlineData(MoveType.Ghost, MoveType.Poison, null)]       // Fantominus : pas de lévitation pour l'instant
+    public void Movement_ComesFromWaterOrFlyingType(MoveType type1, MoveType type2, string? expected) =>
+        Assert.Equal(expected, ParkHabitats.MovementOf((byte)type1, (byte)type2));
+
+    [Theory]
     [MemberData(nameof(Sizes))]
     public void Map_HasATypeForEveryTile(int size)
     {

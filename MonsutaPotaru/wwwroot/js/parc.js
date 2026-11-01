@@ -7,7 +7,8 @@
 // plus tôt la nuit), une intention (explorer un endroit, rejoindre un Pokémon de sa famille, observer autour de lui, aller
 // dormir près d'un congénère), un caractère tiré de sa nature (plus ou moins actif, dormeur, sociable) et de la curiosité
 // pour le pointeur de la souris. Il contourne les obstacles (calque « Collisions » de la carte) et reste dans la zone
-// « Parc » (la taille achetée : forêt dense autour, assombrie) ; on la parcourt en faisant glisser la vue.
+// « Parc » (la taille achetée : forêt dense autour, assombrie) ; on la parcourt en faisant glisser la vue. Les types Eau
+// nagent dans l'eau libre (surtout là), les types Vol la survolent mais se posent sur la terre ferme (ParkPokemon.Moves).
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 
 // Carte : coordonnées du parc en pixels de la carte (16 par tuile). La hauteur affichée est celle de la zone « Départ »
@@ -59,6 +60,14 @@ const FLEE = { speed: 2, distance: [96, 160] }; // le Pokémon frappé s'enfuit 
 // Énergie (par seconde) : 3 à 5 minutes d'activité le jour avant une sieste d'environ une minute ; la nuit, ils
 // s'endorment plus tôt et récupèrent lentement (longues nuits).
 const ENERGY = { walk: 0.004, idle: 0.0012, sleepDay: 0.012, sleepNight: 0.004 };
+// Cases où l'on peut aller (masques de Ground.walkable) : LAND, la terre où l'on marche ; WATER, l'eau libre (sans rocher ni
+// objet posé) et le bord qui la touche (écume de la plage), pour les nageurs et les volants
+const LAND = 1, WATER = 2;
+// Nageur : part de ses destinations dans l'eau ; dans l'eau, le sprite descend de <sink> pixels de sprite et n'est plus
+// dessiné sous la surface (la ligne de ses pieds) ; des remous à la place de l'ombre
+const SWIM = { waterShare: 2 / 3, sink: 4 };
+const FLY_HEIGHT = 10; // hauteur (pixels de la carte) d'un volant au-dessus de l'eau, son ombre restant sur l'eau
+const FLY_OVER = 0.3; // volant : part de ses promenades qui passent au-dessus de l'eau (un tour, puis il se pose à terre)
 
 // Lignes des planches de SpriteCollab : bas, bas-droite, droite, haut-droite, haut, haut-gauche, gauche, bas-gauche.
 const FRONT = 0;
@@ -156,18 +165,6 @@ class Ground {
         // Vue de départ (sa hauteur remplit l'écran) ; partie de la carte où vivent les Pokémon (le reste est assombri)
         this.start = tiles(zones.find(o => o.name === "Départ")) ?? { x: 0, y: 0, w: this.columns, h: this.lines };
         this.area = tiles(zones.find(o => o.name === "Parc")) ?? this.start;
-        const collisions = data?.layers.find(l => l.name === "Collisions" && l.type === "tilelayer")?.data ?? [];
-        this.walkable = new Uint8Array(this.columns * this.lines);
-        this.free = []; // cases libres, pour tirer un endroit au hasard
-        const { x: sx, y: sy, w: sw, h: sh } = this.area;
-        for (let y = sy; y < sy + sh; y++) {
-            for (let x = sx; x < sx + sw; x++) {
-                const i = y * this.columns + x;
-                if (x < 0 || y < 0 || x >= this.columns || y >= this.lines || collisions[i]) continue;
-                this.walkable[i] = 1;
-                this.free.push(i);
-            }
-        }
         // Type de chaque case (« habitats » de la carte, écrit par outils/carte-parc.py : un chiffre par case, 0 aucun,
         // 1 sable, 2 cave, 3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan ; comme Services/ParkHabitats.cs)
         this.habitats = new Uint8Array(this.columns * this.lines);
@@ -177,6 +174,20 @@ class Ground {
                 if (h >= 0 && h <= 7) this.habitats[y * this.columns + x] = h;
             }
         });
+        const layer = name => data?.layers.find(l => l.name === name && l.type === "tilelayer")?.data ?? [];
+        const collisions = layer("Collisions");
+        this.walkable = new Uint8Array(this.columns * this.lines); // LAND, WATER, ou 0 : bloquée pour tous
+        this.free = []; // cases de terre libres, pour tirer un endroit au hasard
+        const { x: sx, y: sy, w: sw, h: sh } = this.area;
+        for (let y = sy; y < sy + sh; y++) {
+            for (let x = sx; x < sx + sw; x++) {
+                const i = y * this.columns + x;
+                if (x < 0 || y < 0 || x >= this.columns || y >= this.lines || collisions[i]) continue;
+                this.walkable[i] = LAND;
+                this.free.push(i);
+            }
+        }
+        this.water = this.openWater(collisions, layer("Décors"), layer("Devant")); // cases d'eau libre, au hasard aussi
         // Recherche de chemin : tableaux gardés d'une recherche à l'autre (pas de déchets à chaque décision)
         const n = this.columns * this.lines;
         this.cost = new Float64Array(n);
@@ -187,51 +198,99 @@ class Ground {
         this.heap = new Int32Array(8 * n + 1);
         this.heapScore = new Float64Array(8 * n + 1);
         this.search = 0;
+        this.mask = LAND; // cases permises de la recherche en cours (path)
+    }
+
+    /**
+     * Eau libre (WATER dans walkable) : les cases d'eau bloquées sans objet posé dessus (rocher, nénuphar, récif), et les
+     * cases bloquées sans objet qui les touchent (écume au bord du sable : pour entrer dans l'eau et en sortir). Seulement
+     * ce qui est relié à la terre où l'on marche (pas de mare enfermée entre des rochers). Rend ces cases.
+     */
+    openWater(collisions, decors, front) {
+        const { columns } = this, { x: sx, y: sy, w: sw, h: sh } = this.area;
+        const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(columns, sx + sw), y1 = Math.min(this.lines, sy + sh);
+        const inArea = (x, y) => x >= x0 && y >= y0 && x < x1 && y < y1;
+        const bare = i => collisions[i] && !decors[i] && !front[i]; // bloquée, sans objet
+        const open = new Uint8Array(columns * this.lines);
+        for (let y = y0; y < y1; y++)
+            for (let x = x0; x < x1; x++)
+                if (bare(y * columns + x) && this.habitats[y * columns + x] === 5) open[y * columns + x] = 1;
+        const touchesWater = (x, y) => {
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    if (inArea(x + dx, y + dy) && open[(y + dy) * columns + x + dx] === 1) return true;
+            return false;
+        };
+        for (let y = y0; y < y1; y++)
+            for (let x = x0; x < x1; x++)
+                if (!open[y * columns + x] && bare(y * columns + x) && touchesWater(x, y)) open[y * columns + x] = 2; // le bord
+        // Reliée à la terre : de proche en proche (par les côtés) depuis les cases où l'on marche
+        const water = [], queue = [...this.free], seen = new Uint8Array(columns * this.lines);
+        for (const i of queue) seen[i] = 1;
+        while (queue.length) {
+            const i = queue.pop(), x = i % columns, y = Math.floor(i / columns);
+            for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+                const j = ny * columns + nx;
+                if (!inArea(nx, ny) || seen[j] || !open[j]) continue;
+                seen[j] = 1;
+                this.walkable[j] = WATER;
+                water.push(j);
+                queue.push(j);
+            }
+        }
+        return water;
     }
 
     get width() { return this.columns * TILE; }
     get height() { return this.lines * TILE; }
 
-    tileFree(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && this.walkable[ty * this.columns + tx] === 1; }
-    isFree(x, y) { return this.tileFree(Math.floor(x / TILE), Math.floor(y / TILE)); }
+    /** Case où l'on peut aller avec <mask> (LAND, WATER, ou les deux). */
+    tileFree(tx, ty, mask = LAND) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && (this.walkable[ty * this.columns + tx] & mask) !== 0; }
+    isFree(x, y, mask = LAND) { return this.tileFree(Math.floor(x / TILE), Math.floor(y / TILE), mask); }
     /** Type de la case (cases de la carte) ; hors de la carte : 0 (aucun). */
     habitatOfTile(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines ? this.habitats[ty * this.columns + tx] : 0; }
     /** Type de la case sous le point (pixels de la carte). */
     habitatAt(x, y) { return this.habitatOfTile(Math.floor(x / TILE), Math.floor(y / TILE)); }
     center(i) { return { x: (i % this.columns) * TILE + TILE / 2, y: Math.floor(i / this.columns) * TILE + TILE / 2 }; }
 
-    /** Endroit libre au hasard (un peu décalé du centre de sa case). */
-    randomSpot() {
-        if (!this.free.length) return { x: this.width / 2, y: this.height / 2 };
-        const c = this.center(this.free[Math.floor(Math.random() * this.free.length)]);
+    /** Endroit libre au hasard (un peu décalé du centre de sa case), sur la terre ou (WATER) dans l'eau libre s'il y en a. */
+    randomSpot(where = LAND) {
+        const cells = where === WATER && this.water.length ? this.water : this.free;
+        if (!cells.length) return { x: this.width / 2, y: this.height / 2 };
+        const c = this.center(cells[Math.floor(Math.random() * cells.length)]);
         return { x: c.x + random(-4, 4), y: c.y + random(-4, 4) };
     }
 
-    /** Le point lui-même s'il est libre, sinon le centre de la case libre la plus proche. */
-    nearestFree(x, y) {
-        if (this.isFree(x, y)) return { x, y };
+    /** Le point lui-même s'il est libre (avec <mask>), sinon le centre de la case libre la plus proche. */
+    nearestFree(x, y, mask = LAND) {
+        if (this.isFree(x, y, mask)) return { x, y };
         let best = -1, bestDistance = Infinity;
-        for (const i of this.free) {
-            const cx = (i % this.columns) * TILE + TILE / 2, cy = Math.floor(i / this.columns) * TILE + TILE / 2;
-            const d = (cx - x) ** 2 + (cy - y) ** 2;
-            if (d < bestDistance) { best = i; bestDistance = d; }
-        }
+        const look = cells => {
+            for (const i of cells) {
+                const cx = (i % this.columns) * TILE + TILE / 2, cy = Math.floor(i / this.columns) * TILE + TILE / 2;
+                const d = (cx - x) ** 2 + (cy - y) ** 2;
+                if (d < bestDistance) { best = i; bestDistance = d; }
+            }
+        };
+        if (mask & LAND) look(this.free);
+        if (mask & WATER) look(this.water);
         return best < 0 ? { x, y } : this.center(best);
     }
 
-    /** Ligne droite sans obstacle (vérifiée tous les 4 pixels). */
-    lineFree(a, b) {
+    /** Ligne droite sans obstacle pour <mask> (vérifiée tous les 4 pixels). */
+    lineFree(a, b, mask = LAND) {
         const steps = Math.ceil(distance(a, b) / 4);
         for (let s = 1; s <= steps; s++) {
-            if (!this.isFree(a.x + (b.x - a.x) * s / steps, a.y + (b.y - a.y) * s / steps)) return false;
+            if (!this.isFree(a.x + (b.x - a.x) * s / steps, a.y + (b.y - a.y) * s / steps, mask)) return false;
         }
         return true;
     }
 
-    /** Points de passage de <from> à <to> (sans <from>), ou null s'il n'y a pas de chemin. */
-    path(from, to) {
-        if (this.lineFree(from, to)) return [to];
-        const start = this.nearestFree(from.x, from.y);
+    /** Points de passage de <from> à <to> (sans <from>) par les cases de <mask>, ou null s'il n'y a pas de chemin. */
+    path(from, to, mask = LAND) {
+        this.mask = mask; // pour canStep et smooth
+        if (this.lineFree(from, to, mask)) return [to];
+        const start = this.nearestFree(from.x, from.y, mask);
         const startTile = Math.floor(start.y / TILE) * this.columns + Math.floor(start.x / TILE);
         const goalTile = Math.floor(to.y / TILE) * this.columns + Math.floor(to.x / TILE);
         if (!this.explore(startTile, goalTile)) return null;
@@ -305,8 +364,9 @@ class Ground {
 
     /** Pas de (cx, cy) vers la case voisine (cx + dx, cy + dy) : libre, et sans couper de coin en diagonale. */
     canStep(cx, cy, dx, dy) {
-        if ((!dx && !dy) || !this.tileFree(cx + dx, cy + dy)) return false;
-        return !dx || !dy || (this.tileFree(cx + dx, cy) && this.tileFree(cx, cy + dy));
+        const mask = this.mask;
+        if ((!dx && !dy) || !this.tileFree(cx + dx, cy + dy, mask)) return false;
+        return !dx || !dy || (this.tileFree(cx + dx, cy, mask) && this.tileFree(cx, cy + dy, mask));
     }
 
     /** Lissage : du point actuel, aller tout droit tant qu'on voit le point de passage suivant. */
@@ -314,7 +374,7 @@ class Ground {
         const result = [];
         for (let i = 0; i < points.length - 1;) {
             let j = i + 1;
-            while (j + 1 < points.length && this.lineFree(points[i], points[j + 1])) j++;
+            while (j + 1 < points.length && this.lineFree(points[i], points[j + 1], this.mask)) j++;
             result.push(points[j]);
             i = j;
         }
@@ -346,9 +406,18 @@ class Pokemon {
         this.prey = null; // Pokémon qu'il va attaquer
         this.hit = null; // frappé : { by, delay } (il a mal un instant après le début de l'attaque)
         this.then = null; // après une animation jouée une fois
+        this.moves = info.moves ?? null; // « swim » (type Eau), « fly » (type Vol) ou null (ParkPokemon.Moves)
+        this.wet = 0; // nageur : 0 sur terre, 1 dans l'eau (progressif en y entrant)
+        this.altitude = 0; // volant : hauteur au-dessus de l'eau (pixels de la carte, progressive)
     }
 
     get anim() { return this.anims[ANIMATION_OF[this.state]]; }
+    /** Cases où il peut passer : l'eau libre aussi pour un nageur ou un volant. */
+    get pass() { return this.moves ? LAND | WATER : LAND; }
+    /** Cases où il peut s'arrêter : un volant se pose toujours sur la terre ferme. */
+    get reach() { return this.moves === "swim" ? LAND | WATER : LAND; }
+    /** Où il part se promener : un nageur va surtout dans l'eau. */
+    destination() { return this.moves === "swim" && Math.random() < SWIM.waterShare ? WATER : LAND; }
 
     setState(state) {
         if (state === this.state) return;
@@ -357,10 +426,13 @@ class Pokemon {
         this.frameTime = 0;
     }
 
-    /** Part vers un endroit (le plus proche où l'on peut aller), en contournant les obstacles. */
-    walkTo(x, y, intent) {
-        const target = this.ground.nearestFree(x, y);
-        const path = this.ground.path(this, target);
+    /**
+     * Part vers un endroit (le plus proche où il peut s'arrêter ; <reach> : où il peut arriver, pour un survol), en
+     * contournant les obstacles.
+     */
+    walkTo(x, y, intent, reach = this.reach) {
+        const target = this.ground.nearestFree(x, y, reach);
+        const path = this.ground.path(this, target, this.pass);
         if (!path) { this.rest(random(1, 2)); return; }
         this.target = target;
         this.path = path;
@@ -444,6 +516,7 @@ export async function create(container, component, options) {
     let scene = null, camera = null, night = null, label = null, labelText = null, marker = null;
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
     let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
+    let clock = 0; // secondes écoulées (remous)
 
     // ---------- Taille : toute la largeur du conteneur ; en hauteur, un nombre entier de fois la zone « Départ » en
     // pixels d'écran (chaque pixel de la carte et des sprites couvre autant de pixels d'écran : dessin net), le plus grand
@@ -709,8 +782,8 @@ export async function create(container, component, options) {
     // ---------- Souris : glisser pour explorer, curiosité, nom au survol, clic ----------
     /** Pokémon sous le pointeur (le plus en avant d'abord). */
     const at = point => [...pokemon].sort((a, b) => b.y - a.y).find(p => {
-        const a = p.anim, w = a.fw * spriteScale / 2, h = a.fh * spriteScale;
-        return Math.abs(point.x - p.x) < w * 0.7 && point.y < p.y + 4 && point.y > p.y - h * 0.75;
+        const a = p.anim, w = a.fw * spriteScale / 2, h = a.fh * spriteScale, y = p.y - p.altitude; // un volant : plus haut
+        return Math.abs(point.x - p.x) < w * 0.7 && point.y < y + 4 && point.y > y - h * 0.75;
     });
     const cursor = () => {
         let style = "grab";
@@ -739,11 +812,14 @@ export async function create(container, component, options) {
         held.p.y = clamp(spot.y + held.dy, 0, ground.height - 1);
     }
 
-    /** Posé là où il est s'il peut y marcher, sinon (ou <back>) remis à sa place ; il reste un moment immobile. */
+    /**
+     * Posé là où il est s'il peut s'y arrêter (dans l'eau : un nageur seulement), sinon (ou <back>) remis à sa place ; il
+     * reste un moment immobile.
+     */
     function putDown(back = false) {
         const { p, from } = held;
         held = null;
-        if (back || !ground.isFree(p.x, p.y)) Object.assign(p, from);
+        if (back || !ground.isFree(p.x, p.y, p.reach)) Object.assign(p, from);
         p.dir = FRONT;
         p.rest(random(2, 4));
         cursor();
@@ -767,7 +843,7 @@ export async function create(container, component, options) {
     function drawMarker() {
         marker.setVisible(!!held);
         if (!held) return;
-        const p = held.p, ok = ground.isFree(p.x, p.y);
+        const p = held.p, ok = ground.isFree(p.x, p.y, p.reach);
         if (marker.ok !== ok) {
             marker.ok = ok;
             const color = ok ? 0xffffff : 0xff4d4d;
@@ -863,12 +939,12 @@ export async function create(container, component, options) {
 
     // ---------- Attaques d'un Pokémon malheureux ----------
     /**
-     * Pokémon que <p> peut attaquer, le plus proche : éveillé ou endormi, ni porté, ni déjà frappé ou en fuite ; sauf <any>
-     * (mode debug), pas de sa famille et à portée.
+     * Pokémon que <p> peut attaquer, le plus proche : éveillé ou endormi, ni porté, ni déjà frappé ou en fuite, là où <p>
+     * peut s'arrêter (pas dans l'eau, sauf pour un nageur) ; sauf <any> (mode debug), pas de sa famille et à portée.
      */
     const preyOf = (p, any) => pokemon
         .filter(o => o !== p && o.state !== "held" && o.state !== "hurt" && o.intent !== "flee" && !o.hit
-            && (any || (o.family !== p.family && distance(p, o) < SAD.reach)))
+            && ground.isFree(o.x, o.y, p.reach) && (any || (o.family !== p.family && distance(p, o) < SAD.reach)))
         .sort((a, b) => distance(p, a) - distance(p, b))[0];
 
     /** Part attaquer <prey> (il marche jusqu'à lui). */
@@ -914,16 +990,29 @@ export async function create(container, component, options) {
         let best = null;
         for (let tries = 0; tries < 8; tries++) {
             const a = angle + random(-0.7, 0.7), d = random(...FLEE.distance);
-            const spot = ground.nearestFree(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d);
+            const spot = ground.nearestFree(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, p.reach);
             if (!best || distance(spot, from) > distance(best, from)) best = spot;
         }
         p.walkTo(best.x, best.y, "flee");
+    }
+
+    /** Endroit au hasard sur la terre ou (WATER) dans l'eau libre, ni trop près ni trop loin de <p> (quelques essais). */
+    function spotNear(p, where) {
+        let spot = ground.randomSpot(where);
+        for (let tries = 0; tries < 12 && !(distance(p, spot) > 40 && distance(p, spot) < 160); tries++) spot = ground.randomSpot(where);
+        return spot;
     }
 
     /** Nouvelle intention quand le Pokémon a fini ce qu'il faisait. */
     function decide(p, night) {
         const { activity, sleepy, sociable, curious } = p.personality;
         const friends = friendsOf(p);
+        if (!ground.isFree(p.x, p.y, p.reach)) {
+            // Volant arrêté au-dessus de l'eau (clic, chemin barré) : il va d'abord se poser sur la terre ferme.
+            const land = ground.nearestFree(p.x, p.y, p.reach);
+            p.walkTo(land.x, land.y, "explore");
+            return;
+        }
         if (p.energy < 0.22 + night * 0.4 + sleepy) {
             // Fatigué : il va dormir près d'un congénère qui dort, sinon sur place.
             const sleeper = friends.filter(f => f.state === "sleep").sort((a, b) => distance(p, a) - distance(p, b))[0];
@@ -977,10 +1066,13 @@ export async function create(container, component, options) {
             p.walkTo(friend.x + Math.cos(angle) * 20, friend.y + Math.sin(angle) * 13, "visit");
             return;
         }
-        if (Math.random() < 0.55) {
-            // Explorer un endroit du parc, ni trop près ni trop loin.
-            let spot = ground.randomSpot();
-            for (let tries = 0; tries < 12 && !(distance(p, spot) > 40 && distance(p, spot) < 160); tries++) spot = ground.randomSpot();
+        if (p.moves === "fly" && ground.water.length && Math.random() < 0.55 * FLY_OVER) {
+            // Volant : un tour au-dessus de l'eau (il n'y reste pas : arrivé, il repart vers la terre, update).
+            const spot = spotNear(p, WATER);
+            p.walkTo(spot.x, spot.y, "soar", WATER);
+        } else if (Math.random() < 0.55) {
+            // Explorer un endroit du parc, ni trop près ni trop loin (un nageur : surtout dans l'eau).
+            const spot = spotNear(p, p.destination());
             p.walkTo(spot.x, spot.y, "explore");
         } else {
             // Rester là à regarder autour de soi.
@@ -1054,6 +1146,10 @@ export async function create(container, component, options) {
         if (remaining < 1.7) {
             if (p.intent === "attack") strike(p);
             else if (p.intent === "sleep") p.sleep();
+            else if (p.intent === "soar") { // au bout de son tour au-dessus de l'eau : il va se poser, sans s'arrêter
+                const spot = spotNear(p, LAND);
+                p.walkTo(spot.x, spot.y, "explore");
+            }
             else {
                 if (p.intent === "curious" && mouse) p.face(mouse);
                 if (p.intent === "visit" || p.intent === "stroll") {
@@ -1080,9 +1176,10 @@ export async function create(container, component, options) {
         p.vy += (dy / norm * speed - p.vy) * ease;
         // Jamais sur une case bloquée : contre un obstacle, il glisse le long (ou s'arrête).
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
-        if (ground.isFree(nx, ny)) { p.x = nx; p.y = ny; }
-        else if (ground.isFree(nx, p.y)) { p.x = nx; p.vy = 0; }
-        else if (ground.isFree(p.x, ny)) { p.y = ny; p.vx = 0; }
+        const pass = p.pass;
+        if (ground.isFree(nx, ny, pass)) { p.x = nx; p.y = ny; }
+        else if (ground.isFree(nx, p.y, pass)) { p.x = nx; p.vy = 0; }
+        else if (ground.isFree(p.x, ny, pass)) { p.y = ny; p.vx = 0; }
         else { p.vx = p.vy = 0; }
         // Regarde où il va, et ne change de direction que franchement (pas de tremblement entre deux directions voisines).
         const moving = Math.hypot(p.vx, p.vy);
@@ -1096,7 +1193,8 @@ export async function create(container, component, options) {
             if (p.progress.distance - remaining < 7) { p.rest(random(1, 2)); return; }
             p.progress = { time: 0, distance: remaining };
         }
-        if (p.intent !== "sleep" && p.intent !== "flee" && remaining > 27 && chance(0.04, dt)) {
+        // Petite pause en chemin (pas pour un volant au-dessus de l'eau : il ne s'y arrête pas)
+        if (p.intent !== "sleep" && p.intent !== "flee" && remaining > 27 && chance(0.04, dt) && ground.isFree(p.x, p.y, p.reach)) {
             const target = p.target, intent = p.intent;
             p.rest(random(0.4, 1.2));
             p.timer = random(0.4, 1.2);
@@ -1138,6 +1236,28 @@ export async function create(container, component, options) {
         return anim.shadow;
     }
 
+    /** Remous autour d'un nageur (à la place de son ombre) : deux ellipses claires, dessinées une fois comme l'ombre. */
+    function rippleOf(anim) {
+        if (anim.rippleK !== spriteK || !scene.textures.exists(anim.ripple)) {
+            const w = Math.max(4, Math.round(Math.min(anim.fw, 32) * spriteK * 0.7)), h = 7 * spriteK;
+            anim.ripple = `remous:${w}x${h}`;
+            anim.rippleK = spriteK;
+            if (!scene.textures.exists(anim.ripple)) {
+                const texture = scene.textures.createCanvas(anim.ripple, w, h);
+                const context = texture.getContext();
+                context.lineWidth = spriteK;
+                for (const [scale, alpha] of [[1, 0.35], [0.62, 0.6]]) {
+                    context.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    context.beginPath();
+                    context.ellipse(w / 2, h / 2, (w / 2 - spriteK / 2) * scale, (h / 2 - spriteK / 2) * scale, 0, 0, Math.PI * 2);
+                    context.stroke();
+                }
+                texture.refresh();
+            }
+        }
+        return anim.ripple;
+    }
+
     const snap = v => Math.round(v * k) / k; // au pixel d'écran près : déplacement continu, sans bonds d'un pixel de carte
 
     function draw(level) {
@@ -1145,13 +1265,28 @@ export async function create(container, component, options) {
         if (level > 0) night.setFillStyle(NIGHT.color, NIGHT.alpha * level);
         for (const p of pokemon) {
             const anim = p.anim, s = spriteScale;
-            // Ombre au sol, puis l'image : SpriteCollab centre le Pokémon dans chaque image, les pieds un peu sous le centre.
-            p.shadow.setTexture(shadowOf(anim)).setScale(1 / k).setPosition(snap(p.x), snap(p.y));
+            // Ombre au sol (remous dans l'eau), puis l'image : SpriteCollab centre le Pokémon dans chaque image, les pieds un
+            // peu sous le centre.
+            if (p.wet > 0.5) {
+                const wave = Math.sin(clock * 2.6 + p.id);
+                p.shadow.setTexture(rippleOf(anim)).setScale((1 + 0.06 * wave) / k).setAlpha(0.75 + 0.25 * wave);
+            } else {
+                p.shadow.setTexture(shadowOf(anim)).setScale((1 - p.altitude / (FLY_HEIGHT * 3)) / k).setAlpha(1);
+            }
+            p.shadow.setPosition(snap(p.x), snap(p.y));
             const row = Math.min(p.state === "sleep" ? 0 : p.dir, anim.rows - 1);
-            const lift = p.state === "held" ? LIFT : 0;
+            const lift = (p.state === "held" ? LIFT : 0) + p.altitude;
             p.sprite.setTexture(anim.key, row * anim.columns + p.frame % anim.columns)
                 .setScale(s)
-                .setPosition(snap(p.x), snap(p.y - 6 * s - lift));
+                .setPosition(snap(p.x), snap(p.y - 6 * s - lift + p.wet * SWIM.sink * s));
+            // Dans l'eau : rien sous la surface (la ligne de ses pieds, une fois descendu de SWIM.sink)
+            if (p.wet > 0.02) {
+                p.sprite.setCrop(0, 0, anim.fw, Math.round(anim.fh - p.wet * (anim.fh / 2 - 6 + SWIM.sink)));
+                p.cropped = true;
+            } else if (p.cropped) {
+                p.sprite.setCrop();
+                p.cropped = false;
+            }
             // Les plus bas passent devant (tri seulement s'ils changent de ligne) ; soulevé : devant tout
             const depth = lift ? HELD_DEPTH : depthOf(Math.round(p.y));
             if (p.sprite.depth !== depth) p.sprite.setDepth(depth);
@@ -1183,13 +1318,15 @@ export async function create(container, component, options) {
             label.clear().fillStyle(0x000000, 0.6).fillRoundedRect(0, 0, labelText.width + 7, 11, 3);
         }
         const width = labelText.width + 7, h = p.anim.fh * spriteScale;
-        const x = snap(clamp(p.x - width / 2, 1, ground.width - width - 1)), y = snap(Math.max(1, p.y - h * 0.75 - 12));
+        const x = snap(clamp(p.x - width / 2, 1, ground.width - width - 1)), y = snap(Math.max(1, p.y - p.altitude - h * 0.75 - 12));
         label.setPosition(x, y);
         labelText.setPosition(x + 3.5, y + 1);
     }
 
     // ---------- Boucle ----------
     function step(dt, level) {
+        clock += dt;
+        const ease = Math.min(1, dt * 5);
         for (const p of pokemon) {
             if (p.state === "idle" && p.resume && p.timer <= dt) { // reprend sa marche après une petite pause
                 const { target, intent } = p.resume;
@@ -1198,6 +1335,12 @@ export async function create(container, component, options) {
             }
             update(p, dt, level);
             p.advanceFrame(dt * 1000, spriteScale);
+            // Dans l'eau (ou au-dessus), pas porté : le nageur s'y enfonce, le volant monte, en douceur
+            if (p.moves) {
+                const water = p.state !== "held" && !ground.isFree(p.x, p.y, LAND) && ground.isFree(p.x, p.y, WATER);
+                if (p.moves === "swim") p.wet += ((water ? 1 : 0) - p.wet) * ease;
+                else p.altitude += ((water ? FLY_HEIGHT : 0) - p.altitude) * ease;
+            }
         }
     }
 
@@ -1232,7 +1375,11 @@ export async function create(container, component, options) {
         async setPokemon(list) {
             const call = ++lists;
             const kept = pokemon.filter(p => list.some(i => i.id === p.id));
-            for (const p of kept) p.mood = list.find(i => i.id === p.id).mood ?? "normal";
+            for (const p of kept) {
+                const info = list.find(i => i.id === p.id);
+                p.mood = info.mood ?? "normal";
+                p.moves = info.moves ?? null;
+            }
             for (const p of pokemon) if (!kept.includes(p)) removeFromScene(p);
             // Retirés de la liste dessinée avant d'attendre les planches des nouveaux : dessiner un Pokémon détruit lève une
             // erreur qui arrête la boucle de Phaser (parc figé, vu sous Firefox en retirant et ajoutant d'un coup).
@@ -1245,8 +1392,9 @@ export async function create(container, component, options) {
             if (call !== lists) return; // une liste plus récente est arrivée pendant le chargement : c'est elle qui compte
             const placed = [...pokemon];
             for (const item of loaded.filter(l => l)) {
-                let spot = ground.randomSpot();
-                for (let tries = 0; tries < 30 && !placed.every(o => distance(o, spot) > 27); tries++) spot = ground.randomSpot();
+                const where = item.info.moves === "swim" && Math.random() < SWIM.waterShare ? WATER : LAND; // nageur : surtout dans l'eau
+                let spot = ground.randomSpot(where);
+                for (let tries = 0; tries < 30 && !placed.every(o => distance(o, spot) > 27); tries++) spot = ground.randomSpot(where);
                 const p = new Pokemon(item.info, item.anims, ground, spot.x, spot.y);
                 addTextures(p.anims);
                 p.sprite = scene.add.image(0, 0, p.anim.key, 0);
@@ -1288,8 +1436,10 @@ export async function create(container, component, options) {
             const level = hour === undefined ? nightLevel() : nightLevel(new Date(2000, 0, 1, Math.floor(hour), (hour % 1) * 60));
             for (let t = 0; t < seconds; t += 1 / 30) step(1 / 30, level);
             draw(level);
-            return pokemon.map(p => ({ id: p.id, species: p.species, mood: p.mood, state: p.state, intent: p.intent, x: Math.round(p.x),
-                y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100, free: ground.isFree(p.x, p.y) }));
+            return pokemon.map(p => ({ id: p.id, species: p.species, mood: p.mood, moves: p.moves, state: p.state, intent: p.intent,
+                x: Math.round(p.x), y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100,
+                free: ground.isFree(p.x, p.y, p.pass), // jamais sur une case qui lui est interdite
+                water: !ground.isFree(p.x, p.y, LAND) })); // dans l'eau (nageur) ou au-dessus (volant)
         },
         /** Mode debug : ce Pokémon attaque le plus proche, quel que soit son bonheur ; false s'il n'y en a pas. */
         attack(id) {

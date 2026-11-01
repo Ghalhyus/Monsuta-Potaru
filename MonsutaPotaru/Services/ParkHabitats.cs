@@ -142,6 +142,16 @@ public static class ParkHabitats
         [MoveType.Fairy]    = "xx.o.xx",
     };
 
+    /// <summary>
+    /// Façon de se déplacer au parc, selon ses deux types (index PKHeX, deux fois le même pour un seul type) : « swim » pour
+    /// un type Eau (il va dans l'eau libre et y reste volontiers), « fly » pour un type Vol (il passe au-dessus de l'eau,
+    /// mais s'arrête sur la terre ferme), null sinon. Un Eau/Vol nage : il peut faire tout ce que fait un volant, et plus.
+    /// </summary>
+    public static string? MovementOf(byte type1, byte type2) =>
+        type1 == (byte)MoveType.Water || type2 == (byte)MoveType.Water ? "swim"
+        : type1 == (byte)MoveType.Flying || type2 == (byte)MoveType.Flying ? "fly"
+        : null;
+
     /// <summary>Avis du type de Pokémon (index PKHeX, comme <c>BankPokemon.Type1</c>) sur le type de case.</summary>
     public static HabitatOpinion OpinionOf(byte type, Habitat habitat) =>
         habitat == Habitat.None || !Sheet.TryGetValue((MoveType)type, out var row) ? HabitatOpinion.Neutral

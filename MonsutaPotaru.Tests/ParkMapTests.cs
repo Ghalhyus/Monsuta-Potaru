@@ -1,26 +1,36 @@
 using System.Text.Json;
 using MonsutaPotaru.Services;
+using PKHeX.Core;
 
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
-/// Cartes du « Parc », une par taille (wwwroot/parc/parc-1-{taille}.json, écrites par outils/generer-parc.py puis
-/// carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis les autres (pas de
-/// Pokémon enfermé), et chaque agrandissement qui garde les cases libres de la taille d'avant.
+/// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py ou
+/// generer-plage.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
+/// les autres (pas de Pokémon enfermé), et chaque agrandissement qui garde les cases libres de la taille d'avant.
 /// </summary>
 public sealed class ParkMapTests
 {
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Tailles du parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
-    public static TheoryData<int> Sizes() => [.. Enumerable.Range(1, ParkService.MaxExpansions + 1)];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie) et la plage.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1"];
 
-    private static JsonElement Map(int size)
+    /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
+    public static TheoryData<string, int> Sizes()
     {
-        var path = Path.Combine(RealSavesTests.WebRoot(), "parc", $"parc-1-{size}.json");
-        return JsonDocument.Parse(File.ReadAllText(path)).RootElement;
+        var data = new TheoryData<string, int>();
+        foreach (var park in Parks)
+            for (var size = 1; size <= ParkService.MaxExpansions + 1; size++)
+                data.Add(park, size);
+        return data;
     }
+
+    private static string Json(string park, int size) =>
+        File.ReadAllText(Path.Combine(RealSavesTests.WebRoot(), "parc", $"{park}-{size}.json"));
+
+    private static JsonElement Map(string park, int size) => JsonDocument.Parse(Json(park, size)).RootElement;
 
     private static JsonElement Layer(JsonElement map, string name) =>
         map.GetProperty("layers").EnumerateArray().Single(l => l.GetProperty("name").GetString() == name);
@@ -44,9 +54,9 @@ public sealed class ParkMapTests
 
     [Theory]
     [MemberData(nameof(Sizes))]
-    public void Map_HasWhatTheParkReads(int size)
+    public void Map_HasWhatTheParkReads(string park, int size)
     {
-        var map = Map(size);
+        var map = Map(park, size);
         Assert.Equal("orthogonal", map.GetProperty("orientation").GetString());
         Assert.False(map.GetProperty("infinite").GetBoolean());
         Assert.Equal(Tile, map.GetProperty("tilewidth").GetInt32());
@@ -70,9 +80,9 @@ public sealed class ParkMapTests
 
     [Theory]
     [MemberData(nameof(Sizes))]
-    public void ParkZone_InsideTheMap_AndEveryFreeTileReachable(int size)
+    public void ParkZone_InsideTheMap_AndEveryFreeTileReachable(string park, int size)
     {
-        var map = Map(size);
+        var map = Map(park, size);
         int width = map.GetProperty("width").GetInt32(), height = map.GetProperty("height").GetInt32();
         var (sx, sy, sw, sh) = Zone(map, "Départ");
         var (x0, y0, w, h) = Zone(map, "Parc");
@@ -105,13 +115,31 @@ public sealed class ParkMapTests
 
     [Theory]
     [MemberData(nameof(Sizes))]
-    public void Expansion_KeepsEveryFreeTileOfTheSmallerPark(int size)
+    public void Expansion_KeepsEveryFreeTileOfTheSmallerPark(string park, int size)
     {
         if (size == 1) return;
-        var before = FreeTiles(Map(size - 1));
-        var after = FreeTiles(Map(size));
+        var before = FreeTiles(Map(park, size - 1));
+        var after = FreeTiles(Map(park, size));
         var lost = before.Where(c => !after.Contains(c)).ToList();
         Assert.True(lost.Count == 0, $"cases libres perdues en passant à la taille {size} : {string.Join(", ", lost.Take(10))}");
         Assert.True(after.Count > before.Count);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Beach_IsAboutTwoThirdsSea_AtEverySize(int size)
+    {
+        // Choix de l'utilisateur : environ 65 % de mer et 35 % de sable, les types Eau y sont heureux, Feu malheureux
+        var map = ParkHabitats.Read(Json("plage-1", size))!;
+        var total = map.Area.W * map.Area.H;
+        int sea = map.Counts[Habitat.Water] * 100 / total, sand = map.Counts[Habitat.Sand] * 100 / total;
+        Assert.InRange(sea, 60, 70);
+        Assert.InRange(sand, 30, 40);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, map).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, map).Mood);
+        Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, map).Mood);
     }
 }
