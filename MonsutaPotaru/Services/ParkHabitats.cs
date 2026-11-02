@@ -145,13 +145,22 @@ public static class ParkHabitats
 
     /// <summary>
     /// Façon de se déplacer au parc, selon ses deux types (index PKHeX, deux fois le même pour un seul type) : « swim » pour
-    /// un type Eau (il va dans l'eau libre et y reste volontiers), « fly » pour un type Vol (il passe au-dessus de l'eau,
-    /// mais s'arrête sur la terre ferme), null sinon. Un Eau/Vol nage : il peut faire tout ce que fait un volant, et plus.
+    /// un type Eau (il va dans l'eau libre et y reste volontiers), « lava » pour un type Feu (il va dans la lave de temps en
+    /// temps), « swim-lava » pour un Feu/Eau (les deux), « fly » pour un type Vol (il passe au-dessus de l'eau et de la
+    /// lave, mais s'arrête sur la terre ferme), null sinon. Un Eau/Vol nage et un Feu/Vol va dans la lave (choix de
+    /// l'utilisateur, 2026-11-01) : ils ne volent pas.
     /// </summary>
-    public static string? MovementOf(byte type1, byte type2) =>
-        type1 == (byte)MoveType.Water || type2 == (byte)MoveType.Water ? "swim"
-        : type1 == (byte)MoveType.Flying || type2 == (byte)MoveType.Flying ? "fly"
-        : null;
+    public static string? MovementOf(byte type1, byte type2)
+    {
+        bool Is(MoveType type) => type1 == (byte)type || type2 == (byte)type;
+        return (Is(MoveType.Water), Is(MoveType.Fire)) switch
+        {
+            (true, true) => "swim-lava",
+            (true, false) => "swim",
+            (false, true) => "lava",
+            _ => Is(MoveType.Flying) ? "fly" : null,
+        };
+    }
 
     /// <summary>Avis du type de Pokémon (index PKHeX, comme <c>BankPokemon.Type1</c>) sur le type de case.</summary>
     public static HabitatOpinion OpinionOf(byte type, Habitat habitat) =>

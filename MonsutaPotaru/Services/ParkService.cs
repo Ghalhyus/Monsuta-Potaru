@@ -10,8 +10,8 @@ namespace MonsutaPotaru.Services;
 /// <param name="Nature">Nature (index PKHeX), qui donne son caractère : plus actif, plus dormeur...</param>
 /// <param name="Mood">Humeur selon les habitats du parc (<see cref="ParkHabitats.MoodOf"/>) : « happy », « normal » ou
 /// « sad » (un malheureux attaque les autres de temps en temps, parc.js).</param>
-/// <param name="Moves">Façon de se déplacer (<see cref="ParkHabitats.MovementOf"/>) : « swim » (nage), « fly » (survole
-/// l'eau) ou null (marche seulement).</param>
+/// <param name="Moves">Façon de se déplacer (<see cref="ParkHabitats.MovementOf"/>) : « swim » (nage), « lava » (va dans
+/// la lave), « swim-lava » (les deux), « fly » (survole l'eau et la lave) ou null (marche seulement).</param>
 public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
     string SpriteFolder, int Family, byte Nature, string Mood = "normal", string? Moves = null);
 

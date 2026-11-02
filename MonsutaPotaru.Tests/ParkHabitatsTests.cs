@@ -46,9 +46,13 @@ public sealed class ParkHabitatsTests
     [InlineData(MoveType.Flying, MoveType.Flying, "fly")]     // Boréas (Vol seul)
     [InlineData(MoveType.Water, MoveType.Flying, "swim")]     // Bekipan : nage (il peut tout ce que fait un volant)
     [InlineData(MoveType.Grass, MoveType.Water, "swim")]      // Ludicolo : l'Eau en second type
-    [InlineData(MoveType.Fire, MoveType.Fire, null)]          // Salamèche : marche seulement
+    [InlineData(MoveType.Fire, MoveType.Fire, "lava")]        // Salamèche : va dans la lave
+    [InlineData(MoveType.Fire, MoveType.Flying, "lava")]      // Dracaufeu : la lave plutôt que le vol
+    [InlineData(MoveType.Ground, MoveType.Fire, "lava")]      // Camerupt : le Feu en second type
+    [InlineData(MoveType.Fire, MoveType.Water, "swim-lava")]  // Volcanion : l'eau et la lave
+    [InlineData(MoveType.Rock, MoveType.Rock, null)]          // Racaillou : marche seulement
     [InlineData(MoveType.Ghost, MoveType.Poison, null)]       // Fantominus : pas de lévitation pour l'instant
-    public void Movement_ComesFromWaterOrFlyingType(MoveType type1, MoveType type2, string? expected) =>
+    public void Movement_ComesFromWaterFireOrFlyingType(MoveType type1, MoveType type2, string? expected) =>
         Assert.Equal(expected, ParkHabitats.MovementOf((byte)type1, (byte)type2));
 
     [Theory]
@@ -190,7 +194,9 @@ public sealed class ParkHabitatsTests
             Assert.All(Enumerable.Range(1, ParkService.MaxExpansions + 1), size => Assert.NotNull(ParkHabitats.Map(landscape, size)));
             Assert.Null(ParkHabitats.Map(landscape, ParkService.MaxExpansions + 2));
         }
-        // La plage : surtout de l'eau, la forêt : surtout de la végétation
+        // La plage : surtout de l'eau, la forêt : surtout de la végétation, le volcan : du volcan partout
+        var volcano = ParkHabitats.Map(ParkLandscape.Volcano, 1)!;
+        Assert.True(volcano.Counts[Habitat.Volcano] * 10 > volcano.Area.W * volcano.Area.H * 9);
         Assert.True(ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Water] > ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Sand]);
         Assert.True(ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Vegetation] > ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Water]);
     }

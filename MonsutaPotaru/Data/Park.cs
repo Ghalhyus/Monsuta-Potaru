@@ -7,6 +7,8 @@ public enum ParkLandscape
     Forest = 1,
     /// <summary>Un tiers de sable, deux tiers de mer (cartes plage-1-{taille}).</summary>
     Beach = 2,
+    /// <summary>Un plateau de roche volcanique, des coulées et des mares de lave (cartes volcan-1-{taille}).</summary>
+    Volcano = 3,
 }
 
 /// <summary>

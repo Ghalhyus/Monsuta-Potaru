@@ -21,8 +21,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes.
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
-  Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage : `EPAISSEUR` = 4,4 ± 0,9 dans
-  `generer-plage.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
+  Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
+  dans `generer-plage.py` et `generer-volcan.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
@@ -77,8 +77,10 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   taille d'avant ; poches d'herbe enfermées → buissons. Le script s'arrête si une taille bloque une case libre de la
   précédente (`ParkMapTests` le vérifie aussi). Libres : 362, 999, 1 784, 3 062 cases (14 à 30 par
   Pokémon).
-- **Moteur commun** `outils/parc_carte.py` (classe `Carte` : jeux de tuiles, calques, `poser`, `essayer`,
-  `boucher_poches(zone, decors, bloque, remplissage)`, `ecrire_carte`, `apercu` ; fonctions de formes). Les générateurs
+- **Moteur commun** `outils/parc_carte.py` (classe `Carte` : jeux de tuiles, `animer` (tuiles animées de Tiled, écrites
+  dans le jeu de tuiles du `.tmx`), calques, `poser`, `essayer`, `boucher_poches(zone, decors, bloque, remplissage)`,
+  `ecrire_carte` (`autres` : calques de tuiles en plus, après « Collisions » ; sans eux, le `.tmx` est le même qu'avant),
+  `apercu` ; fonctions de formes). Les générateurs
   gardent leur paysage et l'ordre de leurs tirages. Refonte du moteur : régénérer les deux parcs dans un dossier
   temporaire et comparer avec `cmp` (`.tmx` et aperçus identiques ; seuls les chemins des planches changent si le dossier
   de sortie change). Chemins des planches normalisés (`../Cute_Fantasy_Desert/...` pour l'extension).
@@ -135,6 +137,67 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   palmes tombées (2 × 2, on y marche), herbes des dunes, rochers du désert sur le sable, rochers dans la mer. Les noix de
   coco des planches de palmiers sont à cheval sur deux tuiles : pas utilisées.
 
+## Volcan (`outils/generer-volcan.py`, `ParkLandscape.Volcano`, 2026-11-01)
+- `Volcan_1-1.tmx` à `Volcan_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `volcan-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `volcan-<n>.png`. Zones du parc 1 (24 × 20, 40 × 30, 56 × 40, tout).
+- Choix de l'utilisateur : **tout de type volcan** (la règle `Cute_Fantasy_Volcano/` de `carte-parc.py` ; le pont :
+  aucun), **plateau et coulées**, lave pour les Feu « de temps en temps », cascades et bulles animées.
+- **Modèle de l'utilisateur** (2026-11-01, après « un peu trop de lave ») : il a peint dans Tiled sa version de la
+  taille 4, gardée dans `C:\Sources\Parcs\Volcan_1-4_modele.tmx` (puis sa version avec les deux ponts ;
+  `Volcan_1-4.tmx` est réécrit par le générateur) : un
+  **grand lac** en haut qui alimente trois cascades (gauche, départ, droite ; celle du milieu à droite retirée, il l'avait
+  cachée sous des tuiles de « Devant »), la mare sous le pont agrandie, la mare de la cascade de gauche fondue avec sa
+  voisine, une mare en bas au centre ; plus de mares à gauche ni en haut. Ses contours sont repris ligne par ligne
+  (`bandes`) ; « corriger » = bords de lave, objets sous la lave, collisions. Comparer un modèle avec le générateur :
+  différences calque par calque, puis rendu des deux (`tmxrasterizer.exe --hide-layer Collisions`).
+- **Quantité de lave** : 16,9 / 19,7 / 30,8 / 18,7 % (la dernière avec la bordure ; 14 à 29 % de lave libre). Le grand
+  lac déborde des zones 1 à 3 : sa lave est coupée à la lisière (on en voit le bas dès la vue de départ, au-dessus de la
+  cascade). **Malentendu à ne pas refaire** (avant le modèle) : rétrécir toutes les mares de 15 % a été refusé, « pas
+  réduire la surface des lacs, mais la présence totale de la lave ».
+- **Règle de l'utilisateur pour toute cascade (eau ou lave, 2026-11-01) : jamais rien en amont ou en aval, « ça doit être
+  logique »** : un lac au-dessus (ou la cascade collée à la bordure de la carte), et en aval une coulée ou un lac. Ici :
+  `lac(cascade, rx, graine)` (4 lignes au-dessus, les 2 dernières pleines sur la largeur de la cascade, sans objet : un
+  rocher de lave y barrait l'écoulement, rien n'est posé sur les 3 lignes au-dessus d'une cascade), coulée, mare. Vérifié
+  par le script (lac, cascades, coulées et mares d'un seul tenant ; lac libre au-dessus et coulée en dessous de chaque
+  cascade montrée) et par `ParkMapTests.Volcano_EveryCascade_HasALakeAbove_AndLavaBelow`.
+- Planche `Volcano_Tiles` (29 colonnes) : sol = tuiles de roche craquelée qui se raccordent toutes (aucune tuile unie :
+  `SOL_LISSE`, `SOL_CRAQUELE`, `SOL_BRULANT` fendue de lave près des coulées). Lave = la forme (`LAVE` : bords 181-241 avec
+  la lueur rouge, coins rentrants 184/185/213/214, centre 211, croûtes 186-246) ; les piliers et murs de la planche (12-28,
+  41-173) ne sont pas utilisés : ils ne se raccordent pas à la cascade.
+- **Cascade** (`Volcano_Lavafall`, 54 colonnes : 18 images de 3 × 5 tuiles) : posée dans « Décors », bloquée, animée
+  (`carte.animer`, 110 ms par image) ; le lac au-dessus déborde dans la cascade, la coulée part sous le bouillonnement. Pour les bords, la forme de la lave comprend les cases des cascades (`forme_de`).
+- **Groupes** (le grand lac avec ses cascades, coulées et mares ; ou une mare seule) : un groupe tout entier dans la zone
+  (`dans_la_zone`) est contourné par la lisière ; sinon sa lave est coupée à la lisière (`nettoyer(lave - cache)`), les
+  cases retirées par le nettoyage portent un rocher (bloquées : elles redeviennent de la lave plus tard, une case libre ne
+  doit pas être reprise). Une cascade n'est montrée que tout entière.
+- **Toute case bloquée hors de la lave porte un décor** (le script s'arrête sinon, `ParkMapTests` le vérifie) : `parc.js`
+  prend une case bloquée de type volcan sans décor pour de la lave libre. Les bulles sont dans le calque « Bulles », pas
+  dans « Décors », pour cette raison.
+- Ponts (`PONTS`, `Volcano_Bridge`, colonnes 3 à 7 : les poteaux sont à cheval sur deux cases) : celui de la coulée de
+  départ, et deux posés par l'utilisateur dans Tiled (dans « Devant », le 2026-11-01 : repris dans « Décors ») sur les
+  coulées de gauche et de droite. Coulée droite sur 4 lignes sous chaque pont (`sous_pont`), pas de lave aux deux bouts
+  (`bouts_de_pont`), rien de posé devant ; tablier débloqué, seule la lave dessous bloquée : les poteaux des bouts
+  laissent passer (le pont de droite commence sur la dernière colonne de la taille 2, où ses cases sont libres : des
+  poteaux bloquants l'empêchaient d'être posé). Arbres de braise (`Volcano_Plants`) jamais à moins d'une case
+  de la lave (`loin_de_la_lave` : un feuillage débordait sur une mare).
+- Hors de la zone : champ de gros rochers 2 × 2 en quinconce (`Volcano_Rocks` : amas, buttes, tours), petits rochers
+  ailleurs, toutes bloquées.
+
+## Lave et tuiles animées (`parc.js`)
+- `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :
+  une fois pour l'eau (5), une fois pour la lave (7) ; `ground.lava`, `ground.liquid` (survol), `liquidAt(x, y)`.
+- `ParkHabitats.MovementOf` : « swim », « lava » (Feu, Feu/Vol compris), « swim-lava » (Feu/Eau), « fly », null.
+  `Pokemon.reach` / `pass` / `bed` (où il dort : jamais la lave ; fatigué dans la lave, il marche vers `bed` avant de
+  dormir). `destination` : eau 2/3 pour un nageur, puis lave `LAVA_BATH.share` (1/4) pour un Feu. Arrivée au parc : sur
+  la terre pour un Feu. `wet` pour l'eau comme pour la lave ; `p.liquid` choisit les remous (`rippleOf(anim, lava)` : dorés).
+- Essai du 2026-11-01 (15 min simulées, volcan taille 2) : Feu 21-22 % du temps dans la lave, volants 10 % au-dessus sans
+  s'y arrêter, autres jamais, aucune case interdite ; 10 min de nuit : aucun Feu endormi dans la lave ; plage : nageurs
+  67 %, volants 14 % (comme avant).
+- **Tuiles animées** (`animatedTiles`, `animate`) : animations de Tiled lues dans `tilesets[].tiles[].animation` ; une
+  `Image` par tuile animée de « Sol », « Décors » et « Bulles » à `ANIMATED_DEPTH` (0,5), frames ajoutées à la texture de la
+  planche (`tuile<n>`) ; `setFrame` seulement quand l'image change. Bulles : un décalage au hasard chacune. Le calque
+  « Bulles » n'est jamais dessiné dans la carte. Vu dans le navigateur : la cascade change d'image d'une capture à l'autre.
+
 ## Types de cases et bonheur
 - Feuille Google « Gestion du parc » de l'utilisateur (id `1m_jWFdXRigcS3tdz2UUDggTtE8cK-1avN_mBvMoYoOE`, connecteur
   Google Sheets), onglet « Habitat » : 7 types de cases × 18 types de Pokémon, « o » aime, « x » n'aime pas. Recopiée
@@ -145,7 +208,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   dessous ; « Sol » puis « Décors », pas « Devant ». Planches d'herbe à bords (`Grass_Tiles_n`) : chemin de terre
   (80-82, 96-98, 112-114, 128, 129, 144, 145) et escaliers = aucun, flancs des hauteurs = falaise. Chemins = aucun (choix
   de l'utilisateur). Les règles des extensions (désert, volcan, donjons, ShroomLands) et des plages sont **devinées
-  d'après les noms**, pas encore vues sur une carte : les vérifier avec « Habitats (debug) » à leur première utilisation.
+  d'après les noms**, pas encore vues sur une carte : les vérifier avec « Habitats (debug) » à leur première utilisation
+  (volcan : vu le 2026-11-01, tout en volcan, le pont en aucun).
 - Champ `habitats` du JSON (pas un calque : Phaser l'ignore) : une chaîne par ligne, chiffres 0 aucun, 1 sable, 2 cave,
   3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan = enum `Habitat` = `Ground.habitats` de `parc.js`.
 - L'eau est bloquée : aucun Pokémon ne s'y tient. D'où un bonheur selon ce que contient le parc

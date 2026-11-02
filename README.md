@@ -558,7 +558,7 @@ retirer, pas en ajouter tant qu'il dépasse.
 **Plusieurs parcs**, un par **paysage** (`ParkLandscape`, table `Parks`, index unique sur le compte et le paysage) : la
 **Forêt** d'abord (créée à la première visite de la page ; la migration `ParkLandscapes` a fait du parc de chaque compte sa
 Forêt, avec ses agrandissements et ses Pokémon), puis **« Acheter un parc »** (sous le titre, tant qu'il reste un paysage
-à acheter) : une fenêtre propose les paysages pas encore achetés (aujourd'hui la **Plage**), au prix d'un agrandissement
+à acheter) : une fenêtre propose les paysages pas encore achetés (la **Plage** et le **Volcan**), au prix d'un agrandissement
 (**40 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
 venue du navigateur), insère le parc (`INSERT OR IGNORE` : un paysage déjà acheté est refusé, même pour deux achats
 simultanés) et débite dans la même transaction ; journal : « Achat d'un parc », « Nouveau parc : Plage ». Le nouveau parc
@@ -567,7 +567,7 @@ s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à p
 visiteurs (sans adresse propre à chaque parc : on arrive sur la Forêt). « Agrandir », « Choisir », « Vider » et les
 boutons debug agissent sur le parc affiché ; chaque méthode du service revérifie que le parc (numéro venu du navigateur)
 est bien à ce joueur. **Un Pokémon vit dans un seul parc** : dans la fenêtre de choix, ceux d'un autre parc portent son
-pictogramme (🌳 forêt, 🏝️ plage, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
+pictogramme (🌳 forêt, 🏝️ plage, 🌋 volcan, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
 quitter (« Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc. »). Nom, carte et textes de chaque paysage :
 `ParkLandscapes` (un nouveau paysage : une valeur de l'énumération, ses quatre cartes, une ligne par méthode).
 « Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
@@ -615,7 +615,22 @@ Pokémon aux trois premières tailles (le test en exige 7 pour la plage), les ty
 n'est pas acheté est caché par une cocoteraie dense côté plage et un récif de gros rochers côté mer ; les îlots pas encore
 achetés n'apparaissent pas. `ParkMapTests` vérifie aussi la part de mer (60 à 70 % des tailles 2 à 4, un peu plus de la
 moitié à la taille 1).
-Les deux générateurs partagent leur moteur (`outils/parc_carte.py`).
+**Volcan** (troisième paysage, à acheter) : `Volcan_1-1.tmx` à `Volcan_1-4.tmx` (`volcan-1-1.json` à `volcan-1-4.json`),
+faites par `outils/generer-volcan.py` (mêmes arguments) avec l'extension Volcano du pack. Un plateau de roche volcanique
+où un **grand lac de lave** déborde en trois **cascades** qui nourrissent des **coulées** finissant en **mares** (une
+cascade a toujours un lac en amont et une coulée en aval, `ParkMapTests` le vérifie ; dessin repris de la carte retouchée
+par l'utilisateur, `Volcan_1-4_modele.tmx`), un pont de pierre sur chaque coulée (celui de la
+vue de départ, puis deux autres aux tailles 3 et 4), des arbres et des plantes de braise, des rochers (dans la lave aussi). Tout est de type **volcan** : les
+Feu, Roche et Dragon y sont heureux, la plupart des autres malheureux (choix de l'utilisateur). Mêmes zones que la Forêt.
+17 à 31 % de **lave** dans la zone (17 % dans la vue de départ : sa cascade, le bas du grand lac et la mare sous le pont),
+bloquée : 14 à 20 cases de roche libres par Pokémon aux trois premières tailles (le test en exige 14, comme pour la
+forêt). Ce qui n'est pas acheté est un champ de gros rochers ; la lave qui en sort est coupée à la lisière (le grand lac
+continue sous les rochers), une cascade n'apparaît que tout entière. Les **cascades** et des **bulles** de lave (calque « Bulles »,
+hors des décors) sont des tuiles animées de Tiled, jouées par `parc.js`. `ParkMapTests` vérifie le type volcan partout,
+la part de lave libre, que toute case bloquée hors de la lave porte un décor (sinon `parc.js` la prendrait pour de la
+lave) et les animations.
+Les trois générateurs partagent leur moteur (`outils/parc_carte.py` : jeux de tuiles, tuiles animées, calques, formes,
+écriture des cartes).
 **Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
 aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
 eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, volcan, donjons) et les écrit dans le champ
@@ -634,7 +649,8 @@ parc montre son **portrait** Donjon Mystère Happy, Normal ou Sad (SpriteCollab,
 forme, chromatique, femelle ; sinon son portrait Normal ; sans portrait : le sprite) à la place du sprite, et la raison
 sous son nom (« Heureux : aime la végétation (80 % du parc). »). Dans la Forêt (69 à 80 % de végétation) :
 les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
-autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux.
+autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux ; au Volcan (tout
+de type volcan), les Feu, Roche et Dragon heureux, les autres malheureux sauf ceux qu'il laisse indifférents.
 Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
 Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
 pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
@@ -672,14 +688,18 @@ PKHeX rapprochés de ceux de SpriteCollab, `images/donjon/formes.json`). Pour qu
   dorment sur la terre ferme. Un Eau/Vol nage. Les autres ne vont pas dans l'eau ; un malheureux qui ne nage pas
   n'attaque pas un Pokémon dans l'eau. La façon de se déplacer vient de la page (`ParkPokemon.Moves`,
   `ParkHabitats.MovementOf`) ;
+- la **lave** (Volcan) : les types **Feu** y vont **de temps en temps** (une promenade sur quatre, `LAVA_BATH` dans
+  `parc.js` : bien moins que les Eau dans l'eau, choix de l'utilisateur), s'y enfoncent comme un nageur, avec des remous
+  dorés ; ils n'y dorment pas (fatigués, ils en sortent d'abord) et arrivent au parc sur la roche. Un Feu/Vol va dans la
+  lave plutôt que de voler ; un Feu/Eau nage et va dans la lave. Les types **Vol** la survolent comme l'eau ;
 - le nom au survol, des « z » au-dessus des dormeurs, les plus bas dessinés devant (devant les arbres aussi : chaque
   feuillage est trié selon la ligne de son tronc). Les positions ne sont pas gardées.
 
 **Déplacer un Pokémon** (propriétaire du parc seulement ; pas les visiteurs) : à la souris, appuyer sur lui et bouger le
 **soulève** ; au doigt, il faut un **appui long** (0,3 s) avant de bouger (un glissement direct fait défiler la vue). Il
 suit le pointeur, un peu au-dessus de son ombre, devant tout, avec son animation **Charge** (Idle quand SpriteCollab ne
-l'a pas) ; la case visée est encadrée en clair si on peut l'y poser, en **rouge** sinon (eau, sauf pour un type Eau ;
-arbre, rocher, banc, hors de la zone « Parc »). Lâché sur une case interdite, il **revient à sa place** ; posé, il reste quelques secondes
+l'a pas) ; la case visée est encadrée en clair si on peut l'y poser, en **rouge** sinon (eau, sauf pour un type Eau ; lave,
+sauf pour un type Feu ; arbre, rocher, banc, hors de la zone « Parc »). Lâché sur une case interdite, il **revient à sa place** ; posé, il reste quelques secondes
 immobile puis reprend sa vie (un dormeur soulevé se réveille). Près du bord de la vue, la vue défile. Deux doigts pendant
 le transport : pincement, le Pokémon revient à sa place. Rien n'est enregistré : comme les positions, le déplacement ne
 vaut que dans ce navigateur.
@@ -948,10 +968,11 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol) ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
+| `MonsutaPotaru/wwwroot/parc/volcan-1-1.json` … `volcan-1-4.json` | Cartes du volcan, une par taille, même format (plus le calque « Bulles » et les tuiles animées) |
 | `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes de la forêt, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
 | `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`), façon de se déplacer (`MovementOf` : nage, vol) |
 | `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution |
-| `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage) : nom, carte, pictogramme et textes de la page |
+| `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage, Volcan) : nom, carte, pictogramme et textes de la page |
 | `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
@@ -981,6 +1002,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/images/parc/tuiles/` | Planches du pack Cute Fantasy utilisées par la carte du parc (hors Git : copiées par `outils/carte-parc.py`, envoyées par `deploy/fond-parc.cmd`) |
 | `outils/generer-parc.py` | Génère les cartes du parc 1 (`Parc_1-1.tmx` à `Parc_1-4.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
 | `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
+| `outils/generer-volcan.py` | Génère les cartes du volcan (`Volcan_1-1.tmx` à `Volcan_1-4.tmx`) : cascades de lave animées, coulées, mares, pont, bulles, champ de rochers autour, 15 à 25 % de lave |
 | `outils/parc_carte.py` | Moteur commun des deux générateurs : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` et aperçus |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
@@ -1138,7 +1160,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
-| [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
+| [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |

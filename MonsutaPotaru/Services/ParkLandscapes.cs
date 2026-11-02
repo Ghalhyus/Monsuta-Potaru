@@ -15,6 +15,7 @@ public static class ParkLandscapes
     public static string Name(ParkLandscape landscape) => landscape switch
     {
         ParkLandscape.Beach => "Plage",
+        ParkLandscape.Volcano => "Volcan",
         _ => "Forêt",
     };
 
@@ -22,6 +23,7 @@ public static class ParkLandscapes
     public static string Where(ParkLandscape landscape) => landscape switch
     {
         ParkLandscape.Beach => "à la plage",
+        ParkLandscape.Volcano => "au volcan",
         _ => "dans la forêt",
     };
 
@@ -29,6 +31,7 @@ public static class ParkLandscapes
     public static string Icon(ParkLandscape landscape) => landscape switch
     {
         ParkLandscape.Beach => "🏝️",
+        ParkLandscape.Volcano => "🌋",
         _ => "🌳",
     };
 
@@ -36,6 +39,7 @@ public static class ParkLandscapes
     public static string MapName(ParkLandscape landscape) => landscape switch
     {
         ParkLandscape.Beach => "plage-1",
+        ParkLandscape.Volcano => "volcan-1",
         _ => "parc-1",
     };
 
@@ -44,6 +48,8 @@ public static class ParkLandscapes
     {
         ParkLandscape.Beach => "Une côte de sable bordée de cocotiers, et surtout la mer : les Pokémon qui nagent y sont à leur aise, " +
                                "ceux qui craignent l'eau beaucoup moins.",
+        ParkLandscape.Volcano => "Un plateau de roche volcanique où la lave tombe en cascades et coule jusqu'à des mares brûlantes : " +
+                                 "le paradis des types Feu, Roche et Dragon, beaucoup moins celui des autres.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -51,6 +57,7 @@ public static class ParkLandscapes
     public static string Expansion(ParkLandscape landscape) => landscape switch
     {
         ParkLandscape.Beach => "La cocoteraie et le récif reculent et dévoilent une nouvelle partie de la plage",
+        ParkLandscape.Volcano => "Les rochers reculent et dévoilent une nouvelle partie du volcan",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
     };
 }

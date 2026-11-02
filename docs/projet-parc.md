@@ -42,7 +42,9 @@ Faire du parc un **refuge de Pokémon** :
    pas encore branchées sur le site) : côte, environ 65 % de mer et 35 % de sable à chaque taille (choix de
    l'utilisateur), cocoteraie côté plage et récif côté mer pour cacher ce qui n'est pas acheté. *Fait le même jour :*
    plusieurs parcs par joueur en base (un par paysage : la Forêt, puis la Plage achetée 40 000 ₽, chacun sa taille), liste
-   déroulante dans la page, un Pokémon dans un seul parc (le choisir ailleurs l'y fait venir).
+   déroulante dans la page, un Pokémon dans un seul parc (le choisir ailleurs l'y fait venir). *Volcan, même jour :*
+   troisième paysage (`outils/generer-volcan.py`), cascades et bulles de lave animées, les types Feu vont de temps en
+   temps dans la lave.
 3. **IA par espèce** : profils tirés des types et des groupes d'œufs, à partir d'un fichier de comportements fourni par
    l'utilisateur.
 4. *(Idée lointaine)* **Construction par les joueurs**.

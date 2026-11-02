@@ -1,7 +1,8 @@
-# Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py) avec le pack Cute Fantasy : jeux de
-# tuiles incorporés, calques, formes (bruit, taches, nettoyage), bordures automatiques, objets posés, poches enfermées,
-# écriture des .tmx pour Tiled et aperçus en PNG. Chaque générateur garde ce qui fait son paysage (formes, objets, ce qui
-# cache la partie pas encore achetée) et l'ordre de ses tirages : relancé sans changement, il redonne les mêmes cartes.
+# Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py, generer-volcan.py) avec le pack Cute
+# Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes (bruit, taches, nettoyage), bordures
+# automatiques, objets posés, poches enfermées, écriture des .tmx pour Tiled et aperçus en PNG. Chaque générateur garde
+# ce qui fait son paysage (formes, objets, ce qui cache la partie pas encore achetée) et l'ordre de ses tirages : relancé
+# sans changement, il redonne les mêmes cartes.
 import math
 import os
 import random
@@ -165,6 +166,8 @@ class Carte:
         self.libre_sol = self.dedans
         self.lisiere = set()
         self.planches = None
+        # Tuiles animées (animations de Tiled, jouées par parc.js) : jeu → {tuile : [(image, durée en ms)...]}
+        self.animations = {}
 
     # --- Jeux de tuiles (incorporés à la carte) ---
     def jeu(self, nom, chemin):
@@ -172,6 +175,10 @@ class Carte:
         self.jeux.append((nom, chemin, largeur, hauteur))
         self.premier[nom] = self.gid_collision
         self.gid_collision += (largeur // 16) * (hauteur // 16)
+
+    def animer(self, nom, i, images):
+        """La tuile i du jeu est animée : images = [(tuile du même jeu, durée en ms)...]."""
+        self.animations.setdefault(nom, {})[i] = images
 
     def t(self, nom, i):
         return self.premier[nom] + i
@@ -251,7 +258,8 @@ class Carte:
         return gardees
 
     # --- Écriture des .tmx et aperçus ---
-    def ecrire_carte(self, sortie, fichier, depart, zone, sol_, decors_, devant_, bloque_):
+    def ecrire_carte(self, sortie, fichier, depart, zone, sol_, decors_, devant_, bloque_, autres=()):
+        """Écrit le .tmx d'une taille. autres : calques de tuiles en plus, [(nom, grille)], après « Collisions »."""
         os.makedirs(sortie, exist_ok=True)
         Image.new("RGBA", (16, 16), (230, 40, 40, 255)).save(os.path.join(sortie, "collisions.png"))
         relatif = os.path.relpath(self.pack, sortie).replace("\\", "/")
@@ -260,25 +268,30 @@ class Carte:
         morceaux = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             f'<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="{L}" '
-            f'height="{H}" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="3">',
+            f'height="{H}" tilewidth="16" tileheight="16" infinite="0" nextlayerid="{6 + len(autres)}" nextobjectid="3">',
         ]
         for nom, chemin_, w, h in self.jeux:
             morceaux.extend([f' <tileset firstgid="{self.premier[nom]}" name="{nom}" tilewidth="16" tileheight="16" '
                              f'tilecount="{(w // 16) * (h // 16)}" columns="{w // 16}">',
                              f'  <image source="{os.path.normpath(relatif + "/" + chemin_).replace(os.sep, "/")}" '
-                             f'width="{w}" height="{h}"/>',
-                             ' </tileset>'])
+                             f'width="{w}" height="{h}"/>'])
+            for i, images in sorted(self.animations.get(nom, {}).items()):
+                morceaux.extend([f'  <tile id="{i}">', '   <animation>']
+                                + [f'    <frame tileid="{image}" duration="{duree}"/>' for image, duree in images]
+                                + ['   </animation>', '  </tile>'])
+            morceaux.append(' </tileset>')
         morceaux.extend([f' <tileset firstgid="{self.gid_collision}" name="collisions" tilewidth="16" tileheight="16" '
                          f'tilecount="1" columns="1">',
                          '  <image source="collisions.png" width="16" height="16"/>',
                          ' </tileset>'])
         for i, (nom, grille, extra) in enumerate([("Sol", sol_, ""), ("Décors", decors_, ""), ("Devant", devant_, ""),
-                                                 ("Collisions", collisions, ' visible="0" opacity="0.45"')], 1):
+                                                 ("Collisions", collisions, ' visible="0" opacity="0.45"')]
+                                                + [(n, g, "") for n, g in autres], 1):
             morceaux.extend([f' <layer id="{i}" name="{nom}" width="{L}" height="{H}"{extra}>',
                              f'  <data encoding="csv">\n{csv(grille)}\n</data>',
                              ' </layer>'])
         # « Départ » : la vue de départ (hauteur affichée, centre) ; « Parc » : là où vivent les Pokémon
-        morceaux.extend([' <objectgroup id="5" name="Zones">',
+        morceaux.extend([f' <objectgroup id="{5 + len(autres)}" name="Zones">',
                          rectangle(1, "Départ", depart),
                          rectangle(2, "Parc", zone),
                          ' </objectgroup>',

@@ -5,8 +5,8 @@ using PKHeX.Core;
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
-/// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py ou
-/// generer-plage.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
+/// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
+/// generer-plage.py ou generer-volcan.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
 /// les autres (pas de Pokémon enfermé), et chaque agrandissement qui garde les cases libres de la taille d'avant.
 /// </summary>
 public sealed class ParkMapTests
@@ -14,8 +14,8 @@ public sealed class ParkMapTests
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie) et la plage.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage et le volcan.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -93,7 +93,8 @@ public sealed class ParkMapTests
         bool Free(int x, int y) => freeTiles.Contains((x, y));
         var free = freeTiles.Order().ToList();
         // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins ; à la plage, la mer est bloquée et
-        // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer)
+        // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer) ; au
+        // volcan, la lave (17 à 31 % de la zone) est bloquée, 14 cases de roche dans la vue de départ (les Feu y vont en plus)
         var capacity = ParkService.CapacityOf(size - 1);
         var perPokemon = park == "plage-1" ? 7 : 14;
         Assert.True(free.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
@@ -144,5 +145,79 @@ public sealed class ParkMapTests
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, map).Mood);
         Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, map).Mood);
         Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, map).Mood);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Volcano_IsAllVolcano_WithLavaForTheFireTypes(int size)
+    {
+        // Choix de l'utilisateur : tout le volcan est de type « Volcan » (Feu, Roche et Dragon heureux, Eau et Normal
+        // malheureux), avec 14 à 29 % de lave libre dans la zone selon la taille (dessin de l'utilisateur ; le reste de la
+        // carte entière est sa bordure)
+        var json = Json("volcan-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var total = habitats.Area.W * habitats.Area.H;
+        Assert.True(habitats.Counts[Habitat.Volcano] * 100 / total >= 95);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, habitats).Mood);
+
+        // Lave libre, comme parc.js : bloquée, de type volcan, sans objet posé (« Décors », « Devant ») ; toute autre case
+        // bloquée en porte un. Les bulles (calque « Bulles », animées) ne sont pas des objets : seulement sur la lave libre.
+        var map = Map("volcan-1", size);
+        int width = map.GetProperty("width").GetInt32();
+        var (x0, y0, w, h) = Zone(map, "Parc");
+        long[] Data(string layer) => Layer(map, layer).GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        long[] collisions = Data("Collisions"), decors = Data("Décors"), front = Data("Devant"), bubbles = Data("Bulles");
+        var lava = Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => y * width + x))
+            .Where(i => collisions[i] != 0 && decors[i] == 0 && front[i] == 0).ToList();
+        Assert.All(lava, i => Assert.Equal(Habitat.Volcano, habitats.At(i % width, i / width)));
+        Assert.InRange(lava.Count * 100 / total, 12, 30);
+        var onLava = lava.ToHashSet();
+        var bubbleTiles = Enumerable.Range(0, bubbles.Length).Where(i => bubbles[i] != 0).ToList();
+        Assert.NotEmpty(bubbleTiles);
+        Assert.All(bubbleTiles, i => Assert.Contains(i, onLava));
+
+        // Cascades et bulles animées (animations de Tiled, jouées par parc.js)
+        var animated = map.GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).ToList();
+        Assert.Equal(["Volcano_Lavafall.png", "Volcano_lava_buble.png"], animated);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Volcano_EveryCascade_HasALakeAbove_AndLavaBelow(int size)
+    {
+        // Règle de l'utilisateur : une cascade n'est jamais seule, il lui faut quelque chose en amont (un lac, ici sur deux
+        // lignes au moins) et en aval (la coulée). Cascade : 3 × 5 tuiles de Volcano_Lavafall (54 colonnes, première image).
+        var map = Map("volcan-1", size);
+        int width = map.GetProperty("width").GetInt32();
+        var lavafall = map.GetProperty("tilesets").EnumerateArray().Single(t => t.GetProperty("image").GetString() == "Volcano_Lavafall.png");
+        long first = lavafall.GetProperty("firstgid").GetInt64(), columns = lavafall.GetProperty("columns").GetInt64();
+        long[] Data(string layer) => Layer(map, layer).GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        long[] collisions = Data("Collisions"), decors = Data("Décors"), front = Data("Devant");
+        bool Lava(int x, int y) => collisions[y * width + x] != 0 && decors[y * width + x] == 0 && front[y * width + x] == 0;
+
+        var cascades = 0;
+        for (var i = 0; i < decors.Length; i++)
+        {
+            var id = decors[i] - first;
+            if (id < 0 || id >= columns * 5) continue;
+            int x = i % width, y = i / width;
+            if (id / columns == 0)
+            {
+                cascades++;
+                Assert.True(Lava(x, y - 1) && Lava(x, y - 2), $"cascade en ({x}, {y}) sans lac au-dessus");
+            }
+            if (id / columns == 4) Assert.True(Lava(x, y + 1), $"cascade en ({x}, {y - 4}) sans coulée en dessous");
+        }
+        Assert.True(cascades >= 3, $"{cascades / 3} cascade(s) seulement"); // celle de la vue de départ au moins
     }
 }

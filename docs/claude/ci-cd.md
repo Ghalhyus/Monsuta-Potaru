@@ -7,7 +7,7 @@
   `sonar.issue.ignore.multicriteria` : `python:S2245` (aléatoire à graine fixe voulu) et `pythonsecurity:*` (chemins de
   la ligne de commande : scripts lancés à la main). Le reste (complexité...) se corrige dans le code.
 - Problèmes à corriger : l'utilisateur colle le JSON de l'API SonarCloud (`issues` : règle, fichier, ligne). Une
-  refonte de `outils/generer-parc.py`, `generer-plage.py` ou `parc_carte.py` se vérifie en comparant ses sorties avant/après (`cmp` : cartes et aperçus
+  refonte de `outils/generer-parc.py`, `generer-plage.py`, `generer-volcan.py` ou `parc_carte.py` se vérifie en comparant ses sorties avant/après (`cmp` : cartes et aperçus
   identiques octet pour octet, graine fixe).
 - CD : bouton « Run workflow » de « CD » ; ne relance pas les tests, lit le résultat de la CI du commit (case « Forcer »
   pour passer outre) ; vérifie que `blazor.web.js` répond.
