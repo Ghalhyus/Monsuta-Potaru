@@ -6,7 +6,7 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py ou generer-volcan.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
+/// generer-plage.py, generer-volcan.py ou generer-desert.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
 /// les autres (pas de Pokémon enfermé), et chaque agrandissement qui garde les cases libres de la taille d'avant.
 /// </summary>
 public sealed class ParkMapTests
@@ -14,8 +14,8 @@ public sealed class ParkMapTests
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage et le volcan.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan et le désert.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -94,9 +94,10 @@ public sealed class ParkMapTests
         var free = freeTiles.Order().ToList();
         // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins ; à la plage, la mer est bloquée et
         // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer) ; au
-        // volcan, la lave (17 à 31 % de la zone) est bloquée, 14 cases de roche dans la vue de départ (les Feu y vont en plus)
+        // volcan, la lave (17 à 31 % de la zone) est bloquée, 14 cases de roche dans la vue de départ (les Feu y vont en plus) ;
+        // au désert, le flanc du plateau (3 lignes) et l'oasis traversent la vue de départ : 11 cases (les Eau nagent en plus)
         var capacity = ParkService.CapacityOf(size - 1);
-        var perPokemon = park == "plage-1" ? 7 : 14;
+        var perPokemon = park switch { "plage-1" => 7, "desert-1" => 11, _ => 14 };
         Assert.True(free.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
 
         // Comme parc.js : en diagonale seulement si les deux côtés sont libres
@@ -219,5 +220,74 @@ public sealed class ParkMapTests
             if (id / columns == 4) Assert.True(Lava(x, y + 1), $"cascade en ({x}, {y - 4}) sans coulée en dessous");
         }
         Assert.True(cascades >= 3, $"{cascades / 3} cascade(s) seulement"); // celle de la vue de départ au moins
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Desert_IsMostlySand_ForTheGroundTypes(int size)
+    {
+        // Choix de l'utilisateur : un désert aride, un seul point d'eau (le lac du plateau, sa cascade et l'oasis), de
+        // l'herbe seulement autour de l'eau (carte entière retouchée par lui, 2026-11-03). Plus de la moitié de sable à
+        // toutes les tailles : les types Sol heureux, Feu malheureux d'après la feuille « Habitat ». La vue de départ a
+        // l'oasis et le flanc du plateau (à peine plus de la moitié) ; la carte entière, sa bordure de cactus sur le sable.
+        var json = Json("desert-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var total = habitats.Area.W * habitats.Area.H;
+        Assert.InRange(habitats.Counts[Habitat.Sand] * 100 / total, size switch { 1 => 50, 4 => 82, _ => 68 },
+            size switch { 1 => 56, 4 => 90, _ => 80 });
+        Assert.True(habitats.Counts[Habitat.Sand] * 2 > total);
+        Assert.True(habitats.Counts[Habitat.Water] > 0 && habitats.Counts[Habitat.Vegetation] > 0 && habitats.Counts[Habitat.Cliff] > 0);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Ground, (byte)MoveType.Ground, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, habitats).Mood);
+        Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, habitats).Mood);
+
+        // Cascade et touffes d'herbe animées (animations de Tiled, jouées par parc.js)
+        var animated = Map("desert-1", size).GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).Order().ToList();
+        Assert.Equal(["Desert_Cliff_Waterfall_1.png", "Desert_Grass_1_Anim.png", "Desert_Grass_2_Anim.png", "Desert_Grass_3_Anim.png"],
+            animated);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Desert_Cascade_HasALakeAbove_AndTheOasisBelow(int size)
+    {
+        // Règle de l'utilisateur : une cascade n'est jamais seule. Celle du désert sort du lac du plateau (le ruisseau se
+        // resserre à une case sur les deux lignes au-dessus d'elle) et tombe dans l'oasis (une case de sortie). Cascade :
+        // la chute de Desert_Cliff_Waterfall_1 (18 colonnes, lignes 2 et 3 de la planche, première image) sur les 3 lignes
+        // du flanc ; eau : bloquée, de type eau, sans objet posé (là où les Eau nagent, comme parc.js).
+        var json = Json("desert-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var map = Map("desert-1", size);
+        int width = map.GetProperty("width").GetInt32();
+        var waterfall = map.GetProperty("tilesets").EnumerateArray().Single(t => t.GetProperty("image").GetString() == "Desert_Cliff_Waterfall_1.png");
+        long first = waterfall.GetProperty("firstgid").GetInt64(), columns = waterfall.GetProperty("columns").GetInt64();
+        long[] Data(string layer) => Layer(map, layer).GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        long[] collisions = Data("Collisions"), decors = Data("Décors"), front = Data("Devant");
+        bool Fall(int x, int y) => decors[y * width + x] - first is var id && id >= 0 && id < columns * 6;
+        bool Water(int x, int y) => collisions[y * width + x] != 0 && decors[y * width + x] == 0 && front[y * width + x] == 0
+                                    && habitats.At(x, y) == Habitat.Water;
+
+        var middles = 0;
+        for (var i = 0; i < decors.Length; i++)
+        {
+            int x = i % width, y = i / width;
+            // Haut de la chute, colonne du milieu
+            if (!Fall(x, y) || Fall(x, y - 1) || (decors[i] - first) % 3 != 1) continue;
+            middles++;
+            Assert.True(Water(x, y - 1) && Water(x, y - 2), $"cascade en ({x}, {y}) sans lac au-dessus");
+            var bottom = y;
+            while (Fall(x, bottom + 1)) bottom++;
+            Assert.Equal(3, bottom - y + 1);
+            Assert.True(Water(x, bottom + 1), $"cascade en ({x}, {y}) sans eau en dessous");
+        }
+        Assert.Equal(1, middles); // une seule cascade, dans la vue de départ
     }
 }

@@ -567,7 +567,7 @@ s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à p
 visiteurs (sans adresse propre à chaque parc : on arrive sur la Forêt). « Agrandir », « Choisir », « Vider » et les
 boutons debug agissent sur le parc affiché ; chaque méthode du service revérifie que le parc (numéro venu du navigateur)
 est bien à ce joueur. **Un Pokémon vit dans un seul parc** : dans la fenêtre de choix, ceux d'un autre parc portent son
-pictogramme (🌳 forêt, 🏝️ plage, 🌋 volcan, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
+pictogramme (🌳 forêt, 🏝️ plage, 🌋 volcan, 🏜️ désert, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
 quitter (« Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc. »). Nom, carte et textes de chaque paysage :
 `ParkLandscapes` (un nouveau paysage : une valeur de l'énumération, ses quatre cartes, une ligne par méthode).
 « Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
@@ -629,7 +629,21 @@ continue sous les rochers), une cascade n'apparaît que tout entière. Les **cas
 hors des décors) sont des tuiles animées de Tiled, jouées par `parc.js`. `ParkMapTests` vérifie le type volcan partout,
 la part de lave libre, que toute case bloquée hors de la lave porte un décor (sinon `parc.js` la prendrait pour de la
 lave) et les animations.
-Les trois générateurs partagent leur moteur (`outils/parc_carte.py` : jeux de tuiles, tuiles animées, calques, formes,
+**Désert** (quatrième paysage, à acheter) : `Desert_1-1.tmx` à `Desert_1-4.tmx` (`desert-1-1.json` à
+`desert-1-4.json`), faites par `outils/generer-desert.py` (mêmes arguments ; `--seulement <taille>` pour une seule) avec
+l'extension Desert du pack (teinte 1, sable doré). Un désert **aride** avec **un seul point d'eau** : un **plateau** à deux
+étages au fond (flanc de 3 cases au milieu, deux escaliers dans la vue de départ, une marche plus basse autour) porte un
+**lac** qui se resserre en ruisseau et tombe en **cascade** (animée) dans l'**oasis** au pied du flanc, derrière une
+corniche de sable. L'herbe n'est qu'autour de l'eau (palmiers) ; ailleurs, cactus, acacias, rochers, herbes sèches. La
+taille 4 est la carte retouchée par l'utilisateur dans Tiled (plateau, raccords de la cascade), reprise à l'identique par le
+générateur, qui en a tiré les autres tailles ; les quatre ont ensuite été retouchées à la main : **ne plus relancer le
+générateur** sur ces cartes (il les écraserait), seulement `carte-parc.py` après une retouche. Sable : 52 / 71 / 76 / 87 % (plus de la moitié partout : les Sol heureux ;
+Feu, Roche, Acier, Eau, Poison, Plante et Fée malheureux d'après la feuille « Habitat »). Mêmes zones que la Forêt. L'eau
+et son bord de sable sont bloqués, les types Eau y nagent ; 11,3 cases libres par Pokémon dans la vue de départ (le test
+en exige 11 au désert), 19 à 38 ensuite. Ce qui n'est pas acheté est un champ serré de cactus et de rochers ; l'eau qui en
+sort est coupée à la lisière, son bord caché porte de petits rochers. `ParkMapTests` vérifie la part de sable, les humeurs,
+les animations et la cascade (lac au-dessus, eau en dessous).
+Les quatre générateurs partagent leur moteur (`outils/parc_carte.py` : jeux de tuiles, tuiles animées, calques, formes,
 écriture des cartes).
 **Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
 aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
@@ -969,6 +983,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
 | `MonsutaPotaru/wwwroot/parc/volcan-1-1.json` … `volcan-1-4.json` | Cartes du volcan, une par taille, même format (plus le calque « Bulles » et les tuiles animées) |
+| `MonsutaPotaru/wwwroot/parc/desert-1-1.json` … `desert-1-4.json` | Cartes du désert, une par taille, même format (cascade et touffes d'herbe animées) |
 | `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes de la forêt, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
 | `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`), façon de se déplacer (`MovementOf` : nage, vol) |
 | `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution |
@@ -1003,6 +1018,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `outils/generer-parc.py` | Génère les cartes du parc 1 (`Parc_1-1.tmx` à `Parc_1-4.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
 | `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
 | `outils/generer-volcan.py` | Génère les cartes du volcan (`Volcan_1-1.tmx` à `Volcan_1-4.tmx`) : cascades de lave animées, coulées, mares, pont, bulles, champ de rochers autour, 15 à 25 % de lave |
+| `outils/generer-desert.py` | Génère les cartes du désert (`Desert_1-1.tmx` à `Desert_1-4.tmx`) : dunes, plateau et escaliers, lac, cascade animée, oasis, prairies, acacias, cactus, champ de cactus et de rochers autour, ~70 % de sable |
 | `outils/parc_carte.py` | Moteur commun des deux générateurs : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` et aperçus |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
@@ -1160,7 +1176,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
-| [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
+| [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert, et tout le désert (sable, falaises, eau, cascade, herbe, cactus, rochers, acacias, plantes) ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |

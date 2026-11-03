@@ -22,7 +22,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
-  dans `generer-plage.py` et `generer-volcan.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
+  dans `generer-plage.py`, `generer-volcan.py` et `generer-desert.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
@@ -183,6 +183,62 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Hors de la zone : champ de gros rochers 2 × 2 en quinconce (`Volcano_Rocks` : amas, buttes, tours), petits rochers
   ailleurs, toutes bloquées.
 
+## Désert (`outils/generer-desert.py`, `ParkLandscape.Desert`, 2026-11-02)
+- `Desert_1-1.tmx` à `Desert_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `desert-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `desert-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : dunes, plateau et oasis ; cactus, plantes, rochers et acacias ; teinte 1 (planches `_1`) ; hors
+  zone, cactus et rochers serrés ; zones du volcan. Puis (2026-11-03, « très laid ») : **aride, un seul point d'eau**, herbe
+  seulement autour de l'eau, plateau plus petit et à deux étages, plus de végétation en haut. Sable 52 / 71 / 76 / 87 %
+  (test : 50-56 / 68-80 / 68-80 / 82-90, et plus de la moitié).
+- **Depuis le 2026-11-03 au soir, les quatre cartes sont retouchées à la main par l'utilisateur** (tailles 1 à 3 dans
+  Tiled, acacias sans ombre « volants » remplacés partout par l'acacia avec ombre) : **ne plus relancer
+  `generer-desert.py`** sur `C:\Sources\Parcs` (il les écraserait et pose encore l'acacia sans ombre une fois sur deux) ;
+  après une retouche, seulement `carte-parc.py` sur chaque carte. Un acacia peint dans « Sol » laisse un trou : le
+  ranger dans « Devant » (lignes 0-1) et « Décors » (tronc, ombre), sans le supprimer.
+- **La taille 4 est sa carte** : il l'a retouchée dans Tiled (`Desert_1-4_modele.tmx` : marche du plateau ;
+  `_modele2` : corniche, rebords ; `_modele3` : la version validée ; `_modele4` : la même avec des remous qu'il a refusés).
+  Ses retouches sont reprises **telles quelles** dans le générateur (`SOL_FORCE`, `DEVANT_FORCE`, `BERGES`, corniche,
+  marche) : `generer-desert.py --seulement 4` doit redonner `Desert_1-4_modele3.tmx` à l'identique (comparer calque par
+  calque ; le 2026-11-03, identique octet pour octet). Toute retouche du générateur : refaire cette comparaison.
+- **Leçons** (2026-11-03, plusieurs allers-retours ratés) : la planche des falaises du désert et les bords de plage ne se
+  raccordent pas d'eux-mêmes ; les essais de raccord « à l'œil » sur des aperçus réduits ont été mauvais. Regarder chaque
+  raccord agrandi (×6 à ×8) avant d'envoyer ; laisser l'utilisateur dessiner les raccords dans Tiled et les reprendre.
+  Refusés : pointes de cascade entourées de rebords (blocs découpés), remous de `Desert_Water_Foam_Animation` (« immonde »),
+  ronds de dunes (carrés clairs), prairies, deux petites oasis.
+- Cascade : seule la chute (lignes 2, 3, 3 de la planche, 3 lignes du flanc ; les lignes 4-5 ont des cailloux, refusés).
+  Le ruisseau se resserre à **une case** sur les deux lignes au-dessus (`GOULOTS`, posés après le nettoyage), avec les
+  pointes de la cascade de part et d'autre (tuiles 1, 18, 20 dans « Sol », coins 79/81 dans « Devant ») ; une case de
+  sortie en dessous, entre deux berges droites.
+- Objet bloquant coupé par la lisière : son pied visible porte un petit décor bloqué (sinon il ne peut pas apparaître à la
+  taille suivante, et la taille 4 perdait des acacias). Cacher l'objet entier se propageait d'objet en objet (moitié de la
+  vue de départ cachée) : refusé.
+- **Planches** (lues le 2026-11-02, aucun exemple fourni avec le pack) :
+  - `Desert_Cliff_Tiles_1` (13 colonnes) : le **sol de sable** est dans cette planche (en bas à droite : 128 uni, 139/140
+    à peine marqués, ronds de dunes 2 × 2 en (9, 5) et (9, 7)) : règle tuile par tuile `DESERT_CLIFF_TILES` de
+    `carte-parc.py` (sable, escaliers = aucun, le reste falaise). Plateau rectangulaire seulement (pas de coin rentrant) :
+    rebord **hors du dessus** (14 15 16 au-dessus, 27 et 29 sur les côtés : le dessus lui-même est transparent, le sable du
+    sol), flanc de 3 lignes sous la dernière ligne du dessus (40-42, 53-55, 66-68, colonne du milieu répétée). Escaliers
+    3 × 3 (22-24, 35-37, 48-50) à la place du flanc. Le groupe (colonnes 4-6) au rebord épais et 70/71 : pas utilisés.
+  - `Desert_Cliff_Waterfall_1` : 6 images de 3 × 6 tuiles (18 colonnes), les pointes de roche à cheval entre deux images.
+    Lignes 0-1 : le ruisseau entre deux pointes, faites pour avoir de l'eau des deux côtés ; 2-4 : la chute ; 5 : le pied
+    (cailloux en 4 et 5). Animée à 120 ms. (Les variantes 2 et 3 n'ont que 5 lignes.)
+  - Eau : bords dessinés **dans le sable** (`Desert_Beach_Tiles_1`, le sable est la forme, coins rentrants 3/4/8/9),
+    eau unie `Desert_Water_Tiles_1` 10. Le bord (écume) est bloqué, les Eau y nagent comme à la plage.
+  - Herbe `Desert_Grass` : son bord passe **au milieu des cases** : tuile choisie d'après les quatre coins (`HERBE`),
+    pleine (11) dans « Sol », bords dans « Décors » (aucun objet sur un bord d'herbe : `bord_herbe`). Anneau autour de
+    l'eau (`anneau`, distance à l'eau), mesuré depuis l'eau d'avant la berge de la corniche (dessin validé).
+  - Petit rebord sans flanc (79-81, 92, 94, 105-107) : `carte-parc.py` lui fait garder le type du dessous.
+  - Cactus de `Cactus.png` : 2 × 2, **à cheval sur deux colonnes** (colonnes 2k et 2k+1), haut dans « Devant ». Acacias
+    5 × 4 (avec l'ombre) ou 5 × 3, tronc en colonne 2.
+- **Piège** : avec des bords dans le sable, une eau qui apparaît à l'agrandissement rend son bord bloqué. Le sable au bord
+  de l'eau encore cachée est donc bloqué (un rocher) dès la taille d'avant ; sinon le script s'arrête (cases libres perdues).
+- Morceaux d'herbe (celle du lac, celle de l'oasis) montrés seulement si 60 % au moins sont hors de la lisière, avec une
+  case de sable entre l'herbe et ce qui est caché (sinon 49,6 % de sable dans la vue de départ : Sol pas heureux).
+- Vue de départ : 11,3 cases libres par Pokémon (`ParkMapTests` : 11 au désert, 14 ailleurs sauf la plage).
+- Essai (première version, 2026-11-02 (instance de test, achat dans la vraie page puis 15 min simulées aux tailles 1, 2 et 4) : nageurs
+  47-54 % du temps dans l'eau, volants 7-15 % au-dessus, marcheurs jamais, aucune case interdite ; types de cases lus par
+  `parc.js` : flanc et rebord falaise, escaliers aucun, eau et cascade eau, herbe végétation.
+
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :
   une fois pour l'eau (5), une fois pour la lave (7) ; `ground.lava`, `ground.liquid` (survol), `liquidAt(x, y)`.
@@ -209,7 +265,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   (80-82, 96-98, 112-114, 128, 129, 144, 145) et escaliers = aucun, flancs des hauteurs = falaise. Chemins = aucun (choix
   de l'utilisateur). Les règles des extensions (désert, volcan, donjons, ShroomLands) et des plages sont **devinées
   d'après les noms**, pas encore vues sur une carte : les vérifier avec « Habitats (debug) » à leur première utilisation
-  (volcan : vu le 2026-11-01, tout en volcan, le pont en aucun).
+  (volcan : vu le 2026-11-01, tout en volcan, le pont en aucun ; désert : vu le 2026-11-02, voir « Désert »).
 - Champ `habitats` du JSON (pas un calque : Phaser l'ignore) : une chaîne par ligne, chiffres 0 aucun, 1 sable, 2 cave,
   3 falaise, 4 végétation, 5 eau, 6 donjon, 7 volcan = enum `Habitat` = `Ground.habitats` de `parc.js`.
 - L'eau est bloquée : aucun Pokémon ne s'y tient. D'où un bonheur selon ce que contient le parc

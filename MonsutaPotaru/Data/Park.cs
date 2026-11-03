@@ -9,6 +9,8 @@ public enum ParkLandscape
     Beach = 2,
     /// <summary>Un plateau de roche volcanique, des coulées et des mares de lave (cartes volcan-1-{taille}).</summary>
     Volcano = 3,
+    /// <summary>Des dunes (~70 % de sable), un plateau d'où une cascade tombe dans une oasis (cartes desert-1-{taille}).</summary>
+    Desert = 4,
 }
 
 /// <summary>

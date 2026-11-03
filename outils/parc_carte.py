@@ -1,4 +1,5 @@
-# Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py, generer-volcan.py) avec le pack Cute
+# Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py, generer-volcan.py, generer-desert.py)
+# avec le pack Cute
 # Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes (bruit, taches, nettoyage), bordures
 # automatiques, objets posés, poches enfermées, écriture des .tmx pour Tiled et aperçus en PNG. Chaque générateur garde
 # ce qui fait son paysage (formes, objets, ce qui cache la partie pas encore achetée) et l'ordre de ses tirages : relancé

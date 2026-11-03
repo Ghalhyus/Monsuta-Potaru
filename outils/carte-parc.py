@@ -58,6 +58,12 @@ DECOR = None  # objet posé sur le sol : la case garde le type de la tuile du de
 GRASS_TILES = {**{i: "Aucun" for i in (80, 81, 82, 96, 97, 98, 112, 113, 114, 128, 129, 144, 145)},
                **{r * 16 + c: "Falaise" for r in (2, 3, 4, 6, 7, 8) for c in range(8, 16)},
                **{i: "Aucun" for i in (6, 7, 22, 23, 86, 87, 102, 103)}}  # escaliers des hauteurs
+# Falaises du désert (13 × 11 tuiles) : rebords et flancs, sauf les escaliers (en haut à droite), le sol de sable (en bas
+# à droite : uni, marqué, ronds de dunes) et le petit rebord sans flanc (79-81, 92, 94, 105-107 : posé sur l'eau ou le
+# sable au bord de la cascade, il garde le type du dessous)
+DESERT_CLIFF_TILES = {**{r * 13 + c: "Sable" for r in range(5, 11) for c in range(7, 13)},
+                      **{i: "Aucun" for i in (20, 33, 46, 72, 22, 23, 24, 35, 36, 37, 48, 49, 50)},
+                      **{i: DECOR for i in (79, 80, 81, 92, 94, 105, 106, 107)}}
 HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Path_", "Aucun"),
@@ -72,6 +78,7 @@ HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Picnic_", DECOR),
     (r"Cute_Fantasy/(Outdoor decoration|Trees|Buildings|Crops|Animals|Other)/", DECOR),
     (r"Cute_Fantasy_Desert/Tiles/Desert_(Water|Cliff_Waterfall)", "Eau"),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_Cliff_Tiles_\d\.png$", ("Falaise", DESERT_CLIFF_TILES)),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Cliff", "Falaise"),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Grass", "Végétation"),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Bridge", "Aucun"),
