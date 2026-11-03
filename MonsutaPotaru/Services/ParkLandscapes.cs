@@ -17,6 +17,7 @@ public static class ParkLandscapes
         ParkLandscape.Beach => "Plage",
         ParkLandscape.Volcano => "Volcan",
         ParkLandscape.Desert => "Désert",
+        ParkLandscape.Ocean => "Océan",
         _ => "Forêt",
     };
 
@@ -26,6 +27,7 @@ public static class ParkLandscapes
         ParkLandscape.Beach => "à la plage",
         ParkLandscape.Volcano => "au volcan",
         ParkLandscape.Desert => "dans le désert",
+        ParkLandscape.Ocean => "dans l'océan",
         _ => "dans la forêt",
     };
 
@@ -35,6 +37,7 @@ public static class ParkLandscapes
         ParkLandscape.Beach => "🏝️",
         ParkLandscape.Volcano => "🌋",
         ParkLandscape.Desert => "🏜️",
+        ParkLandscape.Ocean => "🌊",
         _ => "🌳",
     };
 
@@ -44,6 +47,7 @@ public static class ParkLandscapes
         ParkLandscape.Beach => "plage-1",
         ParkLandscape.Volcano => "volcan-1",
         ParkLandscape.Desert => "desert-1",
+        ParkLandscape.Ocean => "ocean-1",
         _ => "parc-1",
     };
 
@@ -56,6 +60,8 @@ public static class ParkLandscapes
                                  "le paradis des types Feu, Roche et Dragon, beaucoup moins celui des autres.",
         ParkLandscape.Desert => "Des dunes à perte de vue, un plateau d'où tombe une cascade et une oasis bordée de palmiers : " +
                                 "le royaume des types Sol, bien moins celui des Pokémon qui craignent le sable.",
+        ParkLandscape.Ocean => "La pleine mer à perte de vue, quelques rochers et trois îlots au loin : seuls les Pokémon qui nagent (type Eau) " +
+                               "peuvent y vivre, et ils y sont comme chez eux.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -65,6 +71,18 @@ public static class ParkLandscapes
         ParkLandscape.Beach => "La cocoteraie et le récif reculent et dévoilent une nouvelle partie de la plage",
         ParkLandscape.Volcano => "Les rochers reculent et dévoilent une nouvelle partie du volcan",
         ParkLandscape.Desert => "Les cactus reculent et dévoilent une nouvelle partie du désert",
+        ParkLandscape.Ocean => "Le récif recule et dévoile une nouvelle partie de l'océan",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
+    };
+
+    /// <summary>
+    /// Ce qui empêche un Pokémon de ces types (index PKHeX, comme <c>BankPokemon.Type1</c>) de vivre dans ce paysage, en
+    /// quelques mots (« Ne nage pas »), ou null s'il le peut. L'océan n'a que de l'eau et des îlots : seuls les nageurs y
+    /// vont (<see cref="ParkHabitats.MovementOf"/> : type Eau, choix de l'utilisateur, 2026-11-03).
+    /// </summary>
+    public static string? Refusal(ParkLandscape landscape, byte type1, byte type2) => landscape switch
+    {
+        ParkLandscape.Ocean when ParkHabitats.MovementOf(type1, type2) is not ("swim" or "swim-lava") => "Ne nage pas",
+        _ => null,
     };
 }

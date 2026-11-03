@@ -26,14 +26,15 @@ public sealed class ParkServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private int Add(ushort species, string owner = "sacha", bool egg = false, bool shiny = false, MoveType type = MoveType.Normal)
+    private int Add(ushort species, string owner = "sacha", bool egg = false, bool shiny = false, MoveType type = MoveType.Normal,
+        MoveType? type2 = null)
     {
         using var db = _db.NewContext();
         var entry = new BankPokemon
         {
             OwnerId = owner, Species = species, SpeciesName = $"Espèce {species}", Nickname = $"N{species}", Level = 10,
             IsEgg = egg, IsShiny = shiny, Nature = 0, DepositedAt = DateTime.UtcNow, Data = [1],
-            Type1 = (byte)type, Type2 = (byte)type,
+            Type1 = (byte)type, Type2 = (byte)(type2 ?? type),
         };
         db.BankPokemon.Add(entry);
         db.SaveChanges();
@@ -202,6 +203,32 @@ public sealed class ParkServiceTests : IDisposable
         // Vider la plage ne touche pas la forêt
         Assert.True((await _park.ClearAsync("sacha", beach)).Ok);
         Assert.Equal([eevee], (await _park.ListAsync("sacha", forest)).Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task Ocean_TakesOnlyThePokemonThatSwim()
+    {
+        // Choix de l'utilisateur : l'océan n'a que de l'eau et des îlots, seuls les nageurs (type Eau) y vivent ; les autres
+        // sont grisés dans la fenêtre de choix, et refusés par le service (la liste vient du navigateur)
+        await SetWallet("sacha", ParkService.ParkPrice);
+        var squirtle = Add(7, type: MoveType.Water);
+        var wartortle = Add(8, type: MoveType.Fire, type2: MoveType.Water); // Feu/Eau : nage aussi
+        var pikachu = Add(25, type: MoveType.Electric);
+        var pidgey = Add(16, type: MoveType.Normal, type2: MoveType.Flying); // vole, mais ne nage pas
+        var ocean = (await _park.BuyAsync("sacha", ParkLandscape.Ocean)).ParkId;
+
+        var refusals = (await _park.ListCandidatesAsync("sacha", ocean)).ToDictionary(c => c.Id, c => c.Refusal);
+        Assert.Equal([null, null, "Ne nage pas", "Ne nage pas"], new[] { squirtle, wartortle, pikachu, pidgey }.Select(id => refusals[id]));
+        Assert.All(await _park.ListCandidatesAsync("sacha", await Forest()), c => Assert.Null(c.Refusal));
+
+        var refused = await _park.SetAsync("sacha", ocean, [squirtle, pidgey]);
+        Assert.Equal((false, "Espèce 16 ne nage pas : seuls les Pokémon qui nagent (type Eau) peuvent vivre dans l'océan."),
+            (refused.Ok, refused.Message));
+        Assert.Empty(await _park.ListAsync("sacha", ocean));
+
+        Assert.True((await _park.SetAsync("sacha", ocean, [squirtle, wartortle])).Ok);
+        var swimmers = await _park.ListAsync("sacha", ocean);
+        Assert.Equal([("happy", "swim"), ("happy", "swim-lava")], swimmers.Select(p => (p.Mood, p.Moves))); // presque toute en eau
     }
 
     [Fact]

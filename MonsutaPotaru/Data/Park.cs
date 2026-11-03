@@ -11,6 +11,8 @@ public enum ParkLandscape
     Volcano = 3,
     /// <summary>Des dunes (~70 % de sable), un plateau d'où une cascade tombe dans une oasis (cartes desert-1-{taille}).</summary>
     Desert = 4,
+    /// <summary>La pleine mer et trois îlots, seulement pour les Pokémon qui nagent (cartes ocean-1-{taille}).</summary>
+    Ocean = 5,
 }
 
 /// <summary>

@@ -18,11 +18,13 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Tout numéro de parc vient du navigateur (liste déroulante) : chaque méthode filtre sur `OwnerId` (« Ce parc n'existe
   pas. »). `ParkServiceTests.ParkOfAnotherPlayer_IsRefused`.
 - Nouveau paysage : une valeur de `ParkLandscape`, ses cartes `{MapName}-{taille}.json`, une ligne dans chaque méthode de
-  `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes.
+  `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes. Un paysage réservé à certains
+  Pokémon : `ParkLandscapes.Refusal` (raison courte, ou null), repris par `ListCandidatesAsync` (`ParkCandidate.Refusal` :
+  grisé) et revérifié par `SetAsync` (`ParkService.RefusalMessage`).
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
-  dans `generer-plage.py`, `generer-volcan.py` et `generer-desert.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
+  dans `generer-plage.py`, `generer-volcan.py`, `generer-desert.py` et `generer-ocean.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
@@ -238,6 +240,39 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Essai (première version, 2026-11-02 (instance de test, achat dans la vraie page puis 15 min simulées aux tailles 1, 2 et 4) : nageurs
   47-54 % du temps dans l'eau, volants 7-15 % au-dessus, marcheurs jamais, aucune case interdite ; types de cases lus par
   `parc.js` : flanc et rebord falaise, escaliers aucun, eau et cascade eau, herbe végétation.
+
+## Océan (`outils/generer-ocean.py`, `ParkLandscape.Ocean`, 2026-11-03)
+- `Ocean_1-1.tmx` à `Ocean_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `ocean-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `ocean-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : **pas de plage** ; **seuls les nageurs** viennent (« les autres ne peuvent pas venir » ; pas les
+  volants seuls), grisés dans la fenêtre de choix avec la raison ; des **îlots pas bloqués** ; récif de rochers autour ;
+  rochers animés dans l'eau. Pas choisis : poissons animés, barque et rondins. Première version (~90 % d'eau, 20 îlots,
+  remous d'écume) refusée : « beaucoup trop d'îlots, ça doit être un océan » → **trois îlots, aucun dans la vue de
+  départ**, plus d'écume (2026-11-03). Eau : 100 / 99 / 96,7 / 98,2 % (test : 95 % au moins).
+- **Sans terre** (taille 1) : `Ground.openLiquid` part de la case d'eau la plus proche du centre de « Départ » (sinon
+  aucune eau libre : elle est comptée depuis la terre) ; `randomSpot(LAND)` rend de l'eau, `destination` toujours l'eau.
+  Les tests partent aussi de ce centre. À la taille 2, l'îlot de gauche, coupé, n'a que 12 cases de terre : des
+  nageurs s'y serrent parfois.
+- **Îlots** : `Water_Stone_Tile_1` (même disposition que l'herbe du désert : le bord passe au milieu des cases, tuile
+  d'après les quatre coins d'herbe, `RIVAGE`) + `Grass_1_Middle` (même vert). Case à 3 coins d'herbe ou plus (tuiles 0,
+  2, 6, 8, ou herbe pleine) = terre libre, type végétation (`WATER_STONE_TILES` de `carte-parc.py`) ; 1 ou 2 coins = eau
+  bloquée sans décor, où l'on nage. Fleurs sur l'herbe pleine. Placés **à la main** (`ILOTS_PLACES` : centre, rayons ; un ovale plus un ou deux lobes,
+  nouvelle graine tant qu'il touche un voisin à moins de 3 cases ou la bordure à moins de 2). Les anneaux entre deux zones
+  sont trop minces pour y tenir un îlot : un îlot qui déborde de la zone est **coupé à la lisière** (`nettoyer(îlot -
+  caché)`, bouts de moins de 4 cases de terre retirés) ; un agrandissement ne fait que gagner des coins d'herbe (le script
+  vérifie qu'aucune case libre n'est perdue). Le hasard (bruit fort, îlots tirés au hasard) donnait des bras fins sans terre
+  et trop peu de terre.
+- Les îlots sont séparés : le test d'accès de `ParkMapTests` (et le script) passe par la terre **et l'eau libre** pour
+  l'océan ; cases libres par Pokémon : terre + eau libre (20 à 45).
+- Écume retirée (`Water_Foam_Animation`) : son eau est (0, 152, 220), la mer (0, 149, 233), un carré se voyait ; une
+  copie recolorée la raccordait (si elle revient).
+- Rochers animés (`Water_Rocks/Rock_*_Water_Anim`, 8 images d'une tuile, 150 ms), bloqués, à 2 cases au moins des îlots.
+  « Enlève 30 % des rochers » (2026-11-03) : 3 sur 10 retirés **dans chaque anneau** entre deux zones (sur toute la carte
+  d'un coup, la vue de départ n'en perdait aucun), les autres gardent leur place : 5 / 11 / 23 / 49 rochers.
+  Toute case cachée porte un rocher (aucune case bloquée sans décor hors de l'eau libre, comme au volcan).
+- Essai du 2026-11-03 (instance de test, achat et choix dans la vraie page, puis 15 min simulées aux tailles 1, 2 et 4,
+  20 nageurs) : taille 1, 100 % du temps dans l'eau, répartis sur toute la vue ; tailles 2 et 4, 72-77 %, tous montés sur
+  un îlot ; aucune case interdite, la nuit endormis dans l'eau ou à terre. Plage inchangée (67 %).
 
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :

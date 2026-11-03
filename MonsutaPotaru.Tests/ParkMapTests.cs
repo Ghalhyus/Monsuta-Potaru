@@ -6,16 +6,17 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py, generer-volcan.py ou generer-desert.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est accessible depuis
-/// les autres (pas de Pokémon enfermé), et chaque agrandissement qui garde les cases libres de la taille d'avant.
+/// generer-plage.py, generer-volcan.py, generer-desert.py ou generer-ocean.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
+/// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage), et chaque agrandissement qui garde les cases libres de la
+/// taille d'avant.
 /// </summary>
 public sealed class ParkMapTests
 {
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan et le désert.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert et l'océan.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -50,6 +51,24 @@ public sealed class ParkMapTests
         var collisions = Layer(map, "Collisions").GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
         return Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
             .Where(c => collisions[c.y * width + c.x] == 0).ToHashSet();
+    }
+
+    /// <summary>
+    /// Eau libre, comme parc.js : dans la zone « Parc », bloquée, de type eau, sans objet posé (« Décors », « Devant ») ;
+    /// les nageurs y vont (à l'océan, seulement eux).
+    /// </summary>
+    private static HashSet<(int x, int y)> OpenWater(string park, int size)
+    {
+        var map = Map(park, size);
+        var habitats = ParkHabitats.Read(Json(park, size))!;
+        int width = map.GetProperty("width").GetInt32();
+        var (x0, y0, w, h) = Zone(map, "Parc");
+        long[] Data(string layer) => Layer(map, layer).GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        long[] collisions = Data("Collisions"), decors = Data("Décors"), front = Data("Devant");
+        return Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
+            .Where(c => collisions[c.y * width + c.x] != 0 && decors[c.y * width + c.x] == 0 && front[c.y * width + c.x] == 0
+                        && habitats.At(c.x, c.y) == Habitat.Water)
+            .ToHashSet();
     }
 
     [Theory]
@@ -90,18 +109,24 @@ public sealed class ParkMapTests
         Assert.True(x0 <= sx && y0 <= sy && sx + sw <= x0 + w && sy + sh <= y0 + h, "zone « Départ » hors de la zone « Parc »");
 
         var freeTiles = FreeTiles(map);
-        bool Free(int x, int y) => freeTiles.Contains((x, y));
         var free = freeTiles.Order().ToList();
+        // À l'océan, seuls les nageurs vivent : ils passent d'un îlot à l'autre par l'eau libre, et s'y tiennent aussi
+        HashSet<(int x, int y)> passable = park == "ocean-1" ? [.. freeTiles, .. OpenWater(park, size)] : freeTiles;
+        bool Free(int x, int y) => passable.Contains((x, y));
         // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins ; à la plage, la mer est bloquée et
         // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer) ; au
         // volcan, la lave (17 à 31 % de la zone) est bloquée, 14 cases de roche dans la vue de départ (les Feu y vont en plus) ;
         // au désert, le flanc du plateau (3 lignes) et l'oasis traversent la vue de départ : 11 cases (les Eau nagent en plus)
+        // à l'océan, l'eau libre compte (seuls les nageurs y vivent)
         var capacity = ParkService.CapacityOf(size - 1);
         var perPokemon = park switch { "plage-1" => 7, "desert-1" => 11, _ => 14 };
-        Assert.True(free.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {free.Count} cases libres pour {capacity} Pokémon");
+        Assert.True(passable.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {passable.Count} cases libres pour {capacity} Pokémon");
 
         // Comme parc.js : en diagonale seulement si les deux côtés sont libres
-        var reached = new HashSet<(int x, int y)> { free[0] };
+        // À l'océan, la vue de départ n'a pas de terre : parc.js part de l'eau en son centre (Ground.openLiquid)
+        var origin = park == "ocean-1" ? (sx + sw / 2, sy + sh / 2) : free[0];
+        Assert.Contains(origin, passable);
+        var reached = new HashSet<(int x, int y)> { origin };
         var queue = new Queue<(int x, int y)>(reached);
         while (queue.TryDequeue(out var c))
         {
@@ -146,6 +171,44 @@ public sealed class ParkMapTests
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, map).Mood);
         Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, map).Mood);
         Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, map).Mood);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Ocean_IsAlmostAllWater_WithThreeIsletsToWalkOn(int size)
+    {
+        // Choix de l'utilisateur : un océan, sans plage, avec trois îlots d'herbe où les nageurs sortent de l'eau (pas
+        // bloqués), aucun dans la vue de départ. Rien d'autre : les Eau y sont heureux, les Feu malheureux (seuls les
+        // Feu/Eau y viennent).
+        var json = Json("ocean-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var total = habitats.Area.W * habitats.Area.H;
+        Assert.True(habitats.Counts[Habitat.Water] * 100 / total >= 95);
+        Assert.Equal(total, habitats.Counts[Habitat.Water] + habitats.Counts[Habitat.Vegetation]);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, habitats).Mood);
+
+        // La terre des îlots est libre, et rien d'autre : le reste est de l'eau libre, ou porte un rocher (bloqué ; la carte
+        // entière compte en plus sa bordure de récif)
+        var map = Map("ocean-1", size);
+        var free = FreeTiles(map);
+        var (x0, y0, w, h) = Zone(map, "Parc");
+        var land = Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
+            .Where(c => habitats.At(c.x, c.y) == Habitat.Vegetation).ToHashSet();
+        Assert.True(land.SetEquals(free));
+        Assert.Equal(size == 1, land.Count == 0);
+        Assert.True(OpenWater("ocean-1", size).Count * 10 > total * (size == 4 ? 6 : 7));
+
+        // Rochers animés (animations de Tiled, jouées par parc.js) ; pas de remous d'écume (retirés à la demande de
+        // l'utilisateur)
+        var animated = map.GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).Order().ToList();
+        Assert.Equal(6, animated.Count);
+        Assert.All(animated, image => Assert.Contains("_Water_Anim", image));
     }
 
     [Theory]

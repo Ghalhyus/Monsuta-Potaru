@@ -64,7 +64,11 @@ GRASS_TILES = {**{i: "Aucun" for i in (80, 81, 82, 96, 97, 98, 112, 113, 114, 12
 DESERT_CLIFF_TILES = {**{r * 13 + c: "Sable" for r in range(5, 11) for c in range(7, 13)},
                       **{i: "Aucun" for i in (20, 33, 46, 72, 22, 23, 24, 35, 36, 37, 48, 49, 50)},
                       **{i: DECOR for i in (79, 80, 81, 92, 94, 105, 106, 107)}}
+# Rivages des îlots (Water_Stone_Tile, 3 × 5 tuiles : le bord passe au milieu des cases) : de l'eau, sauf les cases à
+# trois coins d'herbe (0, 2, 6, 8), où l'on marche (outils/generer-ocean.py)
+WATER_STONE_TILES = {i: "Végétation" for i in (0, 2, 6, 8)}
 HABITAT_RULES = [
+    (r"Cute_Fantasy/Tiles/Water/Water_Stone_Tile_\d\.png$", ("Eau", WATER_STONE_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Path_", "Aucun"),
     (r"Cute_Fantasy/Tiles/Grass/", "Végétation"),

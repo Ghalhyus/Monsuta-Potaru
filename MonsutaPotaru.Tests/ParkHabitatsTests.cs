@@ -195,12 +195,14 @@ public sealed class ParkHabitatsTests
             Assert.Null(ParkHabitats.Map(landscape, ParkService.MaxExpansions + 2));
         }
         // La plage : surtout de l'eau, la forêt : surtout de la végétation, le volcan : du volcan partout, le désert : surtout
-        // du sable
+        // du sable, l'océan : presque que de l'eau
         var volcano = ParkHabitats.Map(ParkLandscape.Volcano, 1)!;
         Assert.True(volcano.Counts[Habitat.Volcano] * 10 > volcano.Area.W * volcano.Area.H * 9);
         var desert = ParkHabitats.Map(ParkLandscape.Desert, 1)!;
         Assert.True(desert.Counts[Habitat.Sand] * 2 > desert.Area.W * desert.Area.H);
         Assert.True(ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Water] > ParkHabitats.Map(ParkLandscape.Beach, 1)!.Counts[Habitat.Sand]);
         Assert.True(ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Vegetation] > ParkHabitats.Map(ParkLandscape.Forest, 1)!.Counts[Habitat.Water]);
+        var ocean = ParkHabitats.Map(ParkLandscape.Ocean, 1)!;
+        Assert.True(ocean.Counts[Habitat.Water] * 10 > ocean.Area.W * ocean.Area.H * 8);
     }
 }

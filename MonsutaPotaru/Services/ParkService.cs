@@ -19,8 +19,10 @@ public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, str
 /// <param name="InPark">Il vit dans le parc affiché.</param>
 /// <param name="HasSprites">SpriteCollab a ses sprites Donjon Mystère : sinon, grisé (64 espèces récentes n'en ont pas encore).</param>
 /// <param name="OtherPark">Paysage de l'autre parc où il vit (le choisir l'en fait partir) ; null s'il n'est dans aucun autre.</param>
+/// <param name="Refusal">Ce qui l'empêche de vivre dans ce paysage (« Ne nage pas » pour l'océan,
+/// <see cref="ParkLandscapes.Refusal"/>) : grisé ; null s'il peut y aller.</param>
 public sealed record ParkCandidate(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
-    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites, ParkLandscape? OtherPark = null);
+    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites, ParkLandscape? OtherPark = null, string? Refusal = null);
 
 /// <summary>Parc d'un joueur, pour la liste déroulante de la page.</summary>
 /// <param name="Count">Pokémon qui y vivent.</param>
@@ -224,11 +226,13 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
 
     /// <summary>
     /// Pokémon qui peuvent aller dans ce parc (sans les œufs), filtrés comme dans « Ma collection » (pastilles), par numéro
-    /// de Pokédex ; ceux d'un autre parc du joueur portent son paysage.
+    /// de Pokédex ; ceux d'un autre parc du joueur portent son paysage, ceux que ce paysage refuse (un Pokémon qui ne nage
+    /// pas, pour l'océan) la raison.
     /// </summary>
     public async Task<List<ParkCandidate>> ListCandidatesAsync(string ownerId, int parkId, PokemonCriteria? criteria = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
+        var landscape = (await FindAsync(db, ownerId, parkId))?.Landscape ?? ParkLandscape.Forest;
         var placed = await db.ParkMembers.AsNoTracking().Where(m => m.OwnerId == ownerId)
             .Select(m => new { m.BankPokemonId, m.ParkId, m.Park!.Landscape })
             .ToDictionaryAsync(m => m.BankPokemonId);
@@ -237,7 +241,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             query = criteria.Apply(query);
         var candidates = await query
             .OrderBy(p => p.Species).ThenByDescending(p => p.Level).ThenBy(p => p.Id)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.StoredSaveId })
+            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.StoredSaveId, p.Type1, p.Type2 })
             .ToListAsync();
         return candidates.Select(p =>
         {
@@ -245,7 +249,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             return new ParkCandidate(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
                 PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny),
                 p.StoredSaveId, home?.ParkId == parkId, PokemonSprites.HasDonjonSprites(p.Species),
-                home is not null && home.ParkId != parkId ? home.Landscape : null);
+                home is not null && home.ParkId != parkId ? home.Landscape : null, ParkLandscapes.Refusal(landscape, p.Type1, p.Type2));
         }).ToList();
     }
 
@@ -253,7 +257,8 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     /// Remplace les Pokémon du parc par <paramref name="ids"/> (choix de la fenêtre « Choisir les Pokémon ») : ceux qui y
     /// restent gardent leur place, les nouveaux arrivent après ; ceux d'un autre parc du joueur le quittent pour venir ici.
     /// Un parc qui a plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite, 20 depuis) les garde : on
-    /// peut en retirer, pas en ajouter tant qu'il dépasse.
+    /// peut en retirer, pas en ajouter tant qu'il dépasse. Un Pokémon que le paysage refuse (<see cref="ParkLandscapes.Refusal"/>)
+    /// est refusé ici aussi : la liste vient du navigateur.
     /// </summary>
     public async Task<ParkResult> SetAsync(string ownerId, int parkId, IReadOnlyCollection<int> ids)
     {
@@ -269,11 +274,13 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
                 return new(false, $"Le parc accueille {capacity} Pokémon au plus : retires-en {wanted.Count - capacity}.");
         }
 
-        var eligible = await Eligible(db, ownerId).Where(p => wanted.Contains(p.Id)).Select(p => new { p.Id, p.Species, p.SpeciesName }).ToListAsync();
+        var eligible = await Eligible(db, ownerId).Where(p => wanted.Contains(p.Id)).Select(p => new { p.Id, p.Species, p.SpeciesName, p.Type1, p.Type2 }).ToListAsync();
         if (eligible.Count != wanted.Count)
             return new(false, "Seuls tes Pokémon (pas les œufs) peuvent aller au parc.");
         if (eligible.FirstOrDefault(p => !PokemonSprites.HasDonjonSprites(p.Species)) is { } withoutSprites)
             return new(false, $"{withoutSprites.SpeciesName} n'a pas encore de sprites Donjon Mystère : il ne peut pas aller au parc.");
+        if (eligible.FirstOrDefault(p => ParkLandscapes.Refusal(park.Landscape, p.Type1, p.Type2) is not null) is { } refused)
+            return new(false, RefusalMessage(refused.SpeciesName, park.Landscape));
 
         await using var tx = await db.Database.BeginTransactionAsync();
         var now = DateTime.UtcNow;
@@ -316,6 +323,10 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             ? "Le parc est vide : son Pokémon reste dans ta collection."
             : $"Le parc est vide : ses {count} Pokémon restent dans ta collection.");
     }
+
+    /// <summary>Message d'un Pokémon que ce paysage refuse (fenêtre de choix et <see cref="SetAsync"/>).</summary>
+    public static string RefusalMessage(string speciesName, ParkLandscape landscape) =>
+        $"{speciesName} ne nage pas : seuls les Pokémon qui nagent (type Eau) peuvent vivre {ParkLandscapes.Where(landscape)}.";
 
     private static IQueryable<BankPokemon> Eligible(ApplicationDbContext db, string ownerId) =>
         db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == ownerId && !p.IsEgg && p.Species >= 1);

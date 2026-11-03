@@ -217,7 +217,8 @@ class Ground {
      * Eau libre (<bit> WATER dans walkable, <habitat> 5) ou lave libre (LAVA, 7) : les cases de ce type bloquées sans objet
      * posé dessus (rocher, nénuphar, récif, pont ; les bulles de lave sont dans un autre calque), et les cases bloquées sans
      * objet qui les touchent (écume au bord du sable : pour entrer dans l'eau et en sortir). Seulement ce qui est relié à
-     * la terre où l'on marche (pas de mare enfermée entre des rochers). Rend ces cases.
+     * la terre où l'on marche (pas de mare enfermée entre des rochers) ; sans terre (l'océan, vue de départ), à la case de
+     * ce type la plus proche du centre de la vue de départ. Rend ces cases.
      */
     openLiquid(collisions, decors, front, habitat, bit) {
         const { columns } = this, { x: sx, y: sy, w: sw, h: sh } = this.area;
@@ -240,6 +241,18 @@ class Ground {
                     open[y * columns + x] = 2; // le bord (pas déjà pris par l'autre liquide)
         // Reliée à la terre : de proche en proche (par les côtés) depuis les cases où l'on marche
         const cells = [], queue = [...this.free], seen = new Uint8Array(columns * this.lines);
+        if (!queue.length) {
+            const cx = this.start.x + this.start.w / 2, cy = this.start.y + this.start.h / 2;
+            let first = -1, best = Infinity;
+            for (let i = 0; i < open.length; i++) {
+                const d = (i % columns + 0.5 - cx) ** 2 + (Math.floor(i / columns) + 0.5 - cy) ** 2;
+                if (open[i] === 1 && !this.walkable[i] && d < best) { first = i; best = d; }
+            }
+            if (first < 0) return cells;
+            this.walkable[first] = bit;
+            cells.push(first);
+            queue.push(first);
+        }
         for (const i of queue) seen[i] = 1;
         while (queue.length) {
             const i = queue.pop(), x = i % columns, y = Math.floor(i / columns);
@@ -278,7 +291,7 @@ class Ground {
      */
     randomSpot(where = LAND) {
         const liquid = where === WATER ? this.water : where === LAVA ? this.lava : where === LIQUID ? this.liquid : this.free;
-        const cells = liquid.length ? liquid : this.free;
+        const cells = liquid.length ? liquid : this.free.length ? this.free : this.liquid; // sans terre (océan) : l'eau
         if (!cells.length) return { x: this.width / 2, y: this.height / 2 };
         const c = this.center(cells[Math.floor(Math.random() * cells.length)]);
         return { x: c.x + random(-4, 4), y: c.y + random(-4, 4) };
@@ -445,9 +458,9 @@ class Pokemon {
     get reach() { return LAND | (this.swims ? WATER : 0) | (this.bathes ? LAVA : 0); }
     /** Où il peut dormir : pas dans la lave. */
     get bed() { return LAND | (this.swims ? WATER : 0); }
-    /** Où il part se promener : un nageur va surtout dans l'eau, un type Feu de temps en temps dans la lave. */
+    /** Où il part se promener : un nageur va surtout dans l'eau (toujours, sans terre), un type Feu de temps en temps dans la lave. */
     destination() {
-        if (this.swims && this.ground.water.length && Math.random() < SWIM.waterShare) return WATER;
+        if (this.swims && this.ground.water.length && (!this.ground.free.length || Math.random() < SWIM.waterShare)) return WATER;
         if (this.bathes && this.ground.lava.length && Math.random() < LAVA_BATH.share) return LAVA;
         return LAND;
     }

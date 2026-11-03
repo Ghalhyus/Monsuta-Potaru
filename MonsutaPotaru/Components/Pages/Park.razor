@@ -160,6 +160,10 @@ else
                 {
                     @($"Ceux d'un autre parc ({string.Join(", ", parks.Where(p => p.Id != ParkId).Select(p => $"{ParkLandscapes.Icon(p.Landscape)} {ParkLandscapes.Where(p.Landscape)}"))}) le quittent pour venir ici.")
                 }
+                @if (current?.Landscape == ParkLandscape.Ocean)
+                {
+                    @(" Dans l'océan, seuls ceux qui nagent (type Eau) peuvent vivre : les autres sont grisés.")
+                }
             </p>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <input type="search" class="form-control form-control-sm flex-grow-1 w-auto" placeholder="Rechercher (espèce ou surnom)…"
@@ -188,11 +192,11 @@ else
                     {
                         var c = candidate;
                         <PokemonSlot Sprite="@c.SpriteUrl"
-                                     Title="@($"{c.Nickname} ({c.SpeciesName}) N.{c.Level}{(c.StoredSaveId is null ? "" : " — sauvegarde stockée")}{(c.OtherPark is { } other ? $" — vit {ParkLandscapes.Where(other)}" : "")}{(c.HasSprites ? "" : " — pas encore de sprite")}")"
+                                     Title="@($"{c.Nickname} ({c.SpeciesName}) N.{c.Level}{(c.StoredSaveId is null ? "" : " — sauvegarde stockée")}{(c.OtherPark is { } other ? $" — vit {ParkLandscapes.Where(other)}" : "")}{(c.HasSprites ? "" : " — pas encore de sprite")}{(c.Refusal is { } refusal ? $" — {refusal.ToLowerInvariant()}" : "")}")"
                                      Level="c.Level"
                                      Shiny="c.IsShiny"
                                      Marker="@Marker(c)"
-                                     Locked="@(!c.HasSprites)"
+                                     Locked="@(!c.HasSprites || c.Refusal is not null)"
                                      Selected="@chosen.Contains(c.Id)"
                                      OnClick="() => Toggle(c)" />
                     }
@@ -628,6 +632,8 @@ else
             return;
         if (!c.HasSprites)
             chooserMessage = $"{c.SpeciesName} n'a pas encore de sprites Donjon Mystère : il ne peut pas venir au parc pour l'instant.";
+        else if (c.Refusal is not null)
+            chooserMessage = ParkService.RefusalMessage(c.SpeciesName, current?.Landscape ?? ParkLandscape.Ocean);
         else if (chosen.Count >= Capacity && !c.InPark) // un parc déjà trop plein garde ses Pokémon : on peut les recocher
             chooserMessage = $"Le parc est plein ({Capacity} Pokémon) : retires-en un avant d'en ajouter un autre" +
                              (expansions < ParkService.MaxExpansions ? ", ou agrandis-le." : ".");
