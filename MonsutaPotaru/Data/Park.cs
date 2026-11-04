@@ -13,6 +13,8 @@ public enum ParkLandscape
     Desert = 4,
     /// <summary>La pleine mer et trois îlots, seulement pour les Pokémon qui nagent (cartes ocean-1-{taille}).</summary>
     Ocean = 5,
+    /// <summary>Une caverne dans la pénombre, ses piliers de roche, ses cristaux et un lac souterrain (cartes grotte-1-{taille}).</summary>
+    Cave = 6,
 }
 
 /// <summary>

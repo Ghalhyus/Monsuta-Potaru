@@ -10,12 +10,13 @@
 // « Parc » (la taille achetée : forêt dense autour, assombrie) ; on la parcourt en faisant glisser la vue. Les types Eau
 // nagent dans l'eau libre (surtout là), les types Feu vont de temps en temps dans la lave libre, les types Vol survolent
 // l'une et l'autre mais se posent sur la terre ferme (ParkPokemon.Moves). Les tuiles animées de la carte (cascades de lave,
-// bulles) sont jouées par-dessus la carte dessinée.
+// bulles, torches) sont jouées par-dessus la carte dessinée ; une grotte est dans la pénombre, éclairée par ses torches et
+// ses cristaux (calque « Lumières »).
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 
 // Carte : coordonnées du parc en pixels de la carte (16 par tuile). La hauteur affichée est celle de la zone « Départ »
 // (320 pixels), à un nombre entier de pixels d'écran par pixel de carte (dessin net). Une carte par paysage (« parc-1 »,
-// « plage-1 », « volcan-1 » : ParkLandscapes.MapName) et par taille du parc (1 à 4, agrandissements achetés + 1, ParkService), toutes de
+// « plage-1 », « volcan-1 », « grotte-1 »... : ParkLandscapes.MapName) et par taille du parc (1 à 4, agrandissements achetés + 1, ParkService), toutes de
 // la même taille pour un paysage : seule la zone « Parc » et ce qui la cache autour changent.
 const MAP_URL = (map, size) => `parc/${map}-${size}.json`;
 const VIEW_MARGIN = 6; // cases de forêt qu'on peut voir au-delà de la zone « Parc » en faisant glisser la vue
@@ -37,6 +38,10 @@ const FOG = { color: 0x0b1222, alpha: 0.18, steps: 4 };
 // Entre 2 et 3 : au-dessus de la carte (0) et des ombres (1,9), sous le brouillard (3) et la nuit (4).
 const depthOf = y => 2 + y / 10000;
 const NIGHT = { color: 0x101848, alpha: 0.38 };
+// Pénombre d'une grotte (calque d'objets « Lumières » de la carte : torches, cristaux) : un voile sombre sur tout, devant les
+// Pokémon et sous le brouillard, éclairci autour de chaque lumière (clear : part du voile retirée au centre) qui y ajoute un
+// peu de sa couleur (glow) ; dessinée une seule fois
+const SHADE = { color: 0x0a0510, alpha: 0.55, depth: 2.9, clear: 0.9, glow: 0.3 };
 const HABITAT_DEPTH = 3.2; // types de cases (mode debug) : devant le brouillard, sous un Pokémon soulevé et la nuit
 const HABITAT_ALPHA = 0.45;
 const ANIMATED_DEPTH = 0.5; // tuiles animées : sur la carte (0), sous les ombres (1,9)
@@ -702,7 +707,9 @@ export async function create(container, component, options) {
         camera = s.cameras.main;
         game.canvas.classList.add("park-canvas");
         game.canvas.addEventListener("wheel", onWheel, { passive: false });
-        s.add.rectangle(0, 0, ground.width, ground.height, GRASS).setOrigin(0).setDepth(-1); // sous la carte (planches absentes)
+        // Sous la carte : sa couleur de fond (la roche d'une grotte, là où le sol est transparent), ou de l'herbe (planches absentes)
+        const background = data?.backgroundcolor ? parseInt(data.backgroundcolor.slice(-6), 16) : GRASS;
+        s.add.rectangle(0, 0, ground.width, ground.height, background).setOrigin(0).setDepth(-1);
         // La carte ne bouge pas : ses calques sont dessinés une seule fois, dans une image sous les Pokémon (sol, décors), des
         // morceaux de feuillages triés avec eux (foliage) et une image devant tout (brouillard). Des calques de tuiles
         // redessinés à chaque image créaient des dizaines de Ko de déchets par image : petites saccades au passage du
@@ -737,7 +744,8 @@ export async function create(container, component, options) {
         }
         above.draw(fog);
         fog.destroy();
-        night = s.add.rectangle(0, 0, ground.width, ground.height, NIGHT.color).setOrigin(0).setDepth(4).setVisible(false);
+        shade(s);
+        night =s.add.rectangle(0, 0, ground.width, ground.height, NIGHT.color).setOrigin(0).setDepth(4).setVisible(false);
         label = s.add.graphics().setDepth(6).setVisible(false);
         labelText = s.add.text(0, 0, "", { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "8px", color: "#ffffff", resolution: k })
             .setDepth(6.1).setVisible(false);
@@ -748,6 +756,38 @@ export async function create(container, component, options) {
         const start = ground.start;
         camera.centerOn((start.x + start.w / 2) * TILE, (start.y + start.h / 2) * TILE); // vue de départ : la zone « Départ »
         listen(s);
+    }
+
+    /**
+     * Pénombre d'une grotte : si la carte a un calque d'objets « Lumières » (un point par lumière, propriétés « rayon » en
+     * pixels de la carte et « couleur »), un voile sombre dessiné une fois dans une image, où chaque lumière efface un
+     * dégradé rond, et une image de ce dégradé, teinte de sa couleur, ajoutée par-dessus (rien de recalculé ensuite).
+     */
+    function shade(s) {
+        const lights = data?.layers.find(l => l.name === "Lumières" && l.type === "objectgroup")?.objects;
+        if (!lights) return;
+        if (!s.textures.exists("lumiere")) { // dégradé rond, opaque au centre (une texture par jeu de Phaser)
+            const size = 128, texture = s.textures.createCanvas("lumiere", size, size), context = texture.getContext();
+            const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+            gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+            gradient.addColorStop(0.45, "rgba(255, 255, 255, 0.6)");
+            gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, size, size);
+            texture.refresh();
+        }
+        const veil = s.add.renderTexture(0, 0, ground.width, ground.height).setOrigin(0).setDepth(SHADE.depth);
+        veil.fill(SHADE.color, SHADE.alpha);
+        const stamp = s.make.image({ key: "lumiere", add: false });
+        for (const light of lights) {
+            const property = name => light.properties?.find(p => p.name === name)?.value;
+            const radius = property("rayon") ?? 64, color = parseInt(String(property("couleur") ?? "#ffffff").slice(-6), 16);
+            stamp.setPosition(light.x, light.y).setDisplaySize(2 * radius, 2 * radius).setAlpha(SHADE.clear);
+            veil.erase(stamp);
+            s.add.image(light.x, light.y, "lumiere").setDisplaySize(2 * radius, 2 * radius).setTint(color)
+                .setAlpha(SHADE.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHADE.depth + 0.01);
+        }
+        stamp.destroy();
     }
 
     /**

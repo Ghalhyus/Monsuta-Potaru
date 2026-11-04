@@ -24,7 +24,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
-  dans `generer-plage.py`, `generer-volcan.py`, `generer-desert.py` et `generer-ocean.py` (2,4 donnait une seule rangée trouée). Compter large : une case cachée sans décor reste libre, et
+  dans `generer-plage.py`, `generer-volcan.py`, `generer-desert.py` et `generer-ocean.py` (2,4 donnait une seule rangée trouée) ;
+  grotte : 3,6 ± 1 de roche (plus l'anneau de pierres, et le mur sous le bord du haut). Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
@@ -81,7 +82,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   Pokémon).
 - **Moteur commun** `outils/parc_carte.py` (classe `Carte` : jeux de tuiles, `animer` (tuiles animées de Tiled, écrites
   dans le jeu de tuiles du `.tmx`), calques, `poser`, `essayer`, `boucher_poches(zone, decors, bloque, remplissage)`,
-  `ecrire_carte` (`autres` : calques de tuiles en plus, après « Collisions » ; sans eux, le `.tmx` est le même qu'avant),
+  `ecrire_carte` (`autres` : calques de tuiles en plus, après « Collisions » ; `fond` : couleur de fond ; `lumieres` : calque
+  d'objets « Lumières » ; sans eux, le `.tmx` est le même qu'avant),
   `apercu` ; fonctions de formes). Les générateurs
   gardent leur paysage et l'ordre de leurs tirages. Refonte du moteur : régénérer les deux parcs dans un dossier
   temporaire et comparer avec `cmp` (`.tmx` et aperçus identiques ; seuls les chemins des planches changent si le dossier
@@ -273,6 +275,56 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Essai du 2026-11-03 (instance de test, achat et choix dans la vraie page, puis 15 min simulées aux tailles 1, 2 et 4,
   20 nageurs) : taille 1, 100 % du temps dans l'eau, répartis sur toute la vue ; tailles 2 et 4, 72-77 %, tous montés sur
   un îlot ; aucune case interdite, la nuit endormis dans l'eau ou à terre. Plage inchangée (67 %).
+
+## Grotte (`outils/generer-grotte.py`, `ParkLandscape.Cave`, 2026-11-03)
+- `Grotte_1-1.tmx` à `Grotte_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `grotte-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `grotte-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : **grotte naturelle** (pas de rails ni de wagonnets), **un lac souterrain** qui grandit avec les
+  agrandissements, **pénombre et halos**, cristaux et minerais, stalagmites et rochers, torches animées. Tous les Pokémon
+  peuvent y aller.
+- **Planches** (`Cute_Fantasy/Tiles/Cave`, aucun exemple avec le pack, lues le 2026-11-03) :
+  - `Cave_Walls` (7 × 8) : deux anneaux de pierres qui passent **au milieu des cases** du bord d'une forme au milieu
+    transparent : colonnes 0-2 avec du sol autour (`BASSIN` : un creux, ici le lac, l'eau dans « Sol » dessous), colonnes
+    4-6 avec la roche sombre autour (`SALLE` : la salle où l'on marche, le sol dessous). Coins rentrants : les anneaux
+    2 × 2 des lignes 3-4 (SE SO NE NO = 21 22 28 29 et 25 26 32 33 : l'ovale est le dehors). Mur sous le bord du haut d'une
+    salle : 2 rangées (42/43/46/47 sur 49/50/53/54). Tuile 3 transparente.
+  - **Aucune tuile sombre unie** dans tout le pack (cherché) : la roche vue de dessus = tuile 3 transparente sur la couleur de
+    fond de la carte (`FOND` = `#391f21`, `backgroundcolor` du `.tmx`, lue par `parc.js` pour le rectangle sous la carte).
+  - `Cave_Water` : eau unie 6, pied du mur dans l'eau 32 (sous le bord du haut du lac, dans « Sol » : on y nage).
+    `Cave_Water_Animation` : ses 8 images sont **identiques** à la planche fixe (aucune animation, pas utilisée).
+  - Sol : `Cave_Floor_Middle` uni, plaques de fissures 3 × 3 de `Cave_Floor_1/2` (lignes 2-4, bords estompés ; les 2 × 2
+    serrées des lignes 0-1 font des carrés : retirées), `Cave_Floor_Decoration`. Objets : `Ores` colonnes 1-4 (les
+    colonnes 5-7 sont des objets ramassés), `Cave_Decorations` (rochers moussus, stalagmites), `Big_Torch_Anim` (1 × 3 :
+    flamme animée à 110 ms, manche, pied).
+- **Tuile animée sous un décor** : `parc.js` dessine les tuiles animées par-dessus « Décors ». D'où la flamme dans
+  « Décors » sans rien dessus, et l'eau du lac jamais animée.
+- **La salle de chaque taille** (`salle_de`) : la zone, plus une case dehors pour l'anneau (trois en haut : l'anneau et les
+  deux rangées de mur), avec un écart de 0 à 2 cases ; la zone reste libre (14 cases par Pokémon exigées : sinon l'anneau et
+  le mur prenaient un quart de la vue de départ). `adoucir` : salle et roche sans morceau de moins de 2 × 2.
+- **Lac** : `large` (couvert par des carrés 3 × 3, sans île enfermée) ; coupé à la salle de la taille, morceaux de 30 cases
+  au moins ; le sol d'un lac encore caché porte un éboulis (bloqué). **Les pierres du bord sont praticables** : `openLiquid`
+  de `parc.js` relie l'eau libre à la terre case par case, un bord bloqué rendait le lac inaccessible. Les pierres qui
+  deviendront de l'eau plus tard (bord d'un lac coupé) sont bloquées. Le script vérifie que toute l'eau touche le bord
+  praticable (`ParkMapTests` aussi). Eau libre : 0 / 4,5 / 8,7 / 5,6 % de la zone (la vue de départ n'en a pas : le lac
+  est dans l'anneau de la taille 2).
+- **Torches** (« réparties de manière uniforme, trop sont collées », 2026-11-04 ; au hasard : 4 cases d'écart au plus près,
+  rien à gauche) : grille en quinconce calée sur la vue de départ (`PAS_TORCHES` 15 × 12, trois dans la vue de départ),
+  chacune sur la place libre la plus proche de son nœud, `ECART_TORCHES` (9) cases au moins entre deux ; puis, **à chaque
+  taille**, une torche de plus au point le plus loin de celles qu'on y voit, tant qu'il dépasse `PORTEE_TORCHE` (14) : un
+  nœud sur un lac n'en a pas, et la torche d'à côté peut être encore cachée. 3 / 5 / 13 / 21 torches, écart mini 13 / 12 / 11 /
+  9,2 cases, case libre la plus loin 13,4 / 15,7 / 13,1 / 12,2 (`ParkMapTests` : 9 au moins, 16 au plus). Une torche à cheval
+  sur deux tailles ne serait jamais posée (elle prendrait une case libre de la taille d'avant) : `place_de_torche` l'écarte.
+  **L'ancien tirage reste dans le script** (`place_de_l_ancienne_torche`, cases rendues ensuite) : sans lui, le hasard de tous
+  les objets suivants change. Comparé calque par calque : seules les torches ont bougé.
+- **Pénombre** : calque d'objets « Lumières » (`ecrire_carte(lumieres=...)` : un point, propriétés `rayon` et `couleur`),
+  une lumière par torche (88 px, orangée) et par bouquet de cristaux (56 px, sa couleur), seulement pour les objets posés à
+  cette taille. `parc.js` (`shade`, `SHADE`) : une `RenderTexture` remplie du voile (profondeur 2,9 : devant les Pokémon,
+  sous le brouillard), un dégradé rond effacé par lumière (`erase`), puis une image du dégradé teinte, en mode `ADD`.
+  Dessinée une fois. La nuit s'ajoute par-dessus (vu le soir : plus bleu).
+- Essai du 2026-11-03 (instance de test : achat de la Grotte dans la vraie page, puis 15 min simulées aux tailles 1, 2 et 4,
+  8 Pokémon) : nageurs 61-65 % dans le lac (taille 2), 55-64 % (taille 4), 0 % à la taille 1 (pas d'eau) ; volant 4-9 %
+  au-dessus ; marcheurs jamais ; aucune case interdite. Forêt inchangée. Moteur commun : océan et volcan régénérés avec
+  l'ancien et le nouveau `parc_carte.py`, `.tmx` et aperçus identiques.
 
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :

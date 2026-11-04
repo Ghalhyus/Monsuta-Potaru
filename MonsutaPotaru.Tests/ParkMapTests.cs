@@ -6,7 +6,7 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py, generer-volcan.py, generer-desert.py ou generer-ocean.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
+/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py ou generer-grotte.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
 /// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage), et chaque agrandissement qui garde les cases libres de la
 /// taille d'avant.
 /// </summary>
@@ -15,8 +15,8 @@ public sealed class ParkMapTests
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert et l'océan.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan et la grotte.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -352,5 +352,70 @@ public sealed class ParkMapTests
             Assert.True(Water(x, bottom + 1), $"cascade en ({x}, {y}) sans eau en dessous");
         }
         Assert.Equal(1, middles); // une seule cascade, dans la vue de départ
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Cave_IsMostlyCave_WithALake_InTheDark(int size)
+    {
+        // Choix de l'utilisateur (2026-11-03) : une grotte naturelle, un lac souterrain qu'on découvre à la taille 2 et qui
+        // grandit ensuite, des cristaux, des stalagmites, des torches, et la pénombre. Surtout de la cave : Sol, Roche,
+        // Ténèbres, Spectre et Dragon heureux, Vol et Feu malheureux (feuille « Habitat »).
+        var json = Json("grotte-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var total = habitats.Area.W * habitats.Area.H;
+        Assert.True(habitats.Counts[Habitat.Cave] * 100 / total >= 85);
+        Assert.Equal(total, habitats.Counts[Habitat.Cave] + habitats.Counts[Habitat.Water]);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Rock, (byte)MoveType.Rock, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Flying, (byte)MoveType.Flying, habitats).Mood);
+        Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Normal, (byte)MoveType.Normal, habitats).Mood);
+
+        // Le lac : de l'eau libre à partir de la taille 2, où les nageurs entrent depuis les pierres du bord (comme
+        // parc.js : de proche en proche par les côtés, depuis une case libre)
+        var map = Map("grotte-1", size);
+        var free = FreeTiles(map);
+        var water = OpenWater("grotte-1", size);
+        Assert.Equal(size == 1, water.Count == 0);
+        var reached = new HashSet<(int x, int y)>(free);
+        var queue = new Queue<(int x, int y)>(free);
+        while (queue.TryDequeue(out var c))
+            foreach (var n in new[] { (c.x + 1, c.y), (c.x - 1, c.y), (c.x, c.y + 1), (c.x, c.y - 1) })
+                if (water.Contains(n) && reached.Add(n)) queue.Enqueue(n);
+        Assert.True(water.All(reached.Contains), "eau du lac où les nageurs n'entrent pas");
+
+        // La roche vue de dessus : des cases transparentes sur la couleur de fond de la carte ; la pénombre : des lumières
+        // dans la carte (torches, cristaux), chacune avec un rayon et une couleur
+        Assert.Equal("#391f21", map.GetProperty("backgroundcolor").GetString());
+        var lights = map.GetProperty("layers").EnumerateArray()
+            .Single(l => l.GetProperty("name").GetString() == "Lumières").GetProperty("objects").EnumerateArray().ToList();
+        Assert.True(lights.Count >= 5);
+        Assert.All(lights, light =>
+        {
+            var properties = light.GetProperty("properties").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
+            Assert.Equal(["couleur", "rayon"], properties);
+            Assert.InRange(light.GetProperty("x").GetDouble(), 0, map.GetProperty("width").GetInt32() * Tile);
+            Assert.InRange(light.GetProperty("y").GetDouble(), 0, map.GetProperty("height").GetInt32() * Tile);
+        });
+
+        // Torches réparties régulièrement (demande de l'utilisateur, 2026-11-04 : au hasard, elles se collaient et laissaient
+        // des coins sans lumière) : jamais à moins de 9 cases l'une de l'autre, aucune case libre à plus de 16 cases d'une torche
+        var torches = lights.Where(light => light.GetProperty("properties").EnumerateArray()
+                .Single(p => p.GetProperty("name").GetString() == "rayon").GetProperty("value").GetInt32() == 88)
+            .Select(light => (X: light.GetProperty("x").GetDouble() / Tile, Y: light.GetProperty("y").GetDouble() / Tile)).ToList();
+        Assert.True(torches.Count >= 3);
+        double Distance(double ax, double ay, double bx, double by) => Math.Sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by));
+        var closest = torches.SelectMany((a, i) => torches.Take(i).Select(b => Distance(a.X, a.Y, b.X, b.Y))).Min();
+        Assert.True(closest >= 9, $"deux torches à {closest:0.0} cases");
+        var farthest = free.Max(c => torches.Min(torch => Distance(c.x + 0.5, c.y + 0.5, torch.X, torch.Y)));
+        Assert.True(farthest <= 16, $"une case libre à {farthest:0.0} cases de la torche la plus proche");
+
+        // Torches animées (animations de Tiled, jouées par parc.js), rien d'autre
+        var animated = map.GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).ToList();
+        Assert.Equal(["Big_Torch_Anim.png"], animated);
     }
 }

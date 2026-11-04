@@ -1,5 +1,5 @@
 # Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py, generer-volcan.py, generer-desert.py,
-# generer-ocean.py) avec le pack Cute Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes
+# generer-ocean.py, generer-grotte.py) avec le pack Cute Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes
 # (bruit, taches, nettoyage), bordures automatiques, objets posés, poches enfermées, écriture des .tmx pour Tiled et aperçus
 # en PNG. Chaque générateur garde ce qui fait son paysage (formes, objets, ce qui cache la partie pas encore achetée) et
 # l'ordre de ses tirages : relancé sans changement, il redonne les mêmes cartes.
@@ -258,17 +258,23 @@ class Carte:
         return gardees
 
     # --- Écriture des .tmx et aperçus ---
-    def ecrire_carte(self, sortie, fichier, depart, zone, sol_, decors_, devant_, bloque_, autres=()):
-        """Écrit le .tmx d'une taille. autres : calques de tuiles en plus, [(nom, grille)], après « Collisions »."""
+    def ecrire_carte(self, sortie, fichier, depart, zone, sol_, decors_, devant_, bloque_, autres=(), fond=None,
+                     lumieres=()):
+        """Écrit le .tmx d'une taille. autres : calques de tuiles en plus, [(nom, grille)], après « Collisions » ; fond :
+        couleur sous les tuiles (« #rrggbb », visible là où le sol est transparent) ; lumieres : calque d'objets
+        « Lumières » (pénombre de parc.js), [(x, y, rayon en pixels de la carte, « #rrggbb »)...]. Sans les deux derniers,
+        le .tmx est le même qu'avant."""
         os.makedirs(sortie, exist_ok=True)
         Image.new("RGBA", (16, 16), (230, 40, 40, 255)).save(os.path.join(sortie, "collisions.png"))
         relatif = os.path.relpath(self.pack, sortie).replace("\\", "/")
         L, H = self.L, self.H
         collisions = [[self.gid_collision if bloque_[y][x] else 0 for x in range(L)] for y in range(H)]
+        couleur = f' backgroundcolor="{fond}"' if fond else ""
         morceaux = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             f'<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="{L}" '
-            f'height="{H}" tilewidth="16" tileheight="16" infinite="0" nextlayerid="{6 + len(autres)}" nextobjectid="3">',
+            f'height="{H}" tilewidth="16" tileheight="16" infinite="0"{couleur} '
+            f'nextlayerid="{6 + len(autres) + (1 if lumieres else 0)}" nextobjectid="{3 + len(lumieres)}">',
         ]
         for nom, chemin_, w, h in self.jeux:
             morceaux.extend([f' <tileset firstgid="{self.premier[nom]}" name="{nom}" tilewidth="16" tileheight="16" '
@@ -294,8 +300,20 @@ class Carte:
         morceaux.extend([f' <objectgroup id="{5 + len(autres)}" name="Zones">',
                          rectangle(1, "Départ", depart),
                          rectangle(2, "Parc", zone),
-                         ' </objectgroup>',
-                         '</map>'])
+                         ' </objectgroup>'])
+        # « Lumières » : un point par lumière, son rayon et sa couleur en propriétés (lus par parc.js)
+        if lumieres:
+            morceaux.append(f' <objectgroup id="{6 + len(autres)}" name="Lumières">')
+            for i, (x, y, rayon, teinte) in enumerate(lumieres, 3):
+                morceaux.extend([f'  <object id="{i}" x="{x}" y="{y}">',
+                                 '   <properties>',
+                                 f'    <property name="couleur" type="color" value="#ff{teinte[1:]}"/>',
+                                 f'    <property name="rayon" type="int" value="{rayon}"/>',
+                                 '   </properties>',
+                                 '   <point/>',
+                                 '  </object>'])
+            morceaux.append(' </objectgroup>')
+        morceaux.append('</map>')
         with open(os.path.join(sortie, fichier), "w", encoding="utf-8") as f:
             f.write("\n".join(morceaux) + "\n")
 
@@ -307,10 +325,10 @@ class Carte:
         i, cols = g - self.premier[nom], self.colonnes(nom)
         return self.planches[nom].crop(((i % cols) * 16, (i // cols) * 16, (i % cols) * 16 + 16, (i // cols) * 16 + 16))
 
-    def apercu(self, dossier, nom, grilles_, bloque_):
+    def apercu(self, dossier, nom, grilles_, bloque_, fond=(0, 0, 0)):
         """Aperçus (pour vérifier, pas pour Tiled) : la carte, et la même avec les cases bloquées en rouge
-        (<nom>.png, <nom>_collisions.png)."""
-        image = Image.new("RGBA", (self.L * 16, self.H * 16), (0, 0, 0, 255))
+        (<nom>.png, <nom>_collisions.png). fond : couleur sous les tuiles (r, v, b)."""
+        image = Image.new("RGBA", (self.L * 16, self.H * 16), (*fond, 255))
         for grille in grilles_:
             for y in range(self.H):
                 for x in range(self.L):

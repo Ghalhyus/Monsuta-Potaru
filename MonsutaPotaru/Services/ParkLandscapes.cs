@@ -18,6 +18,7 @@ public static class ParkLandscapes
         ParkLandscape.Volcano => "Volcan",
         ParkLandscape.Desert => "Désert",
         ParkLandscape.Ocean => "Océan",
+        ParkLandscape.Cave => "Grotte",
         _ => "Forêt",
     };
 
@@ -28,6 +29,7 @@ public static class ParkLandscapes
         ParkLandscape.Volcano => "au volcan",
         ParkLandscape.Desert => "dans le désert",
         ParkLandscape.Ocean => "dans l'océan",
+        ParkLandscape.Cave => "dans la grotte",
         _ => "dans la forêt",
     };
 
@@ -38,6 +40,7 @@ public static class ParkLandscapes
         ParkLandscape.Volcano => "🌋",
         ParkLandscape.Desert => "🏜️",
         ParkLandscape.Ocean => "🌊",
+        ParkLandscape.Cave => "🦇",
         _ => "🌳",
     };
 
@@ -48,6 +51,7 @@ public static class ParkLandscapes
         ParkLandscape.Volcano => "volcan-1",
         ParkLandscape.Desert => "desert-1",
         ParkLandscape.Ocean => "ocean-1",
+        ParkLandscape.Cave => "grotte-1",
         _ => "parc-1",
     };
 
@@ -62,6 +66,9 @@ public static class ParkLandscapes
                                 "le royaume des types Sol, bien moins celui des Pokémon qui craignent le sable.",
         ParkLandscape.Ocean => "La pleine mer à perte de vue, quelques rochers et trois îlots au loin : seuls les Pokémon qui nagent (type Eau) " +
                                "peuvent y vivre, et ils y sont comme chez eux.",
+        ParkLandscape.Cave => "Une grande caverne dans la pénombre, éclairée par des torches et des cristaux, avec ses stalagmites et un lac " +
+                              "souterrain : le refuge des types Sol, Roche, Ténèbres, Spectre et Dragon, bien moins celui des Pokémon " +
+                              "qui aiment le grand air.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -72,6 +79,7 @@ public static class ParkLandscapes
         ParkLandscape.Volcano => "Les rochers reculent et dévoilent une nouvelle partie du volcan",
         ParkLandscape.Desert => "Les cactus reculent et dévoilent une nouvelle partie du désert",
         ParkLandscape.Ocean => "Le récif recule et dévoile une nouvelle partie de l'océan",
+        ParkLandscape.Cave => "La roche recule et dévoile une nouvelle partie de la grotte",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
     };
 
