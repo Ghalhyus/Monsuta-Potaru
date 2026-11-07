@@ -72,6 +72,9 @@ SEWER_TILES = {i: "Eau" for i in (13, 14, 16, 17, 18, 29, 30, 31, 42, 43, 44,
 # Rivages des îlots (Water_Stone_Tile, 3 × 5 tuiles : le bord passe au milieu des cases) : de l'eau, sauf les cases à
 # trois coins d'herbe (0, 2, 6, 8), où l'on marche (outils/generer-ocean.py)
 WATER_STONE_TILES = {i: "Végétation" for i in (0, 2, 6, 8)}
+# Sable des îlots de l'océan (deuxième groupe de Beach_Tiles, 30 × 3 tuiles) : son bord d'écume est surtout de l'eau, on y
+# nage (outils/generer-ocean.py) ; la plage prend le premier groupe, dont l'écume reste du sable
+BEACH_TILES = {i: "Eau" for i in (5, 6, 7, 35, 37, 65, 66, 67, 8, 9, 38, 39)}
 HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Water/Water_Stone_Tile_\d\.png$", ("Eau", WATER_STONE_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),
@@ -82,6 +85,7 @@ HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Cliff/", "Falaise"),
     (r"Cute_Fantasy/Tiles/Cave/Cave_Water", "Eau"),
     (r"Cute_Fantasy/Tiles/Cave/", "Cave"),
+    (r"Cute_Fantasy/Tiles/Beach/Beach_Tiles\.png$", ("Sable", BEACH_TILES)),
     (r"Cute_Fantasy/Tiles/Beach/", "Sable"),
     (r"Cute_Fantasy/Tiles/(Bridge/|Cobble_Road/|Pavement_|Wooden_Deck_)", "Aucun"),
     (r"Cute_Fantasy/Tiles/Picnic_", DECOR),

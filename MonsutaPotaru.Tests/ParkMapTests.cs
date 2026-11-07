@@ -201,24 +201,24 @@ public sealed class ParkMapTests
     [InlineData(4)]
     public void Ocean_IsAlmostAllWater_WithThreeIsletsToWalkOn(int size)
     {
-        // Choix de l'utilisateur : un océan, sans plage, avec trois îlots d'herbe où les nageurs sortent de l'eau (pas
+        // Choix de l'utilisateur : un océan, sans plage, avec trois îlots de sable où les nageurs sortent de l'eau (pas
         // bloqués), aucun dans la vue de départ. Rien d'autre : les Eau y sont heureux, les Feu malheureux (seuls les
         // Feu/Eau y viennent).
         var json = Json("ocean-1", size);
         var habitats = ParkHabitats.Read(json)!;
         var total = habitats.Area.W * habitats.Area.H;
         Assert.True(habitats.Counts[Habitat.Water] * 100 / total >= 95);
-        Assert.Equal(total, habitats.Counts[Habitat.Water] + habitats.Counts[Habitat.Vegetation]);
+        Assert.Equal(total, habitats.Counts[Habitat.Water] + habitats.Counts[Habitat.Sand]);
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, habitats).Mood);
         Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, habitats).Mood);
 
-        // La terre des îlots est libre, et rien d'autre : le reste est de l'eau libre, ou porte un rocher (bloqué ; la carte
-        // entière compte en plus sa bordure de récif)
+        // Le sable des îlots est libre, et rien d'autre (leur bord d'écume est de l'eau) : le reste est de l'eau libre, ou
+        // porte un rocher (bloqué ; la carte entière compte en plus sa bordure de récif)
         var map = Map("ocean-1", size);
         var free = FreeTiles(map);
         var (x0, y0, w, h) = Zone(map, "Parc");
         var land = Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
-            .Where(c => habitats.At(c.x, c.y) == Habitat.Vegetation).ToHashSet();
+            .Where(c => habitats.At(c.x, c.y) == Habitat.Sand).ToHashSet();
         Assert.True(land.SetEquals(free));
         Assert.Equal(size == 1, land.Count == 0);
         Assert.True(OpenWater("ocean-1", size).Count * 10 > total * (size == 4 ? 6 : 7));

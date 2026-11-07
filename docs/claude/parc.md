@@ -256,7 +256,14 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   aucune eau libre : elle est comptée depuis la terre) ; `randomSpot(LAND)` rend de l'eau, `destination` toujours l'eau.
   Les tests partent aussi de ce centre. À la taille 2, l'îlot de gauche, coupé, n'a que 12 cases de terre : des
   nageurs s'y serrent parfois.
-- **Îlots** : `Water_Stone_Tile_1` (même disposition que l'herbe du désert : le bord passe au milieu des cases, tuile
+- **Îlots en sable depuis le 2026-11-07** (« les îlots doivent être en sable ») : deuxième groupe de `Beach_Tiles`
+  (`RIVAGE`, tuiles 5-9/35-39/65-67, sable uni 36, détails `Beach_Decor_Tiles` 0-3), bord par case (`bordure`, comme la
+  plage) : l'écume est de l'eau bloquée sans décor, où l'on nage (`BEACH_TILES` de `carte-parc.py` ; la plage garde le
+  premier groupe, dont l'écume reste du sable), le sable du milieu est libre (type Sable). Plus de fleurs. Terre : 8 / 59 /
+  68 cases aux tailles 2 / 3 / 4 (un peu moins qu'avec l'herbe : l'écume prend le tour). L'ancien bord (ci-dessous) n'est plus utilisé. Essai (20
+  nageurs, 15 min simulées, tailles 2 à 4) : aucune case interdite, 69 / 73 / 80 % du temps dans l'eau. Simulation :
+  `spriteFolder` est une adresse (`/images/donjon/0007/`), un simple numéro ne charge aucun Pokémon.
+- **Îlots (avant le 2026-11-07)** : `Water_Stone_Tile_1` (même disposition que l'herbe du désert : le bord passe au milieu des cases, tuile
   d'après les quatre coins d'herbe, `RIVAGE`) + `Grass_1_Middle` (même vert). Case à 3 coins d'herbe ou plus (tuiles 0,
   2, 6, 8, ou herbe pleine) = terre libre, type végétation (`WATER_STONE_TILES` de `carte-parc.py`) ; 1 ou 2 coins = eau
   bloquée sans décor, où l'on nage. Fleurs sur l'herbe pleine. Placés **à la main** (`ILOTS_PLACES` : centre, rayons ; un ovale plus un ou deux lobes,

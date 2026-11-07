@@ -644,9 +644,9 @@ en exige 11 au désert), 19 à 38 ensuite. Ce qui n'est pas acheté est un champ
 sort est coupée à la lisière, son bord caché porte de petits rochers. `ParkMapTests` vérifie la part de sable, les humeurs,
 les animations et la cascade (lac au-dessus, eau en dessous).
 **Océan** (cinquième paysage, à acheter) : `Ocean_1-1.tmx` à `Ocean_1-4.tmx` (`ocean-1-1.json` à `ocean-1-4.json`),
-faites par `outils/generer-ocean.py` (mêmes arguments). La **pleine mer, sans plage** : **trois îlots d'herbe** bordés de
-pierre (`Water_Stone_Tile_1` : le bord passe au milieu des cases, une case à trois coins d'herbe ou plus est de la terre,
-les autres de l'eau), placés à la main dans le générateur, **aucun dans la vue de départ** (toute en eau) ; 97 à 100 %
+faites par `outils/generer-ocean.py` (mêmes arguments). La **pleine mer, sans plage** : **trois îlots de sable** (bord d'écume de `Beach_Tiles`, compté comme de l'eau ; d'herbe bordée de
+pierre avant le 2026-11-07),
+placés à la main dans le générateur, **aucun dans la vue de départ** (toute en eau) ; 97 à 100 %
 d'eau. **Seuls les
 Pokémon qui nagent** (type Eau, Eau/Vol et Feu/Eau compris : `ParkLandscapes.Refusal`) peuvent y vivre : les autres sont
 grisés dans la fenêtre de choix (« ne nage pas » dans l'infobulle, message au clic) et refusés par `ParkService.SetAsync`
@@ -1093,7 +1093,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
 | `outils/generer-volcan.py` | Génère les cartes du volcan (`Volcan_1-1.tmx` à `Volcan_1-4.tmx`) : cascades de lave animées, coulées, mares, pont, bulles, champ de rochers autour, 15 à 25 % de lave |
 | `outils/generer-desert.py` | Génère les cartes du désert (`Desert_1-1.tmx` à `Desert_1-4.tmx`) : dunes, plateau et escaliers, lac, cascade animée, oasis, prairies, acacias, cactus, champ de cactus et de rochers autour, ~70 % de sable |
-| `outils/generer-ocean.py` | Génère les cartes de l'océan (`Ocean_1-1.tmx` à `Ocean_1-4.tmx`) : pleine mer, trois îlots d'herbe bordés de pierre (aucun dans la vue de départ), rochers animés, récif autour |
+| `outils/generer-ocean.py` | Génère les cartes de l'océan (`Ocean_1-1.tmx` à `Ocean_1-4.tmx`) : pleine mer, trois îlots de sable (aucun dans la vue de départ), rochers animés, récif autour |
 | `outils/generer-donjon.py` | Génère les cartes du donjon abandonné (`Donjon_1-1.tmx` à `Donjon_1-4.tmx`) : salles et couloirs par taille, murs, bassins d'égout et ponts, piliers, tombes, objets, torches, candélabres et leurs lumières |
 | `outils/generer-montagne.py` | Génère les cartes de la montagne (`Montagne_1-1.tmx` à `Montagne_1-4.tmx`) : vallée, rivière et pont, massifs à flancs de pierre sur deux étages, sapins, rochers, nids, calques « Sommets » et « Survol » |
 | `outils/generer-grotte.py` | Génère les cartes de la grotte (`Grotte_1-1.tmx` à `Grotte_1-4.tmx`) : caverne, piliers de roche, lacs souterrains, cristaux, stalagmites, torches et leurs lumières |

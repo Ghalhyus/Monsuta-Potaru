@@ -1,19 +1,20 @@
 # Génère les cartes de l'océan pour Tiled (Ocean_1-1.tmx à Ocean_1-4.tmx, une par taille achetée) avec le pack Cute
-# Fantasy : la pleine mer, sans plage, trois îlots d'herbe bordés de pierre (on y marche), des rochers animés dans l'eau,
+# Fantasy : la pleine mer, sans plage, trois îlots de sable (on y marche), des rochers animés dans l'eau,
 # et le calque « Collisions » qui va avec. Tirages fixés : relancé sans changement, il redonne les mêmes cartes.
 # Choix de l'utilisateur (2026-11-03) : un océan, seuls les Pokémon qui nagent peuvent y vivre (ParkLandscapes) ; trois
 # îlots seulement, aucun dans la vue de départ (toute en eau), pas bloqués (les nageurs y sortent de l'eau) ; pas de remous
 # d'écume ; ce qui n'est pas encore acheté est caché par un récif de rochers serrés, qui fait aussi la bordure de la carte
 # entière.
-# Le bord des îlots (Water_Stone_Tile_1) passe au milieu des cases : une case prend sa tuile d'après ses quatre coins ;
-# avec trois coins d'herbe ou plus, on y marche (type végétation, règle de carte-parc.py), sinon c'est de l'eau.
+# Îlots en sable (demande de l'utilisateur, 2026-11-07 ; d'herbe bordée de pierre avant) : le sable de la plage
+# (Beach_Tiles), dont le bord d'écume est surtout de l'eau : on y nage (type eau, règle de carte-parc.py), on marche sur
+# le sable du milieu.
 # Ensuite, pour chacune : python outils/carte-parc.py <Ocean_1-1.tmx>. Aperçus (ocean-1.png, ocean-1_collisions.png...)
 # dans le dossier de sortie, ou dans le troisième. Moteur commun avec les autres parcs : parc_carte.py.
 # Usage (Python 3 avec Pillow) :
 #   python outils/generer-ocean.py <dossier Cute_Fantasy du pack> <dossier de sortie> [dossier des aperçus]
 import math
 import sys
-from parc_carte import Carte, bruit, dans, ecrire, morceaux_de, nettoyer, relies, tirage, voisins8
+from parc_carte import Carte, bordure, bruit, dans, ecrire, morceaux_de, nettoyer, relies, tirage, voisins8
 
 PACK, SORTIE = sys.argv[1], sys.argv[2]
 L, H = 80, 60
@@ -27,10 +28,8 @@ bloc, objets = carte.bloc, carte.objets
 # --- Jeux de tuiles (incorporés à la carte) -------------------------------------------------
 jeu("eau_unie", "Tiles/Water/Water_Middle.png")
 jeu("eau_details", "Tiles/Water/Water_Decoration.png")
-jeu("rivage", "Tiles/Water/Water_Stone_Tile_1.png")
-jeu("herbe_unie", "Tiles/Grass/Grass_1_Middle.png")
-jeu("herbe", "Tiles/Grass/Grass_Tiles_1.png")
-jeu("fleurs", "Outdoor decoration/Flowers.png")
+jeu("sable", "Tiles/Beach/Beach_Tiles.png")
+jeu("sable_details", "Tiles/Beach/Beach_Decor_Tiles.png")
 jeu("decors", "Outdoor decoration/Outdoor_Decor.png")
 # Rochers dans l'eau, animés (8 images d'une tuile, le remous autour) : dôme, pointu, anguleux, plat, amas
 ROCHERS_ANIMES = ["Rock_10", "Rock_15", "Rock_3", "Rock_4", "Rock_5", "Rock_9"]
@@ -38,13 +37,13 @@ for nom in ROCHERS_ANIMES:
     jeu(nom, f"Outdoor decoration/Outdoor_Decor_Animations/Water_Decor_Animations/Water_Rocks/{nom}_Water_Anim.png")
     carte.animer(nom, 0, [(i, 150) for i in range(8)])
 
-# Bord des îlots : tuile selon les coins d'herbe (NO, NE, SO, SE), comme l'herbe du désert ; None : toute herbe
-RIVAGE = {(1, 1, 1, 1): None, (0, 0, 0, 1): 9, (0, 0, 1, 0): 10, (0, 1, 0, 0): 12, (1, 0, 0, 0): 13,
-          (1, 1, 1, 0): 0, (1, 1, 0, 0): 1, (1, 1, 0, 1): 2, (1, 0, 1, 0): 3, (0, 1, 0, 1): 5, (1, 0, 1, 1): 6,
-          (0, 0, 1, 1): 7, (0, 1, 1, 1): 8, (1, 0, 0, 1): 9, (0, 1, 1, 0): 10}  # (deux coins opposés : un seul gardé)
+# Bord des îlots (le sable est la forme, la mer autour) : coins HG H HD G D BG B BD, coins rentrants SE SO NE NO. Le
+# deuxième des six groupes de Beach_Tiles (la plage prend le premier) : carte-parc.py compte son écume comme de l'eau
+# (BEACH_TILES), celle de la plage reste du sable
+RIVAGE = ((5, 6, 7, 35, 37, 65, 66, 67), (8, 9, 38, 39))
+SABLE_UNI = 36
 GROS_ROCHERS = [(4, 11), (6, 11), (4, 13)]  # récif : gros rochers de 2 × 2 d'Outdoor_Decor (colonne, ligne du coin)
 PETITS_RECIFS = [44, 53, 62, 42, 61]  # rochers d'un seul morceau, comme ceux de la plage
-FLEURS = [r * 10 + c for r in range(10) for c in range(5)]
 
 # Bordure d'origine (carte entière) : un récif tout autour, 2 à 3 cases à l'œil (règle de l'utilisateur), même
 # EPAISSEUR que les autres parcs
@@ -57,17 +56,9 @@ carte.lisiere = set(bordure_carte)
 
 
 # --- Îlots ----------------------------------------------------------------------------------
-def coins_de(forme):
-    """Coins d'herbe (NO, NE, SO, SE) de chaque case de la forme : un sommet est de l'herbe si les quatre cases autour sont
-    dans la forme (le bord passe au milieu des cases)."""
-    def coin(x, y):
-        return all((x + i, y + j) in forme for i in (-1, 0) for j in (-1, 0))
-    return {(x, y): (coin(x, y), coin(x + 1, y), coin(x, y + 1), coin(x + 1, y + 1)) for x, y in forme}
-
-
 def terre_de(forme):
-    """Cases où l'on marche : trois coins d'herbe au moins."""
-    return {c for c, coins in coins_de(forme).items() if sum(coins) >= 3}
+    """Cases où l'on marche : le sable du milieu (le bord d'écume est de l'eau)."""
+    return {c for c in forme if bordure(forme, *c, *RIVAGE) is None}
 
 
 def ilot(cx, cy, rx, ry, graine):
@@ -112,7 +103,7 @@ for i, place in enumerate(ILOTS_PLACES):
         sys.exit(f"Îlot {place} : trop près d'un autre ou de la bordure")
 TOUS_ILOTS = set().union(*ILOTS)
 
-# --- Objets : rochers animés et fleurs -----------------------------------------------------------
+# --- Objets : rochers animés -------------------------------------------------------------------
 pleine_mer = {(x, y) for y in range(H) for x in range(L)} - proches(TOUS_ILOTS, 2) - bordure_carte
 pres_de_la_mer = set()
 
@@ -134,11 +125,6 @@ for n, zone in enumerate(ZONES):
                and not (n and dans(ZONES[n - 1], *o["tuiles"][0][1:3]))]
     for o in sorted(rochers, key=lambda o: tirage(o["tuiles"][0][1], o["tuiles"][0][2], 7).random())[:round(len(rochers) * 0.3)]:
         objets.remove(o)
-# Fleurs sur l'herbe pleine (on y marche), une sur huit environ
-pleine = {c for c, coins in coins_de(TOUS_ILOTS).items() if all(coins)}
-for x, y in sorted(pleine):
-    if tirage(x, y, 5).random() < 0.12:
-        objets.append({"tuiles": [("decors", x, y, t("fleurs", tirage(x, y, 6).choice(FLEURS)), False)], "herbe": True})
 
 
 # --- Carte de chaque taille : la zone, un récif tout autour -----------------------------------
@@ -169,8 +155,7 @@ def taille(zone, libres_avant):
         for morceau in morceaux_de(nettoyer(ilot_ - cache)):
             if len(terre_de(morceau)) >= 4:
                 forme |= morceau
-    coins = coins_de(forme)
-    terre = {c for c, k in coins.items() if sum(k) >= 3}
+    terre = terre_de(forme)
     sol_ = [[0] * L for _ in range(H)]
     decors_ = [[0] * L for _ in range(H)]
     devant_ = [[0] * L for _ in range(H)]
@@ -179,9 +164,9 @@ def taille(zone, libres_avant):
         for x in range(L):
             r = tirage(x, y, 3)
             if (x, y) in forme:
-                i = RIVAGE[tuple(int(k) for k in coins[(x, y)])]
-                sol_[y][x] = (t("rivage", i) if i is not None
-                              else t("herbe", r.choice((149, 150, 151))) if r.random() < 0.12 else t("herbe_unie", 0))
+                i = bordure(forme, x, y, *RIVAGE)
+                sol_[y][x] = (t("sable", i) if i is not None
+                              else t("sable_details", r.randrange(4)) if r.random() < 0.1 else t("sable", SABLE_UNI))
             else:
                 sol_[y][x] = t("eau_details", r.randrange(3)) if r.random() < 0.04 else t("eau_unie", 0)
     grilles = {"decors": decors_, "devant": devant_}
@@ -197,12 +182,10 @@ def taille(zone, libres_avant):
         bloque_[y][x] = True
         if not decors_[y][x]:
             decors_[y][x] = t("decors", tirage(x, y, 2).choice(PETITS_RECIFS))
-    # Rochers animés et fleurs tout entiers dans la zone, hors de ce qui est caché
+    # Rochers animés tout entiers dans la zone, hors de ce qui est caché
     for objet_ in objets:
         tuiles = objet_["tuiles"]
         if any((x, y) in cache or not dans(zone, x, y) or grilles[calque][y][x] for calque, x, y, _, _ in tuiles):
-            continue
-        if objet_.get("herbe") and not all(all(coins.get((x, y), ())) for _, x, y, _, _ in tuiles):
             continue
         ecrire(grilles, bloque_, tuiles)
     perdues = libres_avant - terre
