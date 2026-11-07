@@ -134,7 +134,7 @@ public sealed class ParkServiceTests : IDisposable
     [Fact]
     public async Task Buying_AnotherLandscape_DebitsTheWallet_OnceOnly()
     {
-        await SetWallet("sacha", 130_000);
+        await SetWallet("sacha", 115_000);
         var forest = await Forest();
 
         var beach = await _park.BuyAsync("sacha", ParkLandscape.Beach);
@@ -150,7 +150,7 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal("Ce paysage n'existe pas.", (await _park.BuyAsync("sacha", (ParkLandscape)99)).Message);
         Assert.Equal(90_000, await _inventory.GetBalanceAsync("sacha"));
         var operation = Assert.Single(await _inventory.ListOperationsAsync("sacha"));
-        Assert.Equal((WalletOperationKind.BuyPark, -40_000L, 90_000L, "Nouveau parc : Plage"),
+        Assert.Equal((WalletOperationKind.BuyPark, -25_000L, 90_000L, "Nouveau parc : Plage"),
             (operation.Kind, operation.Amount, operation.BalanceAfter, operation.Details));
 
         // Chaque parc a sa taille
@@ -162,14 +162,14 @@ public sealed class ParkServiceTests : IDisposable
 
     [Theory]
     [InlineData(0L)]      // pas de porte-monnaie
-    [InlineData(39_999L)]
+    [InlineData(24_999L)]
     public async Task Buying_IsRefused_WithoutEnoughMoney(long money)
     {
         if (money > 0) await SetWallet("sacha", money);
 
         var result = await _park.BuyAsync("sacha", ParkLandscape.Beach);
         Assert.False(result.Ok);
-        Assert.Contains($"il manque {InventoryService.FormatMoney(40_000 - money)}", result.Message);
+        Assert.Contains($"il manque {InventoryService.FormatMoney(25_000 - money)}", result.Message);
         Assert.Equal([ParkLandscape.Forest], (await _park.ListParksAsync("sacha")).Select(p => p.Landscape)); // transaction annulée
         Assert.Equal(money, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
@@ -178,7 +178,7 @@ public sealed class ParkServiceTests : IDisposable
     [Fact]
     public async Task APokemon_LivesInOneParkOnly_AndMovesWhenChosenElsewhere()
     {
-        await SetWallet("sacha", 40_000);
+        await SetWallet("sacha", 25_000);
         var squirtle = Add(7, type: MoveType.Water); // Eau : n'aime que l'eau
         var eevee = Add(133);
         var forest = await Forest();
@@ -278,14 +278,14 @@ public sealed class ParkServiceTests : IDisposable
     [Fact]
     public async Task Expanding_DebitsTheWallet_AndAddsTwentyPokemon_ThreeTimesAtMost()
     {
-        await SetWallet("sacha", 130_000);
+        await SetWallet("sacha", 85_000);
         await SetWallet("ondine", 1_000_000);
         var many = Enumerable.Range(0, 41).Select(_ => Add(19)).ToList();
         var forest = await Forest();
 
         var first = await _park.ExpandAsync("sacha", forest);
         Assert.True(first.Ok, first.Message);
-        Assert.Equal((1, 90_000L), (first.Expansions, first.Balance));
+        Assert.Equal((1, 60_000L), (first.Expansions, first.Balance));
         Assert.StartsWith("Parc agrandi : il accueille maintenant 40 Pokémon.", first.Message);
         Assert.True((await _park.SetAsync("sacha", forest, many[..40])).Ok);
         Assert.Equal("Le parc accueille 40 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", forest, many)).Message);
@@ -302,7 +302,7 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal(10_000, await _inventory.GetBalanceAsync("sacha"));
 
         var operations = await _inventory.ListOperationsAsync("sacha"); // les plus récentes d'abord
-        Assert.All(operations, op => Assert.Equal((WalletOperationKind.ExpandPark, -40_000L), (op.Kind, op.Amount)));
+        Assert.All(operations, op => Assert.Equal((WalletOperationKind.ExpandPark, -25_000L), (op.Kind, op.Amount)));
         Assert.Equal(["Forêt : 60 → 80 Pokémon", "Forêt : 40 → 60 Pokémon", "Forêt : 20 → 40 Pokémon"], operations.Select(o => o.Details));
         Assert.Equal(0, await Expansions(await Forest("ondine"), "ondine")); // l'achat de Sacha ne touche pas Ondine
         Assert.Equal(1_000_000, await _inventory.GetBalanceAsync("ondine"));
@@ -310,7 +310,7 @@ public sealed class ParkServiceTests : IDisposable
 
     [Theory]
     [InlineData(0L)]      // pas de porte-monnaie
-    [InlineData(39_999L)]
+    [InlineData(24_999L)]
     public async Task Expanding_IsRefused_WithoutEnoughMoney(long money)
     {
         if (money > 0) await SetWallet("sacha", money);
@@ -318,7 +318,7 @@ public sealed class ParkServiceTests : IDisposable
 
         var result = await _park.ExpandAsync("sacha", forest);
         Assert.False(result.Ok);
-        Assert.Contains($"il manque {InventoryService.FormatMoney(40_000 - money)}", result.Message);
+        Assert.Contains($"il manque {InventoryService.FormatMoney(25_000 - money)}", result.Message);
         Assert.Equal(0, await Expansions(forest)); // taille remise comme avant (transaction annulée)
         Assert.Equal(money, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));

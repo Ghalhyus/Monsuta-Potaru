@@ -548,7 +548,7 @@ Dissuasif, pas infaillible : rien n'oblige le joueur à remplacer réellement sa
 Le menu « Parc » (`/parc`) est une carte en pixel art (forêt tout autour, chemins, étangs, prairie fleurie) qui prend
 toute la largeur de la page, où vivent jusqu'à **20 Pokémon** de la
 collection, stockage interne ou sauvegardes stockées, de **toutes les générations** (hors œufs ; `ParkService.BaseCapacity`).
-**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **40 000 ₽** du porte-monnaie pour **20 Pokémon de
+**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **25 000 ₽** du porte-monnaie (40 000 ₽ jusqu'au 2026-11-07 ; `ParkService.ExpansionPrice`) pour **20 Pokémon de
 plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
 solde (bouton grisé s'il manque de l'argent, avec un lien vers « Inventaire ») ; la taille et le débit sont vérifiés dans
 les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
@@ -559,7 +559,7 @@ retirer, pas en ajouter tant qu'il dépasse.
 **Forêt** d'abord (créée à la première visite de la page ; la migration `ParkLandscapes` a fait du parc de chaque compte sa
 Forêt, avec ses agrandissements et ses Pokémon), puis **« Acheter un parc »** (sous le titre, tant qu'il reste un paysage
 à acheter) : une fenêtre propose les paysages pas encore achetés (la **Plage**, le **Volcan**, le **Désert**, l'**Océan**, la **Grotte**, la **Montagne** et le **Donjon**), au prix d'un agrandissement
-(**40 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
+(**25 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
 venue du navigateur), insère le parc (`INSERT OR IGNORE` : un paysage déjà acheté est refusé, même pour deux achats
 simultanés) et débite dans la même transaction ; journal : « Achat d'un parc », « Nouveau parc : Plage ». Le nouveau parc
 s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à part (3 fois). Une **liste déroulante**

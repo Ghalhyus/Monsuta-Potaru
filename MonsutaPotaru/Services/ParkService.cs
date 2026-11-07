@@ -58,7 +58,8 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     public const int ExpansionCapacity = 20;
     /// <summary>Agrandissements possibles pour l'instant (80 Pokémon) : une carte par taille, de 1 à MaxExpansions + 1.</summary>
     public const int MaxExpansions = 3;
-    public const long ExpansionPrice = 40_000;
+    /// <summary>Prix d'un agrandissement (40 000 ₽ jusqu'au 2026-11-07, puis 25 000 : choix de l'utilisateur).</summary>
+    public const long ExpansionPrice = 25_000;
     /// <summary>Prix d'un nouveau parc : celui d'un agrandissement (choix de l'utilisateur).</summary>
     public const long ParkPrice = ExpansionPrice;
 
