@@ -3,8 +3,8 @@
 README : « Combats ».
 
 ## Moteur
-- Simulateur de Pokémon Showdown (`showdown/`, `@pkmn/sim` en version fixée ; `npm ci --prefix showdown` en local et dans
-  la CI ; étape `node` du `Dockerfile`). Aucune mécanique de combat réécrite en C# : le site traduit le protocole
+- Simulateur de Pokémon Showdown (`showdown/`, `@pkmn/sim` en version fixée ; `npm ci --ignore-scripts --prefix showdown` en local et
+  dans la CI ; étape `node` du `Dockerfile`). Aucune mécanique de combat réécrite en C# : le site traduit le protocole
   (`BattleView`) et dessine l'interface.
 - Nouveau format (génération) : `BattleTeam.Format`.
 - `combat.js` reçoit les Pokémon **par numéros** (PKHeX) et les traduit en noms de Showdown : `byNum` préfère l'entrée

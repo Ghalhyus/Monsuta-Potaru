@@ -12,11 +12,11 @@ set -euo pipefail
 OLD="$HOME/pokebank"
 NEW="$HOME/monsuta-potaru"
 
-if [ -f "$NEW/.env" ]; then
+if [[ -f "$NEW/.env" ]]; then
     echo "Déjà fait : $NEW/.env existe. Lance « Run workflow » si le site n'est pas encore reparti."
     exit 0
 fi
-if [ ! -f "$OLD/.env" ]; then
+if [[ ! -f "$OLD/.env" ]]; then
     echo "$OLD/.env introuvable : rien à renommer sur ce serveur."
     exit 1
 fi
@@ -40,7 +40,7 @@ copy_volume() {
     local before after
     before=$(docker run --rm -v "$from":/v:ro alpine sh -c 'find /v | wc -l')
     after=$(docker run --rm -v "$to":/v:ro alpine sh -c 'find /v | wc -l')
-    if [ "$before" != "$after" ]; then
+    if [[ "$before" != "$after" ]]; then
         echo "  $from -> $to : $before fichiers avant, $after après. Arrêt : rien n'est supprimé, relance l'ancien site avec"
         echo "  cd ~/pokebank && docker compose up -d"
         exit 1
@@ -52,7 +52,7 @@ copy_volume caddy-data caddy-data
 copy_volume caddy-config caddy-config
 
 echo "== 4/6 Dossier des images"
-if [ -d "$HOME/pokebank-images" ] && [ ! -e "$HOME/monsuta-potaru-images" ]; then
+if [[ -d "$HOME/pokebank-images" ]] && [[ ! -e "$HOME/monsuta-potaru-images" ]]; then
     mv "$HOME/pokebank-images" "$HOME/monsuta-potaru-images"
     echo "  ~/pokebank-images -> ~/monsuta-potaru-images"
 else

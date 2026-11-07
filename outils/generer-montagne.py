@@ -129,7 +129,7 @@ for m in MASSIFS:
     x0, x1, haut, bas, faces, graine = m["plateau"]
     forme = plateau(x0, x1, haut, bas, graine)
     tuiles, emprise, pose, plein = etage(forme, faces, "plateau")
-    sols = {c: "plateau" for c in plein}
+    sols = dict.fromkeys(plein, "plateau")
     survol = emprise - pose
     if "sommet" in m:
         sx0, sx1, shaut, sbas, sfaces, sgraine = m["sommet"]
@@ -139,7 +139,7 @@ for m in MASSIFS:
         if not voisins8(emprise2) <= plein:
             sys.exit(f"Sommet {m['sommet']} : déborde du dessus de son plateau : {sorted(voisins8(emprise2) - plein)[:8]}")
         tuiles.update(tuiles2)
-        sols.update({c: "sommet" for c in plein2})
+        sols.update(dict.fromkeys(plein2, "sommet"))
         pose = (pose - emprise2) | pose2
         survol = (survol | emprise2) - pose
     if set(tuiles) & set(tuiles_massifs) or voisins8(voisins8(emprise)) & set().union(*(m_["emprise"] for m_ in massifs)):

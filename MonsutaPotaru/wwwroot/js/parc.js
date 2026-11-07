@@ -186,7 +186,7 @@ class Ground {
         this.habitats = new Uint8Array(this.columns * this.lines);
         (data?.habitats ?? []).forEach((row, y) => {
             for (let x = 0; x < this.columns && x < row.length && y < this.lines; x++) {
-                const h = row.charCodeAt(x) - 48;
+                const h = row.codePointAt(x) - 48;
                 if (h >= 0 && h <= 7) this.habitats[y * this.columns + x] = h;
             }
         });
@@ -464,7 +464,7 @@ class Pokemon {
         this.nextSulk = random(...SAD.sulkEvery);
         this.prey = null; // Pokémon qu'il va attaquer
         this.hit = null; // frappé : { by, delay } (il a mal un instant après le début de l'attaque)
-        this.then = null; // après une animation jouée une fois
+        this.afterPlay = null; // après une animation jouée une fois
         this.moves = info.moves ?? null; // « swim » (Eau), « lava » (Feu), « swim-lava », « fly » (Vol) ou null (ParkPokemon.Moves)
         this.wet = 0; // nageur (ou dans la lave) : 0 sur terre, 1 dans l'eau (progressif en y entrant)
         this.liquid = WATER; // où il est (ou était) plongé : WATER ou LAVA (couleur des remous)
@@ -544,9 +544,9 @@ class Pokemon {
 
     face(other) { this.dir = directionOf(other.x - this.x, other.y - this.y); }
 
-    /** Joue une fois une animation (« attack », « hurt »), sur place, puis <then> (sinon il se repose). */
-    play(state, then) {
-        Object.assign(this, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, then: then ?? null });
+    /** Joue une fois une animation (« attack », « hurt »), sur place, puis <afterPlay> (sinon il se repose). */
+    play(state, afterPlay) {
+        Object.assign(this, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, afterPlay: afterPlay ?? null });
         this.setState(state);
         this.frame = 0;
         this.frameTime = 0;
@@ -733,7 +733,7 @@ export async function create(container, component, options) {
         game.canvas.classList.add("park-canvas");
         game.canvas.addEventListener("wheel", onWheel, { passive: false });
         // Sous la carte : sa couleur de fond (la roche d'une grotte, là où le sol est transparent), ou de l'herbe (planches absentes)
-        const background = data?.backgroundcolor ? parseInt(data.backgroundcolor.slice(-6), 16) : GRASS;
+        const background = data?.backgroundcolor ? Number.parseInt(data.backgroundcolor.slice(-6), 16) : GRASS;
         s.add.rectangle(0, 0, ground.width, ground.height, background).setOrigin(0).setDepth(-1);
         // La carte ne bouge pas : ses calques sont dessinés une seule fois, dans une image sous les Pokémon (sol, décors), des
         // morceaux de feuillages triés avec eux (foliage) et une image devant tout (brouillard). Des calques de tuiles
@@ -806,7 +806,7 @@ export async function create(container, component, options) {
         const stamp = s.make.image({ key: "lumiere", add: false });
         for (const light of lights) {
             const property = name => light.properties?.find(p => p.name === name)?.value;
-            const radius = property("rayon") ?? 64, color = parseInt(String(property("couleur") ?? "#ffffff").slice(-6), 16);
+            const radius = property("rayon") ?? 64, color = Number.parseInt(String(property("couleur") ?? "#ffffff").slice(-6), 16);
             stamp.setPosition(light.x, light.y).setDisplaySize(2 * radius, 2 * radius).setAlpha(SHADE.clear);
             veil.erase(stamp);
             s.add.image(light.x, light.y, "lumiere").setDisplaySize(2 * radius, 2 * radius).setTint(color)
@@ -963,7 +963,7 @@ export async function create(container, component, options) {
     function pickUp(p, pointer) {
         camera.getWorldPoint(pointer.x, pointer.y, spot);
         held = { p, from: { x: p.x, y: p.y }, dx: p.x - spot.x, dy: p.y - spot.y, pointer };
-        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, then: null });
+        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, afterPlay: null });
         p.setState("held"); // un dormeur se réveille (une attaque prévue n'a pas lieu)
         drag = null;
         hovered = null;
@@ -1114,7 +1114,7 @@ export async function create(container, component, options) {
 
     /** Part attaquer <prey> (il marche jusqu'à lui). */
     function charge(p, prey) {
-        Object.assign(p, { prey, tries: 0, then: null, hit: null });
+        Object.assign(p, { prey, tries: 0, afterPlay: null, hit: null });
         approach(p);
     }
 
@@ -1261,9 +1261,9 @@ export async function create(container, component, options) {
         if (ONCE.has(p.state)) { // animation jouée une fois (attaque, douleur), puis la suite
             p.timer -= dt;
             if (p.timer <= 0) {
-                const then = p.then;
-                p.then = null;
-                if (then) then();
+                const afterPlay = p.afterPlay;
+                p.afterPlay = null;
+                if (afterPlay) afterPlay();
                 else p.rest(random(1, 3));
             }
             return;

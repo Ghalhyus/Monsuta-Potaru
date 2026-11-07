@@ -75,9 +75,15 @@ const end = /^(forcelose (p1|p2)|forcetie)$/;
 const stream = new BattleStreams.BattleStream();
 let started = false;
 
+// Une erreur du simulateur part sur stderr, que le site lit : jamais de promesse rejetée sans suite.
+const report = e => process.stderr.write(`erreur : ${e.message}\n`);
+const send = text => {
+  Promise.resolve(stream.write(text)).catch(report);
+};
+
 (async () => {
   for await (const chunk of stream) process.stdout.write(JSON.stringify(chunk) + '\n');
-})();
+})().catch(report);
 
 readline.createInterface({input: process.stdin}).on('line', line => {
   try {
@@ -85,13 +91,13 @@ readline.createInterface({input: process.stdin}).on('line', line => {
       const setup = JSON.parse(line);
       const dex = Dex.forFormat(setup.format);
       started = true;
-      stream.write(`>start ${JSON.stringify({formatid: setup.format, seed: setup.seed})}`);
+      send(`>start ${JSON.stringify({formatid: setup.format, seed: setup.seed})}`);
       for (const side of ['p1', 'p2']) {
         const team = setup[side].team.map(p => toSet(dex, p));
-        stream.write(`>player ${side} ${JSON.stringify({name: setup[side].name, team})}`);
+        send(`>player ${side} ${JSON.stringify({name: setup[side].name, team})}`);
       }
     } else if (choice.test(line) || end.test(line)) {
-      stream.write(`>${line}`);
+      send(`>${line}`);
     } else {
       process.stderr.write(`commande refusée : ${line}\n`);
     }

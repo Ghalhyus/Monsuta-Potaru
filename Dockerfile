@@ -9,7 +9,7 @@ RUN dotnet publish MonsutaPotaru/MonsutaPotaru.csproj -c Release -o /app/publish
 FROM node:22-bookworm-slim AS showdown
 WORKDIR /showdown
 COPY showdown/package.json showdown/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 COPY showdown/combat.js ./
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

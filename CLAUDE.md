@@ -89,6 +89,6 @@ dotnet test MonsutaPotaru.Tests/MonsutaPotaru.Tests.csproj --artifacts-path <dos
 - **Migration EF** : la générer dans une **copie** du projet (`MonsutaPotaru` copié dans un dossier temporaire,
   `dotnet ef migrations add <Nom>` dessus), puis recopier `Data/Migrations` (migration, designer, snapshot) et remettre
   l'espace de noms `MonsutaPotaru.Migrations` (la copie génère `MonsutaPotaru.Data.Migrations`). Le code doit compiler
-  avant. La base se met à jour au démarrage (`Database.Migrate()`). Une migration qui modifie des données (SQL seul :
+  avant. La base se met à jour au démarrage (`Database.MigrateAsync()`). Une migration qui modifie des données (SQL seul :
   `GameNames`, `JournalFileNames`, `GameGroupNames`) se teste dans `MigrationsTests` (base migrée jusqu'à la précédente,
   lignes ajoutées, migration complète et retour) ; les autres tests créent la base avec `EnsureCreated`.

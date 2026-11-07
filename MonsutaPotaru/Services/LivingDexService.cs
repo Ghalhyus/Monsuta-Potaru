@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.EntityFrameworkCore;
 using PKHeX.Core;
 using MonsutaPotaru.Data;
@@ -844,8 +845,8 @@ public static class LivingDexGames
     }
 
     /// <summary>Espèces qui ont une case Gigamax : leurs octets disent si un exemplaire a le facteur Gigamax.</summary>
-    public static readonly ushort[] GigamaxSpecies = SwordShieldNational
-        .Where(s => Enumerable.Range(0, PersonalTable.SWSH[s].FormCount).Any(f => Gigantamax.CanToggle(s, (byte)f))).ToArray();
+    public static readonly ImmutableArray<ushort> GigamaxSpecies = [.. SwordShieldNational
+        .Where(s => Enumerable.Range(0, PersonalTable.SWSH[s].FormCount).Any(f => Gigantamax.CanToggle(s, (byte)f)))];
 
     /// <summary>
     /// Formes régionales de l'espèce présentes dans le jeu (à partir de la 8e génération : Alola, Galar, Hisui, Paldea et

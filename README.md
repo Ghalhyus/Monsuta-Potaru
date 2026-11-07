@@ -27,11 +27,11 @@ Les combats font tourner le simulateur de Pokémon Showdown avec Node.js (22 ou 
 cloné (sans lui, le site marche mais les combats et leurs tests échouent avec un message qui l'explique) :
 
 ```bash
-npm ci --prefix showdown
+npm ci --ignore-scripts --prefix showdown
 ```
 
 Sous PowerShell, si l'exécution des scripts est bloquée (« npm.ps1 ne peut pas être chargé »), appeler `npm.cmd` à la
-place (`npm.cmd ci --prefix showdown`) : inutile de changer la politique d'exécution de Windows.
+place (`npm.cmd ci --ignore-scripts --prefix showdown`) : inutile de changer la politique d'exécution de Windows.
 
 ```bash
 dotnet run --project MonsutaPotaru
@@ -1170,7 +1170,7 @@ partent au bout de 14 jours, comme les nouvelles.
 
 **CI/CD** (GitHub Actions, deux workflows séparés : `.github/workflows/ci.yml` et `cd.yml`, l'un se lance sans l'autre) :
 
-- **CI, tests** à chaque push (ou « Run workflow » du workflow « CI » pour les relancer), sur une machine Ubuntu propre (un fichier oublié dans un commit s'y voit) : .NET 10, simulateur de combat (`npm ci --prefix showdown`), images
+- **CI, tests** à chaque push (ou « Run workflow » du workflow « CI » pour les relancer), sur une machine Ubuntu propre (un fichier oublié dans un commit s'y voit) : .NET 10, simulateur de combat (`npm ci --ignore-scripts --prefix showdown`), images
   copiées depuis `~/monsuta-potaru-images` du VPS par SSH (exigées par les tests d'images), puis `dotnet test`. Résultat dans
   l'onglet « Actions » du dépôt et à côté de chaque commit. Attention : Linux distingue majuscules et minuscules dans les
   noms de fichiers, Windows non.

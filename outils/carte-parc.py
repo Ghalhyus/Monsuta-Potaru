@@ -55,26 +55,26 @@ LAYERS = ["Sol", "Décors", "Devant", "Collisions"]
 HABITATS = ["Aucun", "Sable", "Cave", "Falaise", "Végétation", "Eau", "Donjon", "Volcan"]
 DECOR = None  # objet posé sur le sol : la case garde le type de la tuile du dessous
 # Planches d'herbe à bords (16 × 10 tuiles) : herbe, sauf le chemin de terre (bas à gauche) et les flancs des hauteurs
-GRASS_TILES = {**{i: "Aucun" for i in (80, 81, 82, 96, 97, 98, 112, 113, 114, 128, 129, 144, 145)},
-               **{r * 16 + c: "Falaise" for r in (2, 3, 4, 6, 7, 8) for c in range(8, 16)},
-               **{i: "Aucun" for i in (6, 7, 22, 23, 86, 87, 102, 103)}}  # escaliers des hauteurs
+GRASS_TILES = {**dict.fromkeys((80, 81, 82, 96, 97, 98, 112, 113, 114, 128, 129, 144, 145), "Aucun"),
+               **dict.fromkeys((r * 16 + c for r in (2, 3, 4, 6, 7, 8) for c in range(8, 16)), "Falaise"),
+               **dict.fromkeys((6, 7, 22, 23, 86, 87, 102, 103), "Aucun")}  # escaliers des hauteurs
 # Falaises du désert (13 × 11 tuiles) : rebords et flancs, sauf les escaliers (en haut à droite), le sol de sable (en bas
 # à droite : uni, marqué, ronds de dunes) et le petit rebord sans flanc (79-81, 92, 94, 105-107 : posé sur l'eau ou le
 # sable au bord de la cascade, il garde le type du dessous)
-DESERT_CLIFF_TILES = {**{r * 13 + c: "Sable" for r in range(5, 11) for c in range(7, 13)},
-                      **{i: "Aucun" for i in (20, 33, 46, 72, 22, 23, 24, 35, 36, 37, 48, 49, 50)},
-                      **{i: DECOR for i in (79, 80, 81, 92, 94, 105, 106, 107)}}
+DESERT_CLIFF_TILES = {**dict.fromkeys((r * 13 + c for r in range(5, 11) for c in range(7, 13)), "Sable"),
+                      **dict.fromkeys((20, 33, 46, 72, 22, 23, 24, 35, 36, 37, 48, 49, 50), "Aucun"),
+                      **dict.fromkeys((79, 80, 81, 92, 94, 105, 106, 107), DECOR)}
 # Bassins d'égout du donjon (Dungeon_n_Sewer_Tileset, 13 × 5 tuiles) : l'eau (le bassin 3 × 3 et ses bords, le canal
 # du haut à gauche, l'eau autour de l'îlot de droite) ; le reste, le rebord de pierre où l'on marche, est du donjon
 # (outils/generer-donjon.py)
-SEWER_TILES = {i: "Eau" for i in (13, 14, 16, 17, 18, 29, 30, 31, 42, 43, 44,
-                                  8, 9, 10, 11, 12, 21, 25, 34, 38, 47, 51, 60, 61, 62, 63, 64)}
+SEWER_TILES = dict.fromkeys((13, 14, 16, 17, 18, 29, 30, 31, 42, 43, 44,
+                             8, 9, 10, 11, 12, 21, 25, 34, 38, 47, 51, 60, 61, 62, 63, 64), "Eau")
 # Rivages des îlots (Water_Stone_Tile, 3 × 5 tuiles : le bord passe au milieu des cases) : de l'eau, sauf les cases à
 # trois coins d'herbe (0, 2, 6, 8), où l'on marche (outils/generer-ocean.py)
-WATER_STONE_TILES = {i: "Végétation" for i in (0, 2, 6, 8)}
+WATER_STONE_TILES = dict.fromkeys((0, 2, 6, 8), "Végétation")
 # Sable des îlots de l'océan (deuxième groupe de Beach_Tiles, 30 × 3 tuiles) : son bord d'écume est surtout de l'eau, on y
 # nage (outils/generer-ocean.py) ; la plage prend le premier groupe, dont l'écume reste du sable
-BEACH_TILES = {i: "Eau" for i in (5, 6, 7, 35, 37, 65, 66, 67, 8, 9, 38, 39)}
+BEACH_TILES = dict.fromkeys((5, 6, 7, 35, 37, 65, 66, 67, 8, 9, 38, 39), "Eau")
 HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Water/Water_Stone_Tile_\d\.png$", ("Eau", WATER_STONE_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),

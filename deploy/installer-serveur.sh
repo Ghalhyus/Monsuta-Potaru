@@ -24,7 +24,7 @@ fi
 sudo usermod -aG docker "$USER" # docker sans sudo, à partir de la prochaine connexion
 
 echo "== 4/6 Réglages (.env)"
-if [ ! -f .env ]; then
+if [[ ! -f .env ]]; then
     read -rp "Nom de domaine (ex. monsuta-potaru.mondomaine.fr ; vide = test en HTTP sur l'adresse IP) : " domain
     read -rp "Pseudo de ton compte, qui sera administrateur (à l'inscription) : " admin
     code=$(openssl rand -base64 18 | tr -d '/+=')
@@ -44,7 +44,7 @@ sudo docker compose up -d --build
 domain=$(grep '^DOMAIN=' .env | cut -d= -f2-)
 echo
 echo "Monsuta Potaru est lancé."
-if [ -n "$domain" ]; then
+if [[ -n "$domain" ]]; then
     echo "  Adresse : https://$domain  (le certificat HTTPS est obtenu à la première visite)"
 else
     ip=$(curl -fsS --proto '=https' https://api.ipify.org 2> /dev/null || echo IP_DU_VPS)

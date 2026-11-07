@@ -220,7 +220,7 @@ public static class SyncEndpoints
         {
             if (ms.Length + read > MaxSaveBytes)
                 return null;
-            ms.Write(buffer, 0, read);
+            await ms.WriteAsync(buffer.AsMemory(0, read), http.HttpContext.RequestAborted);
         }
         return ms.ToArray();
     }

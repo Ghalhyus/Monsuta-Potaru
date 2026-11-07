@@ -89,7 +89,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
     await AdminService.InitializeAsync(db, app.Configuration, app.Logger); // code d'invitation en base, premier administrateur
     await BankService.FillSortNamesAsync(db); // nom de tri des Pokémon enregistrés avant son ajout
     await BankService.FillSpriteDetailsAsync(db); // sexe et objet tenu (image) des Pokémon enregistrés avant leur ajout
@@ -158,4 +158,4 @@ app.MapAdditionalIdentityEndpoints();
 // API du homebrew 3DS PokeBank Sync (envoi des sauvegardes depuis la console, jeton au lieu du cookie de connexion).
 app.MapSyncEndpoints();
 
-app.Run();
+await app.RunAsync();
