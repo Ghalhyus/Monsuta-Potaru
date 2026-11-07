@@ -10,8 +10,9 @@ namespace MonsutaPotaru.Services;
 /// <param name="Nature">Nature (index PKHeX), qui donne son caractère : plus actif, plus dormeur...</param>
 /// <param name="Mood">Humeur selon les habitats du parc (<see cref="ParkHabitats.MoodOf"/>) : « happy », « normal » ou
 /// « sad » (un malheureux attaque les autres de temps en temps, parc.js).</param>
-/// <param name="Moves">Façon de se déplacer (<see cref="ParkHabitats.MovementOf"/>) : « swim » (nage), « lava » (va dans
-/// la lave), « swim-lava » (les deux), « fly » (survole l'eau et la lave) ou null (marche seulement).</param>
+/// <param name="Moves">Façon de se déplacer dans ce paysage (<see cref="ParkHabitats.MovementOf(byte, byte, ParkLandscape)"/>) :
+/// « swim » (nage), « lava » (va dans la lave), « swim-lava » (les deux), « fly » (survole l'eau, la lave, les rebords et
+/// les flancs de la montagne, se pose à terre ou sur un sommet) ou null (marche seulement).</param>
 public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
     string SpriteFolder, int Family, byte Nature, string Mood = "normal", string? Moves = null);
 
@@ -208,7 +209,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         return members.Select(p => new ParkPokemon(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
             PokemonSprites.DonjonFolder(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0),
             Family(p.Species), p.Nature ?? 0, ParkHabitats.MoodOf(p.Type1, p.Type2, map).Mood.ToString().ToLowerInvariant(),
-            ParkHabitats.MovementOf(p.Type1, p.Type2))).ToList();
+            ParkHabitats.MovementOf(p.Type1, p.Type2, park.Landscape))).ToList();
     }
 
     /// <summary>

@@ -6,17 +6,17 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py ou generer-grotte.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
-/// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage), et chaque agrandissement qui garde les cases libres de la
-/// taille d'avant.
+/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py, generer-grotte.py ou generer-montagne.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
+/// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage ; à la montagne, en volant), et chaque agrandissement qui
+/// garde les cases libres de la taille d'avant.
 /// </summary>
 public sealed class ParkMapTests
 {
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan et la grotte.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan, la grotte et la montagne.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1", "montagne-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -51,6 +51,21 @@ public sealed class ParkMapTests
         var collisions = Layer(map, "Collisions").GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
         return Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
             .Where(c => collisions[c.y * width + c.x] == 0).ToHashSet();
+    }
+
+    /// <summary>
+    /// Cases d'un calque de la montagne (« Sommets » : où un volant se pose ; « Survol » : rebords et flancs qu'il survole),
+    /// dans la zone « Parc », comme parc.js ; aucune ailleurs.
+    /// </summary>
+    private static HashSet<(int x, int y)> Marked(JsonElement map, string layer)
+    {
+        if (!map.GetProperty("layers").EnumerateArray().Any(l => l.GetProperty("name").GetString() == layer))
+            return [];
+        int width = map.GetProperty("width").GetInt32();
+        var (x0, y0, w, h) = Zone(map, "Parc");
+        var data = Layer(map, layer).GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        return Enumerable.Range(y0, h).SelectMany(y => Enumerable.Range(x0, w).Select(x => (x, y)))
+            .Where(c => data[c.y * width + c.x] != 0).ToHashSet();
     }
 
     /// <summary>
@@ -110,16 +125,18 @@ public sealed class ParkMapTests
 
         var freeTiles = FreeTiles(map);
         var free = freeTiles.Order().ToList();
-        // À l'océan, seuls les nageurs vivent : ils passent d'un îlot à l'autre par l'eau libre, et s'y tiennent aussi
+        // À l'océan, seuls les nageurs vivent : ils passent d'un îlot à l'autre par l'eau libre, et s'y tiennent aussi (à la
+        // montagne, la vallée est reliée à pied : les sommets des volants sont vérifiés par Mountain_FlyersLandOnTheSummits)
         HashSet<(int x, int y)> passable = park == "ocean-1" ? [.. freeTiles, .. OpenWater(park, size)] : freeTiles;
         bool Free(int x, int y) => passable.Contains((x, y));
         // Place pour ses Pokémon : 20 par taille, une quinzaine de cases chacun au moins ; à la plage, la mer est bloquée et
         // les zones choisies par l'utilisateur laissent ~8 cases de sable (les types Eau nagent en plus dans la mer) ; au
         // volcan, la lave (17 à 31 % de la zone) est bloquée, 14 cases de roche dans la vue de départ (les Feu y vont en plus) ;
         // au désert, le flanc du plateau (3 lignes) et l'oasis traversent la vue de départ : 11 cases (les Eau nagent en plus)
-        // à l'océan, l'eau libre compte (seuls les nageurs y vivent)
+        // à l'océan, l'eau libre compte (seuls les nageurs y vivent) ; à la montagne, le plateau de la vue de départ, son flanc
+        // et la rivière traversent la vue de départ : 11 cases de vallée (les volants se posent en plus sur les sommets)
         var capacity = ParkService.CapacityOf(size - 1);
-        var perPokemon = park switch { "plage-1" => 7, "desert-1" => 11, _ => 14 };
+        var perPokemon = park switch { "plage-1" => 7, "desert-1" or "montagne-1" => 11, _ => 14 };
         Assert.True(passable.Count >= capacity * perPokemon, $"zone « Parc » trop encombrée : {passable.Count} cases libres pour {capacity} Pokémon");
 
         // Comme parc.js : en diagonale seulement si les deux côtés sont libres
@@ -152,6 +169,10 @@ public sealed class ParkMapTests
         var lost = before.Where(c => !after.Contains(c)).ToList();
         Assert.True(lost.Count == 0, $"cases libres perdues en passant à la taille {size} : {string.Join(", ", lost.Take(10))}");
         Assert.True(after.Count > before.Count);
+        // Montagne : un sommet où l'on se posait le reste
+        var summitsAfter = Marked(Map(park, size), "Sommets");
+        var summitsLost = Marked(Map(park, size - 1), "Sommets").Where(c => !summitsAfter.Contains(c)).ToList();
+        Assert.True(summitsLost.Count == 0, $"sommets perdus en passant à la taille {size} : {string.Join(", ", summitsLost.Take(10))}");
     }
 
     [Theory]
@@ -417,5 +438,53 @@ public sealed class ParkMapTests
             .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
             .Select(t => t.GetProperty("image").GetString()).ToList();
         Assert.Equal(["Big_Torch_Anim.png"], animated);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Mountain_FlyersLandOnTheSummits(int size)
+    {
+        // Choix de l'utilisateur (2026-11-07) : tous les Pokémon vont à la montagne, seuls les volants montent sur ses massifs
+        // aux flancs de pierre (deux étages, sans escalier) ; une rivière traverse la vallée. Les sommets (dessus des plateaux)
+        // et les rebords et flancs sont bloqués pour la marche ; parc.js y laisse passer les volants (calques « Sommets » et
+        // « Survol »), qui se posent sur les sommets, tous atteints en volant depuis la vallée.
+        var map = Map("montagne-1", size);
+        int width = map.GetProperty("width").GetInt32();
+        var collisions = Layer(map, "Collisions").GetProperty("data").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+        var summits = Marked(map, "Sommets");
+        var air = Marked(map, "Survol");
+        Assert.NotEmpty(summits);
+        Assert.NotEmpty(air);
+        Assert.Empty(summits.Intersect(air));
+        Assert.All(summits.Concat(air), c => Assert.NotEqual(0, collisions[c.y * width + c.x]));
+        // Plus de sommets aux tailles 2 et 3 (la vue de départ a déjà son plateau) ; un massif n'est montré que tout entier,
+        // et tous tiennent dans la zone de la taille 3 (l'anneau de la carte entière est trop mince entre la bordure et elle)
+        var before = size > 1 ? Marked(Map("montagne-1", size - 1), "Sommets").Count : 0;
+        Assert.True(size == 4 ? summits.Count == before : summits.Count > before);
+        // Tous atteints en volant depuis la vallée (terre, sommets, rebords et flancs, rivière ; diagonale comme parc.js)
+        HashSet<(int x, int y)> flight = [.. FreeTiles(map), .. summits, .. air, .. OpenWater("montagne-1", size)];
+        var reached = new HashSet<(int x, int y)> { FreeTiles(map).Order().First() };
+        var queue = new Queue<(int x, int y)>(reached);
+        while (queue.TryDequeue(out var c))
+            for (var dy = -1; dy <= 1; dy++)
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    var n = (c.x + dx, c.y + dy);
+                    if ((dx == 0 && dy == 0) || !flight.Contains(n)) continue;
+                    if (dx != 0 && dy != 0 && (!flight.Contains((c.x + dx, c.y)) || !flight.Contains((c.x, c.y + dy)))) continue;
+                    if (reached.Add(n)) queue.Enqueue(n);
+                }
+        Assert.All(summits, c => Assert.Contains(c, reached));
+
+        // Des flancs (falaise) et surtout de l'herbe : les volants (qui aiment les deux) y sont heureux ; une rivière
+        var habitats = ParkHabitats.Read(Json("montagne-1", size))!;
+        Assert.True(habitats.Counts[Habitat.Cliff] > 0);
+        Assert.True(habitats.Counts[Habitat.Vegetation] * 2 > habitats.Area.W * habitats.Area.H);
+        Assert.NotEmpty(OpenWater("montagne-1", size));
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Flying, (byte)MoveType.Flying, habitats).Mood);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Flying, habitats).Mood);
     }
 }

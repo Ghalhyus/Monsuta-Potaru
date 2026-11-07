@@ -71,8 +71,9 @@ const FLEE = { speed: 2, distance: [96, 160] }; // le Pokémon frappé s'enfuit 
 const ENERGY = { walk: 0.004, idle: 0.0012, sleepDay: 0.012, sleepNight: 0.004 };
 // Cases où l'on peut aller (masques de Ground.walkable) : LAND, la terre où l'on marche ; WATER, l'eau libre (sans rocher ni
 // objet posé) et le bord qui la touche (écume de la plage), pour les nageurs et les volants ; LAVA, la lave libre (de même),
-// pour les types Feu et les volants
-const LAND = 1, WATER = 2, LAVA = 4, LIQUID = WATER | LAVA;
+// pour les types Feu et les volants ; SUMMIT, le dessus des plateaux et des sommets de la montagne (calque « Sommets »), où
+// seul un volant se pose ; AIR, leurs rebords et leurs flancs (calque « Survol »), qu'il survole sans s'y arrêter
+const LAND = 1, WATER = 2, LAVA = 4, LIQUID = WATER | LAVA, SUMMIT = 8, AIR = 16;
 // Nageur : part de ses destinations dans l'eau ; dans l'eau, le sprite descend de <sink> pixels de sprite et n'est plus
 // dessiné sous la surface (la ligne de ses pieds) ; des remous à la place de l'ombre
 const SWIM = { waterShare: 2 / 3, sink: 4 };
@@ -82,6 +83,7 @@ const SWIM = { waterShare: 2 / 3, sink: 4 };
 const LAVA_BATH = { share: 1 / 4 };
 const FLY_HEIGHT = 10; // hauteur (pixels de la carte) d'un volant au-dessus de l'eau, son ombre restant sur l'eau
 const FLY_OVER = 0.3; // volant : part de ses promenades qui passent au-dessus de l'eau (un tour, puis il se pose à terre)
+const SUMMIT_SHARE = 0.4; // volant, à la montagne : part de ses promenades (et de ses arrivées) sur les plateaux et les sommets
 
 // Lignes des planches de SpriteCollab : bas, bas-droite, droite, haut-droite, haut, haut-gauche, gauche, bas-gauche.
 const FRONT = 0;
@@ -190,15 +192,23 @@ class Ground {
         });
         const layer = name => data?.layers.find(l => l.name === name && l.type === "tilelayer")?.data ?? [];
         const collisions = layer("Collisions");
-        this.walkable = new Uint8Array(this.columns * this.lines); // LAND, WATER, ou 0 : bloquée pour tous
+        this.walkable = new Uint8Array(this.columns * this.lines); // LAND, WATER, LAVA, SUMMIT, AIR, ou 0 : bloquée pour tous
         this.free = []; // cases de terre libres, pour tirer un endroit au hasard
+        this.summits = []; // dessus des plateaux et des sommets (montagne), de même
+        // Montagne : cases bloquées dans « Collisions » (personne n'y marche) mais où un volant se pose, ou qu'il survole
+        const summits = layer("Sommets"), air = layer("Survol");
         const { x: sx, y: sy, w: sw, h: sh } = this.area;
         for (let y = sy; y < sy + sh; y++) {
             for (let x = sx; x < sx + sw; x++) {
                 const i = y * this.columns + x;
-                if (x < 0 || y < 0 || x >= this.columns || y >= this.lines || collisions[i]) continue;
-                this.walkable[i] = LAND;
-                this.free.push(i);
+                if (x < 0 || y < 0 || x >= this.columns || y >= this.lines) continue;
+                if (!collisions[i]) {
+                    this.walkable[i] = LAND;
+                    this.free.push(i);
+                } else if (summits[i]) {
+                    this.walkable[i] = SUMMIT;
+                    this.summits.push(i);
+                } else if (air[i]) this.walkable[i] = AIR;
             }
         }
         const decors = layer("Décors"), front = layer("Devant");
@@ -276,7 +286,7 @@ class Ground {
     get width() { return this.columns * TILE; }
     get height() { return this.lines * TILE; }
 
-    /** Case où l'on peut aller avec <mask> (LAND, WATER, LAVA, ou plusieurs). */
+    /** Case où l'on peut aller avec <mask> (LAND, WATER, LAVA, SUMMIT, AIR, ou plusieurs). */
     tileFree(tx, ty, mask = LAND) { return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && (this.walkable[ty * this.columns + tx] & mask) !== 0; }
     isFree(x, y, mask = LAND) { return this.tileFree(Math.floor(x / TILE), Math.floor(y / TILE), mask); }
     /** Type de la case (cases de la carte) ; hors de la carte : 0 (aucun). */
@@ -288,14 +298,20 @@ class Ground {
         const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
         return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines ? this.walkable[ty * this.columns + tx] & LIQUID : 0;
     }
+    /** Sous le point, une case qu'un volant ne fait que survoler (eau, lave, rebord ou flanc de la montagne) : il y vole haut. */
+    flightAt(x, y) {
+        const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+        return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && (this.walkable[ty * this.columns + tx] & (LIQUID | AIR)) !== 0;
+    }
     center(i) { return { x: (i % this.columns) * TILE + TILE / 2, y: Math.floor(i / this.columns) * TILE + TILE / 2 }; }
 
     /**
      * Endroit libre au hasard (un peu décalé du centre de sa case), sur la terre, ou dans l'eau libre (WATER), la lave libre
-     * (LAVA) ou l'une ou l'autre (LIQUID) s'il y en a.
+     * (LAVA), l'une ou l'autre (LIQUID), ou sur un sommet (SUMMIT) s'il y en a.
      */
     randomSpot(where = LAND) {
-        const liquid = where === WATER ? this.water : where === LAVA ? this.lava : where === LIQUID ? this.liquid : this.free;
+        const liquid = where === WATER ? this.water : where === LAVA ? this.lava : where === LIQUID ? this.liquid
+            : where === SUMMIT ? this.summits : this.free;
         const cells = liquid.length ? liquid : this.free.length ? this.free : this.liquid; // sans terre (océan) : l'eau
         if (!cells.length) return { x: this.width / 2, y: this.height / 2 };
         const c = this.center(cells[Math.floor(Math.random() * cells.length)]);
@@ -316,6 +332,7 @@ class Ground {
         if (mask & LAND) look(this.free);
         if (mask & WATER) look(this.water);
         if (mask & LAVA) look(this.lava);
+        if (mask & SUMMIT) look(this.summits);
         return best < 0 ? { x, y } : this.center(best);
     }
 
@@ -457,16 +474,24 @@ class Pokemon {
     get anim() { return this.anims[ANIMATION_OF[this.state]]; }
     get swims() { return this.moves === "swim" || this.moves === "swim-lava"; }
     get bathes() { return this.moves === "lava" || this.moves === "swim-lava"; }
-    /** Cases où il peut passer : l'eau libre pour un nageur, la lave pour un type Feu, les deux pour un volant. */
-    get pass() { return this.moves === "fly" ? LAND | LIQUID : this.reach; }
-    /** Cases où il peut s'arrêter : un volant se pose toujours sur la terre ferme. */
-    get reach() { return LAND | (this.swims ? WATER : 0) | (this.bathes ? LAVA : 0); }
+    get flies() { return this.moves === "fly"; }
+    /**
+     * Cases où il peut passer : l'eau libre pour un nageur, la lave pour un type Feu ; un volant survole les deux, et à la
+     * montagne les rebords et les flancs.
+     */
+    get pass() { return this.flies ? LAND | LIQUID | SUMMIT | AIR : this.reach; }
+    /** Cases où il peut s'arrêter : un volant se pose toujours sur la terre ferme, ou sur un sommet. */
+    get reach() { return LAND | (this.swims ? WATER : 0) | (this.bathes ? LAVA : 0) | (this.flies ? SUMMIT : 0); }
     /** Où il peut dormir : pas dans la lave. */
-    get bed() { return LAND | (this.swims ? WATER : 0); }
-    /** Où il part se promener : un nageur va surtout dans l'eau (toujours, sans terre), un type Feu de temps en temps dans la lave. */
+    get bed() { return LAND | (this.swims ? WATER : 0) | (this.flies ? SUMMIT : 0); }
+    /**
+     * Où il part se promener : un nageur va surtout dans l'eau (toujours, sans terre), un type Feu de temps en temps dans la
+     * lave, un volant souvent sur les sommets.
+     */
     destination() {
         if (this.swims && this.ground.water.length && (!this.ground.free.length || Math.random() < SWIM.waterShare)) return WATER;
         if (this.bathes && this.ground.lava.length && Math.random() < LAVA_BATH.share) return LAVA;
+        if (this.flies && this.ground.summits.length && Math.random() < SUMMIT_SHARE) return SUMMIT;
         return LAND;
     }
 
@@ -1290,8 +1315,8 @@ export async function create(container, component, options) {
         if (remaining < 1.7) {
             if (p.intent === "attack") strike(p);
             else if (p.intent === "sleep") p.sleep();
-            else if (p.intent === "soar") { // au bout de son tour au-dessus de l'eau : il va se poser, sans s'arrêter
-                const spot = spotNear(p, LAND);
+            else if (p.intent === "soar") { // au bout de son tour au-dessus de l'eau : il va se poser (à terre ou sur un sommet), sans s'arrêter
+                const spot = spotNear(p, p.destination());
                 p.walkTo(spot.x, spot.y, "explore");
             }
             else {
@@ -1483,11 +1508,12 @@ export async function create(container, component, options) {
             }
             update(p, dt, level);
             p.advanceFrame(dt * 1000, spriteScale);
-            // Dans l'eau ou la lave (ou au-dessus), pas porté : le nageur s'y enfonce, le volant monte, en douceur
+            // Dans l'eau ou la lave (ou au-dessus), pas porté : le nageur s'y enfonce, le volant monte, en douceur (de même
+            // au-dessus d'un rebord ou d'un flanc de la montagne ; posé sur un sommet, il redescend)
             if (p.moves) {
-                const under = p.state !== "held" ? ground.liquidAt(p.x, p.y) : 0;
-                if (p.moves === "fly") p.altitude += ((under ? FLY_HEIGHT : 0) - p.altitude) * ease;
+                if (p.flies) p.altitude += ((p.state !== "held" && ground.flightAt(p.x, p.y) ? FLY_HEIGHT : 0) - p.altitude) * ease;
                 else {
+                    const under = p.state !== "held" ? ground.liquidAt(p.x, p.y) : 0;
                     if (under) p.liquid = under;
                     p.wet += ((under ? 1 : 0) - p.wet) * ease;
                 }
@@ -1545,7 +1571,9 @@ export async function create(container, component, options) {
             const placed = [...pokemon];
             for (const item of loaded.filter(l => l)) {
                 const swims = item.info.moves === "swim" || item.info.moves === "swim-lava";
-                const where = swims && Math.random() < SWIM.waterShare ? WATER : LAND; // nageur : surtout dans l'eau ; Feu : à terre
+                // Nageur : surtout dans l'eau ; volant : souvent sur un sommet (montagne) ; Feu : à terre
+                const where = swims && Math.random() < SWIM.waterShare ? WATER
+                    : item.info.moves === "fly" && ground.summits.length && Math.random() < SUMMIT_SHARE ? SUMMIT : LAND;
                 let spot = ground.randomSpot(where);
                 for (let tries = 0; tries < 30 && !placed.every(o => distance(o, spot) > 27); tries++) spot = ground.randomSpot(where);
                 const p = new Pokemon(item.info, item.anims, ground, spot.x, spot.y);
@@ -1593,7 +1621,10 @@ export async function create(container, component, options) {
                 x: Math.round(p.x), y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100,
                 free: ground.isFree(p.x, p.y, p.pass), // jamais sur une case qui lui est interdite
                 water: ground.liquidAt(p.x, p.y) === WATER, // dans l'eau (nageur) ou au-dessus (volant)
-                lava: ground.liquidAt(p.x, p.y) === LAVA })); // dans la lave (Feu) ou au-dessus (volant)
+                lava: ground.liquidAt(p.x, p.y) === LAVA, // dans la lave (Feu) ou au-dessus (volant)
+                summit: ground.isFree(p.x, p.y, SUMMIT), // posé sur un sommet (volant, montagne)
+                air: ground.isFree(p.x, p.y, AIR), // au-dessus d'un rebord ou d'un flanc
+                altitude: Math.round(p.altitude) }));
         },
         /** Mode debug : ce Pokémon attaque le plus proche, quel que soit son bonheur ; false s'il n'y en a pas. */
         attack(id) {

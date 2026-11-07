@@ -56,6 +56,18 @@ public sealed class ParkHabitatsTests
         Assert.Equal(expected, ParkHabitats.MovementOf((byte)type1, (byte)type2));
 
     [Theory]
+    [InlineData(MoveType.Fire, MoveType.Flying, "fly")]     // Dracaufeu : vole à la montagne (pas de lave, des sommets)
+    [InlineData(MoveType.Water, MoveType.Flying, "fly")]    // Bekipan : vole aussi
+    [InlineData(MoveType.Normal, MoveType.Flying, "fly")]   // Roucool
+    [InlineData(MoveType.Water, MoveType.Water, "swim")]    // Carapuce (refusé à la montagne : ParkLandscapes.Refusal)
+    public void Movement_AtTheMountain_EveryFlyingTypeFlies(MoveType type1, MoveType type2, string? expected)
+    {
+        Assert.Equal(expected, ParkHabitats.MovementOf((byte)type1, (byte)type2, ParkLandscape.Mountain));
+        // Ailleurs, la règle de toujours
+        Assert.Equal(ParkHabitats.MovementOf((byte)type1, (byte)type2), ParkHabitats.MovementOf((byte)type1, (byte)type2, ParkLandscape.Volcano));
+    }
+
+    [Theory]
     [MemberData(nameof(Sizes))]
     public void Map_HasATypeForEveryTile(int size)
     {

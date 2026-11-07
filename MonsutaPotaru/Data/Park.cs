@@ -15,6 +15,9 @@ public enum ParkLandscape
     Ocean = 5,
     /// <summary>Une caverne dans la pénombre, ses piliers de roche, ses cristaux et un lac souterrain (cartes grotte-1-{taille}).</summary>
     Cave = 6,
+    /// <summary>Une vallée traversée par une rivière, des massifs de pierre et leurs sommets, où seuls les Pokémon qui volent
+    /// se posent (cartes montagne-1-{taille}).</summary>
+    Mountain = 7,
 }
 
 /// <summary>

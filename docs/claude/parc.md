@@ -25,6 +25,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
   dans `generer-plage.py`, `generer-volcan.py`, `generer-desert.py` et `generer-ocean.py` (2,4 donnait une seule rangée trouée) ;
+  montagne : la forêt de sapins de la forêt (6 en haut, 5 ailleurs, ± 2,2), les massifs hors d'elle ;
   grotte : 3,6 ± 1 de roche (plus l'anneau de pierres, et le mur sous le bord du haut). Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
@@ -325,6 +326,67 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   8 Pokémon) : nageurs 61-65 % dans le lac (taille 2), 55-64 % (taille 4), 0 % à la taille 1 (pas d'eau) ; volant 4-9 %
   au-dessus ; marcheurs jamais ; aucune case interdite. Forêt inchangée. Moteur commun : océan et volcan régénérés avec
   l'ancien et le nouveau `parc_carte.py`, `.tmx` et aperçus identiques.
+
+## Montagne (`outils/generer-montagne.py`, `ParkLandscape.Mountain`, 2026-11-07)
+- `Montagne_1-1.tmx` à `Montagne_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `montagne-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `montagne-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : **tous les Pokémon y vont, seuls les volants montent** (d'abord réservée aux volants, puis
+  ouverte à tous le 2026-11-07 : pas de `Refusal`, `ChooserNote` le dit) ; **à la montagne, tout type Vol vole**, Feu/Vol et Eau/Vol compris (`ParkHabitats.MovementOf(type1, type2, paysage)`,
+  appelé par `ListAsync` ; ailleurs, la règle de 2026-11-01 reste) ; montagnes vertes à flancs de pierre ; **deux étages
+  sans escalier** ; **une rivière qui traverse** (avec un pont).
+- **Planche des hauteurs** (`Grass_Tiles_n`, lue le 2026-11-07, aucun exemple avec le pack) : le bord passe au milieu des
+  cases, tuile d'après les quatre coins (`REBORD`, comme les îlots de l'océan). Tour de pierre colonnes 11-13 : coins 11/13,
+  haut 12, côtés 27/29, centre 28 transparent (l'herbe du plateau est dans « Sol ») ; ligne du bas 43-45 = fin de l'herbe
+  et haut du flanc, puis 59-61 (répétée : le flanc fait 2 à 4 lignes) et 75-77 (pied, avec l'ombre). Coins rentrants du
+  haut : l'anneau de pierre 115 (NE dehors) et 117 (NO dehors), même rebord que la tour (vérifié agrandi). **Aucun coin
+  rentrant avec un flanc** : chaque colonne d'un plateau descend jusqu'à la même dernière ligne (bas plat, `plateau`), le
+  haut est libre. Les murs 104-143 sont des murs de briques (pas utilisés). Colonnes 8-10 : la même tour en terre.
+- **Une herbe par étage** (`HERBES`) : vallée n° 4 (bleutée, `Water_Tile_4` assorti), plateaux n° 1, sommets n° 3 ; chaque
+  étage prend ses tuiles dans sa planche (rebord de son herbe), leur partie transparente montre le « Sol » de l'étage du
+  dessous. Sous la forêt (ce qui est caché), l'herbe de la vallée : sinon les plateaux cachés se devinaient sous les sapins.
+- `MASSIFS` : taille où il apparaît, plateau (x0, x1, haut, bas, lignes de flanc, graine) et sommet facultatif, qui doit
+  tenir sur le dessus entier du plateau avec une case d'herbe autour. **Un massif n'est jamais montré coupé** (demande du
+  2026-11-07, capture du parc 3 avec les massifs des coins coupés par la lisière) : `foret_de` cache tout entier un massif
+  qui déborde de la zone, et le script s'arrête si un massif n'est pas entier à sa « taille » (le bruit du haut peut le
+  faire déborder d'une ligne : le massif nord-est disparaissait). Tous tiennent dans la zone de la taille 3 (coins
+  x 12-19 et 60-67) : la carte entière n'ajoute pas de massif (anneau trop mince entre la bordure et la taille 3 ;
+  `ParkMapTests` : autant de sommets aux tailles 3 et 4). Les massifs du sud des coins n'ont pas de sommet (la rivière
+  laisse trop peu de hauteur). Le script s'arrête si deux massifs sont à moins de 3 cases, si un massif touche
+  la **forêt de bordure** (elle le coupait : trous dans le rebord, essai refusé du 2026-11-07) ou si la rivière passe à
+  moins de 3 cases (la rivière se cale d'elle-même entre les massifs du nord et du sud, `couloir`, `COURS_MILIEU`).
+- **Trois ponts** (`PONTS` : colonnes 15, 36, 62 ; demande du 2026-11-07) : la rivière est droite sous chacun (`pont_de`,
+  une colonne de plus de chaque côté). Bridge_Wood 12-14 / 22 / 30-32, nord-sud, planches sur la colonne du milieu
+  (débloquée), poteaux sur les berges (bloqués). Un pont n'est posé qu'à une taille où il est tout entier dans la zone et
+  où ses poteaux étaient encore cachés à la taille d'avant (sinon ils prendraient des cases libres : jamais posé) : celui
+  du milieu dans la vue de départ, ceux de l'ouest et de l'est à la taille 3 (cachés par la forêt à la taille 2).
+- **La rivière n'est jamais sous la forêt** (`foret_de` rend la forêt sans la rivière ; demande du 2026-11-07 : coupée à
+  la lisière, elle faisait « un lac bizarre ») : à chaque taille elle traverse les sapins jusqu'aux bords de la carte
+  (bloquée hors de la zone ; dans la lisière de la zone, les nageurs y vont). Sol de chaque taille = celui de la carte
+  entière (aucune berge ajoutée).
+- **Pas de feuillage de la forêt sur un massif montré** (`planter_arbres`, `sur_un_massif` ; demande du 2026-11-07 : la
+  rangée de sapins de la lisière du bas du parc 3 cachait le pied des flancs des massifs du sud) : le sapin n'est pas
+  planté, ses buissons restent. Ailleurs, la lisière garde ses sapins (leur feuillage déborde de deux lignes dans la zone).
+- **Volants** : calque « Sommets » (cases à trois coins au moins sur un plateau, sans objet bloquant) et « Survol » (le
+  reste de l'emprise : rebords, flancs), tuile de collision dans les deux, toutes bloquées dans « Collisions ». `parc.js` :
+  `SUMMIT` (8) et `AIR` (16) dans `walkable`, posés avant `openLiquid` (une case de sommet n'est jamais prise pour le
+  bord de l'eau) ; `ground.summits` ; volant : `pass` = `LAND | LIQUID | SUMMIT | AIR`, `reach` et `bed` avec `SUMMIT` ;
+  `destination` envoie un volant sur un sommet `SUMMIT_SHARE` (40 %) du temps, de même à l'arrivée ; `flightAt` (liquide
+  ou `AIR`) le fait voler haut (`altitude`), posé sur un sommet il redescend. Le script relie tout (terre, sommets,
+  survol, eau libre) à la vue de départ : la terre **à pied** (les marcheurs y vivent ; la bande entre la rivière et la
+  lisière de la taille 1, qu'on n'atteignait qu'en volant, est devenue des buissons), les sommets en volant ; ce qui ne
+  l'est pas devient buisson ou n'est plus un sommet.
+- Le dessus des plateaux est étroit autour des sommets : les petits sapins des sommets sont posés **sans marge** (avec une
+  marge d'une case, aucun ne trouvait de place).
+- Cases de terre par Pokémon : 11,3 / 17,1 / 19,7 / 28,7 (`ParkMapTests` : 11, comme le désert ; plateau de la vue de
+  départ rétréci d'une colonne de chaque côté pour y arriver), plus les sommets pour les volants (29 / 66 / 200 / 200).
+- Essais du 2026-11-07 (instance de test : achat de la Montagne et choix dans la vraie page ; 15 min simulées aux tailles
+  1, 2 et 4). 20 volants : 34 / 31 / 22 % du temps sur les sommets, tous y montent, aucune case interdite. Ouverte à tous
+  (14 volants, 3 nageurs, 3 marcheurs) : volants 27 / 25 / 22 % sur les sommets, nageurs 64 / 69 / 55 % dans la rivière,
+  marcheurs jamais en haut, aucune case interdite, 6 volants endormis sur les sommets la nuit. Plage inchangée (nageurs
+  67 %, volants 19 %). Après les massifs entiers (tailles 1, 3, 4) : volants 29 / 28 / 25 % sur les sommets, nageurs
+  59 / 62 / 58 % dans la rivière, marcheurs jamais en haut, aucune case interdite. Avec les trois ponts (tailles 1 et 3,
+  10 volants, 3 nageurs, 7 marcheurs) : les marcheurs passent sur les deux rives (6 sur 7 au nord et au sud à la taille
+  3), volants 25 % sur les sommets, nageurs 52 à 66 % dans l'eau, aucune case interdite, personne hors de la zone.
 
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :

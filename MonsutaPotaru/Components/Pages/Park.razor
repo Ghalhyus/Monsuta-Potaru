@@ -160,9 +160,9 @@ else
                 {
                     @($"Ceux d'un autre parc ({string.Join(", ", parks.Where(p => p.Id != ParkId).Select(p => $"{ParkLandscapes.Icon(p.Landscape)} {ParkLandscapes.Where(p.Landscape)}"))}) le quittent pour venir ici.")
                 }
-                @if (current?.Landscape == ParkLandscape.Ocean)
+                @if (current is not null && ParkLandscapes.ChooserNote(current.Landscape) is { } note)
                 {
-                    @(" Dans l'océan, seuls ceux qui nagent (type Eau) peuvent vivre : les autres sont grisés.")
+                    @(" " + note)
                 }
             </p>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">

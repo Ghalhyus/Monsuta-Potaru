@@ -19,6 +19,7 @@ public static class ParkLandscapes
         ParkLandscape.Desert => "Désert",
         ParkLandscape.Ocean => "Océan",
         ParkLandscape.Cave => "Grotte",
+        ParkLandscape.Mountain => "Montagne",
         _ => "Forêt",
     };
 
@@ -30,6 +31,7 @@ public static class ParkLandscapes
         ParkLandscape.Desert => "dans le désert",
         ParkLandscape.Ocean => "dans l'océan",
         ParkLandscape.Cave => "dans la grotte",
+        ParkLandscape.Mountain => "à la montagne",
         _ => "dans la forêt",
     };
 
@@ -41,6 +43,7 @@ public static class ParkLandscapes
         ParkLandscape.Desert => "🏜️",
         ParkLandscape.Ocean => "🌊",
         ParkLandscape.Cave => "🦇",
+        ParkLandscape.Mountain => "⛰️",
         _ => "🌳",
     };
 
@@ -52,6 +55,7 @@ public static class ParkLandscapes
         ParkLandscape.Desert => "desert-1",
         ParkLandscape.Ocean => "ocean-1",
         ParkLandscape.Cave => "grotte-1",
+        ParkLandscape.Mountain => "montagne-1",
         _ => "parc-1",
     };
 
@@ -69,6 +73,8 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "Une grande caverne dans la pénombre, éclairée par des torches et des cristaux, avec ses stalagmites et un lac " +
                               "souterrain : le refuge des types Sol, Roche, Ténèbres, Spectre et Dragon, bien moins celui des Pokémon " +
                               "qui aiment le grand air.",
+        ParkLandscape.Mountain => "Une vallée traversée par une rivière, entre des massifs aux flancs de pierre et leurs sommets : tous " +
+                                  "les Pokémon s'y promènent, mais seuls ceux qui volent (type Vol) montent se poser tout là-haut.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -80,17 +86,30 @@ public static class ParkLandscapes
         ParkLandscape.Desert => "Les cactus reculent et dévoilent une nouvelle partie du désert",
         ParkLandscape.Ocean => "Le récif recule et dévoile une nouvelle partie de l'océan",
         ParkLandscape.Cave => "La roche recule et dévoile une nouvelle partie de la grotte",
+        ParkLandscape.Mountain => "La forêt de sapins recule et dévoile une nouvelle partie de la montagne",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
     };
 
     /// <summary>
     /// Ce qui empêche un Pokémon de ces types (index PKHeX, comme <c>BankPokemon.Type1</c>) de vivre dans ce paysage, en
     /// quelques mots (« Ne nage pas »), ou null s'il le peut. L'océan n'a que de l'eau et des îlots : seuls les nageurs y
-    /// vont (<see cref="ParkHabitats.MovementOf"/> : type Eau, choix de l'utilisateur, 2026-11-03).
+    /// vont (<see cref="ParkHabitats.MovementOf(byte, byte)"/> : type Eau, choix de l'utilisateur, 2026-11-03). La montagne
+    /// accueille tout le monde ; seuls les volants y montent sur les sommets (choix de l'utilisateur, 2026-11-07).
     /// </summary>
     public static string? Refusal(ParkLandscape landscape, byte type1, byte type2) => landscape switch
     {
         ParkLandscape.Ocean when ParkHabitats.MovementOf(type1, type2) is not ("swim" or "swim-lava") => "Ne nage pas",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Remarque de la fenêtre « Choisir les Pokémon » pour un paysage où tous ne font pas la même chose (à l'océan, les
+    /// autres sont grisés ; à la montagne, seuls les volants montent sur les sommets), ou null.
+    /// </summary>
+    public static string? ChooserNote(ParkLandscape landscape) => landscape switch
+    {
+        ParkLandscape.Ocean => "Dans l'océan, seuls ceux qui nagent (type Eau) peuvent vivre : les autres sont grisés.",
+        ParkLandscape.Mountain => "À la montagne, tous se promènent dans la vallée, mais seuls ceux qui volent (type Vol) montent sur les sommets.",
         _ => null,
     };
 }

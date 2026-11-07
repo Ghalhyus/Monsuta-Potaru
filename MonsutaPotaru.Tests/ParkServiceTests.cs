@@ -232,6 +232,29 @@ public sealed class ParkServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Mountain_TakesEveryPokemon_AndEveryFlyingTypeFliesThere()
+    {
+        // Choix de l'utilisateur (2026-11-07) : tous les Pokémon vont à la montagne, seuls les volants (type Vol) y volent
+        // jusqu'aux sommets ; un Feu/Vol ou un Eau/Vol aussi (ailleurs, il va dans la lave ou nage)
+        await SetWallet("sacha", ParkService.ParkPrice);
+        var pidgey = Add(16, type: MoveType.Normal, type2: MoveType.Flying);
+        var charizard = Add(6, type: MoveType.Fire, type2: MoveType.Flying);
+        var gyarados = Add(130, type: MoveType.Water, type2: MoveType.Flying);
+        var squirtle = Add(7, type: MoveType.Water);
+        var pikachu = Add(25, type: MoveType.Electric);
+        var mountain = (await _park.BuyAsync("sacha", ParkLandscape.Mountain)).ParkId;
+
+        Assert.All(await _park.ListCandidatesAsync("sacha", mountain), c => Assert.Null(c.Refusal));
+        Assert.True((await _park.SetAsync("sacha", mountain, [pidgey, charizard, gyarados, squirtle, pikachu])).Ok);
+        Assert.Equal(["fly", "fly", "fly", "swim", null], (await _park.ListAsync("sacha", mountain)).Select(p => p.Moves));
+        Assert.Equal("happy", (await _park.ListAsync("sacha", mountain)).First().Mood); // herbe et falaises : les Vol aiment
+        // Dans la forêt, Dracaufeu garde la lave et Léviator la nage
+        var forest = await Forest();
+        Assert.True((await _park.SetAsync("sacha", forest, [charizard, gyarados])).Ok);
+        Assert.Equal(["lava", "swim"], (await _park.ListAsync("sacha", forest)).Select(p => p.Moves));
+    }
+
+    [Fact]
     public async Task ParkOfAnotherPlayer_IsRefused()
     {
         await SetWallet("sacha", 1_000_000);

@@ -162,6 +162,17 @@ public static class ParkHabitats
         };
     }
 
+    /// <summary>
+    /// Façon de se déplacer dans ce paysage : comme <see cref="MovementOf(byte, byte)"/>, sauf à la montagne, où tout type
+    /// Vol vole, Eau/Vol et Feu/Vol compris : les sommets ne s'atteignent qu'en volant, et il n'y a pas de lave (choix de
+    /// l'utilisateur, 2026-11-07). Les autres y marchent dans la vallée, les Eau nagent dans la rivière.
+    /// </summary>
+    public static string? MovementOf(byte type1, byte type2, ParkLandscape landscape) =>
+        landscape == ParkLandscape.Mountain && IsFlying(type1, type2) ? "fly" : MovementOf(type1, type2);
+
+    /// <summary>L'un des deux types (index PKHeX) est Vol.</summary>
+    public static bool IsFlying(byte type1, byte type2) => type1 == (byte)MoveType.Flying || type2 == (byte)MoveType.Flying;
+
     /// <summary>Avis du type de Pokémon (index PKHeX, comme <c>BankPokemon.Type1</c>) sur le type de case.</summary>
     public static HabitatOpinion OpinionOf(byte type, Habitat habitat) =>
         habitat == Habitat.None || !Sheet.TryGetValue((MoveType)type, out var row) ? HabitatOpinion.Neutral
