@@ -6,7 +6,7 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py, generer-grotte.py ou generer-montagne.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
+/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py, generer-grotte.py, generer-montagne.py ou generer-donjon.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
 /// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage ; à la montagne, en volant), et chaque agrandissement qui
 /// garde les cases libres de la taille d'avant.
 /// </summary>
@@ -15,8 +15,8 @@ public sealed class ParkMapTests
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan, la grotte et la montagne.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1", "montagne-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan, la grotte, la montagne et le donjon.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1", "montagne-1", "donjon-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -486,5 +486,51 @@ public sealed class ParkMapTests
         Assert.NotEmpty(OpenWater("montagne-1", size));
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Flying, (byte)MoveType.Flying, habitats).Mood);
         Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Flying, habitats).Mood);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Dungeon_IsAllDungeon_WithSewerBasins_InTheDark(int size)
+    {
+        // Choix de l'utilisateur (2026-11-07) : un souterrain délaissé, des salles et des couloirs, des bassins d'égout (un dans
+        // la vue de départ, deux de plus à la taille 3), la pénombre et des torches. Tout est de type donjon, sauf l'eau des
+        // bassins et leurs ponts : Spectre, Ténèbres, Poison, Psy, Acier et Dragon heureux, Normal, Vol, Eau, Plante et Fée
+        // malheureux (feuille « Habitat »).
+        var json = Json("donjon-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        var total = habitats.Area.W * habitats.Area.H;
+        Assert.True(habitats.Counts[Habitat.Dungeon] * 100 / total >= 90);
+        Assert.Equal(total, habitats.Counts[Habitat.Dungeon] + habitats.Counts[Habitat.Water] + habitats.Counts.GetValueOrDefault(Habitat.None));
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Ghost, (byte)MoveType.Ghost, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Grass, (byte)MoveType.Grass, habitats).Mood);
+        Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Fighting, (byte)MoveType.Fighting, habitats).Mood);
+
+        // Les bassins : de l'eau libre où les nageurs entrent depuis le rebord (comme parc.js : de proche en proche par les
+        // côtés, depuis une case libre)
+        var map = Map("donjon-1", size);
+        var free = FreeTiles(map);
+        var water = OpenWater("donjon-1", size);
+        Assert.Equal(size >= 3 ? 80 : 20, water.Count);
+        var reached = new HashSet<(int x, int y)>(free);
+        var queue = new Queue<(int x, int y)>(free);
+        while (queue.TryDequeue(out var c))
+            foreach (var n in new[] { (c.x + 1, c.y), (c.x - 1, c.y), (c.x, c.y + 1), (c.x, c.y - 1) })
+                if (water.Contains(n) && reached.Add(n)) queue.Enqueue(n);
+        Assert.True(water.All(reached.Contains), "eau d'un bassin où les nageurs n'entrent pas");
+
+        // La roche : des cases transparentes sur la couleur de fond ; la pénombre : des lumières (torches, candélabres), chacune
+        // avec un rayon et une couleur, et plus à chaque taille ; les torches et les pics du sol sont animés
+        Assert.Equal("#16141f", map.GetProperty("backgroundcolor").GetString());
+        var lights = Layer(map, "Lumières").GetProperty("objects").EnumerateArray().ToList();
+        Assert.All(lights, light => Assert.Equal(["couleur", "rayon"],
+            light.GetProperty("properties").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order()));
+        if (size > 1) Assert.True(lights.Count > Layer(Map("donjon-1", size - 1), "Lumières").GetProperty("objects").GetArrayLength());
+        var animated = map.GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).Order().ToList();
+        Assert.Equal(["Big_Torch_Anim.png", "Floor_spikes_1.png"], animated);
     }
 }

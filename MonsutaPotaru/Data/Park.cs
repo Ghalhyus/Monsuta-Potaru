@@ -18,6 +18,8 @@ public enum ParkLandscape
     /// <summary>Une vallée traversée par une rivière, des massifs de pierre et leurs sommets, où seuls les Pokémon qui volent
     /// se posent (cartes montagne-1-{taille}).</summary>
     Mountain = 7,
+    /// <summary>Des salles et des couloirs de pierre délaissés, des bassins d'égout, dans la pénombre (cartes donjon-1-{taille}).</summary>
+    Dungeon = 8,
 }
 
 /// <summary>

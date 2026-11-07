@@ -20,6 +20,7 @@ public static class ParkLandscapes
         ParkLandscape.Ocean => "Océan",
         ParkLandscape.Cave => "Grotte",
         ParkLandscape.Mountain => "Montagne",
+        ParkLandscape.Dungeon => "Donjon",
         _ => "Forêt",
     };
 
@@ -32,6 +33,7 @@ public static class ParkLandscapes
         ParkLandscape.Ocean => "dans l'océan",
         ParkLandscape.Cave => "dans la grotte",
         ParkLandscape.Mountain => "à la montagne",
+        ParkLandscape.Dungeon => "dans le donjon",
         _ => "dans la forêt",
     };
 
@@ -44,6 +46,7 @@ public static class ParkLandscapes
         ParkLandscape.Ocean => "🌊",
         ParkLandscape.Cave => "🦇",
         ParkLandscape.Mountain => "⛰️",
+        ParkLandscape.Dungeon => "🏚️",
         _ => "🌳",
     };
 
@@ -56,6 +59,7 @@ public static class ParkLandscapes
         ParkLandscape.Ocean => "ocean-1",
         ParkLandscape.Cave => "grotte-1",
         ParkLandscape.Mountain => "montagne-1",
+        ParkLandscape.Dungeon => "donjon-1",
         _ => "parc-1",
     };
 
@@ -75,6 +79,9 @@ public static class ParkLandscapes
                               "qui aiment le grand air.",
         ParkLandscape.Mountain => "Une vallée traversée par une rivière, entre des massifs aux flancs de pierre et leurs sommets : tous " +
                                   "les Pokémon s'y promènent, mais seuls ceux qui volent (type Vol) montent se poser tout là-haut.",
+        ParkLandscape.Dungeon => "Un souterrain abandonné, ses salles et ses couloirs de pierre, ses tombes, ses bassins d'égout et l'or " +
+                                 "oublié, dans la pénombre des torches : le repaire des types Spectre, Ténèbres, Poison, Psy, Acier et " +
+                                 "Dragon, bien moins celui des Pokémon qui aiment le grand air.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -87,6 +94,7 @@ public static class ParkLandscapes
         ParkLandscape.Ocean => "Le récif recule et dévoile une nouvelle partie de l'océan",
         ParkLandscape.Cave => "La roche recule et dévoile une nouvelle partie de la grotte",
         ParkLandscape.Mountain => "La forêt de sapins recule et dévoile une nouvelle partie de la montagne",
+        ParkLandscape.Dungeon => "Des éboulis sont dégagés et ouvrent de nouvelles salles du donjon",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
     };
 

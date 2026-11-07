@@ -64,6 +64,11 @@ GRASS_TILES = {**{i: "Aucun" for i in (80, 81, 82, 96, 97, 98, 112, 113, 114, 12
 DESERT_CLIFF_TILES = {**{r * 13 + c: "Sable" for r in range(5, 11) for c in range(7, 13)},
                       **{i: "Aucun" for i in (20, 33, 46, 72, 22, 23, 24, 35, 36, 37, 48, 49, 50)},
                       **{i: DECOR for i in (79, 80, 81, 92, 94, 105, 106, 107)}}
+# Bassins d'égout du donjon (Dungeon_n_Sewer_Tileset, 13 × 5 tuiles) : l'eau (le bassin 3 × 3 et ses bords, le canal
+# du haut à gauche, l'eau autour de l'îlot de droite) ; le reste, le rebord de pierre où l'on marche, est du donjon
+# (outils/generer-donjon.py)
+SEWER_TILES = {i: "Eau" for i in (13, 14, 16, 17, 18, 29, 30, 31, 42, 43, 44,
+                                  8, 9, 10, 11, 12, 21, 25, 34, 38, 47, 51, 60, 61, 62, 63, 64)}
 # Rivages des îlots (Water_Stone_Tile, 3 × 5 tuiles : le bord passe au milieu des cases) : de l'eau, sauf les cases à
 # trois coins d'herbe (0, 2, 6, 8), où l'on marche (outils/generer-ocean.py)
 WATER_STONE_TILES = {i: "Végétation" for i in (0, 2, 6, 8)}
@@ -90,6 +95,8 @@ HABITAT_RULES = [
     (r"Cute_Fantasy_Desert/", DECOR),
     (r"Cute_Fantasy_Volcano/Tiles/Volcano_Bridge", "Aucun"),
     (r"Cute_Fantasy_Volcano/", "Volcan"),
+    (r"Cute_Fantasy_Dungeons/Objects/Small_Wooden_Bridge", "Aucun"),
+    (r"Cute_Fantasy_Dungeons/Dungeon_\d/Dungeon_\d_Sewer_Tileset\.png$", ("Donjon", SEWER_TILES)),
     (r"Cute_Fantasy_Dungeons/Objects/", DECOR),
     (r"Cute_Fantasy_Dungeons/", "Donjon"),
     (r"Cute_Fantasy_ShroomLands/Tiles/.*Waterfall", "Eau"),

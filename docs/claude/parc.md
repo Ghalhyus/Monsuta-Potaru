@@ -388,6 +388,51 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   10 volants, 3 nageurs, 7 marcheurs) : les marcheurs passent sur les deux rives (6 sur 7 au nord et au sud à la taille
   3), volants 25 % sur les sommets, nageurs 52 à 66 % dans l'eau, aucune case interdite, personne hors de la zone.
 
+## Donjon (`outils/generer-donjon.py`, `ParkLandscape.Dungeon`, 2026-11-07)
+- `Donjon_1-1.tmx` à `Donjon_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `donjon-1-{taille}.json`. Mêmes
+  arguments que les autres générateurs ; aperçus `donjon-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : **souterrain délaissé**, **salles et couloirs** (chaque agrandissement ouvre de nouvelles salles),
+  **canaux d'égout** avec de petits ponts, **pénombre et torches** ; tous les Pokémon y vont. Teinte Dungeon_1 (pierres
+  rondes) choisie par défaut (Dungeon_2 : briques, même disposition).
+- **Planche Dungeon_1** (13 colonnes, lue le 2026-11-07, aucun exemple) : roche = tuile 3 transparente sur `FOND`
+  (`#16141f`, `backgroundcolor`). **La tuile 0 n'est pas vide** (coin du cadre 1-28) : prise d'abord, elle quadrillait la
+  roche de petits carrés. Dessus du mur (`ANNEAU`) dans la case de roche voisine de la salle : 5 salle au sud, 31 au nord,
+  19 à l'est, 17 à l'ouest, coins 4/6/30/32 (premier côté trouvé : pas de tuile de coin rentrant, les jonctions des
+  couloirs passent bien). Face du mur sous chaque case du bord du haut : deux rangées 82-84 puis 108-110 (bout gauche,
+  milieu, bout droit selon les voisines du bord), puis l'ombre 62-64 sur le dallage : **les trois bloquées** (l'ombre
+  est à l'œil le bas du mur, « les pokémons peuvent marcher sur le bas des murs », 2026-11-07). Dallage
+  88-90 / 101-103 / 114-116 répété en 3 × 3. Les murs 1 case (8/21/34, 56-58) et les cadres 1-54, 134-168 : pas utilisés.
+- **Bassins** (`Dungeon_1_Sewer_Tileset`, 13 colonnes) : eau 16-18 (le haut : la paroi moussue du bassin), 29-31, 42-44 ;
+  rebord de pierre d'une case autour (2-6, 15/28/41, 19/32/45, 54-58), où l'on marche. `carte-parc.py` :
+  `SEWER_TILES` (l'eau = Eau, le reste donjon) ; `Small_Wooden_Bridge` (5 × 1, posé sur le rebord et l'eau, débloqué) =
+  aucun.
+- **Plan** (`PIECES` : taille, rectangle) : deux pièces qui ne se touchent pas ont au moins deux cases de roche entre elles,
+  vérifié ; la forme d'une taille = les pièces de cette taille et des précédentes, toujours tout entières dans la zone.
+  Ajouter une pièce ne fait jamais apparaître de face de mur sur du dallage (elle peut en faire disparaître, quand un
+  couloir s'ouvre au-dessus) : les objets se posent hors des faces de toutes les tailles (`FACES_TOUJOURS`).
+- **Objets** tirés taille par taille, seulement sur le dallage des pièces de cette taille (jamais sur une case libre d'une
+  taille plus petite). Un objet bloquant a du dallage tout autour (`poser`) : dans un couloir de deux rangées où l'on
+  marche, un pot coupait le passage et la suite devenait une poche de gravats (vu sur l'aperçu). Couloirs horizontaux et
+  galeries : cinq rangées (face, face, ombre, puis deux où l'on marche).
+  Torches contre le mur du haut (colonnes `x % 8 == 3`, flamme et manche sur la face, le pied sur l'ombre), toiles dans
+  les coins du haut, piliers (1 × 3, chapiteau et fût dans « Devant ») en rangées dans la grande salle, tombes et statue
+  dans les cryptes, or et coffres à la carte entière ; candélabres (`Dungeon_Objects` 11/20) sur la case de dallage la plus
+  loin d'une lumière tant qu'elle est à plus de `PORTEE` (7) cases. Pics du sol (`Floor_spikes_1`, deuxième ligne, sans
+  dallage dessous) animés : sortis 1,4 s, rentrés 0,9 s.
+- Carte entière : les salles du nord et du sud vont d'un bord à l'autre, celles de l'ouest et de l'est les rejoignent (une
+  galerie tout autour ; les coins pleins de roche « perdaient de la place », 2026-11-07).
+- **Plan symétrique gardé** : un plan sans symétrie (grande salle en L, une salle à l'ouest et deux à l'est, cryptes et
+  galeries de tailles différentes) a été essayé le 2026-11-07 (« un peu trop symétrique »), puis refusé (« j'aime moins,
+  remets la map d'avant ») : ne pas le reproposer tel quel. **Peu d'objets au sol** (« trop d'objets au sol », gardé) :
+  `n` = 1 / 1 / 2 / 3 par taille, os et gravats `2 n`, pots `2 n`, armoires `n`, moins de piliers, d'or et de coffres.
+- Cases libres par Pokémon : 14,5 / 14,1 / 18,0 / 24,2 (`ParkMapTests` : 14). La taille 2 est juste : un objet bloquant
+  de plus peut faire échouer le test.
+- Essai du 2026-11-07 (instance de test : achat du Donjon et choix de 16 Pokémon dans la vraie page, puis 15 min simulées
+  aux tailles 1, 3 et 4 avec 20 Pokémon) : nageurs 50 à 61 % dans les bassins, volants 4 à 6 % au-dessus, aucune case
+  interdite, 12 / 46 / 64 secteurs de 8 × 8 cases parcourus, la plupart endormis la nuit. Après le blocage de l'ombre
+  (tailles 1, 2, 4) : aucune des 3 600 positions relevées sur une face ou une ombre de mur. Plan d'avant, sol allégé (tailles 1 à
+  4) : aucune case interdite, nageurs 49 à 59 % dans l'eau, 8 / 20 / 43 / 74 secteurs de 8 × 8 cases parcourus.
+
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :
   une fois pour l'eau (5), une fois pour la lave (7) ; `ground.lava`, `ground.liquid` (survol), `liquidAt(x, y)`.
