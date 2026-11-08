@@ -134,6 +134,101 @@ public sealed class CollectionPageTests : PageTestContext
         }
     }
 
+    // ---------- Mode compact ----------
+
+    private static IReadOnlyList<AngleSharp.Dom.IElement> Folders(IRenderedComponent<Collection> cut) => cut.FindAll(".collection .slot.folder");
+
+    [Fact]
+    public async Task Compact_GroupsBySpecies_FoldersCountAndUnfoldInTheGrid()
+    {
+        var ids = AddToBank("sacha", 25, 133, 25, 1, 25, 7, 4);
+        using (var db = Db.NewContext()) // deux œufs (les deux derniers) : un dossier « Œufs », à la fin
+        {
+            foreach (var egg in db.BankPokemon.Where(p => p.Id == ids[5] || p.Id == ids[6]))
+                egg.IsEgg = true;
+            db.SaveChanges();
+        }
+        var nav = Services.GetRequiredService<NavigationManager>();
+        var cut = Render<Collection>();
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+        Assert.Empty(Folders(cut));
+
+        // Interrupteur : Pikachu ×3, Évoli et Bulbizarre seuls (cases normales), Œufs ×2
+        await cut.Find("#collection-compact").ChangeAsync(new() { Value = true });
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count));
+        Assert.Contains("compact=1", nav.Uri);
+        Assert.Equal(["3", "2"], Folders(cut).Select(f => f.QuerySelector(".count")!.TextContent));
+        Assert.StartsWith("Pikachu : 3 Pokémon", Folders(cut)[0].GetAttribute("title"));
+        Assert.StartsWith("Œufs : 2 Pokémon", Folders(cut)[1].GetAttribute("title"));
+        Assert.Equal("false", Folders(cut)[0].GetAttribute("aria-expanded"));
+
+        // Ouvrir Pikachu : ses 3 Pokémon suivent le dossier ; ouvrir aussi les œufs ; un Pokémon ouvre sa fiche
+        await Folders(cut)[0].ClickAsync(new());
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+        Assert.Equal("true", Folders(cut)[0].GetAttribute("aria-expanded"));
+        Assert.Contains("open", Folders(cut)[0].ClassList);
+        var unfolded = Slots(cut);
+        Assert.All(unfolded.Skip(1).Take(3), s => Assert.Contains("in-folder", s.ClassList));
+        Assert.DoesNotContain("in-folder", unfolded[4].ClassList);
+        await Folders(cut)[1].ClickAsync(new());
+        cut.WaitForAssertion(() => Assert.Equal(9, Slots(cut).Count));
+        await Slots(cut)[1].ClickAsync(new());
+        cut.WaitForText("Fermer");
+        await cut.Click("Fermer");
+
+        // Tris, recherche et colonnes gardent les dossiers ouverts
+        foreach (var sort in new[] { "nom", "pokedex", "arrivee" })
+        {
+            await cut.Find(".collection-sort select").ChangeAsync(new() { Value = sort });
+            await cut.Find(".collection-sort button").ClickAsync(new());
+            cut.WaitForAssertion(() => Assert.Equal(9, Slots(cut).Count));
+        }
+        await cut.Find(".collection-toolbar input").InputAsync(new() { Value = "pika" });
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count));
+        await cut.Find(".collection-toolbar input").InputAsync(new() { Value = "" });
+        await cut.Find(".collection-columns input").InputAsync(new() { Value = "4" });
+        cut.WaitForAssertion(() => Assert.Equal(9, Slots(cut).Count));
+
+        // Refermer, puis quitter le mode compact (les dossiers ouverts sont oubliés)
+        await Folders(cut)[0].ClickAsync(new());
+        cut.WaitForAssertion(() => Assert.Equal(6, Slots(cut).Count));
+        await cut.Find("#collection-compact").ChangeAsync(new() { Value = false });
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+        Assert.DoesNotContain("compact=", nav.Uri);
+        await cut.Find("#collection-compact").ChangeAsync(new() { Value = true });
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count));
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Compact_FromTheAddress_WithFilters_AndForAVisitor()
+    {
+        AddToBank("ondine", 120, 120, 121);
+        await StoreBw2("ondine", "Ondine"); // un Pikachu et un Salamèche, dans une sauvegarde
+        Services.GetRequiredService<NavigationManager>().NavigateTo("joueurs/ondine/collection?compact=1");
+        var cut = Render<Collection>(p => p.Add(c => c.Pseudo, "ondine"));
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count)); // Stari ×2, Staross, Pikachu, Salamèche
+        Assert.True(cut.Find("#collection-compact").HasAttribute("checked"));
+        await Folders(cut).Single().ClickAsync(new());
+        cut.WaitForAssertion(() => Assert.Equal(6, Slots(cut).Count));
+        await Slots(cut)[1].ClickAsync(new());
+        cut.WaitForText("Fermer");
+        Assert.False(cut.HasButton("Télécharger le fichier"));
+        await cut.Click("Fermer");
+
+        // Origine : le stockage interne seul (le dossier Stari reste ouvert)
+        await cut.Find(".collection-toolbar select.collection-filter").ChangeAsync(new() { Value = "banque" });
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count));
+        await DisposeComponentsAsync();
+
+        // Pastilles dans l'adresse : seul Salamèche est de type Feu, une case normale
+        Services.GetRequiredService<NavigationManager>().NavigateTo("joueurs/ondine/collection?compact=1&type=feu");
+        var fire = Render<Collection>(p => p.Add(c => c.Pseudo, "ondine"));
+        fire.WaitForAssertion(() => Assert.Single(Slots(fire)));
+        Assert.Empty(Folders(fire));
+        await DisposeComponentsAsync();
+    }
+
     [Fact]
     public async Task Visitor_SeesAPublicCollection_ReadOnly()
     {

@@ -74,6 +74,11 @@ else
         </select>
         <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre" @onclick="ReverseSort">@OrderLabel</button>
     </div>
+    @* Mode compact : un dossier par espèce, gardé dans l'adresse (?compact=1). *@
+    <div class="form-check form-switch small collection-compact" title="Regroupe les Pokémon d'une même espèce dans un dossier">
+        <input class="form-check-input" type="checkbox" role="switch" id="collection-compact" checked="@compact" @onchange="CompactChanged" />
+        <label class="form-check-label" for="collection-compact">Mode compact</label>
+    </div>
     @if (!Visitor)
     {
         <a class="small" href="sauvegardes">Gérer mes sauvegardes</a>
@@ -98,20 +103,38 @@ else
 {
     <div class="collection" style="--columns: @columns">
         @* Changer de recherche, d'origine ou de nombre de colonnes recrée la liste (et remonte en haut). *@
-        <Virtualize @key="listVersion" TItem="BankListItem[]" ItemsProvider="LoadRows" Context="row" ItemSize="60" OverscanCount="4">
+        <Virtualize @key="listVersion" @ref="list" TItem="CollectionCell[]" ItemsProvider="LoadRows" Context="row" ItemSize="60" OverscanCount="4">
             <ItemContent>
                 <div class="collection-row">
-                    @foreach (var p in row)
+                    @foreach (var cell in row)
                     {
-                        var item = p;
-                        var stored = item.StoredSaveId is { } sid ? saves.FirstOrDefault(x => x.Id == sid) : null;
-                        <PokemonSlot Sprite="@item.SpriteUrl"
-                                     Title="@SlotTitle(item, stored)"
-                                     Level="item.Level"
-                                     Shiny="item.IsShiny"
-                                     Marker="@(item.StoredSaveId is null ? null : "💾")"
-                                     Selected="@(selected?.Id == item.Id)"
-                                     OnClick="() => Open(item)" />
+                        if (cell.Folder is { } folder)
+                        {
+                            @* Dossier du mode compact : un clic l'ouvre (ses Pokémon prennent les cases suivantes) ou le referme. *@
+                            var open = layout.IsOpen(folder);
+                            <PokemonSlot Sprite="@folder.SpriteUrl"
+                                         Title="@FolderTitle(folder, open)"
+                                         Count="folder.Count"
+                                         Expanded="open"
+                                         Class="@(open ? "folder open" : "folder")"
+                                         OnClick="() => ToggleFolder(folder.Key)" />
+                        }
+                        else if (cell.Item is { } item)
+                        {
+                            var stored = item.StoredSaveId is { } sid ? saves.FirstOrDefault(x => x.Id == sid) : null;
+                            <PokemonSlot Sprite="@item.SpriteUrl"
+                                         Title="@SlotTitle(item, stored)"
+                                         Level="item.Level"
+                                         Shiny="item.IsShiny"
+                                         Marker="@(item.StoredSaveId is null ? null : "💾")"
+                                         Selected="@(selected?.Id == item.Id)"
+                                         Class="@(cell.InFolder ? "in-folder" : null)"
+                                         OnClick="() => Open(item)" />
+                        }
+                        else
+                        {
+                            <div class="slot empty"></div>
+                        }
                     }
                 </div>
             </ItemContent>
@@ -195,6 +218,10 @@ else
     [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
     /// <summary>Sens gardé dans l'adresse (« asc », « desc ») quand il n'est pas celui du critère (récents d'abord, ou croissant).</summary>
     [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+    /// <summary>Mode compact gardé dans l'adresse (« ?compact=1 ») : un dossier par espèce.</summary>
+    [SupplyParameterFromQuery(Name = CompactQueryName)] private string? CompactFromQuery { get; set; }
+
+    private const string CompactQueryName = "compact";
 
     /// <summary>Nom de chaque critère dans l'adresse et dans la liste.</summary>
     private static readonly (CollectionSortBy By, string Slug, string Label)[] SortChoices =
@@ -217,6 +244,21 @@ else
     private int total;
     private int listVersion;   // clé de Virtualize : l'incrémenter recrée la liste
     private int reloadRequest;
+    private Virtualize<CollectionCell[]>? list;
+
+    // ---------- Mode compact ----------
+    private bool compact;
+    private readonly HashSet<CollectionGroupKey> openFolders = []; // dossiers ouverts (non gardés dans l'adresse)
+    private List<CollectionGroup> groups = [];
+    private CollectionFolderLayout layout = CollectionFolderLayout.Empty;
+
+    /// <summary>
+    /// Case de la grille : un Pokémon (<paramref name="InFolder"/> s'il est le contenu d'un dossier ouvert), un dossier du
+    /// mode compact, ou une case vide (Pokémon disparu entre-temps).
+    /// </summary>
+    private sealed record CollectionCell(BankListItem? Item, CollectionGroup? Folder = null, bool InFolder = false);
+
+    private static readonly CollectionCell Gone = new(null);
 
     private List<StoredSaveInfo> saves = []; // pour le filtre et l'origine affichée des Pokémon stockés
     private PokemonCriteria criteria = PokemonCriteria.None; // filtres des pastilles, gardés dans l'adresse
@@ -252,6 +294,10 @@ else
         return $"{title} — sauvegarde {(Visitor ? stored.Label : stored.LabelAndFile)}";
     }
 
+    /// <summary>Bulle d'un dossier : son espèce, son nombre de Pokémon et ce que fait un clic.</summary>
+    private static string FolderTitle(CollectionGroup folder, bool open) =>
+        $"{folder.Label} : {folder.Count} Pokémon — clique pour {(open ? "refermer" : "ouvrir")} le dossier";
+
     protected override async Task OnInitializedAsync()
     {
         if (Visitor)
@@ -277,12 +323,14 @@ else
         var sortFromQuery = SortFromAddress();
         var query = QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query);
         var criteriaFromQuery = PokemonCriteria.FromQuery(name => query.TryGetValue(name, out var value) ? value.ToString() : null);
-        if (!sourceInitialized || fromQuery != source || sortFromQuery != sort || criteriaFromQuery.Key != criteria.Key)
+        var compactFromQuery = CompactFromQuery == "1";
+        if (!sourceInitialized || fromQuery != source || sortFromQuery != sort || criteriaFromQuery.Key != criteria.Key || compactFromQuery != compact)
         {
             sourceInitialized = true;
             source = fromQuery;
             sort = sortFromQuery;
             criteria = criteriaFromQuery;
+            compact = compactFromQuery;
             await Reload();
         }
     }
@@ -339,22 +387,90 @@ else
     }
 
     /// <summary>Appelé par Virtualize pour les lignes à afficher : on ne lit que ces Pokémon-là en base.</summary>
-    private async ValueTask<ItemsProviderResult<BankListItem[]>> LoadRows(ItemsProviderRequest request)
+    private async ValueTask<ItemsProviderResult<CollectionCell[]>> LoadRows(ItemsProviderRequest request)
     {
         var cols = columns;
-        var items = await BankStore.GetRangeAsync(userId, search, request.StartIndex * cols, request.Count * cols, Filter, sort, request.CancellationToken);
+        var first = request.StartIndex * cols;
+        if (compact)
+        {
+            var current = layout; // celle de la demande, même si un dossier s'ouvre pendant la lecture
+            var cells = await LoadCompactCells(current, first, first + request.Count * cols, request.CancellationToken);
+            return new ItemsProviderResult<CollectionCell[]>(cells.Chunk(cols), (current.CellCount + cols - 1) / cols);
+        }
+        var items = await BankStore.GetRangeAsync(userId, search, first, request.Count * cols, Filter, sort, request.CancellationToken);
         var rowCount = (total + cols - 1) / cols;
-        return new ItemsProviderResult<BankListItem[]>(items.Chunk(cols), rowCount);
+        return new ItemsProviderResult<CollectionCell[]>(items.Select(i => new CollectionCell(i)).Chunk(cols), rowCount);
     }
 
-    /// <summary>Nouvelle recherche ou origine : recompte, puis recrée la liste.</summary>
+    /// <summary>
+    /// Cases [<paramref name="first"/>, <paramref name="end"/>[ du mode compact : les dossiers, les Pokémon seuls de leur
+    /// espèce (lus en une requête), et la tranche visible du contenu de chaque dossier ouvert.
+    /// </summary>
+    private async Task<List<CollectionCell>> LoadCompactCells(CollectionFolderLayout current, int first, int end, CancellationToken ct)
+    {
+        var parts = current.Slice(first, end);
+        var singleIds = parts.Where(p => p.IsHead && p.Group.IsSingle).Select(p => p.Group.FirstId).ToList();
+        var singles = (await BankStore.GetItemsAsync(userId, singleIds, ct)).ToDictionary(i => i.Id);
+        var cells = new List<CollectionCell>();
+        foreach (var part in parts)
+        {
+            if (part.IsHead)
+            {
+                if (!part.Group.IsSingle)
+                    cells.Add(new(null, part.Group));
+                else
+                    cells.Add(singles.TryGetValue(part.Group.FirstId, out var item) ? new(item) : Gone);
+                continue;
+            }
+            var members = await BankStore.GetRangeAsync(userId, search, part.MemberSkip, part.MemberCount,
+                Filter with { Group = part.Group.Key }, sort, ct);
+            cells.AddRange(members.Select(m => new CollectionCell(m, InFolder: true)));
+            cells.AddRange(Enumerable.Repeat(Gone, part.MemberCount - members.Count)); // la suite reste à sa place
+        }
+        return cells;
+    }
+
+    /// <summary>Nouvelle recherche ou origine : recompte (ou regroupe, en mode compact), puis recrée la liste.</summary>
     private async Task Reload()
     {
         var request = ++reloadRequest;
-        var count = await BankStore.CountAsync(userId, search, Filter);
-        if (request != reloadRequest) return; // une demande plus récente a déjà relancé le chargement
-        total = count;
+        if (compact)
+        {
+            var found = await BankStore.GetGroupsAsync(userId, search, Filter, sort);
+            if (request != reloadRequest) return;
+            groups = found;
+            layout = new(groups, openFolders);
+            total = layout.PokemonCount;
+        }
+        else
+        {
+            var count = await BankStore.CountAsync(userId, search, Filter);
+            if (request != reloadRequest) return; // une demande plus récente a déjà relancé le chargement
+            total = count;
+        }
         listVersion++;
+    }
+
+    /// <summary>Interrupteur du mode compact : nouvelle adresse (sans ajout à l'historique), dossiers refermés, rechargement.</summary>
+    private async Task CompactChanged(ChangeEventArgs e)
+    {
+        compact = e.Value is true;
+        openFolders.Clear();
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter(CompactQueryName, compact ? "1" : null), replace: true);
+        await Reload();
+    }
+
+    /// <summary>
+    /// Ouvre ou referme un dossier : ses Pokémon prennent (ou libèrent) les cases qui le suivent. La liste est relue sans
+    /// être recréée, pour rester à la même hauteur de défilement.
+    /// </summary>
+    private async Task ToggleFolder(CollectionGroupKey key)
+    {
+        if (!openFolders.Remove(key))
+            openFolders.Add(key);
+        layout = new(groups, openFolders);
+        if (list is not null)
+            await list.RefreshDataAsync();
     }
 
     private async Task SourceChanged()

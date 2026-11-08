@@ -465,6 +465,24 @@ valent le « Spécial »), la nature est celle que donne leur transfert vers les
 affichée sur leur fiche), et ils n'ont pas de talent (exclus par un filtre « Talent »). Ces caractéristiques sont
 enregistrées avec chaque Pokémon (`Services/PokemonTraits.cs`) : la collection filtre en base, sans relire les fichiers.
 
+### Mode compact de « Ma collection »
+
+Un interrupteur **« Mode compact »** (désactivé par défaut, gardé dans l'adresse : `?compact=1`) regroupe les Pokémon d'une
+même **espèce**, toutes formes réunies (Goupix et Goupix d'Alola ensemble), dans une seule case qui sert de **dossier** :
+son image est celle de l'espèce (forme de base, non chromatique), avec en bas à droite le **nombre** de Pokémon qu'il
+contient. Une espèce dont il n'y a qu'un Pokémon garde une case normale (sa fiche au clic). Les œufs vont tous dans un
+dossier « Œufs », toujours à la fin (leur espèce reste cachée).
+
+La recherche, l'origine et les pastilles s'appliquent d'abord : un dossier ne compte et ne contient que les Pokémon qui
+correspondent. Les dossiers suivent le tri, placés comme leur premier Pokémon (arrivée : le plus récent du dossier, ou le
+plus ancien à l'envers ; nom ; numéro de Pokédex), et leur contenu aussi. Un clic sur un dossier l'**ouvre** : ses
+Pokémon prennent les cases qui le suivent (fond doré, le dossier encadré), la suite de la grille est décalée ; un
+deuxième clic le referme. Plusieurs dossiers peuvent être ouverts à la fois ; ils ne sont pas gardés dans l'adresse, et
+quitter le mode compact les referme. Le mode marche aussi sur la collection d'un autre joueur (lecture seule).
+
+La liste reste chargée au fil du défilement : une requête regroupe les Pokémon par espèce (`BankService.GetGroupsAsync`,
+au plus un dossier par espèce), puis seules les cases visibles sont lues en base (`CollectionFolderLayout`).
+
 ### Images des Pokémon
 
 Partout (collection, « Transfert », fiche d'un Pokémon), l'image suit le Pokémon : sa **forme** (Rattata d'Alola, Zarbi B,
@@ -1056,6 +1074,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Components/Account/Pages/` | Pages du compte : connexion, inscription, « Choisis ton pseudo », « Mon compte » (`Manage/` : profil, adresse, mot de passe, données personnelles) |
 | `MonsutaPotaru/Components/Account/Shared/PseudoGuard.razor` | Renvoie un compte sans pseudo sur « Choisis ton pseudo » (autour du contenu de `MainLayout`) |
 | `MonsutaPotaru/Services/BankService.cs` | Accès base, validation transactionnelle, copies de sécurité |
+| `MonsutaPotaru/Services/CollectionFolders.cs` | Mode compact de « Ma collection » : dossiers par espèce (clé, nombre, place dans le tri) et cases de la grille quand des dossiers sont ouverts |
 | `MonsutaPotaru/Services/PokemonFingerprint.cs` | Empreinte d'un Pokémon et recherche de ses doublons dans le compte (vieille copie d'une sauvegarde) |
 | `MonsutaPotaru/Services/PokemonInfo.cs` | Noms français (dont « Rouge / Bleu », « Or / Argent », « Diamant / Perle », « Or HeartGold / Argent SoulSilver » pour les groupes de jeux : une sauvegarde de ces jeux ne dit pas lequel des deux ; migrations `GameNames` et `GameGroupNames` pour les noms déjà enregistrés), sprites, légalité |
 | `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Transfert et stockage interne » (`/transfert`) : boîtes, glisser-déposer, sélection multiple |
@@ -1084,7 +1103,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
 | `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
-| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`) ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur |
+| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`) ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |
 | `MonsutaPotaru/Components/Pages/Sync3ds.razor` | « Synchronisation 3DS » : consoles reliées (code de liaison, attente de la console, retrait) |
 | `MonsutaPotaru/Services/SyncService.cs` | Synchronisation 3DS : codes de liaison, jetons, envoi d'une sauvegarde (ajout, mise à jour ou « déjà à jour »), emplacements sur la console, liste, comparaison et téléchargement pour « Récupérer » |

@@ -171,9 +171,10 @@ h1:focus {
     flex-wrap: wrap;
     align-items: center;
     gap: .5rem 1.5rem;
-    padding: .5rem 0;
+    padding: .5rem .75rem; /* les champs ne collent pas au bord du bandeau */
     margin-bottom: .5rem;
     background: #fff;
+    border-radius: 10px;
 }
 .collection-toolbar > input { max-width: 20rem; }
 .collection-filter { max-width: 16rem; }
@@ -182,6 +183,7 @@ h1:focus {
 .collection-columns { display: flex; align-items: center; gap: .5rem; margin: 0; }
 .collection-columns .form-range { width: 10rem; }
 .collection-columns span { min-width: 1.5rem; }
+.collection-compact { margin: 0; }
 
 /* Filtres de « Ma collection » en pastilles : « Type : Feu, Eau ▾ × », valeurs dans une fenêtre sous la pastille. */
 .filter-chips { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
@@ -232,6 +234,17 @@ h1:focus {
     grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
     gap: 4px;
     padding-bottom: 4px; /* dans la ligne (et non en marge) pour que Virtualize mesure la bonne hauteur */
+}
+
+/* Mode compact : un dossier porte son nombre de Pokémon en bas à droite ; ouvert, il est encadré de doré, et ses Pokémon
+   (les cases qui le suivent) ont un fond doré. */
+.collection .slot.folder.open { border-color: #d4a000; background: #fff3c4; }
+.collection .slot.in-folder { background: rgba(255, 236, 170, .8); }
+.collection .slot.in-folder:hover { background: #fff3c4; }
+.slot .count {
+    position: absolute; bottom: 1px; right: 2px;
+    min-width: 1.1rem; padding: 0 .3rem; border-radius: .55rem;
+    background: #234; color: #fff; font-size: .65rem; font-weight: 700; line-height: 1.1rem; text-align: center;
 }
 
 .collection-backdrop { position: fixed; inset: 0; z-index: 1040; background: rgba(0, 0, 0, .4); }

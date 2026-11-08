@@ -100,6 +100,74 @@ public sealed class BankServiceTests : IDisposable
         Assert.Equal([4, 1, 5, 2, 3], reversed);
     }
 
+    // ---------- Mode compact (dossiers par espèce) ----------
+
+    /// <summary>Dossiers de l'exemple des tris, en « espèce×nombre » (« œufs×1 » pour le dossier des œufs).</summary>
+    private async Task<string[]> Folders(CollectionSort sort, string? search = null) =>
+        (await (await SortSample()).GetGroupsAsync("ondine", search, sort: sort))
+            .Select(g => $"{(g.Key.Eggs ? "œufs" : g.Key.Species.ToString())}×{g.Count}").ToArray();
+
+    [Fact]
+    public async Task Groups_OneFolderPerSpecies_PlacedLikeTheirFirstPokemon_EggsLast()
+    {
+        // Arrivée : un dossier à la place de son Pokémon le plus récent (ou le plus ancien, à l'envers).
+        Assert.Equal(["25×2", "145×1", "133×1", "œufs×1"], await Folders(new(CollectionSortBy.Arrival)));
+        Assert.Equal(["133×1", "25×2", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Arrival, Reversed: true)));
+        Assert.Equal(["145×1", "133×1", "25×2", "œufs×1"], await Folders(new(CollectionSortBy.Name)));
+        Assert.Equal(["25×2", "133×1", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Name, Reversed: true)));
+        Assert.Equal(["25×2", "133×1", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Dex)));
+        Assert.Equal(["145×1", "133×1", "25×2", "œufs×1"], await Folders(new(CollectionSortBy.Dex, Reversed: true)));
+        // Les filtres passent avant : un dossier ne compte que ce qui correspond.
+        Assert.Equal(["25×2"], await Folders(default, "pika"));
+    }
+
+    [Fact]
+    public async Task Groups_FilterAndItems_StayInTheFolderAndTheAccount()
+    {
+        var bank = await SortSample();
+        var pikachus = await bank.GetRangeAsync("ondine", null, 0, 10, CollectionFilter.All with { Group = new(25) });
+        Assert.Equal([105, 102], pikachus.Select(p => p.Id));
+        var eggs = await bank.GetRangeAsync("ondine", null, 0, 10, CollectionFilter.All with { Group = CollectionGroupKey.AllEggs });
+        Assert.Equal([103], eggs.Select(p => p.Id));
+
+        // Cases des espèces seules : celles du compte seulement (l'identifiant 1 est à sacha).
+        Assert.Equal([101], (await bank.GetItemsAsync("ondine", [101, 1])).Select(p => p.Id));
+        Assert.Empty(await bank.GetItemsAsync("ondine", []));
+
+        var folder = (await bank.GetGroupsAsync("ondine", null)).First();
+        Assert.Equal("Pikachu", folder.Label);
+        Assert.StartsWith("images/pokemon/25", folder.SpriteUrl); // forme de base, non chromatique (pas « chromatique/ »)
+        var eggFolder = (await bank.GetGroupsAsync("ondine", null)).Last();
+        Assert.Equal("Œufs", eggFolder.Label);
+    }
+
+    private static CollectionGroup Folder(ushort species, int count) =>
+        new(new(species), count, "", "", DateTime.UnixEpoch, DateTime.UnixEpoch, 0, 0, species, species, species);
+
+    [Fact]
+    public void FolderLayout_AnOpenFolderPushesTheRest()
+    {
+        List<CollectionGroup> folders = [Folder(1, 3), Folder(2, 1), Folder(3, 2)];
+        var closed = new CollectionFolderLayout(folders, new HashSet<CollectionGroupKey>());
+        Assert.Equal(3, closed.CellCount);
+        Assert.Equal(6, closed.PokemonCount);
+
+        // Cases : dossier 1, ses 3 Pokémon, l'espèce 2 seule (jamais « ouverte »), dossier 3.
+        var open = new CollectionFolderLayout(folders, new HashSet<CollectionGroupKey> { new(1), new(2) });
+        Assert.Equal(6, open.CellCount);
+        Assert.Equal(["1", "1:0+3", "2", "3"], Describe(open.Slice(0, 6)));
+        Assert.Equal(["1:1+2", "2"], Describe(open.Slice(2, 5)));
+        Assert.Equal(["3"], Describe(open.Slice(5, 100)));
+        Assert.Empty(open.Slice(6, 10));
+
+        var last = new CollectionFolderLayout(folders, new HashSet<CollectionGroupKey> { new(3) });
+        Assert.Equal(["3:1+1"], Describe(last.Slice(4, 5)));
+        Assert.Equal(["2", "3", "3:0+2"], Describe(last.Slice(1, 5)));
+    }
+
+    private static string[] Describe(List<CollectionLayoutPart> parts) =>
+        parts.Select(p => p.IsHead ? $"{p.Group.Key.Species}" : $"{p.Group.Key.Species}:{p.MemberSkip}+{p.MemberCount}").ToArray();
+
     [Fact]
     public async Task FillSortNames_FillsOnlyMissingNames()
     {

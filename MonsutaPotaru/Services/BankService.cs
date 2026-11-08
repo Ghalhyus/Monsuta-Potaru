@@ -11,9 +11,11 @@ public sealed record BankListItem(int Id, ushort Species, string SpeciesName, st
 
 /// <summary>
 /// Filtre de « Ma collection » : tout, la banque seule, ou une sauvegarde stockée ; <paramref name="Criteria"/> ajoute les
-/// filtres des pastilles (type, nature, IV...).
+/// filtres des pastilles (type, nature, IV...) ; <paramref name="Group"/> garde un seul dossier du mode compact (une
+/// espèce, ou les œufs).
 /// </summary>
-public readonly record struct CollectionFilter(bool BankOnly = false, int? StoredSaveId = null, PokemonCriteria? Criteria = null)
+public readonly record struct CollectionFilter(bool BankOnly = false, int? StoredSaveId = null, PokemonCriteria? Criteria = null,
+    CollectionGroupKey? Group = null)
 {
     public static readonly CollectionFilter All = new();
     public static readonly CollectionFilter Bank = new(BankOnly: true);
@@ -61,10 +63,54 @@ public sealed class BankService(
         return await Sorted(Filtered(db, ownerId, search, filter), sort)
             .Skip(skip)
             .Take(take)
-            .Select(p => new BankListItem(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.IsEgg, p.IsLegal, p.StoredSaveId,
-                PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg)))
+            .Select(ListItem)
             .ToListAsync(ct);
     }
+
+    /// <summary>Ces Pokémon du compte (cases des espèces seules du mode compact), dans le désordre.</summary>
+    public async Task<List<BankListItem>> GetItemsAsync(string ownerId, IReadOnlyCollection<int> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return [];
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == ownerId && ids.Contains(p.Id)).Select(ListItem).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Dossiers du mode compact : les Pokémon qui correspondent à la recherche et au filtre, regroupés par espèce (toutes
+    /// formes réunies ; les œufs ensemble), avec leur nombre, rangés selon le tri. Une seule requête : au plus un dossier
+    /// par espèce.
+    /// </summary>
+    public async Task<List<CollectionGroup>> GetGroupsAsync(string ownerId, string? search, CollectionFilter filter = default,
+        CollectionSort sort = default, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var rows = await Filtered(db, ownerId, search, filter)
+            .GroupBy(p => new { Species = p.IsEgg ? 0 : (int)p.Species, p.IsEgg })
+            .Select(g => new
+            {
+                g.Key.Species,
+                g.Key.IsEgg,
+                Count = g.Count(),
+                SpeciesName = g.Max(p => p.SpeciesName),
+                SortName = g.Max(p => p.SortName),
+                Newest = g.Max(p => p.DepositedAt),
+                Oldest = g.Min(p => p.DepositedAt),
+                FirstPosition = g.Min(p => p.Position),
+                LastPosition = g.Max(p => p.Position),
+                FirstId = g.Min(p => p.Id),
+                LastId = g.Max(p => p.Id),
+                SpriteSpecies = g.Min(p => p.Species),
+            })
+            .ToListAsync(ct);
+        return CollectionGroup.Order(rows.Select(r => new CollectionGroup(new((ushort)r.Species, r.IsEgg), r.Count, r.SpeciesName ?? "",
+            r.SortName ?? "", r.Newest, r.Oldest, r.FirstPosition, r.LastPosition, r.FirstId, r.LastId, r.SpriteSpecies)), sort);
+    }
+
+    /// <summary>Case d'un Pokémon dans la grille (sans ses octets).</summary>
+    private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, BankListItem>> ListItem = p =>
+        new BankListItem(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.IsEgg, p.IsLegal, p.StoredSaveId,
+            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg));
 
     /// <summary>Talents présents dans la collection (hors œufs), pour la liste du filtre « Talent ».</summary>
     public async Task<List<int>> ListAbilitiesAsync(string ownerId)
@@ -191,6 +237,8 @@ public sealed class BankService(
         }
         if (filter.Criteria is { } criteria)
             query = criteria.Apply(query);
+        if (filter.Group is { } group)
+            query = group.Eggs ? query.Where(p => p.IsEgg) : query.Where(p => !p.IsEgg && p.Species == group.Species);
         return query.OrderByDescending(p => p.DepositedAt).ThenBy(p => p.Position).ThenByDescending(p => p.Id);
     }
 

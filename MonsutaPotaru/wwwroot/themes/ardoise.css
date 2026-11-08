@@ -576,6 +576,14 @@ a.ardoise-link.active {
 [data-theme="ardoise"] .drag-ghost { border-color: var(--ard-accent); }
 [data-theme="ardoise"] .drag-count { background: var(--ard-accent); }
 
+/* Barre d'outils de « Ma collection » : un bandeau comme l'en-tête de page */
+[data-theme="ardoise"] main .collection-toolbar {
+    padding: .75rem 1rem;
+    border: 1px solid var(--ard-line);
+    border-radius: .5rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+
 /* Filtres de « Ma collection » */
 [data-theme="ardoise"] main .filter-chip.active { border-color: var(--ard-accent); }
 [data-theme="ardoise"] main .filter-chip-caret,
