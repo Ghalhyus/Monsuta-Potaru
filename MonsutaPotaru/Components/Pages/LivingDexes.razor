@@ -45,7 +45,9 @@ else
             Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier,
             Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate, Violet). Le <strong>living dex global</strong>, lui,
             compte les Pokémon de ton stockage interne (« Transfert »), tous jeux confondus, avec un mode de plus : Ultime, chaque
-            forme de chaque espèce ; le <strong>global chromatique</strong>, pareil avec tes chromatiques.
+            forme de chaque espèce ; le <strong>global chromatique</strong>, pareil avec tes chromatiques. Chaque jeu (sauf la
+            1re génération) peut aussi avoir son <strong>living dex chromatique</strong>, sur une autre sauvegarde : seuls ses
+            chromatiques comptent, dans le Pokédex régional pour l'instant.
         </Description>
     </PageHeader>
 }
@@ -66,9 +68,14 @@ else
             @* D'abord le jeu (un living dex par jeu), puis les sauvegardes stockées qui peuvent être une partie de ce jeu
                (Rouge / Bleu : PKHeX ne distingue pas les deux, une sauvegarde Rouge / Bleu va avec l'un comme l'autre). *@
             @* Générations repliées au départ, dépliées une à une par leur titre ; repliée, celle du jeu choisi le montre encore. *@
+            @* Normal ou chromatique d'abord : chromatique, le global chromatique et les jeux qui en ont un (pas la 1re génération). *@
+            <div class="btn-group btn-group-sm mb-3 livingdex-choice" role="group" aria-label="Type de living dex">
+                <button type="button" class="btn @(!shinyKind ? "btn-primary" : "btn-outline-primary")" @onclick="() => KindChosen(false)">Normal</button>
+                <button type="button" class="btn @(shinyKind ? "btn-primary" : "btn-outline-primary")" @onclick="() => KindChosen(true)">Chromatique</button>
+            </div>
             <div class="form-label">Jeu</div>
             <div class="livingdex-games mb-3">
-                @foreach (var info in new[] { GlobalLivingDex.Game, GlobalLivingDex.ShinyGame })
+                @foreach (var info in new[] { shinyKind ? GlobalLivingDex.ShinyGame : GlobalLivingDex.Game })
                 {
                     var value = info.Game;
                     var globalTaken = taken.Contains(value);
@@ -79,7 +86,8 @@ else
                     </label>
                 }
             </div>
-            @foreach (var generation in LivingDexGames.All.GroupBy(g => g.Generation))
+            @foreach (var generation in LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g))
+                          .Select(g => LivingDexGames.Get(g.Game, shinyKind)).GroupBy(g => g.Generation))
             {
             var number = generation.Key;
             var open = openGenerations.Contains(number);
@@ -96,10 +104,10 @@ else
                 @foreach (var info in shownGames)
                 {
                     var value = info.Game;
-                    var isTaken = taken.Contains(value);
+                    var isTaken = (shinyKind ? takenShiny : taken).Contains(value);
                     <label class="livingdex-game @(game == value ? "selected" : "") @(isTaken ? "taken" : "")" title="@(isTaken ? "Tu as déjà ce living dex" : null)">
                         <input type="radio" class="visually-hidden" name="dexGame" checked="@(game == value)" disabled="@isTaken" @onchange="() => GameChosen(value)" />
-                        <img src="@info.Cover" alt="" data-cacher-si-absente />
+                        <LivingDexCover Game="info" />
                         <span>@info.Name@(isTaken ? " (déjà créé)" : "")</span>
                     </label>
                 }
@@ -118,6 +126,14 @@ else
             }
             else if (game is { } chosenGame)
             {
+                @if (shinyKind)
+                {
+                    <p class="small text-muted mb-3">
+                        Seuls les chromatiques de la sauvegarde comptent, dans son Pokédex régional (Let's Go : son Pokédex) ; ce qui
+                        n'a jamais existé en chromatique n'est pas demandé. Il lui faut sa propre sauvegarde : pas celle d'un autre
+                        living dex.
+                    </p>
+                }
                 @if (Saves().Count == 0)
                 {
                     <p class="text-muted mb-3">
@@ -157,15 +173,25 @@ else
 {
     <p class="text-muted">Chargement…</p>
 }
-else if (taken.Count == 0)
+else if (taken.Count == 0 && takenShiny.Count == 0)
 {
     <p class="text-muted">@(Visitor ? $"{player!.Pseudo} n'a pas encore de living dex." : "Tu n'as pas encore de living dex.")</p>
 }
 else
 {
     @* Progression de toutes les cartes dans un mode, gardé dans l'adresse (?mode=regional) ; une carte s'ouvre dans ce mode.
-       Tri à côté, gardé aussi (?tri=completion&ordre=desc) : par complétion, dans le mode affiché. *@
+       Filtre Tous / Normaux / Chromatiques (?filtre=chromatiques) et tri à côté, gardés aussi (?tri=completion&ordre=desc) :
+       par complétion, dans le mode affiché. *@
     <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Living dex affichés">
+            @foreach (var (k, label) in Kinds)
+            {
+                var value = k;
+                <button type="button" class="btn @(kind == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetKind(value)">
+                    @label
+                </button>
+            }
+        </div>
         <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Progression affichée">
             @foreach (var m in AllModes)
             {
@@ -186,13 +212,14 @@ else
                     aria-label="@(descending ? "Ordre décroissant" : "Ordre croissant")">@(descending ? "↓" : "↑")</button>
         </div>
     </div>
-    @if (dexes.Count == 0)
+    var shownDexes = dexes.Where(d => LivingDexGames.Matches(d.Game, kind)).ToList();
+    @if (shownDexes.Count == 0)
     {
-        @* Ultime : seuls les living dex qui ont ce mode sont montrés. *@
-        <p class="text-muted">Seuls les living dex globaux ont le mode Ultime@(Visitor ? "." : " : crée-en un avec « + Créer un living dex ».")</p>
+        @* Ultime : seuls les living dex qui ont ce mode sont montrés ; le filtre peut aussi ne rien laisser. *@
+        <p class="text-muted">@EmptyMessage</p>
     }
     <div class="livingdex-cards">
-        @foreach (var d in LivingDexGames.Sort(dexes, sort, descending))
+        @foreach (var d in LivingDexGames.Sort(shownDexes, sort, descending))
         {
             <a class="livingdex-card" href="@CardLink(d)">
                 <LivingDexCover Game="d.Game" Alt="@(GlobalLivingDex.IsGlobal(d.Game.Game) ? d.Game.Name : $"Jaquette de {d.Game.Name}")" />
@@ -204,7 +231,7 @@ else
                         @d.Owned / @d.Total
                         @if (d.Mode != mode)
                         {
-                            <span class="text-muted ms-1" title="Ce jeu n'a pas le mode @LivingDexGames.ModeName(mode)">· @LivingDexGames.ModeName(d.Mode) seul</span>
+                            <span class="text-muted ms-1" title="@(d.Game.Shiny ? "Ce living dex chromatique" : "Ce jeu") n'a pas le mode @LivingDexGames.ModeName(mode)">· @LivingDexGames.ModeName(d.Mode) seul</span>
                         }
                     </div>
                 </div>
@@ -237,18 +264,25 @@ else
     [SupplyParameterFromQuery(Name = "mode")] private string? ModeFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "filtre")] private string? KindFromQuery { get; set; }
 
     private static readonly LivingDexMode[] AllModes = [LivingDexMode.Regional, LivingDexMode.National, LivingDexMode.Complete, LivingDexMode.Ultimate];
 
+    private static readonly (LivingDexKind Kind, string Label)[] Kinds =
+        [(LivingDexKind.All, "Tous"), (LivingDexKind.Normal, "Normaux"), (LivingDexKind.Shiny, "Chromatiques")];
+
     private string userId = "";
     private LivingDexMode mode = LivingDexMode.National;
+    private LivingDexKind kind;
     private LivingDexSort sort;
     private bool descending;
     private readonly HashSet<byte> openGenerations = [];
     private List<LivingDexSummary>? dexes;
-    private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex (tous, même cachés par le mode Ultime)
+    private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex normal (globaux compris, même cachés par le mode Ultime)
+    private HashSet<LivingDexGame> takenShiny = []; // jeux qui ont déjà leur living dex chromatique
     private List<LivingDexCandidate> candidates = [];
     private bool creating;
+    private bool shinyKind; // création d'un living dex chromatique
     private int saveId;
     private LivingDexGame? game;
     private bool busy;
@@ -273,12 +307,30 @@ else
         mode = LivingDexGames.ModeFromSlug(ModeFromQuery);
         sort = LivingDexGames.SortFromSlug(SortFromQuery);
         descending = OrderFromQuery == "desc";
+        kind = LivingDexGames.KindFromSlug(KindFromQuery);
         dexes = await Dexes.ListAsync(userId, mode);
         taken = await Dexes.TakenGamesAsync(userId);
+        takenShiny = await Dexes.TakenGamesAsync(userId, shiny: true);
     }
 
     private void SetMode(LivingDexMode value) =>
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("mode", LivingDexGames.ModeSlug(value)), replace: true);
+
+    /// <summary>Filtre Tous / Normaux / Chromatiques, gardé dans l'adresse (« Tous » n'y est pas écrit).</summary>
+    private void SetKind(LivingDexKind value) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", LivingDexGames.KindSlug(value)), replace: true);
+
+    /// <summary>Aucune carte à montrer : mode Ultime sans living dex global, ou filtre qui ne laisse rien.</summary>
+    private string EmptyMessage
+    {
+        get
+        {
+            var create = Visitor ? "." : " : crée-en un avec « + Créer un living dex ».";
+            if (mode == LivingDexMode.Ultimate)
+                return kind == LivingDexKind.Shiny ? $"Seul le living dex global chromatique a le mode Ultime{create}" : $"Seuls les living dex globaux ont le mode Ultime{create}";
+            return kind == LivingDexKind.Shiny ? $"Aucun living dex chromatique{create}" : $"Aucun living dex normal{create}";
+        }
+    }
 
     /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
     private void SortChosen(ChangeEventArgs e) =>
@@ -307,11 +359,23 @@ else
         if (Visitor)
             return;
         message = null;
+        shinyKind = false;
         candidates = await Dexes.ListCandidatesAsync(userId);
         game = null;
         saveId = 0;
         openGenerations.Clear(); // toutes repliées au départ
         creating = true;
+    }
+
+    /// <summary>Normal ou chromatique : les jeux et les sauvegardes proposés changent, le jeu choisi est oublié.</summary>
+    private async Task KindChosen(bool shiny)
+    {
+        if (shiny == shinyKind)
+            return;
+        shinyKind = shiny;
+        candidates = await Dexes.ListCandidatesAsync(userId, shiny);
+        game = null;
+        saveId = 0;
     }
 
     /// <summary>Jeu choisi : la première de ses sauvegardes est proposée d'office.</summary>
@@ -329,7 +393,7 @@ else
             return;
         busy = true;
         var result = GlobalLivingDex.IsGlobal(chosenGame) ? await Dexes.CreateGlobalAsync(userId, chosenGame == LivingDexGame.GlobalShiny)
-            : await Dexes.CreateAsync(userId, saveId, chosenGame);
+            : await Dexes.CreateAsync(userId, saveId, chosenGame, shinyKind);
         busy = false;
         if (result.Ok)
         {

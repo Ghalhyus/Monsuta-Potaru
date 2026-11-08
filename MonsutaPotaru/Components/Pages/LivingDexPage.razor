@@ -162,13 +162,13 @@ else if (view is not null)
     /// <summary>Liste des living dex : les miens, ou ceux du joueur consulté.</summary>
     private string ListLink => player is null ? "livingdex" : PlayerService.Link(player.Pseudo, "livingdex");
 
-    /// <summary>Sous le titre : la sauvegarde du living dex, ou ce que compte un living dex global.</summary>
+    /// <summary>Sous le titre : la sauvegarde du living dex (et ses seuls chromatiques), ou ce que compte un living dex global.</summary>
     private string Subtitle
     {
         get
         {
             if (!Global)
-                return $"Sauvegarde : {(Visitor ? view!.PublicSaveLabel : view!.SaveLabel)}";
+                return $"Sauvegarde : {(Visitor ? view!.PublicSaveLabel : view!.SaveLabel)}{(view.Game.Shiny ? " · seulement ses chromatiques" : "")}";
             return view!.Game.Game == LivingDexGame.GlobalShiny
                 ? $"Pokémon chromatiques {StorageOf}, tous jeux confondus"
                 : $"Pokémon {StorageOf}, tous jeux confondus (sans les chromatiques)";

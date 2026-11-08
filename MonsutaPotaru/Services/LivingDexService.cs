@@ -24,6 +24,14 @@ public enum LivingDexMode
     Ultimate,
 }
 
+/// <summary>Filtre des cartes de la vue générale : toutes, les normales ou les chromatiques (global chromatique compris).</summary>
+public enum LivingDexKind
+{
+    All,
+    Normal,
+    Shiny,
+}
+
 /// <summary>Tri des cartes de la vue générale.</summary>
 public enum LivingDexSort
 {
@@ -61,10 +69,15 @@ public enum LivingDexSort
 /// Sous-Pokédex qui forment le régional, dans l'ordre (Kalos : Centre, Côtes, Montagnes), avec leur nombre de Pokémon :
 /// chacun a sa numérotation et son titre dans la grille. Null : un seul Pokédex, celui de <paramref name="Region"/>.
 /// </param>
+/// <param name="Shiny">
+/// Living dex chromatique : seuls les chromatiques comptent, images chromatiques, sans les espèces jamais chromatiques
+/// (<see cref="GlobalLivingDex.ShinyLockedSpecies"/>). D'un jeu : <see cref="LivingDexGames.Get(LivingDexGame, bool)"/> ;
+/// le global chromatique : <see cref="GlobalLivingDex.ShinyGame"/>.
+/// </param>
 public sealed record LivingDexGameInfo(LivingDexGame Game, string Name, string Cover, string? SpriteFolder, byte Generation,
     string Region, IReadOnlyList<ushort> Regional, ushort NationalMax, byte DeoxysForm = 0, int RegionalStart = 1,
     IReadOnlyList<(string Name, int Count)>? Sections = null, IReadOnlyList<ushort>? National = null,
-    IReadOnlyList<int>? RegionalNumbers = null);
+    IReadOnlyList<int>? RegionalNumbers = null, bool Shiny = false);
 
 /// <summary>Une case du living dex : un Pokémon (et sa forme) demandé par le mode.</summary>
 /// <param name="AnyForm">Remplie par n'importe quelle forme de l'espèce, même en Complet (Deoxys de 3e génération, Arceus).</param>
@@ -115,7 +128,10 @@ public sealed record LivingDexEntry(int Number, ushort Species, byte Form, strin
 }
 
 /// <summary>Carte de la vue générale : progression dans un mode.</summary>
-/// <param name="Mode">Mode compté : celui demandé, ou le National si le jeu ne le propose pas (1re génération).</param>
+/// <param name="Mode">
+/// Mode compté : celui demandé, ou le National si le jeu ne le propose pas (1re génération) ; le seul mode d'un living dex
+/// chromatique d'un jeu (Régional, National pour Let's Go) s'il n'a ni l'un ni l'autre.
+/// </param>
 public sealed record LivingDexSummary(int Id, LivingDexGameInfo Game, string SaveLabel, int Owned, int Total,
     LivingDexMode Mode = LivingDexMode.National)
 {
@@ -639,6 +655,27 @@ public static class LivingDexGames
         _ => All.Single(g => g.Game == game),
     };
 
+    /// <summary>Jeu d'un living dex, normal ou chromatique (« Pokémon Platine chromatique »).</summary>
+    public static LivingDexGameInfo Get(LivingDexGame game, bool shiny) => shiny ? ShinyGames[game] : Get(game);
+
+    /// <summary>
+    /// Le jeu a-t-il un living dex chromatique ? Tous les jeux, sauf la 1re génération (pas de chromatiques) et les globaux
+    /// (le global chromatique est un jeu à part, <see cref="LivingDexGame.GlobalShiny"/>).
+    /// </summary>
+    public static bool HasShiny(LivingDexGameInfo game) => game.Generation >= 2 && !GlobalLivingDex.IsGlobal(game.Game);
+
+    /// <summary>Living dex chromatique de chaque jeu qui en a un.</summary>
+    private static readonly Dictionary<LivingDexGame, LivingDexGameInfo> ShinyGames =
+        All.Where(HasShiny).ToDictionary(g => g.Game, g => g with { Name = $"{g.Name} chromatique", Shiny = true });
+
+    /// <summary>
+    /// Case retirée d'un living dex chromatique d'un jeu : espèce jamais chromatique dans un jeu pris en charge
+    /// (<see cref="GlobalLivingDex.ShinyLockedSpecies"/> : Victini, Marshadow...). Seulement le Régional pour l'instant, où
+    /// n'importe quelle forme compte : les formes jamais chromatiques (casquettes de Pikachu...) n'y ont pas de case.
+    /// </summary>
+    public static bool ShinyLocked(LivingDexGameInfo game, LivingDexSlot slot) =>
+        game.Shiny && !GlobalLivingDex.IsGlobal(game.Game) && GlobalLivingDex.ShinyLockedSpecies.Contains(slot.Species);
+
     /// <summary>
     /// Jeux possibles pour une sauvegarde : PKHeX reconnaît Jaune, Cristal, Émeraude et Platine, mais pas Rouge de Bleu, Or
     /// d'Argent, Rubis de Saphir, Rouge Feu de Vert Feuille, Diamant de Perle ni HeartGold de SoulSilver (même format) : au
@@ -998,7 +1035,7 @@ public static class LivingDexGames
     /// </summary>
     public static string Sprite(LivingDexGameInfo game, LivingDexSlot slot) => game.SpriteFolder is null
         ? Fallback(game, slot)
-        : $"{game.SpriteFolder}{slot.Species}{FormSuffix(slot)}.png";
+        : $"{game.SpriteFolder}{(game.Shiny ? "chromatique/" : "")}{slot.Species}{FormSuffix(slot)}.png";
 
     private static string FormSuffix(LivingDexSlot slot) => (slot.Species, slot.Form) switch
     {
@@ -1113,13 +1150,14 @@ public static class LivingDexGames
 
     /// <summary>
     /// Image de la même forme dans la collection : celle des cases à partir de la 6e génération, et le remplacement d'un
-    /// sprite du jeu absent avant (images pas encore récupérées). Méga par la gemme, comme un Pokémon qui la tient.
+    /// sprite du jeu absent avant (images pas encore récupérées). Méga par la gemme, comme un Pokémon qui la tient ;
+    /// chromatique pour un living dex chromatique.
     /// </summary>
     public static string Fallback(LivingDexGameInfo game, LivingDexSlot slot) => slot switch
     {
-        { MegaItem: not 0 } => PokemonSprites.Url(slot.Species, 0, Context(game), female: false, heldItem: slot.MegaItem, shiny: false), // Méga par la gemme
+        { MegaItem: not 0 } => PokemonSprites.Url(slot.Species, 0, Context(game), female: false, heldItem: slot.MegaItem, shiny: game.Shiny), // Méga par la gemme
         { Gigamax: true } => PokemonSprites.GigamaxUrl(slot.Species, slot.Form, Context(game)),
-        _ => PokemonSprites.Url(slot.Species, slot.Form, Context(game), female: false, heldItem: 0, shiny: false),
+        _ => PokemonSprites.Url(slot.Species, slot.Form, Context(game), female: false, heldItem: 0, shiny: game.Shiny),
     };
 
     /// <summary>Jeu des Pokémon du living dex chez PKHeX (noms des formes : casquettes de Pikachu en 7e, costumes en 6e).</summary>
@@ -1151,12 +1189,15 @@ public static class LivingDexGames
     /// Johto a les mêmes 251 Pokémon que le national mais dans un autre ordre, et Zarbi ses 26 lettres : les trois modes ;
     /// à partir de la 3e, le Pokédex régional, le national et les formes : les trois. Let's Go : son Pokédex est tout ce
     /// qu'il peut contenir, le National et le Complet (formes d'Alola, Méga). Légendes Arceus : comme Johto, le Pokédex de
-    /// Hisui a les mêmes Pokémon que son national, dans un autre ordre : les trois.
+    /// Hisui a les mêmes Pokémon que son national, dans un autre ordre : les trois. Un living dex chromatique d'un jeu n'a
+    /// pour l'instant que le premier : le Régional, ou le National de Let's Go (son seul Pokédex).
     /// </summary>
     public static IReadOnlyList<LivingDexMode> Modes(LivingDexGameInfo game)
     {
         if (GlobalLivingDex.IsGlobal(game.Game))
             return GlobalLivingDex.Modes;
+        if (game.Shiny)
+            return [Modes(Get(game.Game))[0]];
         var national = Slots(game, LivingDexMode.National);
         var modes = new List<LivingDexMode>();
         if (!Slots(game, LivingDexMode.Regional).SequenceEqual(national))
@@ -1196,18 +1237,18 @@ public static class LivingDexGames
     /// <summary>
     /// Cartes triées. Par génération : l'ordre des jeux, ou son exact inverse (Violet, Écarlate... Rouge). Par
     /// complétion : le pourcentage dans le mode de chaque carte (celui affiché, le National pour « National seul »), du
-    /// plus petit au plus grand ou l'inverse, et à égalité toujours dans l'ordre des jeux. Le living dex global reste en
-    /// tête, suivi du global chromatique.
+    /// plus petit au plus grand ou l'inverse, et à égalité toujours dans l'ordre des jeux. Par génération, le chromatique
+    /// d'un jeu suit son normal, dans les deux sens. Le living dex global reste en tête, suivi du global chromatique.
     /// </summary>
     public static List<LivingDexSummary> Sort(IEnumerable<LivingDexSummary> dexes, LivingDexSort sort, bool descending)
     {
         var all = dexes.ToList();
         var global = all.Where(d => GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game);
-        var byGame = all.Where(d => !GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game).ToList();
+        var byGame = all.Where(d => !GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game).ThenBy(d => d.Game.Shiny).ToList();
         if (sort == LivingDexSort.Generation)
         {
             if (descending)
-                byGame.Reverse();
+                byGame = [.. byGame.OrderByDescending(d => d.Game.Game).ThenBy(d => d.Game.Shiny)];
             return [.. global, .. byGame];
         }
         // Comparaison exacte des fractions (owned / total), sans arrondi : 1 / 3 avant 34 / 100.
@@ -1215,6 +1256,30 @@ public static class LivingDexGames
             ((long)a.Owned * Math.Max(b.Total, 1)).CompareTo((long)b.Owned * Math.Max(a.Total, 1));
         return [.. global, .. byGame.Order(Comparer<LivingDexSummary>.Create((a, b) => descending ? completion(b, a) : completion(a, b)))];
     }
+
+    /// <summary>La carte passe-t-elle le filtre de la vue générale ? Chromatiques : ceux des jeux et le global chromatique.</summary>
+    public static bool Matches(LivingDexGameInfo game, LivingDexKind kind) => kind switch
+    {
+        LivingDexKind.Normal => !game.Shiny,
+        LivingDexKind.Shiny => game.Shiny,
+        _ => true,
+    };
+
+    /// <summary>Filtre dans l'adresse (?filtre=chromatiques, ?filtre=normaux) ; « Tous » n'y figure pas (null).</summary>
+    public static string? KindSlug(LivingDexKind kind) => kind switch
+    {
+        LivingDexKind.Normal => "normaux",
+        LivingDexKind.Shiny => "chromatiques",
+        _ => null,
+    };
+
+    /// <summary>Filtre lu dans l'adresse ; absent ou inconnu : tous.</summary>
+    public static LivingDexKind KindFromSlug(string? slug) => slug switch
+    {
+        "normaux" => LivingDexKind.Normal,
+        "chromatiques" => LivingDexKind.Shiny,
+        _ => LivingDexKind.All,
+    };
 
     /// <summary>Tri dans l'adresse (?tri=completion) ; celui par génération n'y figure pas (null), c'est le tri par défaut.</summary>
     public static string? SortSlug(LivingDexSort sort) => sort == LivingDexSort.Completion ? "completion" : null;
@@ -1243,25 +1308,25 @@ public sealed class LivingDexService(
 {
     /// <summary>
     /// Living dex du compte, progression comptée dans un mode (vue générale) : le National pour un jeu qui ne propose pas
-    /// ce mode (<see cref="LivingDexSummary.Mode"/>), comme sur sa page. En Ultime, seulement ceux qui ont ce mode (le
-    /// living dex global).
+    /// ce mode, le seul mode d'un living dex chromatique d'un jeu (<see cref="LivingDexSummary.Mode"/>), comme sur sa page.
+    /// En Ultime, seulement ceux qui ont ce mode (les living dex globaux).
     /// </summary>
     public async Task<List<LivingDexSummary>> ListAsync(string ownerId, LivingDexMode mode = LivingDexMode.National)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var dexes = await db.LivingDexes.AsNoTracking().Where(d => d.OwnerId == ownerId)
-            .Select(d => new { d.Id, d.Game, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
+            .Select(d => new { d.Id, d.Game, d.Shiny, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
             .ToListAsync();
         var summaries = new List<LivingDexSummary>();
-        foreach (var d in dexes.OrderBy(d => d.Game))
+        foreach (var d in dexes.OrderBy(d => d.Game).ThenBy(d => d.Shiny))
         {
-            var game = LivingDexGames.Get(d.Game);
+            var game = LivingDexGames.Get(d.Game, d.Shiny);
             var modes = LivingDexGames.Modes(game);
             if (mode == LivingDexMode.Ultimate && !modes.Contains(mode))
                 continue;
-            var shown = modes.Contains(mode) ? mode : LivingDexMode.National;
+            var shown = ShownMode(modes, mode);
             var entries = d.StoredSaveId is { } saveId ? await EntriesAsync(db, game, saveId, shown)
-                : await GlobalEntriesAsync(db, ownerId, shown, d.Game == LivingDexGame.GlobalShiny);
+                : await GlobalEntriesAsync(db, ownerId, shown, game.Shiny);
             summaries.Add(new(d.Id, game, d.StoredSaveId is null ? GlobalLabelOf(d.Game) : SaveLabel(d.TrainerName, d.FileName),
                 entries.Count(e => e.Owned), entries.Count, shown)
             { PublicSaveLabel = d.StoredSaveId is null ? GlobalLabelOf(d.Game) : d.TrainerName });
@@ -1269,11 +1334,22 @@ public sealed class LivingDexService(
         return summaries;
     }
 
-    /// <summary>Jeux qui ont déjà un living dex sur ce compte (global compris) : grisés à la création.</summary>
-    public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId)
+    /// <summary>Mode affiché : celui demandé s'il est proposé, sinon le National, sinon le seul mode du living dex (chromatique d'un jeu).</summary>
+    private static LivingDexMode ShownMode(IReadOnlyList<LivingDexMode> modes, LivingDexMode mode)
+    {
+        if (modes.Contains(mode))
+            return mode;
+        return modes.Contains(LivingDexMode.National) ? LivingDexMode.National : modes[0];
+    }
+
+    /// <summary>
+    /// Jeux qui ont déjà un living dex sur ce compte : les normaux (globaux compris, le global chromatique étant un jeu à
+    /// part), ou les chromatiques des jeux. Grisés à la création.
+    /// </summary>
+    public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId, bool shiny = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return [.. await db.LivingDexes.Where(d => d.OwnerId == ownerId).Select(d => d.Game).ToListAsync()];
+        return [.. await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.Shiny == shiny).Select(d => d.Game).ToListAsync()];
     }
 
     /// <summary>Living dex global, ou global chromatique : un de chaque par compte, sur le stockage interne.</summary>
@@ -1299,11 +1375,15 @@ public sealed class LivingDexService(
         return new(true, $"{LivingDexGames.Get(game).Name} créé.", dex.Id);
     }
 
-    /// <summary>Sauvegardes stockées qui peuvent recevoir un living dex : d'un jeu qui en a, pas encore liées, avec un jeu libre.</summary>
-    public async Task<List<LivingDexCandidate>> ListCandidatesAsync(string ownerId)
+    /// <summary>
+    /// Sauvegardes stockées qui peuvent recevoir un living dex, normal ou chromatique (pas en 1re génération) : d'un jeu
+    /// qui en a, pas encore liées (une sauvegarde par living dex, même entre normal et chromatique), avec un jeu libre
+    /// pour ce type.
+    /// </summary>
+    public async Task<List<LivingDexCandidate>> ListCandidatesAsync(string ownerId, bool shiny = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var taken = await db.LivingDexes.Where(d => d.OwnerId == ownerId).Select(d => d.Game).ToListAsync();
+        var taken = await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.Shiny == shiny).Select(d => d.Game).ToListAsync();
         var linked = db.LivingDexes.Where(d => d.StoredSaveId != null).Select(d => d.StoredSaveId!.Value);
         var saves = await db.StoredSaves.AsNoTracking()
             .Where(s => s.OwnerId == ownerId && s.Generation <= 9 && !linked.Contains(s.Id))
@@ -1315,29 +1395,33 @@ public sealed class LivingDexService(
         {
             if (!StoredSaveService.TryRead(s.Data, s.FileName, out var sav))
                 continue;
-            var games = LivingDexGames.For(sav).Except(taken).ToList();
+            var games = LivingDexGames.For(sav).Where(g => !shiny || LivingDexGames.HasShiny(LivingDexGames.Get(g))).Except(taken).ToList();
             if (games.Count > 0)
                 candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", games));
         }
         return candidates;
     }
 
-    public async Task<LivingDexResult> CreateAsync(string ownerId, int saveId, LivingDexGame game)
+    /// <summary>Living dex d'un jeu sur une sauvegarde stockée ; chromatique : il ne compte que ses chromatiques.</summary>
+    public async Task<LivingDexResult> CreateAsync(string ownerId, int saveId, LivingDexGame game, bool shiny = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var save = await db.StoredSaves.AsNoTracking().Where(s => s.Id == saveId && s.OwnerId == ownerId)
             .Select(s => new { s.FileName, s.Data }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        var name = LivingDexGames.Get(game).Name;
+        var gameName = LivingDexGames.Get(game).Name;
+        if (shiny && !LivingDexGames.HasShiny(LivingDexGames.Get(game)))
+            return new(false, $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.");
         if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
-            return new(false, $"Cette sauvegarde n'est pas une partie de {name}.");
-        if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game))
+            return new(false, $"Cette sauvegarde n'est pas une partie de {gameName}.");
+        var name = LivingDexGames.Get(game, shiny).Name;
+        if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game && d.Shiny == shiny))
             return new(false, $"Tu as déjà un living dex {name} : supprime-le pour en créer un autre.");
         if (await db.LivingDexes.AnyAsync(d => d.StoredSaveId == saveId))
             return new(false, "Cette sauvegarde a déjà un living dex.");
 
-        var dex = new LivingDex { OwnerId = ownerId, Game = game, StoredSaveId = saveId, CreatedAt = DateTime.UtcNow };
+        var dex = new LivingDex { OwnerId = ownerId, Game = game, Shiny = shiny, StoredSaveId = saveId, CreatedAt = DateTime.UtcNow };
         db.LivingDexes.Add(dex);
         try
         {
@@ -1348,25 +1432,27 @@ public sealed class LivingDexService(
             return new(false, $"Tu as déjà un living dex {name}, ou cette sauvegarde en a déjà un.");
         }
         if (logger.IsEnabled(LogLevel.Information))
-            logger.LogInformation("Utilisateur {User} : living dex {Game} créé sur la sauvegarde {Save}.", ownerId, game, saveId);
+            logger.LogInformation("Utilisateur {User} : living dex {Game} (chromatique : {Shiny}) créé sur la sauvegarde {Save}.", ownerId, game, shiny, saveId);
         return new(true, $"Living dex {name} créé.", dex.Id);
     }
 
-    /// <summary>Living dex dans un mode (le National si celui demandé n'est pas proposé pour ce jeu), null s'il n'existe pas.</summary>
+    /// <summary>
+    /// Living dex dans un mode (le National si celui demandé n'est pas proposé pour ce jeu, le seul mode d'un chromatique
+    /// d'un jeu), null s'il n'existe pas.
+    /// </summary>
     public async Task<LivingDexView?> GetAsync(string ownerId, int id, LivingDexMode mode = LivingDexMode.National)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var dex = await db.LivingDexes.AsNoTracking().Where(d => d.Id == id && d.OwnerId == ownerId)
-            .Select(d => new { d.Id, d.Game, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
+            .Select(d => new { d.Id, d.Game, d.Shiny, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
             .FirstOrDefaultAsync();
         if (dex is null)
             return null;
-        var game = LivingDexGames.Get(dex.Game);
+        var game = LivingDexGames.Get(dex.Game, dex.Shiny);
         var modes = LivingDexGames.Modes(game);
-        if (!modes.Contains(mode))
-            mode = LivingDexMode.National;
+        mode = ShownMode(modes, mode);
         var entries = dex.StoredSaveId is { } saveId ? await EntriesAsync(db, game, saveId, mode)
-            : await GlobalEntriesAsync(db, ownerId, mode, dex.Game == LivingDexGame.GlobalShiny);
+            : await GlobalEntriesAsync(db, ownerId, mode, game.Shiny);
         return new(dex.Id, game, dex.StoredSaveId is null ? GlobalLabelOf(dex.Game) : SaveLabel(dex.TrainerName, dex.FileName), modes, mode, entries)
         { PublicSaveLabel = dex.StoredSaveId is null ? GlobalLabelOf(dex.Game) : dex.TrainerName };
     }
@@ -1414,18 +1500,20 @@ public sealed class LivingDexService(
     /// exemplaires, que les autres cases ne reprennent pas : il faut un exemplaire de plus par Méga-Évolution. En Let's Go
     /// (<see cref="LivingDexSlot.MegaInBag"/>), n'importe quel exemplaire convient : la case de l'espèce garde le premier,
     /// chaque Méga dont la gemme est dans le sac prend le suivant. Les cases Gigamax (<see cref="LivingDexSlot.Gigamax"/>)
-    /// prennent aussi d'abord le leur, qui a le facteur Gigamax.
+    /// prennent aussi d'abord le leur, qui a le facteur Gigamax. Living dex chromatique : les seuls chromatiques, sans les
+    /// cases des espèces jamais chromatiques (retirées à la fin : les autres gardent leur numéro du Pokédex régional).
     /// </summary>
     private static async Task<List<LivingDexEntry>> EntriesAsync(ApplicationDbContext db, LivingDexGameInfo game, int saveId, LivingDexMode mode)
     {
-        var owned = await OwnedAsync(db, saveId);
+        var owned = await OwnedAsync(db, saveId, game.Shiny);
         var slots = LivingDexGames.Slots(game, mode);
         var bag = slots.Any(s => s.KeyItem != 0 || s.MegaInBag) ? await BagItemsAsync(db, saveId) : new HashSet<int>();
 
         var megaCopies = MegaCopies(slots, owned);
         var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
         var copies = new SlotCopies(available, megaCopies, BagMegas(slots, available, bag), bag);
-        return slots.Select((slot, index) => Entry(game, mode, slot, index, copies)).ToList();
+        return slots.Select((slot, index) => (slot, index)).Where(s => !LivingDexGames.ShinyLocked(game, s.slot))
+            .Select(s => Entry(game, mode, s.slot, s.index, copies)).ToList();
     }
 
     /// <summary>Exemplaires trouvés pour les cases (voir <see cref="EntriesAsync"/>).</summary>
@@ -1537,12 +1625,12 @@ public sealed class LivingDexService(
         return deleted > 0;
     }
 
-    /// <summary>Living dex de chaque sauvegarde (nom du jeu), pour prévenir qu'il partira avec elle (« Supprimer »).</summary>
+    /// <summary>Living dex de chaque sauvegarde (nom du jeu, « chromatique »), pour prévenir qu'il partira avec elle (« Supprimer »).</summary>
     public async Task<Dictionary<int, string>> NamesBySaveAsync(string ownerId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return (await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.StoredSaveId != null).Select(d => new { d.StoredSaveId, d.Game }).ToListAsync())
-            .ToDictionary(d => d.StoredSaveId!.Value, d => LivingDexGames.Get(d.Game).Name);
+        return (await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.StoredSaveId != null).Select(d => new { d.StoredSaveId, d.Game, d.Shiny }).ToListAsync())
+            .ToDictionary(d => d.StoredSaveId!.Value, d => LivingDexGames.Get(d.Game, d.Shiny).Name);
     }
 
     /// <summary>Pokémon de la sauvegarde qui remplit une case.</summary>
@@ -1552,11 +1640,14 @@ public sealed class LivingDexService(
     private sealed record OwnedCopy(int Id, ushort Species, byte Form, string? Location, int HeldItem, bool KnowsMegaMove,
         bool CanGigantamax);
 
-    /// <summary>Pokémon de la sauvegarde (les œufs ne comptent pas), dans son ordre : équipe, puis boîtes.</summary>
-    private static async Task<List<OwnedCopy>> OwnedAsync(ApplicationDbContext db, int saveId)
+    /// <summary>
+    /// Pokémon de la sauvegarde (les œufs ne comptent pas), dans son ordre : équipe, puis boîtes ; les seuls chromatiques
+    /// pour un living dex chromatique (le normal compte tout le monde, chromatiques compris).
+    /// </summary>
+    private static async Task<List<OwnedCopy>> OwnedAsync(ApplicationDbContext db, int saveId, bool shiny)
     {
         var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.StoredSaveId == saveId && !p.IsEgg)
+            .Where(p => p.StoredSaveId == saveId && !p.IsEgg && (!shiny || p.IsShiny))
             .OrderBy(p => p.Position)
             // Octets seulement pour les Rayquaza (leurs capacités disent s'ils peuvent méga-évoluer) et les espèces qui ont
             // une case Gigamax (le facteur est dans les octets).

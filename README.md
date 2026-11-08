@@ -393,8 +393,9 @@ chaque paysage, générateurs, types de cases, comportement, tests) : `docs/clau
 et modes dans `LivingDexGames` (`Services/LivingDexService.cs`), global dans `Services/GlobalLivingDex.cs`. Modes et cases
 jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md`.
 
-- Jeux de la 1re à la 9e génération (pas Colosseum, XD, ni Légendes Z-A). **Un living dex par jeu et par compte**, une
-  sauvegarde pour un seul living dex (index uniques) ; supprimer la sauvegarde supprime son living dex (cascade).
+- Jeux de la 1re à la 9e génération (pas Colosseum, XD, ni Légendes Z-A). **Un living dex normal et un chromatique par
+  jeu et par compte** (index unique compte + jeu + `Shiny`), une sauvegarde pour un seul living dex, même entre normal
+  et chromatique (index unique) ; supprimer la sauvegarde supprime son living dex (cascade).
 - PKHeX ne distingue pas Rouge de Bleu, Or d'Argent, Rubis de Saphir, Rouge Feu de Vert Feuille, ni Diamant de Perle :
   la sauvegarde est proposée pour les deux jeux. À partir de la 5e génération, chaque sauvegarde dit son jeu.
 - **Comptage** : équipe et boîtes de la sauvegarde liée (pas les œufs), donc à jour à chaque mise à jour de la sauvegarde.
@@ -402,8 +403,15 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
   Régional et National n'importe quelle forme compte, en Complet la forme exacte. Un mode identique à un autre, ordre
   compris, est caché. Cases qui demandent un exemplaire de plus (Méga, Primo, Gigamax), un objet dans le sac (Shaymin
   Céleste, Hoopa Déchaîné jusqu'à la 6e, Méga de Let's Go) ou une forme fixée par le jeu (Deoxys de 3e génération).
-- Vue générale : `?mode=regional|complet|ultime`, `?tri=completion`, `?ordre=desc` (`LivingDexGames.Sort`) ; pourcentage
-  arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
+- **Chromatique d'un jeu** (`LivingDex.Shiny`, `LivingDexGames.Get(jeu, shiny: true)`) : pas en 1re génération
+  (`HasShiny`) ; seulement les chromatiques de sa sauvegarde ; un seul mode, le Régional (Let's Go : son Pokédex, en
+  National) ; sans les espèces de `GlobalLivingDex.ShinyLockedSpecies`, les autres cases gardent leur numéro régional ;
+  sprites dans `chromatique/` (jusqu'à la 5e génération), sinon images chromatiques de la collection ; jaquette avec le
+  Charme Chroma.
+- Vue générale : `?mode=regional|complet|ultime`, `?filtre=chromatiques|normaux` (global chromatique compris dans
+  « chromatiques », `LivingDexGames.Matches`), `?tri=completion`, `?ordre=desc` (`LivingDexGames.Sort` : le chromatique
+  d'un jeu suit son normal) ; une carte sans le mode demandé compte en National, ou dans son seul mode (« Régional
+  seul ») ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
   (`Shared/GridColumns.cs`, commun avec « Ma collection »).
 - **Global** (`LivingDexGame.Global`, `StoredSaveId` null) : stockage interne seulement, sans œufs ni chromatiques,
   chaque exemplaire pour une seule case ; formes reconnues par leur nom anglais chez PKHeX ; National 1 025, Complet
@@ -491,12 +499,12 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage, Volcan, Désert, Océan, Grotte, Montagne, Donjon) : nom, carte, pictogramme, textes de la page, et qui ne peut pas y vivre (`Refusal` : l'océan, seulement les nageurs ; `ChooserNote` : la remarque de la fenêtre de choix, à l'océan et à la montagne) |
 | `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
-| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
+| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
-| `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu, ou Master Ball / Charme Chroma pour les globaux |
+| `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu (avec le Charme Chroma pour un chromatique), ou Master Ball / Charme Chroma pour les globaux |
 | `MonsutaPotaru/Components/Pages/LivingDexPage.razor` | Page d'un living dex : grille des sprites du jeu (silhouettes des manquants), progression, fiche au clic |
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
-| `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
+| `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
 | `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`) ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |

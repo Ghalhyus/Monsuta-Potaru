@@ -44,7 +44,7 @@ public static class GlobalLivingDex
     public static readonly LivingDexGameInfo Game = new(LivingDexGame.Global, "Living dex global", "", null, 0, "", [], MaxSpecies);
 
     public static readonly LivingDexGameInfo ShinyGame =
-        new(LivingDexGame.GlobalShiny, "Living dex global chromatique", "", null, 0, "", [], MaxSpecies);
+        new(LivingDexGame.GlobalShiny, "Living dex global chromatique", "", null, 0, "", [], MaxSpecies, Shiny: true);
 
     /// <summary>Living dex global, normal ou chromatique (sans jeu ni sauvegarde).</summary>
     public static bool IsGlobal(LivingDexGame game) => game is LivingDexGame.Global or LivingDexGame.GlobalShiny;

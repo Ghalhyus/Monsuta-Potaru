@@ -466,6 +466,9 @@ namespace MonsutaPotaru.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Shiny")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("StoredSaveId")
                         .HasColumnType("INTEGER");
 
@@ -474,7 +477,7 @@ namespace MonsutaPotaru.Migrations
                     b.HasIndex("StoredSaveId")
                         .IsUnique();
 
-                    b.HasIndex("OwnerId", "Game")
+                    b.HasIndex("OwnerId", "Game", "Shiny")
                         .IsUnique();
 
                     b.ToTable("LivingDexes");

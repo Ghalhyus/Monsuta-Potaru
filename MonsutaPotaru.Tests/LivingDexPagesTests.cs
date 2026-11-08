@@ -29,13 +29,18 @@ public sealed class LivingDexPagesTests : PageTestContext
         // Générations dépliées puis repliées ; un jeu sans sauvegarde
         foreach (var toggle in cut.FindAll(".livingdex-generation-toggle").Select((_, i) => i).ToList())
             await cut.FindAll(".livingdex-generation-toggle")[toggle].ClickAsync(new());
-        await cut.FindAll("input[name=dexGame]")[2].ChangeAsync(new() { Value = true });
+        await cut.FindAll("input[name=dexGame]")[1].ChangeAsync(new() { Value = true });
         cut.WaitForText("disponible");
         await cut.FindAll(".livingdex-generation-toggle")[0].ClickAsync(new());
 
-        // Le global chromatique, puis le global
-        await cut.FindAll("input[name=dexGame]")[1].ChangeAsync(new() { Value = true });
+        // Le global chromatique (type « Chromatique »), puis le global (« Normal »)
+        await cut.Click("Chromatique");
+        await cut.FindAll("input[name=dexGame]")[0].ChangeAsync(new() { Value = true });
         cut.WaitForText("Seuls tes chromatiques comptent");
+        await cut.Click("Chromatique"); // déjà choisi : rien ne change
+        cut.WaitForText("Seuls tes chromatiques comptent");
+        await cut.Click("Normal");
+        Assert.DoesNotContain("Seuls tes chromatiques comptent", cut.Markup); // jeu oublié
         await cut.FindAll("input[name=dexGame]")[0].ChangeAsync(new() { Value = true });
         cut.WaitForText("Les chromatiques n'y comptent pas");
         await cut.Click("Créer");
@@ -64,6 +69,84 @@ public sealed class LivingDexPagesTests : PageTestContext
     }
 
     [Fact]
+    public async Task List_CreatesAShinyLivingDex_AndFiltersTheCards()
+    {
+        await StoreReal("sacha", "noir.sav");
+        await Dexes.CreateGlobalAsync("sacha");
+        var cut = Render<LivingDexes>();
+        await cut.Click("+ Créer un living dex");
+        await cut.Click("Chromatique");
+
+        // Pas de 1re génération (aucun chromatique) ; la jaquette porte le Charme Chroma.
+        Assert.DoesNotContain(cut.FindAll(".livingdex-generation-toggle"), t => t.TextContent.Contains("1re"));
+        var black = LivingDexGames.Get(LivingDexGame.Black, shiny: true);
+        await cut.FindAll(".livingdex-generation-toggle")[black.Generation - 2].ClickAsync(new());
+        Assert.NotEmpty(cut.FindAll(".livingdex-game .livingdex-shiny-cover"));
+        var radio = cut.FindAll(".livingdex-game").First(l => l.TextContent.Contains(black.Name)).QuerySelector("input")!;
+        await radio.ChangeAsync(new() { Value = true });
+        cut.WaitForText("Seuls les chromatiques de la sauvegarde comptent");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("#dexSave")));
+        await cut.Click("Créer");
+        Assert.Contains("livingdex/", Navigation.Uri);
+        var shiny = (await Dexes.ListAsync("sacha")).Single(d => d.Game.Shiny);
+        Assert.Equal(black.Name, shiny.Game.Name);
+
+        // Page du chromatique : un seul mode (pas de boutons), ses seuls chromatiques.
+        var page = Render<LivingDexPage>(p => p.Add(x => x.Id, shiny.Id));
+        page.WaitForText("seulement ses chromatiques");
+        Assert.False(page.HasButton("National"));
+        Assert.NotNull(page.Find(".livingdex-shiny-cover"));
+
+        // Vue générale : filtre Tous / Normaux / Chromatiques, dans l'adresse ; en National, « Régional seul ».
+        Navigation.NavigateTo("livingdex?filtre=chromatiques");
+        var list = Render<LivingDexes>();
+        list.WaitForAssertion(() => Assert.Single(list.FindAll(".livingdex-card")));
+        Assert.Contains("Régional seul", list.Text());
+        Assert.Contains("mode=regional", list.Find(".livingdex-card").GetAttribute("href"));
+        await list.Click("Normaux");
+        Assert.EndsWith("filtre=normaux", Navigation.Uri);
+        await list.Click("Tous");
+        Assert.DoesNotContain("filtre", Navigation.Uri);
+
+        Navigation.NavigateTo("livingdex?filtre=normaux");
+        list = Render<LivingDexes>();
+        list.WaitForAssertion(() => Assert.Equal(["Living dex global"], list.FindAll(".livingdex-card strong").Select(s => s.TextContent)));
+        Navigation.NavigateTo("livingdex?filtre=chromatiques&mode=ultime");
+        list = Render<LivingDexes>();
+        list.WaitForText("Seul le living dex global chromatique a le mode Ultime : crée-en un");
+        Navigation.NavigateTo("livingdex");
+        list = Render<LivingDexes>();
+        list.WaitForAssertion(() => Assert.Equal(2, list.FindAll(".livingdex-card").Count));
+
+        // La création grise le jeu déjà pris en chromatique, pas en normal.
+        await list.Click("+ Créer un living dex");
+        await list.Click("Chromatique");
+        await list.FindAll(".livingdex-generation-toggle")[black.Generation - 2].ClickAsync(new());
+        Assert.Contains("(déjà créé)", list.FindAll(".livingdex-game").First(l => l.TextContent.Contains(black.Name)).TextContent);
+        await list.Click("Normal"); // la 5e génération reste dépliée
+        Assert.DoesNotContain("(déjà créé)", list.FindAll(".livingdex-game").First(l => l.TextContent.Contains("Pokémon Noire")).TextContent);
+    }
+
+    [Fact]
+    public async Task List_EmptyFilter_SaysSo()
+    {
+        await Dexes.CreateGlobalAsync("sacha", shiny: true);
+        Navigation.NavigateTo("livingdex?filtre=normaux");
+        var cut = Render<LivingDexes>();
+        cut.WaitForText("Aucun living dex normal : crée-en un");
+        Navigation.NavigateTo("livingdex?filtre=normaux&mode=ultime");
+        cut = Render<LivingDexes>();
+        cut.WaitForText("Seuls les living dex globaux ont le mode Ultime");
+
+        await Dexes.DeleteAsync("sacha", (await Dexes.ListAsync("sacha")).Single().Id);
+        AddToBank("sacha", 25);
+        await Dexes.CreateGlobalAsync("sacha");
+        Navigation.NavigateTo("livingdex?filtre=chromatiques");
+        cut = Render<LivingDexes>();
+        cut.WaitForText("Aucun living dex chromatique : crée-en un");
+    }
+
+    [Fact]
     public async Task List_ShowsEachMode_AndSort()
     {
         AddToBank("sacha", 25, 133);
@@ -78,7 +161,7 @@ public sealed class LivingDexPagesTests : PageTestContext
             Navigation.NavigateTo("livingdex" + query);
             var cut = Render<LivingDexes>();
             cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".livingdex-card")));
-            await cut.FindAll(".livingdex-choice button")[0].ClickAsync(new());
+            await cut.FindAll(".livingdex-choice button")[3].ClickAsync(new()); // Régional (après Tous / Normaux / Chromatiques)
             await cut.Find("#dexSort").ChangeAsync(new() { Value = "completion" });
             await cut.Find(".livingdex-choice button[aria-label]").ClickAsync(new());
         }

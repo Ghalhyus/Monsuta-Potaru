@@ -48,8 +48,9 @@ public enum LivingDexGame
 
 /// <summary>
 /// Living dex d'un compte : un exemplaire de chaque Pokémon du Pokédex d'un jeu, compté dans une sauvegarde stockée
-/// (équipe et boîtes). Au plus un par jeu et par compte, une sauvegarde ne sert qu'à un ; supprimé avec la sauvegarde.
-/// Le living dex global (<see cref="LivingDexGame.Global"/>) n'a pas de sauvegarde : il compte le stockage interne.
+/// (équipe et boîtes). Au plus un normal et un chromatique par jeu et par compte, une sauvegarde ne sert qu'à un ;
+/// supprimé avec la sauvegarde. Le living dex global (<see cref="LivingDexGame.Global"/>) n'a pas de sauvegarde : il
+/// compte le stockage interne.
 /// </summary>
 public class LivingDex
 {
@@ -59,6 +60,12 @@ public class LivingDex
     public ApplicationUser? Owner { get; set; }
 
     public LivingDexGame Game { get; set; }
+
+    /// <summary>
+    /// Living dex chromatique d'un jeu : ne compte que les chromatiques de sa sauvegarde, mode Régional seulement. Le
+    /// global chromatique, lui, est un jeu à part (<see cref="LivingDexGame.GlobalShiny"/>, ce champ à false).
+    /// </summary>
+    public bool Shiny { get; set; }
 
     /// <summary>Sauvegarde stockée où sont comptés les Pokémon ; null pour le living dex global (stockage interne).</summary>
     public int? StoredSaveId { get; set; }

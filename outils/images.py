@@ -382,13 +382,16 @@ def combats_jobs():
 
 
 def livingdex_jobs():
-    """Sprites des jeux des living dex (PokéAPI, fond transparent) et jaquettes officielles (Bulbagarden Archives)."""
+    """Sprites des jeux des living dex (PokéAPI, fond transparent), chromatiques compris (chromatique/, living dex
+    chromatiques : pas en 1re génération, qui n'en a pas), et jaquettes officielles (Bulbagarden Archives)."""
     jobs, missing = {}, []
     for folder, (theirs, count) in LIVINGDEX_SPRITES.items():
-        for number in range(1, count + 1):
-            jobs[f"livingdex/{folder}/{number}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{number}.png"
-        for mine, their_file in LIVINGDEX_FORMS.get(folder, {}).items():
-            jobs[f"livingdex/{folder}/{mine}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_file}.png"
+        variants = {"": ""} if folder in ("rouge-bleu", "jaune") else {"": "", "chromatique/": "shiny/"}
+        for mine_variant, their_variant in variants.items():
+            for number in range(1, count + 1):
+                jobs[f"livingdex/{folder}/{mine_variant}{number}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_variant}{number}.png"
+            for mine, their_file in LIVINGDEX_FORMS.get(folder, {}).items():
+                jobs[f"livingdex/{folder}/{mine_variant}{mine}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_variant}{their_file}.png"
     for name, title in LIVINGDEX_COVERS.items():
         if (OUT / "livingdex" / "jaquettes" / f"{name}.png").exists():
             continue

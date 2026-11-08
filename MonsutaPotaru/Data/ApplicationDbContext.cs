@@ -131,7 +131,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<LivingDex>(e =>
         {
-            e.HasIndex(d => new { d.OwnerId, d.Game }).IsUnique(); // un living dex par jeu et par compte
+            e.HasIndex(d => new { d.OwnerId, d.Game, d.Shiny }).IsUnique(); // un normal et un chromatique par jeu et par compte
             e.HasIndex(d => d.StoredSaveId).IsUnique(); // une sauvegarde ne sert qu'à un living dex
             e.HasOne(d => d.Owner).WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             // La sauvegarde est supprimée : son living dex aussi (la confirmation de suppression le signale).

@@ -63,6 +63,28 @@ README : « Living dex ». Jeux et modes : `LivingDexGames` (`Services/LivingDex
   Dominants retirés aussi), seulement les chromatiques. Image : Charme Chroma. Forme ou espèce jamais distribuée en
   chromatique : l'ajouter à `ShinyLocked`.
 
+## Living dex chromatique d'un jeu (2026-11-08)
+- Colonne `LivingDex.Shiny` (migration `ShinyLivingDex`, index unique OwnerId + Game + Shiny ; le `Down` supprime les
+  chromatiques). Le global chromatique reste un **jeu à part** (`LivingDexGame.GlobalShiny`, `Shiny` à false en base) ;
+  en mémoire, `LivingDexGameInfo.Shiny` est vrai pour les deux (`GlobalLivingDex.ShinyGame`, `LivingDexGames.Get(jeu, true)`,
+  nom « Pokémon Platine chromatique »).
+- Choix de l'utilisateur : **une sauvegarde chacun** (l'index unique sur `StoredSaveId` ne change pas) ; le normal
+  continue de compter les chromatiques ; pas en 1re génération (`HasShiny`, aucun chromatique) ; Let's Go oui.
+- **Un seul mode pour l'instant** : `Modes` rend le premier mode du jeu normal (Régional ; National pour Let's Go, son seul
+  Pokédex). Pour ajouter National / Complet plus tard : `Modes` et `ShinyLocked` (aujourd'hui l'espèce seule, les formes
+  jamais chromatiques comme Pichu Troizépi ou les casquettes n'ont pas de case en Régional), voir `GlobalLivingDex.ShinyLocked`.
+- `OwnedAsync(…, shiny)` filtre `IsShiny` ; les cases de `ShinyLockedSpecies` sont retirées **après** `Entry` : les
+  numéros régionaux suivent l'index de la case (Victini n° 000 en Unys : Vipélierre garde son n° 001).
+- Sprites : `{SpriteFolder}chromatique/` (même noms que les normaux, `outils/images.py` les télécharge pour tous les
+  dossiers sauf Rouge / Bleu et Jaune ; ceux de la 3e génération venaient déjà des combats) ; `Fallback` prend l'image
+  chromatique de la collection.
+- Vue générale : `?filtre=chromatiques|normaux` (`LivingDexKind`, `LivingDexGames.Matches`) ; en National / Complet, une
+  carte chromatique compte dans son seul mode (« Régional seul », `ShownMode`) ; en Ultime, seul le global chromatique.
+  Tri par génération : le chromatique suit le normal du même jeu dans les deux sens. Création : boutons Normal /
+  Chromatique en tête (`ListCandidatesAsync(…, shiny)`, `TakenGamesAsync(…, shiny)`).
+- Tests : `ShinyLivingDexTests` ; une deuxième copie d'une vraie sauvegarde est refusée (même identité, ou mêmes Pokémon :
+  anti-copie) : fabriquer une autre partie (`SaveSessionTests.CreatePlatinumSave`) ou insérer la ligne en base.
+
 ## Images et jaquettes
 - Les tests n'exigent **pas** ces images (la CI les copie du VPS, qui ne les reçoit qu'au déploiement) : tester le chemin,
   pas la présence.
@@ -87,7 +109,8 @@ Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, c
   `LivingDexGames.Percent`.
 - **Création** : « + Créer un living dex », d'abord le **jeu** (jaquettes groupées par génération, **repliées** au
   départ : le titre de chaque génération, « ▸ 4e génération (5 jeux) », la déplie ou la replie ; repliée, celle du jeu
-  choisi le montre encore ; un jeu qui a déjà son living dex est grisé), puis une de ses **sauvegardes** stockées pas encore liées. PKHeX reconnaît Jaune, Cristal,
+  choisi le montre encore ; un jeu qui a déjà son living dex est grisé ; boutons **Normal / Chromatique** en tête, voir
+  « Living dex chromatique d'un jeu »), puis une de ses **sauvegardes** stockées pas encore liées. PKHeX reconnaît Jaune, Cristal,
   Émeraude, Platine, et depuis PKHeX 26 HeartGold et SoulSilver, mais pas Rouge de Bleu, Or d'Argent, Rubis de Saphir,
   Rouge Feu de Vert Feuille ni Diamant de Perle (même format) : une sauvegarde Rouge / Bleu est proposée pour Rouge comme
   pour Bleu, de même pour les autres paires (pour Rouge Feu / Vert Feuille, PKHeX répond toujours « Rouge Feu » faute de mieux ; le site devine Vert Feuille d'après les Pokémon du dresseur, voir « Rouge Feu ou Vert Feuille », mais propose toujours les deux). À partir
