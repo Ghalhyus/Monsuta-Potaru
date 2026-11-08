@@ -42,9 +42,7 @@ else if (view is not null)
         <div class="flex-grow-1">
             <a class="small" href="@ListLink">← Living dex</a>
             <h1 class="mb-0 @(Visitor ? "h3" : "")">@view.Game.Name</h1>
-            <div class="small text-muted mb-2">@(!Global ? $"Sauvegarde : {(Visitor ? view.PublicSaveLabel : view.SaveLabel)}"
-                : view.Game.Game == LivingDexGame.GlobalShiny ? $"Pokémon chromatiques {StorageOf}, tous jeux confondus"
-                : $"Pokémon {StorageOf}, tous jeux confondus (sans les chromatiques)")</div>
+            <div class="small text-muted mb-2">@Subtitle</div>
             @if (view.Modes.Count > 1)
             {
                 <div class="btn-group btn-group-sm mb-2 livingdex-choice" role="group" aria-label="Mode">
@@ -118,8 +116,7 @@ else if (view is not null)
                 <h2 class="livingdex-section">@e.Section</h2>
             }
             var number = view.Mode == LivingDexMode.Regional ? $"{e.Section ?? view.Game.Region} #{e.Number:000} {e.Name} (national #{e.Species:000})" : $"#{e.Number:000} {e.Name}";
-            var title = $"{number} — {(e.Owned ? e.Location ?? "dans la sauvegarde" : "manquant")}"
-                + (e.Note is null ? "" : e.Owned ? $" · {e.Note}" : $" : {e.Note}");
+            var title = EntryTitle(number, e);
             @if (e.Owned)
             {
                 <button type="button" class="livingdex-slot" title="@title" aria-label="@title" @onclick="() => OpenDetail(e)">
@@ -164,6 +161,28 @@ else if (view is not null)
 
     /// <summary>Liste des living dex : les miens, ou ceux du joueur consulté.</summary>
     private string ListLink => player is null ? "livingdex" : PlayerService.Link(player.Pseudo, "livingdex");
+
+    /// <summary>Sous le titre : la sauvegarde du living dex, ou ce que compte un living dex global.</summary>
+    private string Subtitle
+    {
+        get
+        {
+            if (!Global)
+                return $"Sauvegarde : {(Visitor ? view!.PublicSaveLabel : view!.SaveLabel)}";
+            return view!.Game.Game == LivingDexGame.GlobalShiny
+                ? $"Pokémon chromatiques {StorageOf}, tous jeux confondus"
+                : $"Pokémon {StorageOf}, tous jeux confondus (sans les chromatiques)";
+        }
+    }
+
+    /// <summary>Bulle d'une case : numéro, où est le Pokémon (ou manquant), et sa note.</summary>
+    private static string EntryTitle(string number, LivingDexEntry e)
+    {
+        var title = $"{number} — {(e.Owned ? e.Location ?? "dans la sauvegarde" : "manquant")}";
+        if (e.Note is null)
+            return title;
+        return e.Owned ? $"{title} · {e.Note}" : $"{title} : {e.Note}";
+    }
 
     private string StorageOf => player is null ? "de ton stockage interne" : $"du stockage interne de {player.Pseudo}";
     [SupplyParameterFromQuery(Name = "mode")] private string? ModeFromQuery { get; set; }
@@ -261,7 +280,10 @@ else if (view is not null)
                 await screenWatcher.InvokeVoidAsync("dispose");
                 await screenWatcher.DisposeAsync();
             }
-            catch (JSDisconnectedException) { } // onglet fermé : plus rien à nettoyer côté navigateur
+            catch (JSDisconnectedException)
+            {
+                // onglet fermé : plus rien à nettoyer côté navigateur
+            }
         }
         selfRef?.Dispose();
     }

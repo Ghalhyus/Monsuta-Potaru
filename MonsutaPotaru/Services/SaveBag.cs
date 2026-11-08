@@ -81,7 +81,7 @@ public static class SaveBag
     /// Poches du sac jamais lues ni modifiées : objets rares (les retirer pourrait bloquer la progression), Lettres et Cristaux Z.
     /// Le PC d'objets n'est pas une poche du sac : il n'est lu et modifié que comme <see cref="BagPlace.Pc"/>.
     /// </summary>
-    private static readonly IReadOnlySet<InventoryType> UntouchedPouches = new HashSet<InventoryType>(
+    private static readonly HashSet<InventoryType> UntouchedPouches = new(
         [InventoryType.KeyItems, InventoryType.MailItems, InventoryType.ZCrystals, InventoryType.PCItems]);
 
     /// <summary>Début des clés des CT et DT : <c>MachineKeyBase + numéro de la capacité</c>, au-delà de tout numéro d'objet.</summary>
@@ -106,13 +106,18 @@ public static class SaveBag
     /// ni une Pokéball, ni un médicament, ni une baie, ni une CT est un objet ordinaire ; c'est la poche où chaque jeu le range
     /// qui dit s'il y est transférable (<see cref="ItemPouches"/>).
     /// </summary>
-    public static ItemCategory? CategoryOf(int key) =>
-        BallItems.Contains(key) ? ItemCategory.Balls
-        : MedicineItems.Contains(key) ? ItemCategory.Medicine
-        : BerryItems.Contains(key) ? ItemCategory.Berries
-        : MoveOf(key) is not null ? ItemCategory.Machines
-        : key is > 0 and < MachineKeyBase && !MailItems.Contains(key) ? ItemCategory.Items
-        : null;
+    public static ItemCategory? CategoryOf(int key)
+    {
+        if (BallItems.Contains(key))
+            return ItemCategory.Balls;
+        if (MedicineItems.Contains(key))
+            return ItemCategory.Medicine;
+        if (BerryItems.Contains(key))
+            return ItemCategory.Berries;
+        if (MoveOf(key) is not null)
+            return ItemCategory.Machines;
+        return key is > 0 and < MachineKeyBase && !MailItems.Contains(key) ? ItemCategory.Items : null;
+    }
 
     /// <summary>La sauvegarde a un PC d'objets, à côté du sac (1re à 3e génération).</summary>
     public static bool HasPc(SaveFile sav) => sav.Generation <= 3 && sav.Inventory.Pouches.Any(p => p.Type == InventoryType.PCItems);
@@ -171,23 +176,36 @@ public static class SaveBag
                 capacity[item] = pouch.MaxCount;
         }
         var machines = MachinesOf(sav);
-        foreach (var pouch in target.Where(p => ItemPouches.Contains(p.Type)))
-        {
-            foreach (var index in pouch.GetAllItems())
-            {
-                if (KeyOf(sav, machines, pouch, index) is { } item && CategoryOf(item) == ItemCategory.Items)
-                    capacity.TryAdd(item, pouch.MaxCount);
-            }
-        }
+        foreach (var (item, max) in OrdinaryItems(sav, machines, target))
+            capacity.TryAdd(item, max);
         foreach (var machine in machines.ByMove.Values)
         {
             var key = MachineKey(machine.Move);
             if (PouchFor(sav, target, machine.Item) is { } pouch)
-                capacity[key] = machine.Reusable ? 1
-                    : machine.Limited ? Math.Max(0, Math.Min(pouch.MaxCount, LimitedMachineThreshold - 1 - other.GetValueOrDefault(key)))
-                    : pouch.MaxCount;
+                capacity[key] = MachineCapacity(machine, pouch.MaxCount, other.GetValueOrDefault(key));
         }
         return capacity;
+    }
+
+    /// <summary>Objets ordinaires que le jeu connaît dans ces poches, avec le maximum de leur poche.</summary>
+    private static IEnumerable<(int Item, int Max)> OrdinaryItems(SaveFile sav, Machines machines, IEnumerable<InventoryPouch> target) =>
+        from pouch in target.Where(p => ItemPouches.Contains(p.Type))
+        from index in pouch.GetAllItems().ToArray()
+        let item = KeyOf(sav, machines, pouch, index)
+        where item is not null && CategoryOf(item.Value) == ItemCategory.Items
+        select (item.Value, pouch.MaxCount);
+
+    /// <summary>
+    /// Exemplaires d'une CT qu'un endroit peut avoir : un pour une CT réutilisable, pour une CT à usage unique ce qui reste
+    /// sous le seuil avec ceux de l'autre endroit (<paramref name="elsewhere"/>), sinon le maximum de la poche.
+    /// </summary>
+    private static int MachineCapacity(Machine machine, int pouchMax, int elsewhere)
+    {
+        if (machine.Reusable)
+            return 1;
+        if (!machine.Limited)
+            return pouchMax;
+        return Math.Max(0, Math.Min(pouchMax, LimitedMachineThreshold - 1 - elsewhere));
     }
 
     /// <summary>Numéro dans le jeu de la sauvegarde de la CT ou de la DT de chaque capacité (« CT26 », « DT04 »), par clé.</summary>
@@ -245,7 +263,7 @@ public static class SaveBag
 
     /// <summary>Position de la poche dans la sauvegarde : champ interne de PKHeX (voir <see cref="ClearEmptiedMachines"/>).</summary>
     private static readonly System.Reflection.FieldInfo PouchOffset =
-        typeof(InventoryPouch).GetField("Offset", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+        typeof(InventoryPouch).GetField("Offset", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) // NOSONAR : PKHeX ne publie pas ce champ (voir ClearEmptiedMachines)
         ?? throw new InvalidOperationException("PKHeX : position des poches introuvable (InventoryPouch.Offset).");
 
     /// <summary>
@@ -283,28 +301,11 @@ public static class SaveBag
         var have = place == BagPlace.Pc ? counts.Pc : counts.Bag;
         var total = Total(counts);
         var locked = Locked(sav, total);
-        var capacity = Capacity(sav, place);
+        var check = new DepositCheck(sav, place, gameName, name, locked, total, Capacity(sav, place), have);
         foreach (var (item, quantity) in quantities)
         {
-            if (CategoryOf(item) is null)
-                return $"{name(item)} ne peut pas être transféré.";
-            if (locked.Contains(item))
-                return LockedMessage(name(item));
-            if (IsLimited(sav, item) && total.GetValueOrDefault(item) + quantity > LimitedMachineThreshold - 1)
-            {
-                var already = total.GetValueOrDefault(item);
-                return $"{name(item)} : la sauvegarde en contient déjà {already}, et une CT à usage unique est limitée à " +
-                       $"{LimitedMachineThreshold - 1} par sauvegarde ({LimitedMachineThreshold - 1 - already} de plus).";
-            }
-            if (!capacity.TryGetValue(item, out var max))
-                return place == BagPlace.Pc && Capacity(sav).ContainsKey(item) ? $"{name(item)} ne peut pas être rangé dans le PC de {gameName}."
-                    : MoveOf(item) is not null ? $"{name(item)} : aucune CT ni DT n'apprend cette capacité dans {gameName}."
-                    : IsEnigmaOfGen3(sav, item) ? $"{name(item)} : en 3e génération, elle vient de l'e-Reader et ne peut pas être déposée."
-                    : CategoryOf(item) == ItemCategory.Items ? $"{name(item)} n'existe pas dans {gameName}, ou y est un objet rare."
-                    : $"{name(item)} n'existe pas dans {gameName}.";
-            var current = have.GetValueOrDefault(item);
-            if (current + quantity > max)
-                return $"{name(item)} : {PlaceName(place)} en contient déjà {current} et en accepte {max} au plus ({max - current} de plus).";
+            if (DepositProblem(check, item, quantity) is { } problem)
+                return problem;
         }
 
         var machines = MachinesOf(sav);
@@ -317,6 +318,45 @@ public static class SaveBag
         }
         bag.CopyTo(sav);
         return null;
+    }
+
+    /// <summary>Ce qu'un dépôt vérifie pour chaque objet (<see cref="DepositProblem"/>).</summary>
+    private sealed record DepositCheck(SaveFile Sav, BagPlace Place, string GameName, Func<int, string> Name, HashSet<int> Locked,
+        Dictionary<int, int> Total, Dictionary<int, int> Capacity, Dictionary<int, int> Have);
+
+    /// <summary>Pourquoi cette quantité de cet objet ne peut pas être déposée ; null si elle peut l'être.</summary>
+    private static string? DepositProblem(DepositCheck check, int item, int quantity)
+    {
+        var name = check.Name(item);
+        if (CategoryOf(item) is null)
+            return $"{name} ne peut pas être transféré.";
+        if (check.Locked.Contains(item))
+            return LockedMessage(name);
+        var already = check.Total.GetValueOrDefault(item);
+        if (IsLimited(check.Sav, item) && already + quantity > LimitedMachineThreshold - 1)
+            return $"{name} : la sauvegarde en contient déjà {already}, et une CT à usage unique est limitée à " +
+                   $"{LimitedMachineThreshold - 1} par sauvegarde ({LimitedMachineThreshold - 1 - already} de plus).";
+        if (!check.Capacity.TryGetValue(item, out var max))
+            return UnknownItemMessage(check, item, name);
+        var current = check.Have.GetValueOrDefault(item);
+        if (current + quantity > max)
+            return $"{name} : {PlaceName(check.Place)} en contient déjà {current} et en accepte {max} au plus ({max - current} de plus).";
+        return null;
+    }
+
+    /// <summary>Objet que l'endroit ne peut pas recevoir : refusé par le PC, CT absente du jeu, Baie Enigma, objet inconnu.</summary>
+    private static string UnknownItemMessage(DepositCheck check, int item, string name)
+    {
+        var gameName = check.GameName;
+        if (check.Place == BagPlace.Pc && Capacity(check.Sav).ContainsKey(item))
+            return $"{name} ne peut pas être rangé dans le PC de {gameName}.";
+        if (MoveOf(item) is not null)
+            return $"{name} : aucune CT ni DT n'apprend cette capacité dans {gameName}.";
+        if (IsEnigmaOfGen3(check.Sav, item))
+            return $"{name} : en 3e génération, elle vient de l'e-Reader et ne peut pas être déposée.";
+        return CategoryOf(item) == ItemCategory.Items
+            ? $"{name} n'existe pas dans {gameName}, ou y est un objet rare."
+            : $"{name} n'existe pas dans {gameName}.";
     }
 
     /// <summary>Refus d'un dépôt d'une CT bloquée (<see cref="LockedMachines"/>), prêt à afficher.</summary>
@@ -391,19 +431,35 @@ public static class SaveBag
     private static int ToNational(SaveFile sav, int index) => sav.Generation switch
     {
         1 => Gen1Items.GetValueOrDefault(index),
-        2 => index == LureBall2 ? LureBall
-            : index is > 0 and <= byte.MaxValue && ItemConverter.GetItemFuture2((byte)index) is var item and not 128 ? item : 0,
+        2 => Gen2ToNational(index),
         3 => ItemConverter.GetItemFuture3((ushort)index),
         _ => index,
     };
+
+    /// <summary>Numéro national d'un objet d'Or/Argent/Cristal (0 sans équivalent, 128 chez PKHeX).</summary>
+    private static int Gen2ToNational(int index)
+    {
+        if (index == LureBall2)
+            return LureBall;
+        return index is > 0 and <= byte.MaxValue && ItemConverter.GetItemFuture2((byte)index) is var item and not 128 ? item : 0;
+    }
+
+    /// <summary>Numéro d'Or/Argent/Cristal d'un objet (0 s'il n'y existe pas).</summary>
+    private static ushort Gen2ToGame(SaveFile sav, int item)
+    {
+        if (item == LureBall)
+            return LureBall2;
+        if (item is <= 0 or > ushort.MaxValue)
+            return 0;
+        var index = ItemConverter.GetItemOld2((ushort)item);
+        return ToNational(sav, index) == item ? index : (ushort)0;
+    }
 
     /// <summary>Numéro de l'objet dans le jeu de la sauvegarde (0 si l'objet n'y existe pas).</summary>
     private static ushort ToGame(SaveFile sav, int item) => sav.Generation switch
     {
         1 => (ushort)Gen1Back.GetValueOrDefault(item),
-        2 => item == LureBall ? (ushort)LureBall2
-            : item is > 0 and <= ushort.MaxValue && ItemConverter.GetItemOld2((ushort)item) is var index && ToNational(sav, index) == item
-                ? index : (ushort)0,
+        2 => Gen2ToGame(sav, item),
         3 => ItemConverter.GetItemOld3((ushort)item),
         _ => (ushort)item,
     };
@@ -491,7 +547,7 @@ public static class SaveBag
     private static readonly Lazy<Machines> Gen2 = new(() => new(Numbered(
         [.. Enumerable.Range(328, 50).Select(i => (ushort)i)], [.. PersonalInfo2.MachineMoves[..50].ToArray().Select(m => (ushort)m)], "CT", 2, reusable: false)));
     private static readonly Lazy<Machines> Gen3 = new(() => new(Numbered(
-        [.. ItemStorage3RS.MachineOnlyTM.ToArray().Select(i => (ushort)ItemConverter.GetItemFuture3(i))],
+        [.. ItemStorage3RS.MachineOnlyTM.ToArray().Select(ItemConverter.GetItemFuture3)],
         PersonalInfo3.MachineMovesTechnical, "CT", 2, reusable: false)));
     private static readonly Lazy<Machines> Gen4 = new(() => new(Numbered(
         ItemStorage4.Machine[..PersonalInfo4.MachineMovesTechnical.Length], PersonalInfo4.MachineMovesTechnical, "CT", 2, reusable: false)));

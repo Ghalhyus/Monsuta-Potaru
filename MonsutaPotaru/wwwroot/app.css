@@ -108,7 +108,7 @@ h1:focus {
 .slot.selected { border-color: #ff6b00; background: #fff; }
 .slot.pending { outline: 2px dashed #f0ad4e; outline-offset: -4px; }
 .slot.locked { background: rgba(0, 0, 0, .15); }
-.slot img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.slot img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
 .slot .lvl { position: absolute; bottom: 1px; right: 4px; font-size: .65rem; font-weight: 600; color: #234; }
 .slot .shiny { position: absolute; top: 0; left: 4px; font-size: .75rem; color: #d4a000; }
 .slot .lock { font-size: .9rem; }
@@ -125,7 +125,6 @@ h1:focus {
 .slot[draggable=true] { cursor: grab; }
 .slot[draggable=true]:active { cursor: grabbing; }
 .slot.dragging { opacity: .35; }
-.slot img { pointer-events: none; }
 .box-grid.drop-active { box-shadow: 0 0 0 3px #ffd43b; }
 .slot.empty.drop-target { background: rgba(255, 255, 255, .6); outline: 2px dashed #fff; outline-offset: -4px; }
 
@@ -458,7 +457,7 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .trade-friend { max-width: 22rem; }
 .trade-candidates { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; }
 .trade-candidate {
-    display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .4rem; color: inherit; text-align: center;
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .4rem; color: inherit; text-align: center;
     border: 2px solid var(--bs-border-color); border-radius: .6rem; background: var(--bs-body-bg); cursor: pointer;
 }
 .trade-candidate:hover:not(:disabled) { border-color: var(--bs-primary); }
@@ -471,7 +470,6 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 
 /* ---------- Combats (Multijoueurs) : interface inspirée de Pokémon Platine ---------- */
 .battle-friend { max-width: 22rem; }
-.trade-candidate { position: relative; }
 .battle-order {
     position: absolute; top: .25rem; left: .35rem; min-width: 1.4rem; padding: 0 .3rem; border-radius: 1rem;
     background: var(--bs-primary); color: #fff; font-weight: 700; font-size: .8rem;

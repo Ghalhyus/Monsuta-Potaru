@@ -86,15 +86,16 @@ public sealed class BattleTests
     [Fact]
     public void View_SpeaksFrench_FromEachSide()
     {
-        var lines = new[]
-        {
+        string[] protocol =
+        [
             "|player|p1|Sacha||", "|player|p2|Ondine||", "|teamsize|p1|2", "|teamsize|p2|1",
             "|switch|p1a: Pika|Pikachu, L50, M, shiny|110/110", "|switch|p2a: Abo|Ekans, L48, F|100/100",
             "|move|p1a: Pika|Thunderbolt|p2a: Abo", "|-supereffective|p2a: Abo", "|-damage|p2a: Abo|20/100",
             "|-unboost|p2a: Abo|atk|1", "|-boost|p1a: Pika|spa|2", "|-status|p2a: Abo|par|[from] ability: Static|[of] p1a: Pika",
             "|-weather|RainDance|[from] ability: Drizzle|[of] p2a: Abo", "|-sidestart|p1: Sacha|Reflect",
             "|-damage|p2a: Abo|0 fnt", "|faint|p2a: Abo", "|win|Sacha",
-        }.Select(BattleLine.Parse).ToList();
+        ];
+        var lines = protocol.Select(BattleLine.Parse).ToList();
 
         var sacha = new BattleView("p1");
         var steps = sacha.Apply(lines);

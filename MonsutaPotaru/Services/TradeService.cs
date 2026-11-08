@@ -128,10 +128,13 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         }
     }
 
-    private static PKM? Get(SaveFile sav, TradeSlot slot) =>
-        slot.InParty ? (slot.Slot < sav.PartyCount ? sav.GetPartySlotAtIndex(slot.Slot) : null)
-        : slot.Box < sav.BoxCount && slot.Slot < sav.BoxSlotCount && !sav.IsBoxSlotLocked(slot.Box, slot.Slot) ? sav.GetBoxSlotAtIndex(slot.Box, slot.Slot)
-        : null;
+    private static PKM? Get(SaveFile sav, TradeSlot slot)
+    {
+        if (slot.InParty)
+            return slot.Slot < sav.PartyCount ? sav.GetPartySlotAtIndex(slot.Slot) : null;
+        var inBox = slot.Box < sav.BoxCount && slot.Slot < sav.BoxSlotCount && !sav.IsBoxSlotLocked(slot.Box, slot.Slot);
+        return inBox ? sav.GetBoxSlotAtIndex(slot.Box, slot.Slot) : null;
+    }
 
     /// <summary>Le Pokémon au format de l'autre sauvegarde, s'il peut y aller ; null sinon.</summary>
     private static PKM? ConvertFor(PKM pk, SaveFile to)
@@ -172,28 +175,36 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         var tree = EvolutionTree.GetEvolutionTree(pk.Context);
         foreach (var evo in tree.Forward.GetForward(pk.Species, pk.Form).Span)
         {
-            var possible = evo.Method switch
-            {
-                EvolutionType.Trade => true,
-                EvolutionType.TradeHeldItem => pk.HeldItem == evo.Argument,
-                EvolutionType.TradeShelmetKarrablast => partnerSpecies == (pk.Species == Karrablast ? Shelmet : Karrablast),
-                _ => false,
-            };
-            if (!possible)
+            if (!EvolvesByTrade(pk, evo, partnerSpecies))
                 continue;
-            if (evo.Method == EvolutionType.TradeHeldItem)
-                pk.HeldItem = 0; // l'objet est consommé
-            var wasNicknamed = pk.IsNicknamed;
-            pk.Species = evo.Species;
-            pk.Form = evo.GetDestinationForm(pk.Form);
-            if (!wasNicknamed)
-                pk.ClearNickname(); // le nom de la nouvelle espèce
-            if (pk.Format >= 3)
-                pk.RefreshAbility(pk.AbilityNumber >> 1);
-            pk.ResetPartyStats();
+            Evolve(pk, evo);
             return evo.Species;
         }
         return null;
+    }
+
+    /// <summary>Cette évolution se fait-elle par cet échange (contre <paramref name="partnerSpecies"/>) ?</summary>
+    private static bool EvolvesByTrade(PKM pk, EvolutionMethod evo, ushort partnerSpecies) => evo.Method switch
+    {
+        EvolutionType.Trade => true,
+        EvolutionType.TradeHeldItem => pk.HeldItem == evo.Argument,
+        EvolutionType.TradeShelmetKarrablast => partnerSpecies == (pk.Species == Karrablast ? Shelmet : Karrablast),
+        _ => false,
+    };
+
+    /// <summary>Fait évoluer le Pokémon : objet consommé, nouvelle espèce (et son nom s'il n'a pas de surnom), talent, stats.</summary>
+    private static void Evolve(PKM pk, EvolutionMethod evo)
+    {
+        if (evo.Method == EvolutionType.TradeHeldItem)
+            pk.HeldItem = 0; // l'objet est consommé
+        var wasNicknamed = pk.IsNicknamed;
+        pk.Species = evo.Species;
+        pk.Form = evo.GetDestinationForm(pk.Form);
+        if (!wasNicknamed)
+            pk.ClearNickname(); // le nom de la nouvelle espèce
+        if (pk.Format >= 3)
+            pk.RefreshAbility(pk.AbilityNumber >> 1);
+        pk.ResetPartyStats();
     }
 
     /// <summary>
@@ -261,8 +272,9 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         }
         await storedSaves.WriteBackupAsync(first.UserId, saveA, "echange-apres");
         await storedSaves.WriteBackupAsync(second.UserId, saveB, "echange-apres");
-        logger.LogInformation("Échange entre les comptes {First} (sauvegarde {SaveA}) et {Second} (sauvegarde {SaveB}).",
-            first.UserId, saveA.Id, second.UserId, saveB.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Échange entre les comptes {First} (sauvegarde {SaveA}) et {Second} (sauvegarde {SaveB}).",
+                first.UserId, saveA.Id, second.UserId, saveB.Id);
 
         return new(true, Received(receivedByA, toA, evolvedToA, saveA), Received(receivedByB, toB, evolvedToB, saveB));
     }

@@ -72,14 +72,14 @@ public sealed class BattleHubTests : IDisposable
         Assert.Contains("Sacha envoie Piafou !", session.Steps("ondine", 0).Select(s => s.Text));
 
         // Choix vérifiés avant d'aller au simulateur.
-        Assert.Equal("Cette capacité n'existe pas.", _hub.Choose(session, "sacha", BattleChoice.Move(9)));
-        Assert.Equal("Ce Pokémon est déjà au combat.", _hub.Choose(session, "sacha", BattleChoice.SwitchTo(1)));
-        Assert.Equal("Le combat n'est pas en cours.", _hub.Choose(session, "pierre", BattleChoice.Move(1)));
+        Assert.Equal("Cette capacité n'existe pas.", BattleHub.Choose(session, "sacha", BattleChoice.Move(9)));
+        Assert.Equal("Ce Pokémon est déjà au combat.", BattleHub.Choose(session, "sacha", BattleChoice.SwitchTo(1)));
+        Assert.Equal("Le combat n'est pas en cours.", BattleHub.Choose(session, "pierre", BattleChoice.Move(1)));
 
         // Un tour : chacun attaque ; le temps pour choisir commence après les étapes à jouer.
-        Assert.Null(_hub.Choose(session, "sacha", BattleChoice.Move(1)));
-        Assert.Equal("Ce n'est pas le moment de choisir.", _hub.Choose(session, "sacha", BattleChoice.Move(1))); // déjà choisi
-        Assert.Null(_hub.Choose(session, "ondine", BattleChoice.Move(1)));
+        Assert.Null(BattleHub.Choose(session, "sacha", BattleChoice.Move(1)));
+        Assert.Equal("Ce n'est pas le moment de choisir.", BattleHub.Choose(session, "sacha", BattleChoice.Move(1))); // déjà choisi
+        Assert.Null(BattleHub.Choose(session, "ondine", BattleChoice.Move(1)));
         WaitUntil(() => session.Snapshot("sacha").Scene is not null && ReadyToChoose(session, "sacha") && ReadyToChoose(session, "ondine"), "tour 2");
         Assert.Contains("Piafou utilise Picpic !", session.Steps("sacha", 0).Select(s => s.Text));
         var deadline = session.Snapshot("sacha").Deadline!.Value;
@@ -101,7 +101,7 @@ public sealed class BattleHubTests : IDisposable
     public void Forfeit_TheOtherWins()
     {
         var session = Fighting();
-        _hub.Forfeit(session, "ondine");
+        BattleHub.Forfeit(session, "ondine");
         WaitUntil(() => session.Stage == BattleStage.Done, "fin du combat");
         Assert.Equal(BattleOutcome.Won, session.Snapshot("sacha").Outcome);
         Assert.Contains("Ondine abandonne le combat.", session.Steps("sacha", 0).Select(s => s.Text));
@@ -121,6 +121,7 @@ public sealed class BattleHubTests : IDisposable
         _hub.RequestsChanged += changed.Add;
         var (session, message) = _hub.Request(Sacha, Ondine, Format);
         Assert.Equal("Demande envoyée à Ondine : en attente de sa réponse.", message);
+        Assert.NotNull(session);
         Assert.Equal([session], _hub.Incoming("ondine"));
         Assert.Equal(["ondine"], changed);
         Assert.Equal("Tu as déjà un combat en cours.", _hub.Request(Sacha, Ondine, Format).Message);
@@ -199,7 +200,7 @@ public sealed class BattleHubTests : IDisposable
         var at = DateTime.UtcNow;
 
         var won = Fighting();
-        _hub.Forfeit(won, "ondine");
+        BattleHub.Forfeit(won, "ondine");
         WaitUntil(() => won.Stage == BattleStage.Done, "fin du combat");
         await BattleRecorder.RecordAsync(db.Factory, won, at);
 
@@ -249,7 +250,7 @@ public sealed class BattleHubTests : IDisposable
         var recorder = new BattleRecorder(_hub, factory, NullLogger<BattleRecorder>.Instance);
         await recorder.StartAsync(CancellationToken.None);
         var session = Fighting();
-        _hub.Forfeit(session, "sacha");
+        BattleHub.Forfeit(session, "sacha");
         await factory.Saved.Task.WaitAsync(TimeSpan.FromSeconds(15)); // combat enregistré, sans lire la base pendant l'écriture
         await recorder.StopAsync(CancellationToken.None);
         await using var check = db.NewContext();

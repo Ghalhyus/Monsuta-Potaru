@@ -10,6 +10,13 @@ namespace Microsoft.AspNetCore.Routing;
 
 internal static class IdentityComponentsEndpointRouteBuilderExtensions
 {
+    /// <summary>Mise en forme du fichier des données personnelles : indenté, accents lisibles.</summary>
+    private static readonly JsonSerializerOptions PersonalDataJson = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     // Points d'accès des pages du compte (Components/Account/Pages) : déconnexion, téléchargement des données personnelles.
     public static IEndpointConventionBuilder MapAdditionalIdentityEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -46,7 +53,8 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             }
 
             var userId = await userManager.GetUserIdAsync(user);
-            downloadLogger.LogInformation("Compte {UserId} : données personnelles téléchargées.", userId);
+            if (downloadLogger.IsEnabled(LogLevel.Information))
+                downloadLogger.LogInformation("Compte {UserId} : données personnelles téléchargées.", userId);
 
             // Ce que le compte garde sur la personne (ni téléphone ni double authentification : retirés du site).
             var personalData = new Dictionary<string, string>
@@ -55,11 +63,7 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
                 ["Pseudo"] = user.UserName ?? "",
                 ["Adresse mail"] = user.Email ?? "",
             };
-            var fileBytes = JsonSerializer.SerializeToUtf8Bytes(personalData, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // accents lisibles
-            });
+            var fileBytes = JsonSerializer.SerializeToUtf8Bytes(personalData, PersonalDataJson);
 
             return TypedResults.File(fileBytes, contentType: "application/json", fileDownloadName: "donnees-personnelles.json");
         });

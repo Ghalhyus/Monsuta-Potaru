@@ -535,7 +535,7 @@ else
     {
         if (session is null)
             return;
-        if (Hub.Choose(session, userId, choice) is { } error)
+        if (BattleHub.Choose(session, userId, choice) is { } error)
         {
             message = error;
             messageIsError = true;
@@ -550,7 +550,7 @@ else
     {
         if (session is null || !await JS.InvokeAsync<bool>("confirm", "Abandonner le combat ? Tu perdras."))
             return;
-        Hub.Forfeit(session, userId);
+        BattleHub.Forfeit(session, userId);
     }
 
     /// <summary>« Annuler le combat » (demande ou choix des équipes) : annulé pour les deux, retour à l'accueil.</summary>
@@ -618,7 +618,7 @@ else
         _ => "",
     };
 
-    private static string HpClass(int percent) => percent > 50 ? "hp-high" : percent > 20 ? "hp-mid" : "hp-low";
+    private static string HpClass(int percent) => percent switch { > 50 => "hp-high", > 20 => "hp-mid", _ => "hp-low" };
 
     private static string Gender(string gender) => gender switch { "M" => "♂", "F" => "♀", _ => "" };
 

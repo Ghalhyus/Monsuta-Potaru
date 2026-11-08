@@ -97,15 +97,18 @@ public static class BattleProtocol
         if (raw.Length == 0 || raw[0] != "update")
             return [];
         var lines = new List<BattleLine>();
-        for (var i = 1; i < raw.Length; i++)
+        var i = 1;
+        while (i < raw.Length)
         {
             var text = raw[i];
-            if (text.StartsWith("|split|", StringComparison.Ordinal))
+            var next = i + 1;
+            if (text.StartsWith("|split|", StringComparison.Ordinal)) // suivi de la ligne du joueur, puis de celle des autres
             {
                 var side = text["|split|".Length..];
                 text = side == viewer ? At(raw, i + 1) : At(raw, i + 2);
-                i += 2;
+                next = i + 3;
             }
+            i = next;
             if (!text.StartsWith('|'))
                 continue;
             var line = BattleLine.Parse(text);

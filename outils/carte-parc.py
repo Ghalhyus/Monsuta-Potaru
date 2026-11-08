@@ -52,7 +52,8 @@ TILES_OUT = os.path.join(WWWROOT, "images", "parc", "tuiles")
 LAYERS = ["Sol", "Décors", "Devant", "Collisions"]
 
 # ---------- Types de cases : la première règle dont le motif se trouve dans le chemin de la planche (« / » partout) ----------
-HABITATS = ["Aucun", "Sable", "Cave", "Falaise", "Végétation", "Eau", "Donjon", "Volcan"]
+VEGETATION = "Végétation"
+HABITATS = ["Aucun", "Sable", "Cave", "Falaise", VEGETATION, "Eau", "Donjon", "Volcan"]
 DECOR = None  # objet posé sur le sol : la case garde le type de la tuile du dessous
 # Planches d'herbe à bords (16 × 10 tuiles) : herbe, sauf le chemin de terre (bas à gauche) et les flancs des hauteurs
 GRASS_TILES = {**dict.fromkeys((80, 81, 82, 96, 97, 98, 112, 113, 114, 128, 129, 144, 145), "Aucun"),
@@ -71,16 +72,16 @@ SEWER_TILES = dict.fromkeys((13, 14, 16, 17, 18, 29, 30, 31, 42, 43, 44,
                              8, 9, 10, 11, 12, 21, 25, 34, 38, 47, 51, 60, 61, 62, 63, 64), "Eau")
 # Rivages des îlots (Water_Stone_Tile, 3 × 5 tuiles : le bord passe au milieu des cases) : de l'eau, sauf les cases à
 # trois coins d'herbe (0, 2, 6, 8), où l'on marche (outils/generer-ocean.py)
-WATER_STONE_TILES = dict.fromkeys((0, 2, 6, 8), "Végétation")
+WATER_STONE_TILES = dict.fromkeys((0, 2, 6, 8), VEGETATION)
 # Sable des îlots de l'océan (deuxième groupe de Beach_Tiles, 30 × 3 tuiles) : son bord d'écume est surtout de l'eau, on y
 # nage (outils/generer-ocean.py) ; la plage prend le premier groupe, dont l'écume reste du sable
 BEACH_TILES = dict.fromkeys((5, 6, 7, 35, 37, 65, 66, 67, 8, 9, 38, 39), "Eau")
 HABITAT_RULES = [
     (r"Cute_Fantasy/Tiles/Water/Water_Stone_Tile_\d\.png$", ("Eau", WATER_STONE_TILES)),
-    (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", ("Végétation", GRASS_TILES)),
+    (r"Cute_Fantasy/Tiles/Grass/Grass_Tiles_\d\.png$", (VEGETATION, GRASS_TILES)),
     (r"Cute_Fantasy/Tiles/Grass/Path_", "Aucun"),
-    (r"Cute_Fantasy/Tiles/Grass/", "Végétation"),
-    (r"Cute_Fantasy/Tiles/Hedge_", "Végétation"),
+    (r"Cute_Fantasy/Tiles/Grass/", VEGETATION),
+    (r"Cute_Fantasy/Tiles/Hedge_", VEGETATION),
     (r"Cute_Fantasy/Tiles/(Water|Waterfall)/", "Eau"),
     (r"Cute_Fantasy/Tiles/Cliff/", "Falaise"),
     (r"Cute_Fantasy/Tiles/Cave/Cave_Water", "Eau"),
@@ -93,7 +94,7 @@ HABITAT_RULES = [
     (r"Cute_Fantasy_Desert/Tiles/Desert_(Water|Cliff_Waterfall)", "Eau"),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Cliff_Tiles_\d\.png$", ("Falaise", DESERT_CLIFF_TILES)),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Cliff", "Falaise"),
-    (r"Cute_Fantasy_Desert/Tiles/Desert_Grass", "Végétation"),
+    (r"Cute_Fantasy_Desert/Tiles/Desert_Grass", VEGETATION),
     (r"Cute_Fantasy_Desert/Tiles/Desert_Bridge", "Aucun"),
     (r"Cute_Fantasy_Desert/Tiles/", "Sable"),
     (r"Cute_Fantasy_Desert/", DECOR),
@@ -105,7 +106,7 @@ HABITAT_RULES = [
     (r"Cute_Fantasy_Dungeons/", "Donjon"),
     (r"Cute_Fantasy_ShroomLands/Tiles/.*Waterfall", "Eau"),
     (r"Cute_Fantasy_ShroomLands/Tiles/.*Cliff", "Falaise"),
-    (r"Cute_Fantasy_ShroomLands/Tiles/", "Végétation"),
+    (r"Cute_Fantasy_ShroomLands/Tiles/", VEGETATION),
 ]
 HABITAT_LAYERS = ["Sol", "Décors"]  # dans l'ordre : une tuile de sol de « Décors » remplace celle de « Sol »
 
@@ -183,7 +184,7 @@ for tileset in data["tilesets"]:
 
 # ---------- Types de cases ----------
 FLIP_BITS = 0x1FFFFFFF  # bits de retournement des tuiles de Tiled
-tilesets = sorted(data["tilesets"], key=lambda t: t["firstgid"])
+tilesets = sorted(data["tilesets"], key=lambda t: t["firstgid"], reverse=True)  # du dernier au premier
 width, height = data["width"], data["height"]
 cells = [0] * (width * height)
 missing = set()
@@ -192,7 +193,7 @@ for name in HABITAT_LAYERS:
         gid &= FLIP_BITS
         if not gid:
             continue
-        tileset = next(t for t in reversed(tilesets) if t["firstgid"] <= gid)
+        tileset = next(t for t in tilesets if t["firstgid"] <= gid)
         rule = tileset["_habitat"]
         if rule is False:
             missing.add(tileset["image"])

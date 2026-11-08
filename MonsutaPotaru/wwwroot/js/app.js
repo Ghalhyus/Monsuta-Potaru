@@ -54,11 +54,11 @@ document.addEventListener("click", e => {
         root.toggleAttribute("data-menu-ouvert");
         return;
     }
-    if (e.target.closest(".ardoise-backdrop") || e.target.closest(".ardoise-menu a")) root.removeAttribute("data-menu-ouvert");
+    if (e.target.closest(".ardoise-backdrop") || e.target.closest(".ardoise-menu a")) delete root.dataset.menuOuvert;
 });
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    document.documentElement.removeAttribute("data-menu-ouvert");
+    delete document.documentElement.dataset.menuOuvert;
     for (const account of document.querySelectorAll(".ardoise-account[open]")) account.open = false;
 });
 
@@ -101,7 +101,7 @@ window.watchScreenSize = (narrowWidth, windowWidths, component) => {
 // (.item-grid-probe), dont le navigateur calcule les colonnes avec les règles de .item-grid. Le composant est prévenu
 // à chaque changement (fenêtre redimensionnée, journal ouvert ou fermé).
 window.watchGridColumns = (probe, component) => {
-    const count = () => getComputedStyle(probe).gridTemplateColumns.split(" ").filter(t => t).length;
+    const count = () => getComputedStyle(probe).gridTemplateColumns.split(" ").filter(Boolean).length;
     let last = count();
     const observer = new ResizeObserver(() => {
         const current = count();

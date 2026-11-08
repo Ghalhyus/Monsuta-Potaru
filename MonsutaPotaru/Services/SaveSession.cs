@@ -28,7 +28,7 @@ public sealed class SaveSession
     public bool TryLoad(byte[] data, string fileName, out string error)
     {
         // PKHeX peut modifier le tableau : on lui passe une copie pour garder l'original intact.
-        if (!SaveUtil.TryGetSaveFile(data.ToArray(), out var sav, fileName) || sav is null)
+        if (!SaveUtil.TryGetSaveFile(data.ToArray(), out var sav, fileName))
         {
             error = "Fichier non reconnu comme une sauvegarde Pokémon.";
             return false;

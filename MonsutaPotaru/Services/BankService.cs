@@ -94,16 +94,21 @@ public sealed class BankService(
     private static IQueryable<BankPokemon> Query(ApplicationDbContext db, string ownerId, string? search, CollectionFilter filter) =>
         Filtered(db, ownerId, search, filter).OrderByDescending(p => p.DepositedAt).ThenBy(p => p.Position).ThenByDescending(p => p.Id);
 
+    // Clés de tri (traduites en SQL) : les œufs, déjà rangés à la fin, n'ont ni nom, ni numéro, ni forme.
+    private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, string>> NameKey = p => p.IsEgg ? "" : p.SortName;
+    private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, int>> DexKey = p => p.IsEgg ? 0 : p.Species;
+    private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, int>> FormKey = p => p.IsEgg ? 0 : p.Form;
+
     /// <summary>Tri choisi dans « Ma collection » (voir <see cref="CollectionSort"/>).</summary>
     private static IQueryable<BankPokemon> Sorted(IQueryable<BankPokemon> query, CollectionSort sort)
     {
         var eggsLast = query.OrderBy(p => p.IsEgg);
         var sorted = (sort.By, sort.Reversed) switch
         {
-            (CollectionSortBy.Name, false) => eggsLast.ThenBy(p => p.IsEgg ? "" : p.SortName).ThenBy(p => p.IsEgg ? 0 : p.Form),
-            (CollectionSortBy.Name, true) => eggsLast.ThenByDescending(p => p.IsEgg ? "" : p.SortName).ThenBy(p => p.IsEgg ? 0 : p.Form),
-            (CollectionSortBy.Dex, false) => eggsLast.ThenBy(p => p.IsEgg ? 0 : p.Species).ThenBy(p => p.IsEgg ? 0 : p.Form),
-            (CollectionSortBy.Dex, true) => eggsLast.ThenByDescending(p => p.IsEgg ? 0 : p.Species).ThenBy(p => p.IsEgg ? 0 : p.Form),
+            (CollectionSortBy.Name, false) => eggsLast.ThenBy(NameKey).ThenBy(FormKey),
+            (CollectionSortBy.Name, true) => eggsLast.ThenByDescending(NameKey).ThenBy(FormKey),
+            (CollectionSortBy.Dex, false) => eggsLast.ThenBy(DexKey).ThenBy(FormKey),
+            (CollectionSortBy.Dex, true) => eggsLast.ThenByDescending(DexKey).ThenBy(FormKey),
             (CollectionSortBy.Arrival, true) => eggsLast.ThenBy(p => p.DepositedAt).ThenByDescending(p => p.Position).ThenBy(p => p.Id),
             _ => eggsLast,
         };
@@ -139,7 +144,7 @@ public sealed class BankService(
             foreach (var entry in batch)
             {
                 var pk = ToPkm(entry);
-                entry.Gender = (byte)(pk?.Gender ?? 2);
+                entry.Gender = pk?.Gender ?? 2;
                 entry.HeldItem = pk?.HeldItem ?? 0;
             }
             await db.SaveChangesAsync();
@@ -292,8 +297,9 @@ public sealed class BankService(
         await WriteBackupsAsync(ownerId, session, newData);
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : {Deposits} dépôt(s), {Withdrawals} retrait(s).",
-            ownerId, session.Deposits.Count, session.Withdrawals.Count);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : {Deposits} dépôt(s), {Withdrawals} retrait(s).",
+                ownerId, session.Deposits.Count, session.Withdrawals.Count);
 
         session.MarkCommitted(newData);
         return newData;

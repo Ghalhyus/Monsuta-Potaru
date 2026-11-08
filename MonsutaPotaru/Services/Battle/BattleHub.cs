@@ -102,11 +102,11 @@ public sealed class BattleSession(BattleParty first, BattleParty second, string 
     {
         lock (Gate)
         {
-            var first = IsFirst(userId);
-            var view = first ? FirstView : SecondView;
-            return new BattleSnapshot(Stage, view.Scene, view.Request, first ? FirstChosen : SecondChosen,
-                first ? FirstDeadline : SecondDeadline, view.Outcome, (first ? FirstSteps : SecondSteps).Count,
-                first ? FirstError : SecondError, Me(userId).Pseudo, Other(userId).Pseudo);
+            var isFirst = IsFirst(userId);
+            var view = isFirst ? FirstView : SecondView;
+            return new BattleSnapshot(Stage, view.Scene, view.Request, isFirst ? FirstChosen : SecondChosen,
+                isFirst ? FirstDeadline : SecondDeadline, view.Outcome, (isFirst ? FirstSteps : SecondSteps).Count,
+                isFirst ? FirstError : SecondError, Me(userId).Pseudo, Other(userId).Pseudo);
         }
     }
 
@@ -239,7 +239,8 @@ public sealed class BattleHub : IDisposable
             session.Stage = BattleStage.Fighting;
             simulator.Chunk += chunk => OnChunk(session, chunk);
             simulator.Exited += () => OnExited(session);
-            logger.LogInformation("Combat {Id} : {First} contre {Second}.", session.Id, session.First.UserId, session.Second.UserId);
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Combat {Id} : {First} contre {Second}.", session.Id, session.First.UserId, session.Second.UserId);
         }
         catch (Exception ex)
         {
@@ -259,43 +260,55 @@ public sealed class BattleHub : IDisposable
             if (session.IsOver)
                 return;
             if (BattleProtocol.Request(chunk) is var (side, request))
-            {
-                var first = side == "p1";
-                (first ? session.FirstView : session.SecondView).Request = request;
-                var deadline = request.MustAct && !session.Ending ? Now + (first ? session.FirstPending : session.SecondPending) + BattleTiming.Decision : (DateTime?)null;
-                if (first)
-                    (session.FirstChosen, session.FirstDeadline, session.FirstPending) = (false, deadline, TimeSpan.Zero);
-                else
-                    (session.SecondChosen, session.SecondDeadline, session.SecondPending) = (false, deadline, TimeSpan.Zero);
-            }
+                OnRequest(session, side == "p1", request);
             else if (BattleProtocol.Error(chunk) is var (errorSide, english))
-            {
-                logger.LogInformation("Combat {Id} : choix refusé par le simulateur ({Side}) : {Message}", session.Id, errorSide, english);
-                const string refused = "Ce choix n'est pas possible pour l'instant : choisis autre chose.";
-                if (errorSide == "p1")
-                    (session.FirstChosen, session.FirstError) = (false, refused);
-                else
-                    (session.SecondChosen, session.SecondError) = (false, refused);
-            }
+                OnRefused(session, errorSide, english);
             else
-            {
-                var firstSteps = session.FirstView.Apply(BattleProtocol.Lines(chunk, "p1"));
-                var secondSteps = session.SecondView.Apply(BattleProtocol.Lines(chunk, "p2"));
-                session.FirstSteps.AddRange(firstSteps);
-                session.SecondSteps.AddRange(secondSteps);
-                session.FirstPending += BattleTiming.Playback(firstSteps);
-                session.SecondPending += BattleTiming.Playback(secondSteps);
-                if (session.FirstView.Outcome != BattleOutcome.None)
-                {
-                    session.Stage = BattleStage.Done;
-                    (session.FirstDeadline, session.SecondDeadline) = (null, null);
-                    finished = true;
-                }
-            }
+                finished = OnSteps(session, chunk);
         }
         if (finished)
             Finish(session);
         session.Notify();
+    }
+
+    /// <summary>Nouvelle requête d'un joueur : il a <see cref="BattleTiming.Decision"/> pour choisir, après les animations en attente.</summary>
+    private void OnRequest(BattleSession session, bool first, BattleRequest request)
+    {
+        (first ? session.FirstView : session.SecondView).Request = request;
+        var pending = first ? session.FirstPending : session.SecondPending;
+        DateTime? deadline = request.MustAct && !session.Ending ? Now + pending + BattleTiming.Decision : null;
+        if (first)
+            (session.FirstChosen, session.FirstDeadline, session.FirstPending) = (false, deadline, TimeSpan.Zero);
+        else
+            (session.SecondChosen, session.SecondDeadline, session.SecondPending) = (false, deadline, TimeSpan.Zero);
+    }
+
+    /// <summary>Choix refusé par le simulateur : le joueur choisit autre chose.</summary>
+    private void OnRefused(BattleSession session, string side, string english)
+    {
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Combat {Id} : choix refusé par le simulateur ({Side}) : {Message}", session.Id, side, english);
+        const string refused = "Ce choix n'est pas possible pour l'instant : choisis autre chose.";
+        if (side == "p1")
+            (session.FirstChosen, session.FirstError) = (false, refused);
+        else
+            (session.SecondChosen, session.SecondError) = (false, refused);
+    }
+
+    /// <summary>Étapes du combat, vues par chaque joueur. Vrai si le combat est fini.</summary>
+    private static bool OnSteps(BattleSession session, string chunk)
+    {
+        var firstSteps = session.FirstView.Apply(BattleProtocol.Lines(chunk, "p1"));
+        var secondSteps = session.SecondView.Apply(BattleProtocol.Lines(chunk, "p2"));
+        session.FirstSteps.AddRange(firstSteps);
+        session.SecondSteps.AddRange(secondSteps);
+        session.FirstPending += BattleTiming.Playback(firstSteps);
+        session.SecondPending += BattleTiming.Playback(secondSteps);
+        if (session.FirstView.Outcome == BattleOutcome.None)
+            return false;
+        session.Stage = BattleStage.Done;
+        (session.FirstDeadline, session.SecondDeadline) = (null, null);
+        return true;
     }
 
     private void Finish(BattleSession session)
@@ -304,7 +317,8 @@ public sealed class BattleHub : IDisposable
             sessions.Remove(session); // les pages gardent leur référence pour la fin du combat
         if (session.Simulator is { } simulator)
             _ = simulator.DisposeAsync().AsTask();
-        logger.LogInformation("Combat {Id} terminé : {Outcome} pour {First}.", session.Id, session.FirstView.Outcome, session.First.UserId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Combat {Id} terminé : {Outcome} pour {First}.", session.Id, session.FirstView.Outcome, session.First.UserId);
         try
         {
             Finished?.Invoke(session);
@@ -332,7 +346,7 @@ public sealed class BattleHub : IDisposable
     }
 
     /// <summary>Choix de ce joueur (capacité ou Pokémon), vérifié sur sa dernière requête. Message d'erreur, ou null si envoyé.</summary>
-    public string? Choose(BattleSession session, string userId, BattleChoice choice)
+    public static string? Choose(BattleSession session, string userId, BattleChoice choice)
     {
         lock (session.Gate)
         {
@@ -372,17 +386,17 @@ public sealed class BattleHub : IDisposable
         }
         if (request.MustSwitch)
             return "Choisis le Pokémon à envoyer.";
-        var moves = request.Active?.FirstOrDefault()?.Moves ?? [];
+        var moves = request.Active is [{ } active, ..] ? active.Moves : [];
         if (choice.Index < 1 || choice.Index > moves.Count)
             return "Cette capacité n'existe pas.";
         return moves[choice.Index - 1].IsDisabled ? "Cette capacité ne peut pas être utilisée !" : null;
     }
 
     /// <summary>« Fuite » : le joueur abandonne, l'autre gagne.</summary>
-    public void Forfeit(BattleSession session, string userId) =>
+    public static void Forfeit(BattleSession session, string userId) =>
         ForceLoss(session, userId, $"{session.Me(userId).Pseudo} abandonne le combat.");
 
-    private void ForceLoss(BattleSession session, string userId, string notice)
+    private static void ForceLoss(BattleSession session, string userId, string notice)
     {
         lock (session.Gate)
         {

@@ -112,32 +112,44 @@ else
         StopWatching();
         pairingWatch = new CancellationTokenSource();
         var token = pairingWatch.Token;
-        _ = Task.Run(async () =>
+        _ = Task.Run(() => PollPairingAsync(code, known, token));
+    }
+
+    /// <summary>Toutes les 3 secondes : une 3DS de plus est-elle reliée, ou le code a-t-il expiré ?</summary>
+    private async Task PollPairingAsync(SyncPairingInfo code, HashSet<int> known, CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-            try
+            while (await timer.WaitForNextTickAsync(token))
             {
-                while (await timer.WaitForNextTickAsync(token))
+                var list = await Sync.ListDevicesAsync(userId);
+                var linked = list.FirstOrDefault(d => !known.Contains(d.Id));
+                if (linked is not null || DateTime.UtcNow >= code.ExpiresAt)
                 {
-                    var list = await Sync.ListDevicesAsync(userId);
-                    var linked = list.FirstOrDefault(d => !known.Contains(d.Id));
-                    var expired = DateTime.UtcNow >= code.ExpiresAt;
-                    if (linked is null && !expired)
-                        continue;
-                    await InvokeAsync(() =>
-                    {
-                        if (pairing != code) return; // annulé ou remplacé entre-temps
-                        pairing = null;
-                        devices = list;
-                        if (linked is not null) Show($"3DS « {linked.Name} » reliée à ton compte : elle peut envoyer ses sauvegardes.");
-                        else Show("Le code a expiré sans que la 3DS soit reliée : demandes-en un nouveau.", isError: true);
-                        StateHasChanged();
-                    });
+                    await InvokeAsync(() => EndPairing(code, list, linked));
                     return;
                 }
             }
-            catch (OperationCanceledException) { } // page quittée ou code annulé
-        });
+        }
+        catch (OperationCanceledException)
+        {
+            // page quittée ou code annulé
+        }
+    }
+
+    /// <summary>Fin de l'attente du code : 3DS reliée (<paramref name="linked"/>), ou code expiré.</summary>
+    private void EndPairing(SyncPairingInfo code, List<SyncDeviceInfo> list, SyncDeviceInfo? linked)
+    {
+        if (pairing != code)
+            return; // annulé ou remplacé entre-temps
+        pairing = null;
+        devices = list;
+        if (linked is not null)
+            Show($"3DS « {linked.Name} » reliée à ton compte : elle peut envoyer ses sauvegardes.");
+        else
+            Show("Le code a expiré sans que la 3DS soit reliée : demandes-en un nouveau.", isError: true);
+        StateHasChanged();
     }
 
     private Task CancelPairing() =>

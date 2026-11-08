@@ -10,6 +10,8 @@ namespace MonsutaPotaru.Tests;
 /// <summary>Migrations qui modifient des données (pas seulement le schéma), passées sur une vraie base SQLite en mémoire.</summary>
 public sealed class MigrationsTests : IDisposable
 {
+    private static readonly string[] Owners = ["sacha", "ondine"];
+
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly DbContextOptions<ApplicationDbContext> _options;
 
@@ -27,7 +29,7 @@ public sealed class MigrationsTests : IDisposable
     /// Compte ajouté en SQL, avec les seules colonnes d'origine d'Identity : le modèle actuel a des colonnes (Theme...) que
     /// la base, migrée seulement jusqu'à une étape plus ancienne, n'a pas encore.
     /// </summary>
-    private static Task AddUserAsync(ApplicationDbContext db, string id, string userName, string? phone = null, bool twoFactor = false) =>
+    private static Task<int> AddUserAsync(ApplicationDbContext db, string id, string userName, string? phone = null, bool twoFactor = false) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO AspNetUsers (Id, UserName, EmailConfirmed, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
             VALUES ({id}, {userName}, 0, {phone}, {phone is not null}, {twoFactor}, 1, 0)
@@ -176,7 +178,7 @@ public sealed class MigrationsTests : IDisposable
             await AddUserAsync(db, "sacha", "Sacha");
             await AddUserAsync(db, "ondine", "Ondine");
             await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET ParkExpansions = 2 WHERE Id = 'sacha';");
-            var pokemon = new[] { "sacha", "ondine" }.Select(owner => new BankPokemon
+            var pokemon = Owners.Select(owner => new BankPokemon
             {
                 OwnerId = owner, Species = 25, SpeciesName = "Pikachu", Nickname = "Pikachu", Level = 10, DepositedAt = DateTime.UtcNow, Data = [1],
             }).ToList();

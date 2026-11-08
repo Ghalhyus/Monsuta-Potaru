@@ -9,10 +9,13 @@ public sealed record Crumb(string Label, string? Href);
 /// </summary>
 public static class Breadcrumbs
 {
+    /// <summary>Rubrique du menu des pages entre joueurs.</summary>
+    private const string Multiplayer = "Multijoueurs";
+
     /// <summary>Étapes pour une adresse relative à la racine du site (« joueurs/Sacha/parc?x=1 ») ; vide pour une page inconnue.</summary>
     public static IReadOnlyList<Crumb> For(string? relativeUrl)
     {
-        var path = (relativeUrl ?? "").Split('?', '#')[0];
+        var path = (relativeUrl ?? "").Split(['?', '#'])[0];
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
             return [new("Accueil", null)];
@@ -27,9 +30,9 @@ public static class Breadcrumbs
             "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new("Sauvegardes", null), new("Synchronisation 3DS", null)],
             "sauvegardes" => [new("Sauvegardes", null), new("Mes sauvegardes", null)],
             "joueurs" => Player(parts),
-            "amis" => [new("Multijoueurs", null), new("Amis", null)],
-            "echanges" => [new("Multijoueurs", null), new("Échanges", null)],
-            "combats" => [new("Multijoueurs", null), new("Combats", null)],
+            "amis" => [new(Multiplayer, null), new("Amis", null)],
+            "echanges" => [new(Multiplayer, null), new("Échanges", null)],
+            "combats" => [new(Multiplayer, null), new("Combats", null)],
             "administration" => [new("Administration", null)],
             "statistiques" => [new("Mon compte", "Account/Manage"), new("Statistiques", null)],
             "account" => Account(parts.Skip(1).ToArray()),
@@ -46,7 +49,7 @@ public static class Breadcrumbs
     /// <summary>Recherche d'un joueur, sa page, puis l'une de ses pages publiques (collection, inventaire, parc, living dex).</summary>
     private static List<Crumb> Player(string[] parts)
     {
-        List<Crumb> crumbs = [new("Multijoueurs", null)];
+        List<Crumb> crumbs = [new(Multiplayer, null)];
         if (parts.Length == 1)
         {
             crumbs.Add(new("Rechercher un joueur", null));

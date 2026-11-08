@@ -99,97 +99,115 @@ public static class SyncEndpoints
     {
         var api = app.MapGroup("/api/sync");
 
-        api.MapPost("/liaison", async (LinkRequest request, SyncService sync) =>
-            {
-                var result = await sync.LinkAsync(request.Code, request.Name);
-                return result.Ok
-                    ? Results.Ok(new LinkResponse(result.Token, result.Account, result.Message))
-                    : Results.BadRequest(new LinkResponse(null, null, result.Message));
-            })
-            .RequireRateLimiting(PairingRateLimit);
-
-        api.MapGet("/compte", async (HttpRequest http, SyncService sync) =>
-            await sync.AuthenticateAsync(BearerToken(http)) is { } caller
-                ? Results.Ok(new AccountResponse(await sync.AccountNameAsync(caller.OwnerId), caller.DeviceName))
-                : Unauthorized());
-
-        api.MapPost("/sauvegardes", async (HttpRequest http, [FromQuery(Name = "fichier")] string? fileName,
-                [FromQuery(Name = "cle")] string? key, SyncService sync, ILogger<SyncService> logger) =>
-            {
-                if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
-                    return Unauthorized();
-                if (await ReadBodyAsync(http) is not { } data)
-                    return Results.Json(new ErrorResponse($"Fichier trop gros (plus de {MaxSaveBytes / (1024 * 1024)} Mo) : ce n'est pas une sauvegarde Pokémon."),
-                        statusCode: StatusCodes.Status413PayloadTooLarge);
-                if (data.Length == 0)
-                    return Results.BadRequest(new ErrorResponse("Fichier vide."));
-
-                try
-                {
-                    var result = await sync.UploadAsync(caller, fileName, data, key);
-                    return Results.Ok(new UploadResponse(StatusName(result.Status), result.Refusal?.ToString(), result.Message));
-                }
-                catch (Exception ex) // copie de sécurité impossible, base indisponible... : la console affiche le message
-                {
-                    logger.LogError(ex, "Envoi de « {File} » depuis la 3DS {Device} impossible.", fileName, caller.DeviceId);
-                    return Results.Json(new ErrorResponse("Erreur du serveur : réessaie plus tard."), statusCode: StatusCodes.Status500InternalServerError);
-                }
-            });
-
-        api.MapGet("/sauvegardes", async (HttpRequest http, SyncService sync) =>
-        {
-            if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
-                return Unauthorized();
-            var saves = await sync.ListForDeviceAsync(caller);
-            return Results.Ok(new SaveListResponse(saves.Select(s => new SaveEntryResponse(s.Id, s.Game, s.Trainer, s.TrainerId,
-                s.FileName, s.Hash, s.PlayTimeSeconds, s.ModifiedOnServer, s.Console, s.Family, s.Keys)).ToList()));
-        });
-
-        api.MapPost("/sauvegardes/{id:int}/comparer", async (HttpRequest http, int id, SyncService sync) =>
-        {
-            if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
-                return Unauthorized();
-            if (await ReadBodyAsync(http) is not { } data)
-                return Results.Json(new ErrorResponse($"Fichier trop gros (plus de {MaxSaveBytes / (1024 * 1024)} Mo) : ce n'est pas une sauvegarde Pokémon."),
-                    statusCode: StatusCodes.Status413PayloadTooLarge);
-            var result = await sync.CompareAsync(caller, id, data);
-            var verdict = result.Verdict switch
-            {
-                SyncCompareVerdict.Retrievable => "recuperable",
-                SyncCompareVerdict.UpToDate => "a-jour",
-                _ => "refusee",
-            };
-            var refusal = result.Refusal switch
-            {
-                SyncCompareRefusal.Missing => "absente",
-                SyncCompareRefusal.Unreadable => "illisible",
-                SyncCompareRefusal.OtherGame => "autre-partie",
-                SyncCompareRefusal.MoreAdvanced => "plus-avancee",
-                _ => null,
-            };
-            return Results.Ok(new CompareResponse(verdict, refusal, result.ModifiedOnServer, result.Message));
-        });
-
-        api.MapGet("/sauvegardes/{id:int}", async (HttpRequest http, int id, [FromQuery(Name = "cle")] string? key,
-            SyncService sync, ILogger<SyncService> logger) =>
-        {
-            if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
-                return Unauthorized();
-            try
-            {
-                return await sync.DownloadAsync(caller, id, key) is { } file
-                    ? Results.File(file.Data, "application/octet-stream")
-                    : Results.Json(new ErrorResponse("Cette sauvegarde n'existe plus sur le site."), statusCode: StatusCodes.Status404NotFound);
-            }
-            catch (Exception ex) // modifiée au même moment (retrait depuis le site), base indisponible...
-            {
-                logger.LogError(ex, "Récupération de la sauvegarde {Id} par la 3DS {Device} impossible.", id, caller.DeviceId);
-                return Results.Json(new ErrorResponse("Erreur du serveur : réessaie plus tard."), statusCode: StatusCodes.Status500InternalServerError);
-            }
-        });
-
+        api.MapPost("/liaison", LinkAsync).RequireRateLimiting(PairingRateLimit);
+        api.MapGet("/compte", AccountAsync);
+        api.MapPost("/sauvegardes", UploadAsync);
+        api.MapGet("/sauvegardes", ListAsync);
+        api.MapPost("/sauvegardes/{id:int}/comparer", CompareAsync);
+        api.MapGet("/sauvegardes/{id:int}", DownloadAsync);
         return app;
     }
+
+    /// <summary>Relie la console au compte du code de liaison : elle reçoit son jeton.</summary>
+    private static async Task<IResult> LinkAsync(LinkRequest request, SyncService sync)
+    {
+        var result = await sync.LinkAsync(request.Code, request.Name);
+        return result.Ok
+            ? Results.Ok(new LinkResponse(result.Token, result.Account, result.Message))
+            : Results.BadRequest(new LinkResponse(null, null, result.Message));
+    }
+
+    /// <summary>Compte et nom de la console reliée.</summary>
+    private static async Task<IResult> AccountAsync(HttpRequest http, SyncService sync)
+    {
+        if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
+            return Unauthorized();
+        return Results.Ok(new AccountResponse(await sync.AccountNameAsync(caller.OwnerId), caller.DeviceName));
+    }
+
+    /// <summary>Envoi d'une sauvegarde depuis la console : ajoutée, mise à jour, inchangée ou refusée.</summary>
+    private static async Task<IResult> UploadAsync(HttpRequest http, [FromQuery(Name = "fichier")] string? fileName,
+        [FromQuery(Name = "cle")] string? key, SyncService sync, ILogger<SyncService> logger)
+    {
+        if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
+            return Unauthorized();
+        if (await ReadBodyAsync(http) is not { } data)
+            return TooBig();
+        if (data.Length == 0)
+            return Results.BadRequest(new ErrorResponse("Fichier vide."));
+
+        try
+        {
+            var result = await sync.UploadAsync(caller, fileName, data, key);
+            return Results.Ok(new UploadResponse(StatusName(result.Status), result.Refusal?.ToString(), result.Message));
+        }
+        catch (Exception ex) // copie de sécurité impossible, base indisponible... : la console affiche le message
+        {
+            logger.LogError(ex, "Envoi de « {File} » depuis la 3DS {Device} impossible.", fileName, caller.DeviceId);
+            return ServerError();
+        }
+    }
+
+    /// <summary>Sauvegardes du compte que la console peut récupérer.</summary>
+    private static async Task<IResult> ListAsync(HttpRequest http, SyncService sync)
+    {
+        if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
+            return Unauthorized();
+        var saves = await sync.ListForDeviceAsync(caller);
+        return Results.Ok(new SaveListResponse(saves.Select(s => new SaveEntryResponse(s.Id, s.Game, s.Trainer, s.TrainerId,
+            s.FileName, s.Hash, s.PlayTimeSeconds, s.ModifiedOnServer, s.Console, s.Family, s.Keys)).ToList()));
+    }
+
+    /// <summary>Compare la sauvegarde de la console à celle du site, avant de la remplacer.</summary>
+    private static async Task<IResult> CompareAsync(HttpRequest http, int id, SyncService sync)
+    {
+        if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
+            return Unauthorized();
+        if (await ReadBodyAsync(http) is not { } data)
+            return TooBig();
+        var result = await sync.CompareAsync(caller, id, data);
+        var verdict = result.Verdict switch
+        {
+            SyncCompareVerdict.Retrievable => "recuperable",
+            SyncCompareVerdict.UpToDate => "a-jour",
+            _ => "refusee",
+        };
+        var refusal = result.Refusal switch
+        {
+            SyncCompareRefusal.Missing => "absente",
+            SyncCompareRefusal.Unreadable => "illisible",
+            SyncCompareRefusal.OtherGame => "autre-partie",
+            SyncCompareRefusal.MoreAdvanced => "plus-avancee",
+            _ => null,
+        };
+        return Results.Ok(new CompareResponse(verdict, refusal, result.ModifiedOnServer, result.Message));
+    }
+
+    /// <summary>Fichier d'une sauvegarde stockée, pour la console.</summary>
+    private static async Task<IResult> DownloadAsync(HttpRequest http, int id, [FromQuery(Name = "cle")] string? key,
+        SyncService sync, ILogger<SyncService> logger)
+    {
+        if (await sync.AuthenticateAsync(BearerToken(http)) is not { } caller)
+            return Unauthorized();
+        try
+        {
+            return await sync.DownloadAsync(caller, id, key) is { } file
+                ? Results.File(file.Data, "application/octet-stream")
+                : Results.Json(new ErrorResponse("Cette sauvegarde n'existe plus sur le site."), statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (Exception ex) // modifiée au même moment (retrait depuis le site), base indisponible...
+        {
+            logger.LogError(ex, "Récupération de la sauvegarde {Id} par la 3DS {Device} impossible.", id, caller.DeviceId);
+            return ServerError();
+        }
+    }
+
+    private static IResult TooBig() =>
+        Results.Json(new ErrorResponse($"Fichier trop gros (plus de {MaxSaveBytes / (1024 * 1024)} Mo) : ce n'est pas une sauvegarde Pokémon."),
+            statusCode: StatusCodes.Status413PayloadTooLarge);
+
+    private static IResult ServerError() =>
+        Results.Json(new ErrorResponse("Erreur du serveur : réessaie plus tard."), statusCode: StatusCodes.Status500InternalServerError);
 
     private static string StatusName(SyncUploadStatus status) => status switch
     {

@@ -109,7 +109,7 @@
                     var rows = all.Where(Matches).ToList();
                     @if (all.Count == 0)
                     {
-                        <p class="small text-muted mb-0">@(Deposit ? "Aucun dans ton inventaire." : current == BagPlace.Pc ? "Aucun dans ce PC." : "Aucun dans ce sac.")</p>
+                        <p class="small text-muted mb-0">@NoneText(current)</p>
                         continue;
                     }
                     @if (rows.Count == 0)
@@ -309,13 +309,34 @@
     /// Dépôt impossible pour cet objet à cet endroit : CT bloquée dans cette sauvegarde (au moins 80 exemplaires), inconnu du jeu
     /// (une capacité qu'il n'apprend que par une CS aussi), refusé par le PC, ou plus de place.
     /// </summary>
-    private string? RowProblem(ItemStack item, BagPlace place) =>
-        chosen!.LockedMachines.Contains(item.ItemId) ? $"déjà au moins {SaveBag.LimitedMachineThreshold} dans cette sauvegarde"
-        : !chosen.CapacityIn(place).TryGetValue(item.ItemId, out var capacity)
-            ? place == BagPlace.Pc && chosen.Capacity.ContainsKey(item.ItemId) ? "ne peut pas être rangé dans le PC"
-            : item.Category == ItemCategory.Machines ? $"aucune CT ni DT pour cette capacité dans {chosen.GameName}" : $"n'existe pas dans {chosen.GameName}"
-        : chosen.CountIn(item.ItemId, place) >= capacity ? $"{(place == BagPlace.Pc ? "PC" : "sac")} plein ({capacity} au maximum)"
-        : null;
+    private string? RowProblem(ItemStack item, BagPlace place)
+    {
+        if (chosen!.LockedMachines.Contains(item.ItemId))
+            return $"déjà au moins {SaveBag.LimitedMachineThreshold} dans cette sauvegarde";
+        if (!chosen.CapacityIn(place).TryGetValue(item.ItemId, out var capacity))
+            return UnknownProblem(item, place);
+        if (chosen.CountIn(item.ItemId, place) < capacity)
+            return null;
+        return $"{(place == BagPlace.Pc ? "PC" : "sac")} plein ({capacity} au maximum)";
+    }
+
+    /// <summary>Objet que cet endroit ne peut pas recevoir : refusé par le PC, ou inconnu du jeu.</summary>
+    private string UnknownProblem(ItemStack item, BagPlace place)
+    {
+        if (place == BagPlace.Pc && chosen!.Capacity.ContainsKey(item.ItemId))
+            return "ne peut pas être rangé dans le PC";
+        return item.Category == ItemCategory.Machines
+            ? $"aucune CT ni DT pour cette capacité dans {chosen!.GameName}"
+            : $"n'existe pas dans {chosen!.GameName}";
+    }
+
+    /// <summary>Message d'une catégorie vide à cet endroit.</summary>
+    private string NoneText(BagPlace place)
+    {
+        if (Deposit)
+            return "Aucun dans ton inventaire.";
+        return place == BagPlace.Pc ? "Aucun dans ce PC." : "Aucun dans ce sac.";
+    }
 
     private int Wanted(int itemId, BagPlace place) => quantities.GetValueOrDefault((place, itemId)) ?? 0;
 
@@ -327,20 +348,32 @@
     {
         if (!quantities.TryGetValue((place, item.ItemId), out var value))
             return null;
+        if (value is not { } n)
+            return "Nombre entier attendu.";
+        if (n < 0)
+            return "Pas de quantité négative.";
         var max = Max(item, place);
+        if (n <= max)
+            return null;
         var available = Deposit ? item.Count - Places.Where(p => p != place).Sum(p => Wanted(item.ItemId, p)) : item.Count;
-        return value is not { } n ? "Nombre entier attendu."
-            : n < 0 ? "Pas de quantité négative."
-            : n > max ? (Deposit && n <= available ? $"{(place == BagPlace.Pc ? "Le PC" : "Le sac")} n'accepte que {max} de plus." : $"{max} au maximum.")
-            : null;
+        if (Deposit && n <= available)
+            return $"{(place == BagPlace.Pc ? "Le PC" : "Le sac")} n'accepte que {max} de plus.";
+        return $"{max} au maximum.";
     }
 
     private bool HasError(BagPlace place) => Rows(place).Any(r => QuantityError(r, place) is not null);
 
     private bool CanContinue => Places.Any(p => Rows(p).Any(r => Wanted(r.ItemId, p) > 0)) && !Places.Any(HasError);
 
-    private void SetQuantity(BagPlace place, int itemId, object? value) =>
-        quantities[(place, itemId)] = int.TryParse(value?.ToString(), out var n) ? n : string.IsNullOrWhiteSpace(value?.ToString()) ? 0 : null;
+    private void SetQuantity(BagPlace place, int itemId, object? value) => quantities[(place, itemId)] = Quantity(value?.ToString());
+
+    /// <summary>Quantité saisie : un nombre, 0 pour un champ vide, null pour autre chose (erreur affichée).</summary>
+    private static int? Quantity(string? text)
+    {
+        if (int.TryParse(text, out var n))
+            return n;
+        return string.IsNullOrWhiteSpace(text) ? 0 : null;
+    }
 
     private async Task Cancel()
     {

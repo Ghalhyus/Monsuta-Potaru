@@ -18,6 +18,12 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class LivingDexServiceTests : IDisposable
 {
+    /// <summary>Premières et dernières cases des trois Pokédex de Kalos.</summary>
+    private static readonly int[] KalosStarts = [0, 152, 153, 456];
+
+    /// <summary>Première et 400e case d'un Pokédex régional.</summary>
+    private static readonly int[] FirstAndFourHundredth = [0, 399];
+
     private readonly TestDatabase _db = new("sacha", "ondine", "pierre");
     private readonly StoredSaveService _saves;
     private readonly LivingDexService _dex;
@@ -162,7 +168,7 @@ public sealed class LivingDexServiceTests : IDisposable
         var x = LivingDexGames.Get(LivingDexGame.X);
         // Kalos : Centre, Côtes, Montagnes, chacun numéroté à partir de 1.
         Assert.Equal([("Kalos Centre", 1), ("Kalos Centre", 153), ("Kalos Côtes", 1), ("Kalos Montagnes", 151)],
-            new[] { 0, 152, 153, 456 }.Select(i => LivingDexGames.RegionalNumber(x, i)));
+            KalosStarts.Select(i => LivingDexGames.RegionalNumber(x, i)));
         Assert.Equal(((string?)null, 1), LivingDexGames.RegionalNumber(LivingDexGames.Get(LivingDexGame.OmegaRuby), 0));
 
         var oras = LivingDexGames.Get(LivingDexGame.OmegaRuby);
@@ -310,7 +316,7 @@ public sealed class LivingDexServiceTests : IDisposable
         Assert.Equal((664, 733), (paldea.Count, national.Count));
         Assert.Subset(national.Select(s => s.Species).ToHashSet(), paldea.Select(s => s.Species).ToHashSet());
         Assert.Equal([906, 907, 908], paldea.Take(3).Select(s => (int)s.Species)); // Poussacha, Matourgeon, Miascarade
-        Assert.Equal([("Paldea", 1), ("Paldea", 400)], new[] { 0, 399 }.Select(i => LivingDexGames.RegionalNumber(game, i)));
+        Assert.Equal([("Paldea", 1), ("Paldea", 400)], FirstAndFourHundredth.Select(i => LivingDexGames.RegionalNumber(game, i)));
         Assert.Equal(("Septentria", "Myrtille"), (LivingDexGames.RegionalNumber(game, 400).Section, LivingDexGames.RegionalNumber(game, 663).Section));
 
         var slots = LivingDexGames.Slots(game, LivingDexMode.Complete);
@@ -342,7 +348,7 @@ public sealed class LivingDexServiceTests : IDisposable
     {
         var sword = LivingDexGames.Get(LivingDexGame.Sword);
         // Galar, puis ce que l'Isolarmure et la Couronneige ajoutent, avec leurs numéros (sans les Pokémon déjà vus).
-        Assert.Equal([("Galar", 1), ("Galar", 400)], new[] { 0, 399 }.Select(i => LivingDexGames.RegionalNumber(sword, i)));
+        Assert.Equal([("Galar", 1), ("Galar", 400)], FirstAndFourHundredth.Select(i => LivingDexGames.RegionalNumber(sword, i)));
         Assert.Equal("Isolarmure", LivingDexGames.RegionalNumber(sword, 400).Section);
         Assert.Equal("Couronneige", LivingDexGames.RegionalNumber(sword, 583).Section);
         Assert.Equal(584, sword.Regional.Distinct().Count());

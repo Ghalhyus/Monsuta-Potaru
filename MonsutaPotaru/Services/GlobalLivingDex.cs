@@ -91,8 +91,8 @@ public static class GlobalLivingDex
         || slot.Species == 809 && slot.Gigamax
         || slot.FormKey == "Large";
 
-    private const ushort Pikachu = 25, Eevee = 133, Raticate = 20, Marowak = 105, Mothim = 414, Arceus = 493, Genesect = 649,
-        Greninja = 658, Floette = 670, Furfrou = 676, Zygarde = 718, Rockruff = 744, Silvally = 773, Mimikyu = 778, Necrozma = 800,
+    private const ushort Pikachu = 25, Eevee = 133, Mothim = 414, Arceus = 493, Genesect = 649,
+        Greninja = 658, Floette = 670, Furfrou = 676, Zygarde = 718, Rockruff = 744, Silvally = 773, Necrozma = 800,
         Toxtricity = 849, Alcremie = 869, Zacian = 888, Zamazenta = 889, Koraidon = 1007, Miraidon = 1008, Scatterbug = 664,
         Spewpa = 665, Vivillon = 666;
 
@@ -145,8 +145,12 @@ public static class GlobalLivingDex
     /// Nom anglais d'une forme chez PKHeX (« Alola », « Rock Star ») : la clé qui la reconnaît d'un jeu à l'autre. La forme
     /// de base s'appelle « Normal » (PKHeX ne la nomme pas dans un jeu où l'espèce n'a qu'une forme).
     /// </summary>
-    public static string FormKey(ushort species, byte form, EntityContext context) =>
-        FormName(species, form, context) is { Length: > 0 } name ? name : form == 0 ? "Normal" : $"{form}";
+    public static string FormKey(ushort species, byte form, EntityContext context)
+    {
+        if (FormName(species, form, context) is { Length: > 0 } name)
+            return name;
+        return form == 0 ? "Normal" : $"{form}";
+    }
 
     /// <summary>Nom anglais de la forme chez PKHeX, null si PKHeX ne la nomme pas dans ce jeu (Dominants de Let's Go).</summary>
     private static string? FormName(ushort species, byte form, EntityContext context)
@@ -169,7 +173,15 @@ public static class GlobalLivingDex
             .ToList());
 
     /// <summary>Clé d'une case : l'espèce, son genre de case (forme, Méga, Gigamax), la forme.</summary>
-    private static (ushort, int, string) Key(GlobalSlot s) => (s.Species, s.ExtraCopy ? s.Gigamax ? 2 : 1 : 0, s.AnyOfKeys is null ? s.FormKey : "*");
+    private static (ushort, int, string) Key(GlobalSlot s) => (s.Species, SlotKind(s), s.AnyOfKeys is null ? s.FormKey : "*");
+
+    /// <summary>Genre de case : 0 forme, 1 Méga (ou forme due à un objet), 2 Gigamax.</summary>
+    private static int SlotKind(GlobalSlot s)
+    {
+        if (!s.ExtraCopy)
+            return 0;
+        return s.Gigamax ? 2 : 1;
+    }
 
     /// <summary>
     /// Cases Complet de chaque jeu, réunies : une même case (espèce, forme) n'est comptée qu'une fois ; « n'importe quelle
@@ -211,15 +223,19 @@ public static class GlobalLivingDex
     /// (impossibles à capturer), Arceus « ??? » (sans Plaque en 4e génération). Mâle et femelle à part quand la femelle
     /// est différente ; Charmilly avec chaque décoration.
     /// </summary>
-    private static readonly Lazy<IReadOnlyList<GlobalSlot>> UltimateSlots = new(() =>
-    {
-        var slots = new Dictionary<(ushort, int, string), (GlobalSlot Slot, int Order)>();
-        void Add(GlobalSlot slot)
-        {
-            if (!slots.ContainsKey(Key(slot)))
-                slots[Key(slot)] = (slot, slots.Count);
-        }
+    private static readonly Lazy<IReadOnlyList<GlobalSlot>> UltimateSlots = new(BuildUltimateSlots);
 
+    /// <summary>Cases du mode Ultime, sans doublon (une même clé : la première gardée), dans leur ordre d'arrivée.</summary>
+    private sealed class SlotSet
+    {
+        public Dictionary<(ushort, int, string), (GlobalSlot Slot, int Order)> Slots { get; } = [];
+
+        public void Add(GlobalSlot slot) => Slots.TryAdd(Key(slot), (slot, Slots.Count));
+    }
+
+    private static List<GlobalSlot> BuildUltimateSlots()
+    {
+        var set = new SlotSet();
         foreach (var s in CompleteSlots.Value)
         {
             if (s.AnyOfKeys is not null)
@@ -227,52 +243,60 @@ public static class GlobalLivingDex
             if (s.Gigamax && s.Species == Toxtricity)
                 continue; // les deux Gigamax de Salarsen, plus bas
             var exact = s.ExtraCopy ? s : s with { AnyForm = false };
-            Add(exact with { Name = UltimateName(exact, s.Name) });
+            set.Add(exact with { Name = UltimateName(exact, s.Name) });
         }
-
-        foreach (var (table, context, generation) in Games)
-        {
-            for (ushort species = 1; species <= Math.Min((int)table.MaxSpeciesID, MaxSpecies); species++)
-            {
-                for (byte form = 0; form < table[species].FormCount; form++)
-                {
-                    if (generation >= 8 && !table.IsPresentInGame(species, form))
-                        continue;
-                    if (form > 0 && FormName(species, form, context) is null)
-                        continue; // forme sans nom dans ce jeu (Dominants de Let's Go) : elle n'y existe pas
-                    var key = FormKey(species, form, context);
-                    if (FormInfo.IsMegaForm(species, form) || FormInfo.IsPrimalForm(species, form) || Excluded(species, form, key))
-                        continue; // Méga et Primo : déjà dans le Complet
-                    if (HeldBattleForms.TryGetValue((species, form), out var held))
-                        Add(new GlobalSlot(species, form, context, held.Name, held.Name, AnyForm: true, HeldItem: held.Item));
-                    else if (!FormInfo.IsBattleOnlyForm(species, form, generation))
-                        Add(new GlobalSlot(species, form, context, key, UltimateName(species, form, context, key)));
-                }
-            }
-        }
+        foreach (var slot in Games.SelectMany(g => GameFormSlots(g.Table, g.Context, g.Generation)))
+            set.Add(slot);
         // Salarsen : un Gigamax par forme (même aspect).
         foreach (var form in new byte[] { 0, 1 })
-            Add(new GlobalSlot(Toxtricity, form, EntityContext.Gen8, FormKey(Toxtricity, form, EntityContext.Gen8),
+            set.Add(new GlobalSlot(Toxtricity, form, EntityContext.Gen8, FormKey(Toxtricity, form, EntityContext.Gen8),
                 $"{SpeciesName(Toxtricity)} Gigamax ({(form == 0 ? "forme Aigüe" : "forme Grave")})", Gigamax: true));
+        return Ordered(set.Slots.Values.SelectMany(s => Split(s.Slot).Select(split => (split, s.Order))));
+    }
 
-        // Mâle et femelle : la case de la forme de base se dédouble ; Charmilly : une case par crème et par décoration.
-        var result = new List<(GlobalSlot Slot, int Order)>();
-        foreach (var (slot, order) in slots.Values)
+    /// <summary>Cases des formes d'un jeu que ses boîtes peuvent garder (sauf Méga, Primo et formes exclues).</summary>
+    private static IEnumerable<GlobalSlot> GameFormSlots(IPersonalTable table, EntityContext context, byte generation)
+    {
+        for (ushort species = 1; species <= Math.Min((int)table.MaxSpeciesID, MaxSpecies); species++)
         {
-            if (!slot.ExtraCopy && slot.Form == 0 && GenderDifferences.Contains(slot.Species))
+            for (byte form = 0; form < table[species].FormCount; form++)
             {
-                var name = SpeciesName(slot.Species);
-                result.Add((slot with { Gender = 0, Name = $"{name} ♂" }, order));
-                result.Add((slot with { Gender = 1, Name = $"{name} ♀" }, order));
+                if (GameFormSlot(table, context, generation, species, form) is { } slot)
+                    yield return slot;
             }
-            else if (!slot.ExtraCopy && slot.Species == Alcremie)
-                result.AddRange(Sweets.Select((sweet, i) =>
-                    (slot with { Sweet = (byte)i, Name = $"{SpeciesName(Alcremie)} ({Creams[Math.Min(slot.Form, (byte)8)]}, {sweet.Name})" }, order)));
-            else
-                result.Add((slot, order));
         }
-        return Ordered(result);
-    });
+    }
+
+    /// <summary>Case d'une forme d'un jeu, ou null si elle n'en a pas en mode Ultime.</summary>
+    private static GlobalSlot? GameFormSlot(IPersonalTable table, EntityContext context, byte generation, ushort species, byte form)
+    {
+        if (generation >= 8 && !table.IsPresentInGame(species, form))
+            return null;
+        if (form > 0 && FormName(species, form, context) is null)
+            return null; // forme sans nom dans ce jeu (Dominants de Let's Go) : elle n'y existe pas
+        var key = FormKey(species, form, context);
+        if (FormInfo.IsMegaForm(species, form) || FormInfo.IsPrimalForm(species, form) || Excluded(species, form, key))
+            return null; // Méga et Primo : déjà dans le Complet
+        if (HeldBattleForms.TryGetValue((species, form), out var held))
+            return new GlobalSlot(species, form, context, held.Name, held.Name, AnyForm: true, HeldItem: held.Item);
+        if (FormInfo.IsBattleOnlyForm(species, form, generation))
+            return null;
+        return new GlobalSlot(species, form, context, key, UltimateName(species, form, context, key));
+    }
+
+    /// <summary>Mâle et femelle : la case de la forme de base se dédouble ; Charmilly : une case par crème et par décoration.</summary>
+    private static IEnumerable<GlobalSlot> Split(GlobalSlot slot)
+    {
+        if (!slot.ExtraCopy && slot.Form == 0 && GenderDifferences.Contains(slot.Species))
+        {
+            var name = SpeciesName(slot.Species);
+            return [slot with { Gender = 0, Name = $"{name} ♂" }, slot with { Gender = 1, Name = $"{name} ♀" }];
+        }
+        if (!slot.ExtraCopy && slot.Species == Alcremie)
+            return Sweets.Select((sweet, i) =>
+                slot with { Sweet = (byte)i, Name = $"{SpeciesName(Alcremie)} ({Creams[Math.Min(slot.Form, (byte)8)]}, {sweet.Name})" });
+        return [slot];
+    }
 
     private static readonly Lazy<IReadOnlyList<GlobalSlot>> ShinyNational = new(() => NationalSlots.Value.Where(s => !ShinyLocked(s)).ToList());
     private static readonly Lazy<IReadOnlyList<GlobalSlot>> ShinyComplete = new(() => CompleteSlots.Value.Where(s => !ShinyLocked(s)).ToList());
@@ -369,39 +393,60 @@ public static class GlobalLivingDex
         var used = new HashSet<int>();
         var keys = copies.ToDictionary(c => c.Id, c => mode == LivingDexMode.Complete
             ? CompleteKey(c.Species, c.Form, c.Context) : FormKey(c.Species, c.Form, c.Context));
-        var bySpecies = copies.GroupBy(c => c.Species).ToDictionary(g => g.Key, g => g.ToList());
-        void Pass(Func<GlobalSlot, bool> which, Func<GlobalSlot, Copy, bool> fills)
-        {
-            for (var i = 0; i < slots.Count; i++)
-            {
-                if (result[i] is not null || !which(slots[i]))
-                    continue;
-                var copy = bySpecies.GetValueOrDefault(slots[i].Species)?.FirstOrDefault(c => !used.Contains(c.Id) && fills(slots[i], c));
-                if (copy is null)
-                    continue;
-                result[i] = copy;
-                used.Add(copy.Id);
-            }
-        }
-        Pass(s => s.ExtraCopy, (s, c) =>
-            s.Gigamax ? c.CanGigantamax && (s.AnyForm || keys[c.Id] == s.FormKey)
-            : s.Move != 0 ? c.KnowsDragonAscent
-            : c.HeldItem == s.HeldItem);
-        Pass(s => !s.ExtraCopy && !s.AnyForm, (s, c) =>
-            (s.AnyOfKeys?.Contains(keys[c.Id]) ?? keys[c.Id] == s.FormKey)
-            && (s.Gender is null || c.Gender == s.Gender) && (s.Sweet is null || c.Sweet == s.Sweet));
-        Pass(s => !s.ExtraCopy && s.AnyForm, (_, _) => true);
+        var assignment = new Assignment(slots, result, used, copies.GroupBy(c => c.Species).ToDictionary(g => g.Key, g => g.ToList()));
+        assignment.Pass(s => s.ExtraCopy, (s, c) => FillsExtra(s, c, keys[c.Id]));
+        assignment.Pass(s => !s.ExtraCopy && !s.AnyForm, (s, c) => FillsExact(s, c, keys[c.Id]));
+        assignment.Pass(s => !s.ExtraCopy && s.AnyForm, (_, _) => true);
         return result;
     }
+
+    /// <summary>Attribution en cours (<see cref="Assign"/>) : chaque exemplaire ne sert qu'une fois.</summary>
+    private sealed record Assignment(IReadOnlyList<GlobalSlot> Slots, Copy?[] Result, HashSet<int> Used, Dictionary<ushort, List<Copy>> BySpecies)
+    {
+        /// <summary>Donne aux cases vides choisies (<paramref name="which"/>) le premier exemplaire libre qui convient.</summary>
+        public void Pass(Func<GlobalSlot, bool> which, Func<GlobalSlot, Copy, bool> fills)
+        {
+            for (var i = 0; i < Slots.Count; i++)
+            {
+                var slot = Slots[i];
+                if (Result[i] is not null || !which(slot))
+                    continue;
+                var copy = BySpecies.GetValueOrDefault(slot.Species)?.FirstOrDefault(c => !Used.Contains(c.Id) && fills(slot, c));
+                if (copy is null)
+                    continue;
+                Result[i] = copy;
+                Used.Add(copy.Id);
+            }
+        }
+    }
+
+    /// <summary>Case à exemplaire de plus : facteur Gigamax (de la bonne forme), Draco-Ascension, ou objet tenu.</summary>
+    private static bool FillsExtra(GlobalSlot s, Copy c, string key)
+    {
+        if (s.Gigamax)
+            return c.CanGigantamax && (s.AnyForm || key == s.FormKey);
+        return s.Move != 0 ? c.KnowsDragonAscent : c.HeldItem == s.HeldItem;
+    }
+
+    /// <summary>Case d'une forme exacte : la forme (ou l'une des formes), le sexe et la décoration demandés.</summary>
+    private static bool FillsExact(GlobalSlot s, Copy c, string key) =>
+        (s.AnyOfKeys?.Contains(key) ?? key == s.FormKey)
+        && (s.Gender is null || c.Gender == s.Gender) && (s.Sweet is null || c.Sweet == s.Sweet);
 
     /// <summary>Infobulle d'une case à exemplaire de plus : « avec Dracaufite X » ; manquante, « il faut un Dracaufeu de plus avec... ».</summary>
     public static string? Note(GlobalSlot slot, bool filled)
     {
         if (!slot.ExtraCopy)
             return null;
-        var condition = slot.Gigamax ? "avec le facteur Gigamax"
-            : slot.Move != 0 ? $"qui connaît {French.movelist[slot.Move]}"
-            : $"avec {French.itemlist[slot.HeldItem]}";
+        var condition = ExtraCondition(slot);
         return filled ? condition : $"il faut un {SpeciesName(slot.Species)} de plus {condition}";
+    }
+
+    /// <summary>« avec le facteur Gigamax », « qui connaît Draco-Ascension », « avec Dracaufite X ».</summary>
+    private static string ExtraCondition(GlobalSlot slot)
+    {
+        if (slot.Gigamax)
+            return "avec le facteur Gigamax";
+        return slot.Move != 0 ? $"qui connaît {French.movelist[slot.Move]}" : $"avec {French.itemlist[slot.HeldItem]}";
     }
 }

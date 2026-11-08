@@ -40,9 +40,10 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
                 UpdatedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync();
-            logger.LogInformation(string.IsNullOrEmpty(configured)
-                ? "Code d'invitation tiré au hasard (visible dans « Administration »)."
-                : "Code d'invitation repris de la configuration (Bank:InviteCode), puis gardé en base.");
+            if (string.IsNullOrEmpty(configured))
+                logger.LogInformation("Code d'invitation tiré au hasard (visible dans « Administration »).");
+            else
+                logger.LogInformation("Code d'invitation repris de la configuration (Bank:InviteCode), puis gardé en base.");
         }
 
         if (await db.UserRoles.AnyAsync(r => r.RoleId == SiteRoles.AdminId))
@@ -65,7 +66,8 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
             await SetRoleAsync(db, userId, SiteRoles.AdminId);
             await tx.CommitAsync();
         }
-        logger.LogInformation("Compte {User} ({Pseudo}) : administrateur (Bank:AdminPseudo).", userId, pseudo);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} ({Pseudo}) : administrateur (Bank:AdminPseudo).", userId, pseudo);
     }
 
     /// <summary>
@@ -76,7 +78,7 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
     public static async Task<bool> PromoteFirstAdminAsync(ApplicationDbContext db, IConfiguration configuration, string userId, string pseudo)
     {
         var wanted = AccountService.NormalizePseudo(configuration["Bank:AdminPseudo"]);
-        if (wanted.Length == 0 || wanted.ToUpperInvariant() != AccountService.NormalizePseudo(pseudo).ToUpperInvariant())
+        if (wanted.Length == 0 || !string.Equals(wanted, AccountService.NormalizePseudo(pseudo), StringComparison.OrdinalIgnoreCase))
             return false;
         await using var tx = await db.Database.BeginTransactionAsync();
         if (await db.UserRoles.AnyAsync(r => r.RoleId == SiteRoles.AdminId))
@@ -129,7 +131,8 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
         if (changed == 0)
             db.SiteSettings.Add(new SiteSetting { Key = SiteSetting.InviteCodeKey, Value = code, UpdatedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
-        logger.LogInformation("Compte {User} : nouveau code d'invitation.", callerId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : nouveau code d'invitation.", callerId);
         return new(true, $"Nouveau code d'invitation : {code}. L'ancien ne marche plus.");
     }
 
@@ -173,7 +176,8 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
                 await SetRoleAsync(db, targetId, SiteRoles.AdminId);
                 await promote.CommitAsync();
             }
-            logger.LogInformation("Compte {User} : rôle administrateur donné au compte {Target}.", callerId, targetId);
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Compte {User} : rôle administrateur donné au compte {Target}.", callerId, targetId);
             return new(true, $"{name} est maintenant administrateur (effectif à sa prochaine connexion).");
         }
 
@@ -191,7 +195,8 @@ public sealed class AdminService(IDbContextFactory<ApplicationDbContext> dbFacto
             return new(false, "Impossible : il doit toujours rester au moins un administrateur.");
         await SetRoleAsync(db, targetId, SiteRoles.StandardId);
         await tx.CommitAsync();
-        logger.LogInformation("Compte {User} : rôle administrateur retiré au compte {Target}.", callerId, targetId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : rôle administrateur retiré au compte {Target}.", callerId, targetId);
         return new(true, $"{name} n'est plus administrateur (effectif à sa prochaine connexion, 30 minutes au plus).");
     }
 

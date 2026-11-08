@@ -150,7 +150,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
     background-color: var(--dex-red);
     border-color: var(--dex-red);
 }
-[data-theme="pokedex"] main .nav-link.active .badge.text-bg-light { color: var(--dex-red) !important; }
+/* La couleur de text-bg-light est imposée (#000 !important) : celle du texte peint passe par -webkit-text-fill-color. */
+[data-theme="pokedex"] main .nav-link.active .badge.text-bg-light { -webkit-text-fill-color: var(--dex-red); }
 [data-theme="pokedex"] main .nav-pills .nav-link { color: var(--dex-frame); }
 [data-theme="pokedex"] main .nav-pills .nav-link.active { color: #fff; background-color: var(--dex-frame); }
 
@@ -189,6 +190,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
     --bs-list-group-bg: #fff;
     --bs-list-group-border-color: var(--dex-screen-line);
     --bs-list-group-action-hover-bg: #f4f7f9;
+    --bs-list-group-active-bg: var(--dex-frame);
+    --bs-list-group-active-border-color: var(--dex-frame);
 }
 [data-theme="pokedex"] main .list-group-item-action:not(:disabled):hover { box-shadow: inset 4px 0 0 var(--dex-red); }
 
@@ -235,7 +238,6 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
 }
 [data-theme="pokedex"] main .form-check-input:focus { box-shadow: 0 0 0 .2rem rgba(48, 167, 215, .3); border-color: var(--dex-lens); }
 [data-theme="pokedex"] main .progress { --bs-progress-bg: #d5dee4; --bs-progress-bar-bg: var(--dex-red); }
-[data-theme="pokedex"] main .list-group { --bs-list-group-active-bg: var(--dex-frame); --bs-list-group-active-border-color: var(--dex-frame); }
 [data-theme="pokedex"] main .btn-light {
     --bs-btn-bg: var(--dex-screen);
     --bs-btn-border-color: var(--dex-frame);

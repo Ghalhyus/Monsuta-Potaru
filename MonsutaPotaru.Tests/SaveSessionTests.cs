@@ -210,8 +210,9 @@ public class SaveSessionTests
     public void WriteSampleSave_WhenRequested()
     {
         var path = Environment.GetEnvironmentVariable("MONSUTA_POTARU_SAMPLE_OUT");
-        if (string.IsNullOrEmpty(path)) return;
-        File.WriteAllBytes(path, CreateBw2Save());
+        if (!string.IsNullOrEmpty(path))
+            File.WriteAllBytes(path, CreateBw2Save());
+        Assert.True(string.IsNullOrEmpty(path) || File.Exists(path));
     }
 
     /// <summary>

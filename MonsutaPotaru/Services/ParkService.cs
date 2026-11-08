@@ -295,7 +295,8 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : parc {Park} de {Count} Pokémon ({Moved} venus d'un autre parc).", ownerId, parkId, wanted.Count, moved);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : parc {Park} de {Count} Pokémon ({Moved} venus d'un autre parc).", ownerId, parkId, wanted.Count, moved);
         if (wanted.Count == 0)
             return new(true, "Le parc est vide.");
         return new(true, $"Parc mis à jour : {wanted.Count} Pokémon" + moved switch
@@ -320,7 +321,8 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         var count = await db.ParkMembers.Where(m => m.OwnerId == ownerId && m.ParkId == parkId).ExecuteDeleteAsync();
         if (count == 0)
             return new(false, "Le parc est déjà vide.");
-        logger.LogInformation("Utilisateur {User} : parc {Park} vidé ({Count} Pokémon).", ownerId, parkId, count);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : parc {Park} vidé ({Count} Pokémon).", ownerId, parkId, count);
         return new(true, count == 1
             ? "Le parc est vide : son Pokémon reste dans ta collection."
             : $"Le parc est vide : ses {count} Pokémon restent dans ta collection.");

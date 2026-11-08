@@ -853,7 +853,8 @@ public sealed class InventoryServiceTests : IDisposable
     {
         var sav = Red();
         // 20 emplacements dans le sac de Rouge/Bleu : 19 objets différents plus la Bicyclette le remplissent.
-        SaveSessionTests.GiveItems(sav, [(6, 1), .. new[] { 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 29, 30, 32, 33 }.Select(i => (i, 1))]);
+        int[] others = [1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 29, 30, 32, 33];
+        SaveSessionTests.GiveItems(sav, [(6, 1), .. others.Select(i => (i, 1))]);
         var refused = SaveBag.Deposit(sav, new Dictionary<int, int> { [Nugget] = 1 }, _ => "Pépite", "Rouge / Bleu");
         Assert.Equal("Plus de place dans le sac pour Pépite.", refused);
         Assert.Null(SaveBag.Deposit(sav, new Dictionary<int, int> { [Nugget] = 1 }, _ => "Pépite", "Rouge / Bleu", BagPlace.Pc));

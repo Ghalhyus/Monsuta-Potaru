@@ -39,7 +39,7 @@ public static class BattleTeam
     /// <summary>Plus grande équipe (combat simple, comme en jeu).</summary>
     public const int MaxSize = 6;
 
-    private static readonly IReadOnlyList<string> EnglishNatures = GameInfo.GetStrings("en").natures;
+    private static readonly string[] EnglishNatures = GameInfo.GetStrings("en").natures;
 
     /// <summary>Format du simulateur pour les sauvegardes de cette génération (null : pas encore de combats).</summary>
     public static string? Format(int generation) => generation switch
@@ -92,8 +92,12 @@ public static class BattleTeam
     }
 
     /// <summary>Objet tenu en numérotation nationale (la 3e génération a la sienne).</summary>
-    private static int HeldItem(PKM pk, SaveFile sav) =>
-        pk.HeldItem == 0 ? 0 : sav.Generation == 3 ? ItemConverter.GetItemFuture3((ushort)pk.HeldItem) : pk.HeldItem;
+    private static int HeldItem(PKM pk, SaveFile sav)
+    {
+        if (pk.HeldItem == 0 || sav.Generation != 3)
+            return pk.HeldItem;
+        return ItemConverter.GetItemFuture3((ushort)pk.HeldItem);
+    }
 
     /// <summary>Pokémon de la sauvegarde qui peuvent combattre : équipe puis boîtes, sans les œufs ni les cases vides.</summary>
     public static IEnumerable<(PKM Pokemon, int Box, int Slot)> Candidates(SaveFile sav)

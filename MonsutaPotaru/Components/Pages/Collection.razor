@@ -15,7 +15,7 @@
 @inject IJSRuntime JS
 @inject PlayerService Players
 
-<PageTitle>@(!Visitor ? "Ma collection" : player is null ? "Joueur introuvable" : $"Collection de {player.Pseudo}")</PageTitle>
+<PageTitle>@PageName</PageTitle>
 
 @* Tous les Pokémon de l'utilisateur sur une seule page, sans boîtes : ceux du stockage interne et ceux des sauvegardes
    stockées (lecture seule, gérées dans « Mes sauvegardes »). Seules les lignes visibles à l'écran (plus une petite marge) sont rendues et lues
@@ -106,7 +106,7 @@ else
                         var item = p;
                         var stored = item.StoredSaveId is { } sid ? saves.FirstOrDefault(x => x.Id == sid) : null;
                         <PokemonSlot Sprite="@item.SpriteUrl"
-                                     Title="@($"{item.Nickname} ({item.SpeciesName}) N.{item.Level}{(stored is null ? "" : $" — sauvegarde {(Visitor ? stored.Label : stored.LabelAndFile)}")}")"
+                                     Title="@SlotTitle(item, stored)"
                                      Level="item.Level"
                                      Shiny="item.IsShiny"
                                      Marker="@(item.StoredSaveId is null ? null : "💾")"
@@ -162,6 +162,17 @@ else
 }
 
 @code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Ma collection";
+            return player is null ? "Joueur introuvable" : $"Collection de {player.Pseudo}";
+        }
+    }
+
     private const string BankSource = "banque";
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
@@ -219,10 +230,27 @@ else
     private BankPokemon? selected;
     private PokemonView? selectedView;
 
-    private CollectionFilter Filter =>
-        (source == BankSource ? CollectionFilter.Bank
-        : int.TryParse(source, out var id) ? CollectionFilter.Save(id)
-        : CollectionFilter.All) with { Criteria = criteria };
+    private CollectionFilter Filter => SourceFilter with { Criteria = criteria };
+
+    /// <summary>Origine choisie : le stockage interne, une sauvegarde, ou tout.</summary>
+    private CollectionFilter SourceFilter
+    {
+        get
+        {
+            if (source == BankSource)
+                return CollectionFilter.Bank;
+            return int.TryParse(source, out var id) ? CollectionFilter.Save(id) : CollectionFilter.All;
+        }
+    }
+
+    /// <summary>Bulle d'un Pokémon : surnom, espèce, niveau, et sa sauvegarde s'il y est.</summary>
+    private string SlotTitle(BankListItem item, StoredSaveInfo? stored)
+    {
+        var title = $"{item.Nickname} ({item.SpeciesName}) N.{item.Level}";
+        if (stored is null)
+            return title;
+        return $"{title} — sauvegarde {(Visitor ? stored.Label : stored.LabelAndFile)}";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -272,6 +300,9 @@ else
 
     private bool Descending => DescendingByDefault(sort.By) != sort.Reversed;
 
+    /// <summary>Ordre dans l'adresse (« ?ordre=desc »).</summary>
+    private string OrderParameter => Descending ? "desc" : "asc";
+
     /// <summary>Texte du bouton de sens : l'ordre affiché (cliquer l'inverse).</summary>
     private string OrderLabel => (sort.By, Descending) switch
     {
@@ -302,7 +333,7 @@ else
         Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["tri"] = sort.By == CollectionSortBy.Arrival ? null : slug,
-            ["ordre"] = sort.Reversed ? (Descending ? "desc" : "asc") : null,
+            ["ordre"] = sort.Reversed ? OrderParameter : null,
         }), replace: true);
         await Reload();
     }
@@ -379,7 +410,10 @@ else
                 await screenWatcher.InvokeVoidAsync("dispose");
                 await screenWatcher.DisposeAsync();
             }
-            catch (JSDisconnectedException) { } // onglet fermé : plus rien à nettoyer côté navigateur
+            catch (JSDisconnectedException)
+            {
+                // onglet fermé : plus rien à nettoyer côté navigateur
+            }
         }
         selfRef?.Dispose();
     }

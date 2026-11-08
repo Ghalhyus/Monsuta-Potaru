@@ -13,18 +13,21 @@ namespace MonsutaPotaru.Services;
 public static partial class PokemonSprites
 {
     /// <summary>Images présentes (« 19-alola.png », « chromatique/femelle/25.png »), lues au démarrage par <see cref="Load"/>.</summary>
-    private static IReadOnlySet<string> _files = new HashSet<string>();
+    private static HashSet<string> _files = [];
+
+    /// <summary>Dossier des images, dans wwwroot.</summary>
+    private const string ImagesFolder = "images";
 
     /// <summary>Lit la liste des images du site (dossier wwwroot) ; sans elle, chaque Pokémon a l'image de son espèce.</summary>
     public static void Load(string webRoot)
     {
         _webRoot = webRoot;
-        var folder = Path.Combine(webRoot, "images", "pokemon");
+        var folder = Path.Combine(webRoot, ImagesFolder, "pokemon");
         _files = Directory.Exists(folder)
             ? Directory.EnumerateFiles(folder, "*.png", SearchOption.AllDirectories)
                 .Select(f => Path.GetRelativePath(folder, f).Replace('\\', '/')).ToHashSet()
-            : new HashSet<string>();
-        var forms = Path.Combine(webRoot, "images", "donjon", "formes.json");
+            : [];
+        var forms = Path.Combine(webRoot, ImagesFolder, "donjon", "formes.json");
         _donjonForms = File.Exists(forms)
             ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(File.ReadAllText(forms))!
                 .ToDictionary(e => e.Key, e => e.Value.GroupBy(f => Compact(f.Key)).ToDictionary(g => g.Key, g => g.First().Value))
@@ -59,7 +62,11 @@ public static partial class PokemonSprites
     public static string? DonjonPortraitUrl(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem,
         string expression) =>
         ChoosePortrait(DonjonCandidates(species, form, context, shiny, female, heldItem), expression,
-            path => _webRoot is not null && File.Exists(Path.Combine(_webRoot, "images", "donjon", "portraits", path)));
+            path => _webRoot is not null && File.Exists(Path.Combine(_webRoot, ImagesFolder, "donjon", "portraits", path)));
+
+    /// <summary>Portrait d'un Pokémon enregistré (voir l'autre surcharge).</summary>
+    public static string? DonjonPortraitUrl(Data.BankPokemon p, string expression) =>
+        DonjonPortraitUrl(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0, expression);
 
     /// <summary>
     /// Choix du portrait parmi des dossiers SpriteCollab (du plus précis à l'espèce) : le premier dossier qui a
@@ -69,28 +76,33 @@ public static partial class PokemonSprites
         folders.SelectMany(folder => new[] { $"{folder}/{expression}.png", $"{folder}/Normal.png" })
             .FirstOrDefault(exists) is { } path ? $"images/donjon/portraits/{path}" : null;
 
-    /// <summary>Portrait d'un Pokémon enregistré (voir l'autre surcharge).</summary>
-    public static string? DonjonPortraitUrl(Data.BankPokemon p, string expression) =>
-        DonjonPortraitUrl(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0, expression);
-
     /// <summary>Dossiers SpriteCollab possibles d'un Pokémon, du plus précis (forme chromatique femelle) à l'espèce.</summary>
     private static IEnumerable<string> DonjonCandidates(ushort species, byte form, EntityContext context, bool shiny, bool female, int heldItem)
     {
         var dex = $"{species:0000}";
         var (shown, names) = MegaForm(species, form, heldItem) is { } mega ? (mega, MegaContext) : (form, context);
         var key = shown != 0 && FormName(species, shown, names) is { } name ? DonjonForm(dex, name) : null;
-        string?[] candidates =
-        [
-            .. key is null ? [] : new[] { shiny && female ? $"{dex}/{key}/0001/0002" : null, shiny ? $"{dex}/{key}/0001" : null,
-                female ? $"{dex}/{key}/0000/0002" : null, $"{dex}/{key}" },
-            shiny && female ? $"{dex}/0000/0001/0002" : null, shiny ? $"{dex}/0000/0001" : null,
-            female ? $"{dex}/0000/0000/0002" : null, dex,
-        ];
-        return candidates.OfType<string>();
+        IEnumerable<string> ofForm = key is null ? [] : DonjonVariants($"{dex}/{key}", $"{dex}/{key}", shiny, female);
+        return ofForm.Concat(DonjonVariants($"{dex}/0000", dex, shiny, female));
+    }
+
+    /// <summary>
+    /// Dossiers d'une forme SpriteCollab (<paramref name="form"/>) : chromatique femelle, chromatique, femelle, puis
+    /// <paramref name="plain"/> (la forme elle-même ; l'espèce seule pour la forme par défaut).
+    /// </summary>
+    private static IEnumerable<string> DonjonVariants(string form, string plain, bool shiny, bool female)
+    {
+        if (shiny && female)
+            yield return $"{form}/0001/0002";
+        if (shiny)
+            yield return $"{form}/0001";
+        if (female)
+            yield return $"{form}/0000/0002";
+        yield return plain;
     }
 
     private static bool DonjonExists(string folder) =>
-        _webRoot is not null && File.Exists(Path.Combine(_webRoot, "images", "donjon", folder, "AnimData.xml"));
+        _webRoot is not null && File.Exists(Path.Combine(_webRoot, ImagesFolder, "donjon", folder, "AnimData.xml"));
 
     /// <summary>
     /// Dossier SpriteCollab d'une forme d'après son nom anglais chez PKHeX : le nom lui-même (« Mega X » ↔ « Mega_X »),
@@ -133,10 +145,9 @@ public static partial class PokemonSprites
             var (shown, names) = MegaForm(species, form, heldItem) is { } mega ? (mega, MegaContext) : (form, context);
             // Même la forme 0 : l'image de l'espèce est celle de la forme par défaut de PokéAPI, pas toujours la même que
             // celle de PKHeX (Prismillon : Bocage chez PokéAPI, Blizzard chez PKHeX).
-            if (FormName(species, shown, names) is { } name)
-                foreach (var slug in Candidates(name))
-                    if (_files.Contains($"{folder}{species}-{slug}.png"))
-                        return $"images/pokemon/{folder}{species}-{slug}.png";
+            if (FormName(species, shown, names) is { } name
+                && Candidates(name).Select(slug => $"{folder}{species}-{slug}.png").FirstOrDefault(_files.Contains) is { } file)
+                return $"images/pokemon/{file}";
             if (female && shown == 0 && _files.Contains($"{folder}femelle/{species}.png"))
                 return $"images/pokemon/{folder}femelle/{species}.png";
         }
@@ -150,10 +161,9 @@ public static partial class PokemonSprites
     public static string GigamaxUrl(ushort species, byte form, EntityContext context, bool shiny = false)
     {
         var folder = shiny ? "chromatique/" : "";
-        if (FormName(species, form, context) is { } name)
-            foreach (var slug in Candidates(name))
-                if (_files.Contains($"{folder}{species}-{slug}-gmax.png"))
-                    return $"images/pokemon/{folder}{species}-{slug}-gmax.png";
+        if (FormName(species, form, context) is { } name
+            && Candidates(name).Select(slug => $"{folder}{species}-{slug}-gmax.png").FirstOrDefault(_files.Contains) is { } file)
+            return $"images/pokemon/{file}";
         return _files.Contains($"{folder}{species}-gmax.png") ? $"images/pokemon/{folder}{species}-gmax.png"
             : Url(species, form, context, female: false, heldItem: 0, shiny);
     }
@@ -223,9 +233,15 @@ public static partial class PokemonSprites
         var meteor = MinorPattern().Match(name); // Météno : « C-Blue » (noyau) → blue, « M-Blue » (météore) → blue-meteor
         if (meteor.Success)
             yield return meteor.Groups[1].Value == "c" ? meteor.Groups[2].Value : $"{meteor.Groups[2].Value}-meteor";
-        if (name.EndsWith("-mega", StringComparison.Ordinal))
-            yield return name.StartsWith("f-", StringComparison.Ordinal) ? "mega-female"
-                : name.StartsWith("m-", StringComparison.Ordinal) ? "mega-male" : "mega"; // « Curly-Mega », « F-Mega »
+        if (name.EndsWith("-mega", StringComparison.Ordinal)) // « Curly-Mega », « F-Mega »
+        {
+            if (name.StartsWith("f-", StringComparison.Ordinal))
+                yield return "mega-female";
+            else if (name.StartsWith("m-", StringComparison.Ordinal))
+                yield return "mega-male";
+            else
+                yield return "mega";
+        }
         foreach (var suffix in Suffixes)
             yield return name + suffix;
     }

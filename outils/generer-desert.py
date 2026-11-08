@@ -235,6 +235,18 @@ bord_herbe = {c for c, i in herbe_de(herbe).items() if i != HERBE_PLEINE}
 
 
 # --- Sol : sable, eau, écume et herbe, tiré case par case (le même dans toutes les tailles) -----
+def tuile_hors_de_l_eau(x, y, forme, herbes, ecume):
+    """Sol d'une case hors de l'eau : la plage (de l'écume, bloquée), l'herbe, sinon du sable (parfois marqué). Rend
+    (tuile, écume ?)."""
+    r = tirage(x, y, 3)
+    i = None if (x, y) in sable_uni else BERGES.get((x, y), bordure(forme, x, y, *PLAGE[1:]))
+    if i is not None:
+        return t("plage", i), True
+    if herbes.get((x, y)) == HERBE_PLEINE and (x, y) not in ecume:
+        return t("herbe", HERBE_PLEINE), False
+    return t("falaise", r.choice(SABLE_MARQUE) if r.random() < 0.05 else SABLE_UNI), False
+
+
 def sol_de(eau_, herbe_):
     """Sol d'une taille et ses bords : rend (sol, écume (bloquée), tuiles du bord de l'herbe (dans « Décors »))."""
     forme = {(x, y) for x in range(-1, L + 1) for y in range(-1, H + 1)} - eau_  # le sable, et au-delà du bord
@@ -242,18 +254,12 @@ def sol_de(eau_, herbe_):
     sol_, ecume = [[0] * L for _ in range(H)], set()
     for y in range(H):
         for x in range(L):
-            r = tirage(x, y, 3)
             if (x, y) in eau_:
                 sol_[y][x] = t("eau", EAU_UNIE)
                 continue
-            i = None if (x, y) in sable_uni else BERGES.get((x, y), bordure(forme, x, y, *PLAGE[1:]))
-            if i is not None:
-                sol_[y][x] = t("plage", i)
+            sol_[y][x], est_ecume = tuile_hors_de_l_eau(x, y, forme, herbes, ecume)
+            if est_ecume:
                 ecume.add((x, y))
-            elif herbes.get((x, y)) == HERBE_PLEINE and (x, y) not in ecume:
-                sol_[y][x] = t("herbe", HERBE_PLEINE)
-            else:
-                sol_[y][x] = t("falaise", r.choice(SABLE_MARQUE) if r.random() < 0.05 else SABLE_UNI)
     for (x, y), (nom, i) in SOL_FORCE.items():
         sol_[y][x] = t(nom, i)
     bords = {c: t("herbe", i) for c, i in herbes.items() if i != HERBE_PLEINE}
@@ -405,19 +411,27 @@ def planter_cactus(cache, sable_, grilles, bloque_):
     """Champ en quinconce : un grand cactus (parfois un gros rocher) dont les deux cases du pied sont du sable caché."""
     for y in range(-1, H, 2):
         for x in range(-1 + (y // 2) % 2, L, 2):
-            pied = [(x, y + 1), (x + 1, y + 1)]
-            haut_ = [(x, y), (x + 1, y)]
-            if (all(not dedans(*c) or (c in cache and c in sable_ and not grilles["decors"][c[1]][c[0]]) for c in pied)
-                    and all(not dedans(*c) or not grilles["devant"][c[1]][c[0]] for c in haut_)):
-                r = tirage(x, y, 4)
-                if r.random() < 0.8:
-                    tuiles = bloc("cactus", 2 * r.randrange(5), 2 * r.randrange(8), 2, 2, x, y, rang_devant=1,
-                                  bloque_lignes=(1,))
-                else:
-                    tuiles = bloc("rochers", 2, 0, 2, 2, x, y, bloque_lignes=(0, 1))
-                    if any(c in grilles["decors"] and grilles["decors"][c[1]][c[0]] for c in haut_ if dedans(*c)):
-                        continue
+            if place_de_cactus(x, y, cache, sable_, grilles) and (tuiles := cactus_ou_rocher(x, y, grilles)):
                 ecrire(grilles, bloque_, tuiles)
+
+
+def place_de_cactus(x, y, cache, sable_, grilles):
+    """Les deux cases du pied (x, y + 1 et la suivante) sont du sable caché sans décor, et le haut n'a rien devant."""
+    pied = [(x, y + 1), (x + 1, y + 1)]
+    haut_ = [(x, y), (x + 1, y)]
+    return (all(not dedans(*c) or (c in cache and c in sable_ and not grilles["decors"][c[1]][c[0]]) for c in pied)
+            and all(not dedans(*c) or not grilles["devant"][c[1]][c[0]] for c in haut_))
+
+
+def cactus_ou_rocher(x, y, grilles):
+    """Un grand cactus (parfois un gros rocher, s'il ne couvre aucun décor) : ses tuiles, ou None."""
+    r = tirage(x, y, 4)
+    if r.random() < 0.8:
+        return bloc("cactus", 2 * r.randrange(5), 2 * r.randrange(8), 2, 2, x, y, rang_devant=1, bloque_lignes=(1,))
+    haut_ = [(x, y), (x + 1, y)]
+    if any(c in grilles["decors"] and grilles["decors"][c[1]][c[0]] for c in haut_ if dedans(*c)):
+        return None
+    return bloc("rochers", 2, 0, 2, 2, x, y, bloque_lignes=(0, 1))
 
 
 def planter_bordure(cache, grilles, bloque_):
@@ -440,20 +454,54 @@ def poser_objets(cache, libres_avant, grilles, bloque_):
         tuiles = objet_["tuiles"]
         cellules = {(x, y) for _, x, y, _, _ in tuiles}
         if cellules & cache and not cellules & bordure_carte and not objet_.get("cascade"):
-            # Coupé par la lisière : son pied visible porte un petit décor, bloqué, pour que l'objet puisse apparaître tout
-            # entier à la taille suivante (une case libre ne doit pas être reprise)
-            for calque, x, y, _, bloquee in tuiles:
-                if bloquee and (x, y) not in cache:
-                    bloque_[y][x] = True
-                    if not grilles["decors"][y][x]:
-                        grilles["decors"][y][x] = petit_decor(x, y)
-            continue
-        if any((x, y) in cache or grilles[calque][y][x] or (bloquee and (x, y) in libres_avant)
-               for calque, x, y, _, bloquee in tuiles):
-            continue
-        ecrire(grilles, bloque_, tuiles)
-        posees |= objet_.get("cascade", set())
+            bloquer_pied_visible(tuiles, cache, grilles, bloque_)
+        elif not any((x, y) in cache or grilles[calque][y][x] or (bloquee and (x, y) in libres_avant)
+                     for calque, x, y, _, bloquee in tuiles):
+            ecrire(grilles, bloque_, tuiles)
+            posees |= objet_.get("cascade", set())
     return posees
+
+
+def bloquer_pied_visible(tuiles, cache, grilles, bloque_):
+    """Objet coupé par la lisière : son pied visible porte un petit décor, bloqué, pour que l'objet puisse apparaître tout
+    entier à la taille suivante (une case libre ne doit pas être reprise)."""
+    for _, x, y, _, bloquee in tuiles:
+        if bloquee and (x, y) not in cache:
+            bloque_[y][x] = True
+            if not grilles["decors"][y][x]:
+                grilles["decors"][y][x] = petit_decor(x, y)
+
+
+def dessiner_plateau(cache, bords_herbe, decors_, bloque_):
+    """Plateau (rebord, flanc, escaliers) : toujours dessiné, bloqué sauf les escaliers montrés ; la marche du plateau et
+    la corniche de l'oasis (on n'y va pas, rien n'y est posé) ; le bord de l'herbe."""
+    for (x, y), i in falaise.items():
+        decors_[y][x] = t("falaise", i)
+        bloque_[y][x] = (x, y) not in escaliers or (x, y) in cache
+    for x, y in marche | corniche:
+        bloque_[y][x] = True
+    for (x, y), tuile in bords_herbe.items():
+        decors_[y][x] = tuile
+
+
+def bloquer_bord_de_l_eau(cache, eau_, ecume_, decors_, bloque_):
+    """L'eau retirée au bord de la coupe (le nettoyage) : un rocher, bloqué (elle redevient de l'eau plus tard : une case
+    libre ne doit pas être reprise). Le sable au bord de l'eau cachée aussi : il deviendra de l'écume (bloquée) quand
+    l'eau sera montrée."""
+    for x, y in (eau - eau_ - cache) | (voisins8(eau - eau_) - cache - eau_ - ecume_ - set(falaise) - set(cascade)):
+        bloque_[y][x] = True
+        if not decors_[y][x]:
+            decors_[y][x] = t("rochers", tirage(x, y, 2).choice(PETITS_ROCHERS))
+
+
+def verifier_cascade(zone, posees, eau_, decors_):
+    """La cascade est posée, avec le lac au-dessus et de l'eau en dessous."""
+    if posees != set(cascade):
+        sys.exit(f"Zone {zone} : cascade pas posée")
+    amont = all((CX + 1, CY - j) in eau_ and not decors_[CY - j][CX + 1] for j in (1, 2))
+    aval = (CX + 1, CY + len(CASCADE_LIGNES)) in eau_
+    if not (amont and aval):
+        sys.exit(f"Zone {zone} : cascade sans lac au-dessus ou sans eau en dessous")
 
 
 def taille(zone, libres_avant):
@@ -471,21 +519,8 @@ def taille(zone, libres_avant):
     devant_ = [[0] * L for _ in range(H)]
     bloque_ = [[(x, y) in eau_ or (x, y) in ecume_ for x in range(L)] for y in range(H)]
     grilles = {"decors": decors_, "devant": devant_}
-    # Plateau (rebord, flanc, escaliers) : toujours dessiné, bloqué sauf les escaliers montrés
-    for (x, y), i in falaise.items():
-        decors_[y][x] = t("falaise", i)
-        bloque_[y][x] = (x, y) not in escaliers or (x, y) in cache
-    for x, y in marche | corniche:  # la marche du plateau et la corniche de l'oasis : on n'y va pas, rien n'y est posé
-        bloque_[y][x] = True
-    for (x, y), tuile in bords_herbe.items():
-        decors_[y][x] = tuile
-    # L'eau retirée au bord de la coupe (le nettoyage) : un rocher, bloqué (elle redevient de l'eau plus tard : une case
-    # libre ne doit pas être reprise)
-    # Le sable au bord de l'eau cachée aussi : il deviendra de l'écume (bloquée) quand l'eau sera montrée
-    for x, y in (eau - eau_ - cache) | (voisins8(eau - eau_) - cache - eau_ - ecume_ - set(falaise) - set(cascade)):
-        bloque_[y][x] = True
-        if not decors_[y][x]:
-            decors_[y][x] = t("rochers", tirage(x, y, 2).choice(PETITS_ROCHERS))
+    dessiner_plateau(cache, bords_herbe, decors_, bloque_)
+    bloquer_bord_de_l_eau(cache, eau_, ecume_, decors_, bloque_)
     sable_ = {(x, y) for y in range(H) for x in range(L)} - eau_ - ecume_ - set(falaise) - set(cascade)
     planter_cactus(cache, sable_, grilles, bloque_)
     planter_bordure(cache, grilles, bloque_)
@@ -493,12 +528,7 @@ def taille(zone, libres_avant):
     for (x, y), (nom, i) in DEVANT_FORCE.items():
         if (x, y) not in cache:
             devant_[y][x] = t(nom, i)
-    if posees != set(cascade):
-        sys.exit(f"Zone {zone} : cascade pas posée")
-    amont = all((CX + 1, CY - j) in eau_ and not decors_[CY - j][CX + 1] for j in (1, 2))
-    aval = (CX + 1, CY + len(CASCADE_LIGNES)) in eau_
-    if not (amont and aval):
-        sys.exit(f"Zone {zone} : cascade sans lac au-dessus ou sans eau en dessous")
+    verifier_cascade(zone, posees, eau_, decors_)
     # Poches de sable enfermées (entre la lisière, l'eau, le plateau et les objets) : un petit décor, personne n'y va
     gardees = carte.boucher_poches(zone, decors_, bloque_, petit_decor)
     perdues = libres_avant - gardees

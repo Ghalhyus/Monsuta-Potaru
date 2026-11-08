@@ -74,24 +74,30 @@ public sealed class BankServiceTests : IDisposable
     [Fact]
     public async Task Sort_ByArrival_MostRecentFirst_EggsLast()
     {
-        Assert.Equal(new[] { 5, 4, 2, 1, 3 }, await Ids(new(CollectionSortBy.Arrival)));
-        Assert.Equal(new[] { 1, 2, 4, 5, 3 }, await Ids(new(CollectionSortBy.Arrival, Reversed: true)));
+        var sorted = await Ids(new(CollectionSortBy.Arrival));
+        Assert.Equal([5, 4, 2, 1, 3], sorted);
+        var reversed = await Ids(new(CollectionSortBy.Arrival, Reversed: true));
+        Assert.Equal([1, 2, 4, 5, 3], reversed);
     }
 
     [Fact]
     public async Task Sort_ByName_IgnoresAccents_AndKeepsTheMostRecentFirstOnTies()
     {
         // Électhor et Évoli avec les « e », pas après Pikachu ; les deux Pikachu : le plus récent d'abord.
-        Assert.Equal(new[] { 4, 1, 5, 2, 3 }, await Ids(new(CollectionSortBy.Name)));
-        Assert.Equal(new[] { 5, 2, 1, 4, 3 }, await Ids(new(CollectionSortBy.Name, Reversed: true)));
+        var sorted = await Ids(new(CollectionSortBy.Name));
+        Assert.Equal([4, 1, 5, 2, 3], sorted);
+        var reversed = await Ids(new(CollectionSortBy.Name, Reversed: true));
+        Assert.Equal([5, 2, 1, 4, 3], reversed);
     }
 
     [Fact]
     public async Task Sort_ByDex_HidesTheSpeciesOfEggs()
     {
         // L'œuf (Bulbizarre, n° 1) reste à la fin : le trier par numéro trahirait son espèce.
-        Assert.Equal(new[] { 5, 2, 1, 4, 3 }, await Ids(new(CollectionSortBy.Dex)));
-        Assert.Equal(new[] { 4, 1, 5, 2, 3 }, await Ids(new(CollectionSortBy.Dex, Reversed: true)));
+        var sorted = await Ids(new(CollectionSortBy.Dex));
+        Assert.Equal([5, 2, 1, 4, 3], sorted);
+        var reversed = await Ids(new(CollectionSortBy.Dex, Reversed: true));
+        Assert.Equal([4, 1, 5, 2, 3], reversed);
     }
 
     [Fact]

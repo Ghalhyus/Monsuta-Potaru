@@ -26,9 +26,14 @@ public sealed record BattleSprites(string? Folder, string DeoxysSuffix = "")
     }
 
     /// <summary>Sprite d'un Pokémon en combat : de dos (<paramref name="back"/>) pour ceux du joueur.</summary>
-    public string Url(BattleFighter f, bool back) => Folder is null
-        ? Fallback(f)
-        : $"{Folder}{(back ? "dos/" : "")}{(f.Shiny ? "chromatique/" : "")}{f.Species}{Suffix(f)}.png";
+    public string Url(BattleFighter f, bool back)
+    {
+        if (Folder is null)
+            return Fallback(f);
+        var side = back ? "dos/" : "";
+        var shiny = f.Shiny ? "chromatique/" : "";
+        return $"{Folder}{side}{shiny}{f.Species}{Suffix(f)}.png";
+    }
 
     /// <summary>Image de la collection, en remplacement d'un sprite du jeu absent.</summary>
     public static string Fallback(BattleFighter f) =>

@@ -76,7 +76,9 @@ public static class PokemonFingerprint
         if (copies.Count == 0)
             return null;
         var names = string.Join(", ", copies.Take(MaxNamed).Select(c => c.Describe()));
-        var more = copies.Count > MaxNamed ? $" et {copies.Count - MaxNamed} autre{(copies.Count - MaxNamed > 1 ? "s" : "")}" : "";
+        var others = copies.Count - MaxNamed;
+        var plural = others > 1 ? "s" : "";
+        var more = others > 0 ? $" et {others} autre{plural}" : "";
         var count = copies.Count == 1
             ? "1 Pokémon de cette sauvegarde est déjà ailleurs dans ton compte"
             : $"{copies.Count} Pokémon de cette sauvegarde sont déjà ailleurs dans ton compte";

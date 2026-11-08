@@ -41,6 +41,10 @@ public sealed partial class PokemonInfo
     public string GameName(GameVersion version) =>
         GroupNames.TryGetValue(version, out var name) ? name : Get(_strings.gamelist, (int)version, version.ToString());
 
+    /// <summary>Nom du jeu d'une sauvegarde ; certaines ne précisent pas la version exacte (« Any » pour PKHeX).</summary>
+    public string GameName(SaveFile sav) =>
+        sav.Version == GameVersion.Any ? $"Jeu de génération {sav.Generation}" : GameName(sav.Version);
+
     /// <summary>
     /// Noms des groupes de jeux, absents des listes de PKHeX : une sauvegarde de Rouge/Bleu, d'Or/Argent, de Rubis/Saphir,
     /// de Diamant/Perle ou de HeartGold/SoulSilver ne dit pas lequel des deux, et un Pokémon de 1re ou 2e génération pas de
@@ -63,10 +67,6 @@ public sealed partial class PokemonInfo
         [GameVersion.DPPt] = "Diamant / Perle / Platine",
         [GameVersion.HGSS] = "Or HeartGold / Argent SoulSilver",
     };
-
-    /// <summary>Nom du jeu d'une sauvegarde ; certaines ne précisent pas la version exacte (« Any » pour PKHeX).</summary>
-    public string GameName(SaveFile sav) =>
-        sav.Version == GameVersion.Any ? $"Jeu de génération {sav.Generation}" : GameName(sav.Version);
 
     /// <summary>Nom français d'un objet par sa clé (voir <see cref="SaveBag"/>) : « Super Ball », « CT/DT Séisme ».</summary>
     public string ItemName(int key) =>
@@ -92,12 +92,22 @@ public sealed partial class PokemonInfo
         : $"images/objets/{key}.png";
 
     /// <summary>Type d'une capacité dans les jeux récents (Charme est de type Fée depuis la 6e génération).</summary>
-    private static byte MoveType(ushort move) =>
-        move < MoveInfo.GetTypeTable(EntityContext.Gen9).Length ? MoveInfo.GetType(move, EntityContext.Gen9)
-        : move < MoveInfo.GetTypeTable(EntityContext.Gen9a).Length ? MoveInfo.GetType(move, EntityContext.Gen9a)
-        : (byte)0;
+    private static byte MoveType(ushort move)
+    {
+        if (move < MoveInfo.GetTypeTable(EntityContext.Gen9).Length)
+            return MoveInfo.GetType(move, EntityContext.Gen9);
+        return move < MoveInfo.GetTypeTable(EntityContext.Gen9a).Length ? MoveInfo.GetType(move, EntityContext.Gen9a) : (byte)0;
+    }
 
     private static readonly IReadOnlyList<string> EnglishTypes = GameInfo.GetStrings("en").types;
+
+    /// <summary>« Œuf », le surnom, sinon le nom de l'espèce.</summary>
+    private static string DisplayName(PKM pk, string speciesName)
+    {
+        if (pk.IsEgg)
+            return "Œuf";
+        return pk.IsNicknamed ? pk.Nickname : speciesName;
+    }
 
     public static bool IsLegal(PKM pk) => new LegalityAnalysis(pk, StorageSlotType.Box).Valid;
 
@@ -108,7 +118,7 @@ public sealed partial class PokemonInfo
             pk.Species,
             pk.Form,
             speciesName,
-            pk.IsEgg ? "Œuf" : pk.IsNicknamed ? pk.Nickname : speciesName,
+            DisplayName(pk, speciesName),
             pk.CurrentLevel,
             pk.IsShiny,
             pk.IsEgg,

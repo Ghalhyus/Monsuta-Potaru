@@ -433,8 +433,8 @@
     private void SelectWholeBankPage()
     {
         ClearSelection();
-        foreach (var e in bankEntries.Skip(bankPage * PageSize).Take(PageSize))
-            if (!Session.IsPendingWithdrawal(e.Id)) selectedBankIds.Add(e.Id);
+        foreach (var e in bankEntries.Skip(bankPage * PageSize).Take(PageSize).Where(e => !Session.IsPendingWithdrawal(e.Id)))
+            selectedBankIds.Add(e.Id);
     }
 
     private void ClearSelection()

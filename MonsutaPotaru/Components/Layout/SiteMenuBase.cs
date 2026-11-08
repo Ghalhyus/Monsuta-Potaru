@@ -104,11 +104,19 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
 
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Se désabonne des événements (navigation, porte-monnaie, demandes reçues).</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing)
+            return;
         NavigationManager.LocationChanged -= OnLocationChanged;
         Wallet.Changed -= OnWalletChanged;
         Friends.Changed -= OnFriendsChanged;
         Trades.RequestsChanged -= OnTradeRequestsChanged;
         Battles.RequestsChanged -= OnBattleRequestsChanged;
-        GC.SuppressFinalize(this);
     }
 }

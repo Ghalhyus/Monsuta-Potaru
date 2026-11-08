@@ -31,7 +31,7 @@
         }
     </div>
     <div class="progress" role="progressbar" aria-label="Emplacements utilisés" aria-valuenow="@projected" aria-valuemin="0" aria-valuemax="@Usage.Limit">
-        <div class="progress-bar @(percent >= 100 ? "bg-danger" : percent >= 90 ? "bg-warning" : "")" style="width: @(percent)%"></div>
+        <div class="progress-bar @BarClass(percent)" style="width: @(percent)%"></div>
     </div>
 </div>
 
@@ -103,12 +103,23 @@
     private CollectionUsage current; // relue à l'ouverture de la fenêtre
     private string userId = "";
 
-    private string? LotsError =>
-        lots is not { } n || n < 1 ? "Indique un nombre de lots (au moins 1)."
-        : n > 100_000 ? "Trop de lots en une seule fois."
-        : n * CollectionCapacity.LotPrice > balance
-            ? $"Il te faut {InventoryService.FormatMoney(n * CollectionCapacity.LotPrice)}, ton porte-monnaie contient {InventoryService.FormatMoney(balance)} : il manque {InventoryService.FormatMoney(n * CollectionCapacity.LotPrice - balance)}. Retire de l'argent d'une sauvegarde depuis « Inventaire »."
-        : null;
+    private string? LotsError
+    {
+        get
+        {
+            if (lots is not { } n || n < 1)
+                return "Indique un nombre de lots (au moins 1).";
+            if (n > 100_000)
+                return "Trop de lots en une seule fois.";
+            var cost = n * CollectionCapacity.LotPrice;
+            if (cost <= balance)
+                return null;
+            return $"Il te faut {InventoryService.FormatMoney(cost)}, ton porte-monnaie contient {InventoryService.FormatMoney(balance)} : il manque {InventoryService.FormatMoney(cost - balance)}. Retire de l'argent d'une sauvegarde depuis « Inventaire ».";
+        }
+    }
+
+    /// <summary>Couleur de la jauge : rouge pleine, orange à partir de 90 %.</summary>
+    private static string BarClass(int percent) => percent switch { >= 100 => "bg-danger", >= 90 => "bg-warning", _ => "" };
 
     private async Task OpenPurchase()
     {

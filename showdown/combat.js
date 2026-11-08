@@ -7,7 +7,7 @@
 // - lignes envoyées : chaque morceau du protocole de Showdown (« update », « sideupdate », « end »), encodé en JSON.
 'use strict';
 const {Battle, BattleStreams, Dex} = require('@pkmn/sim');
-const readline = require('readline');
+const readline = require('node:readline');
 
 // PP Plus de chaque capacité (« ppUps » du Pokémon) : Showdown en suppose toujours 3. Appliqués juste avant le début du
 // combat, quand les Pokémon existent et qu'aucune requête n'est encore partie.

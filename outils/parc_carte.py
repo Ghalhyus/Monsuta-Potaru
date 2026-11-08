@@ -330,15 +330,22 @@ class Carte:
         (<nom>.png, <nom>_collisions.png). fond : couleur sous les tuiles (r, v, b)."""
         image = Image.new("RGBA", (self.L * 16, self.H * 16), (*fond, 255))
         for grille in grilles_:
-            for y in range(self.H):
-                for x in range(self.L):
-                    g = grille[y][x]
-                    if g and g < self.gid_collision:
-                        image.alpha_composite(self.tuile_de(g), (x * 16, y * 16))
+            self.dessiner(image, grille)
         os.makedirs(dossier, exist_ok=True)
         image.save(os.path.join(dossier, f"{nom}.png"))
-        for y in range(self.H):
-            for x in range(self.L):
-                if bloque_[y][x]:
-                    image.alpha_composite(Image.new("RGBA", (16, 16), (230, 40, 40, 110)), (x * 16, y * 16))
+        rouge = Image.new("RGBA", (16, 16), (230, 40, 40, 110))
+        for x, y in self.cases():
+            if bloque_[y][x]:
+                image.alpha_composite(rouge, (x * 16, y * 16))
         image.save(os.path.join(dossier, f"{nom}_collisions.png"))
+
+    def cases(self):
+        """Toutes les cases de la carte, ligne par ligne."""
+        return ((x, y) for y in range(self.H) for x in range(self.L))
+
+    def dessiner(self, image, grille):
+        """Dessine les tuiles d'un calque (pas celles des collisions) sur l'image."""
+        for x, y in self.cases():
+            g = grille[y][x]
+            if g and g < self.gid_collision:
+                image.alpha_composite(self.tuile_de(g), (x * 16, y * 16))

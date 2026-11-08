@@ -1,3 +1,5 @@
+using Translation = (string? Text, MonsutaPotaru.Services.BattleCue Cue, string? Side);
+
 namespace MonsutaPotaru.Services;
 
 /// <summary>Ce que l'interface anime pour une étape : le Pokémon qui attaque s'avance, la barre de PV bouge...</summary>
@@ -37,6 +39,13 @@ public sealed class BattleView(string viewer)
 {
     public string Viewer { get; } = viewer;
     private string Opponent => Viewer == "p1" ? "p2" : "p1";
+
+    // Noms anglais du protocole de Showdown employés plusieurs fois.
+    private const string AbilityEffect = "ability";
+    private const string Sandstorm = "Sandstorm";
+    private const string Confusion = "confusion";
+    private const string Ingrain = "Ingrain";
+    private const string Attract = "Attract";
 
     private readonly Dictionary<string, string> trainers = [];
     private readonly Dictionary<string, int> teamSize = [];
@@ -112,7 +121,7 @@ public sealed class BattleView(string viewer)
         return kind switch
         {
             "item" => BattleNames.Item(name),
-            "ability" => BattleNames.Ability(name),
+            AbilityEffect => BattleNames.Ability(name),
             _ => BattleNames.Move(name),
         };
     }
@@ -164,160 +173,61 @@ public sealed class BattleView(string viewer)
         var (species, forme, speciesName) = BattleNames.SpeciesOf(details);
         var parts = details.Split(',', StringSplitOptions.TrimEntries);
         var level = parts.Select(p => p.StartsWith('L') && int.TryParse(p[1..], out var l) ? l : 0).FirstOrDefault(l => l > 0, 100);
-        var gender = parts.Contains("M") ? "M" : parts.Contains("F") ? "F" : "";
+        var gender = "";
+        if (parts.Contains("M"))
+            gender = "M";
+        else if (parts.Contains("F"))
+            gender = "F";
         var (hp, max, status) = BattleProtocol.Condition(condition);
         active[side] = new BattleFighter(name, species, forme, speciesName, level, gender, parts.Contains("shiny"), hp, max, status);
     }
 
     // ---------- Traduction ----------
 
-    private (string? Text, BattleCue Cue, string? Side) Translate(BattleLine line, ref bool painSplitShown)
+    private Translation Translate(BattleLine line, ref bool painSplitShown)
     {
-        var who = line.Arg(0);
-        var side = SideOf(who);
-        var from = line.Tag("from");
-        var of = line.Tag("of");
-        var silent = line.Has("silent");
+        if (line.Kind == "-sethp")
+            return SetHpLine(line, ref painSplitShown);
+        return BattleLineText(line) ?? FighterChange(line) ?? FighterText(line);
+    }
+
+    /// <summary>Ligne sans message ni animation.</summary>
+    private static readonly Translation Nothing = (null, BattleCue.None, null);
+
+    /// <summary>Texte de la ligne, sauf si le simulateur la veut discrète (« [silent] ») : alors rien.</summary>
+    private static string? Unless(bool silent, Func<string?> text) => silent ? null : text();
+
+    /// <summary>Lignes du combat entier : joueurs, tours, météo, côtés du terrain, fin. Null : pas l'une d'elles.</summary>
+    private Translation? BattleLineText(BattleLine line)
+    {
         switch (line.Kind)
         {
             case "player":
                 if (line.Arg(1).Length > 0)
                     trainers[line.Arg(0)] = line.Arg(1);
-                return (null, BattleCue.None, null);
+                return Nothing;
             case "teamsize":
                 teamSize[line.Arg(0)] = int.TryParse(line.Arg(1), out var size) ? size : 0;
-                return (null, BattleCue.None, null);
+                return Nothing;
             case "turn":
                 Turn = int.TryParse(line.Arg(0), out var turn) ? turn : Turn;
-                return (null, BattleCue.None, null);
-            case "switch" or "drag":
-            {
-                var previous = active.GetValueOrDefault(side ?? "");
-                SwitchIn(who, line.Arg(1), line.Arg(2));
-                var mine = side == Viewer;
-                var name = BattleProtocol.Who(who).Name;
-                if (line.Kind == "drag")
-                    return ($"{Mon(who)} est traîné de force au combat !", BattleCue.SwitchIn, side);
-                var recall = previous is { Hp: > 0 } && previous.Name != name
-                    ? mine ? $"{previous.Name}, reviens ! " : $"{TrainerName(false)} rappelle {previous.Name} ! "
-                    : "";
-                return (recall + (mine ? $"Go ! {name} !" : $"{TrainerName(false)} envoie {name} !"), BattleCue.SwitchIn, side);
-            }
-            case "move":
-            {
-                var move = BattleNames.Move(line.Arg(1));
-                return ($"{Mon(who)} utilise {move} !", line.Has("still") ? BattleCue.None : BattleCue.Attack, side);
-            }
-            case "-damage":
-            {
-                SetHp(who, line.Arg(1));
-                return (DamageText(who, from, of), BattleCue.Damage, side);
-            }
-            case "-heal":
-            {
-                SetHp(who, line.Arg(1));
-                return (silent ? null : HealText(who, from, of, line.Tag("wisher")), BattleCue.Heal, side);
-            }
-            case "-sethp":
-            {
-                SetHp(who, line.Arg(1));
-                var text = !painSplitShown && from == "move: Pain Split" ? "Les deux Pokémon partagent leurs PV !" : null;
-                painSplitShown |= text is not null;
-                return (text, BattleCue.Heal, side);
-            }
-            case "faint":
-                Update(who, f => f with { Hp = 0 });
-                if (side is not null)
-                    fainted[side] = fainted.GetValueOrDefault(side) + 1;
-                return ($"{Mon(who)} est K.O. !", BattleCue.Faint, side);
-            case "-status":
-                Update(who, f => f with { Status = line.Arg(1) });
-                return (StatusText(who, line.Arg(1), from, of), BattleCue.None, side);
-            case "-curestatus":
-                Update(who, f => f with { Status = null });
-                return (silent || !line.Has("msg") && Effect(from).Kind != "ability" ? null : CureText(who, line.Arg(1), from), BattleCue.None, side);
-            case "-cureteam":
-                foreach (var key in active.Keys.Where(k => k == side).ToList())
-                    active[key] = active[key] is { } f ? f with { Status = null } : null;
-                return (from == "move: Aromatherapy" ? "Une odeur apaisante se répand !" : "Un carillon retentit !", BattleCue.None, side);
-            case "-boost" or "-unboost":
-                return (silent ? null : BoostText(who, line.Arg(1), line.Arg(2), line.Kind == "-boost"), BattleCue.None, side);
-            case "-setboost":
-                return ($"{Mon(who)} sacrifie des PV et maximise son Attaque !", BattleCue.None, side);
+                return Nothing;
             case "-clearallboost":
                 return ("Les changements de stats sont annulés !", BattleCue.None, null);
-            case "-clearnegativeboost":
-                return (silent ? null : $"Les baisses de stats {De(Mon(who))} sont annulées !", BattleCue.None, side);
-            case "-copyboost":
-                return ($"{Mon(who)} copie les changements de stats {De(Mon(line.Arg(1)))} !", BattleCue.None, side);
             case "-weather":
-                return (WeatherText(line.Arg(0), line.Has("upkeep"), from, of), BattleCue.None, null);
+                return (WeatherText(line.Arg(0), line.Has("upkeep"), line.Tag("from"), line.Tag("of")), BattleCue.None, null);
             case "-sidestart":
                 return (SideStartText(line.Arg(0), EffectName(line.Arg(1)), Effect(line.Arg(1)).Name), BattleCue.None, null);
             case "-sideend":
                 return (SideEndText(line.Arg(0), EffectName(line.Arg(1)), Effect(line.Arg(1)).Name), BattleCue.None, null);
-            case "-start":
-                return (silent ? null : StartText(line, who, of), BattleCue.None, side);
-            case "-end":
-                return (silent ? null : EndText(line, who), BattleCue.None, side);
-            case "-activate":
-                return (ActivateText(line, who, of), BattleCue.None, side);
-            case "-singleturn":
-                return (SingleTurnText(who, Effect(line.Arg(1)).Name), BattleCue.None, side);
-            case "-singlemove":
-                return (Effect(line.Arg(1)).Name switch
-                {
-                    "Destiny Bond" => $"{Mon(who)} veut emmener son adversaire avec lui !",
-                    "Grudge" => $"{Mon(who)} veut que son adversaire lui garde rancune !",
-                    _ => null, // Frénésie : rien en jeu
-                }, BattleCue.None, side);
-            case "-prepare":
-                return (PrepareText(who, line.Arg(1)), BattleCue.None, side);
+            case "-fieldactivate":
+                return (FieldActivateText(Effect(line.Arg(0)).Name), BattleCue.None, null);
             case "-mustrecharge" or "-anim" or "-hint" or "-message" or "-center" or "-waiting":
-                return (null, BattleCue.None, null);
-            case "-crit":
-                return ("Coup critique !", BattleCue.None, side);
-            case "-supereffective":
-                return ("C'est super efficace !", BattleCue.None, side);
-            case "-resisted":
-                return ("Ce n'est pas très efficace…", BattleCue.None, side);
-            case "-immune":
-                return (ImmuneText(who, line, from), BattleCue.None, side);
-            case "-miss":
-                return (line.Arg(1).Length > 0 ? $"{Mon(line.Arg(1))} évite l'attaque !" : $"L'attaque {De(Mon(who))} échoue !", BattleCue.None, side);
-            case "-fail":
-                return (FailText(line, who, from), BattleCue.None, side);
-            case "-notarget":
-                return ("Mais il n'y a pas de cible…", BattleCue.None, side);
+                return Nothing;
             case "-nothing":
                 return ("Mais rien ne se passe !", BattleCue.None, null);
             case "-ohko":
                 return ("C'est un K.O. en un coup !", BattleCue.None, null);
-            case "-hitcount":
-                return ($"Touché {line.Arg(1)} fois !", BattleCue.None, side);
-            case "-item":
-                return (silent ? null : ItemText(who, BattleNames.Item(line.Arg(1)), from, of), BattleCue.None, side);
-            case "-enditem":
-                return (silent ? null : EndItemText(who, line, from, of), BattleCue.None, side);
-            case "-ability":
-                return (silent ? null : AbilityText(who, line, from, of), BattleCue.None, side);
-            case "-transform":
-                return ($"{Mon(who)} se transforme en {BattleProtocol.Who(line.Arg(1)).Name} !", BattleCue.None, side);
-            case "-formechange":
-            {
-                var (_, forme, _) = BattleNames.SpeciesOf(line.Arg(1));
-                Update(who, f => f with { Forme = forme });
-                return (silent ? null : $"{Mon(who)} change de forme !", BattleCue.None, side);
-            }
-            case "-fieldactivate":
-                return (Effect(line.Arg(0)).Name switch
-                {
-                    "Pay Day" => "Des pièces sont éparpillées partout !",
-                    "Perish Song" => "Tous les Pokémon qui entendent le Requiem seront K.O. dans trois tours !",
-                    _ => null,
-                }, BattleCue.None, null);
-            case "cant":
-                return (CantText(who, line.Arg(1), line.Arg(2)), BattleCue.None, side);
             case "win":
                 Outcome = line.Arg(0) == trainers.GetValueOrDefault(Viewer) ? BattleOutcome.Won : BattleOutcome.Lost;
                 return (Outcome == BattleOutcome.Won ? $"Tu as battu {TrainerName(false)} !" : $"{TrainerName(false)} a gagné le combat !", BattleCue.None, null);
@@ -325,10 +235,186 @@ public sealed class BattleView(string viewer)
                 Outcome = BattleOutcome.Draw;
                 return ("Match nul !", BattleCue.None, null);
             default:
-                Unhandled.Add(string.Join('|', [line.Kind, .. line.Args]));
-                return (null, BattleCue.None, null);
+                return null;
         }
     }
+
+    /// <summary>Lignes qui changent un Pokémon sur le terrain : entrée, attaque, PV, K.O., statut, forme. Null : pas l'une d'elles.</summary>
+    private Translation? FighterChange(BattleLine line)
+    {
+        var who = line.Arg(0);
+        var side = SideOf(who);
+        var from = line.Tag("from");
+        var silent = line.Has("silent");
+        switch (line.Kind)
+        {
+            case "switch" or "drag":
+                return (SwitchText(line, who, side), BattleCue.SwitchIn, side);
+            case "move":
+                return ($"{Mon(who)} utilise {BattleNames.Move(line.Arg(1))} !", line.Has("still") ? BattleCue.None : BattleCue.Attack, side);
+            case "-damage":
+                SetHp(who, line.Arg(1));
+                return (DamageText(who, from, line.Tag("of")), BattleCue.Damage, side);
+            case "-heal":
+                SetHp(who, line.Arg(1));
+                return (Unless(silent, () => HealText(who, from, line.Tag("of"), line.Tag("wisher"))), BattleCue.Heal, side);
+            case "faint":
+                Update(who, f => f with { Hp = 0 });
+                if (side is not null)
+                    fainted[side] = fainted.GetValueOrDefault(side) + 1;
+                return ($"{Mon(who)} est K.O. !", BattleCue.Faint, side);
+            case "-status":
+                Update(who, f => f with { Status = line.Arg(1) });
+                return (StatusText(who, line.Arg(1), from, line.Tag("of")), BattleCue.None, side);
+            case "-curestatus":
+                Update(who, f => f with { Status = null });
+                var shown = !silent && (line.Has("msg") || Effect(from).Kind == AbilityEffect);
+                return (shown ? CureText(who, line.Arg(1), from) : null, BattleCue.None, side);
+            case "-cureteam":
+                foreach (var key in active.Keys.Where(k => k == side).ToList())
+                    active[key] = active[key] is { } f ? f with { Status = null } : null;
+                return (from == "move: Aromatherapy" ? "Une odeur apaisante se répand !" : "Un carillon retentit !", BattleCue.None, side);
+            case "-formechange":
+                var (_, forme, _) = BattleNames.SpeciesOf(line.Arg(1));
+                Update(who, f => f with { Forme = forme });
+                return (Unless(silent, () => $"{Mon(who)} change de forme !"), BattleCue.None, side);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>« -sethp » (Balance) : un seul message pour les deux Pokémon.</summary>
+    private Translation SetHpLine(BattleLine line, ref bool painSplitShown)
+    {
+        var who = line.Arg(0);
+        SetHp(who, line.Arg(1));
+        var text = !painSplitShown && line.Tag("from") == "move: Pain Split" ? "Les deux Pokémon partagent leurs PV !" : null;
+        painSplitShown |= text is not null;
+        return (text, BattleCue.Heal, SideOf(who));
+    }
+
+    /// <summary>Pokémon qui entre sur le terrain (envoyé, ou traîné de force), après le rappel du précédent s'il tient debout.</summary>
+    private string SwitchText(BattleLine line, string who, string? side)
+    {
+        var previous = active.GetValueOrDefault(side ?? "");
+        SwitchIn(who, line.Arg(1), line.Arg(2));
+        if (line.Kind == "drag")
+            return $"{Mon(who)} est traîné de force au combat !";
+        var mine = side == Viewer;
+        var name = BattleProtocol.Who(who).Name;
+        var sent = mine ? $"Go ! {name} !" : $"{TrainerName(false)} envoie {name} !";
+        return RecallText(previous, name, mine) + sent;
+    }
+
+    /// <summary>« Pika, reviens ! » avant un changement (rien si le précédent est K.O. ou s'il n'y en avait pas).</summary>
+    private string RecallText(BattleFighter? previous, string incoming, bool mine)
+    {
+        if (previous is not { Hp: > 0 } || previous.Name == incoming)
+            return "";
+        return mine ? $"{previous.Name}, reviens ! " : $"{TrainerName(false)} rappelle {previous.Name} ! ";
+    }
+
+    /// <summary>Messages sur un Pokémon, sans changement de l'état du terrain (stats, effets, coups, objets, talents).</summary>
+    private Translation FighterText(BattleLine line)
+    {
+        var who = line.Arg(0);
+        var from = line.Tag("from");
+        var of = line.Tag("of");
+        var silent = line.Has("silent");
+        string? text;
+        switch (line.Kind)
+        {
+            case "-boost" or "-unboost":
+                text = Unless(silent, () => BoostText(who, line.Arg(1), line.Arg(2), line.Kind == "-boost"));
+                break;
+            case "-setboost":
+                text = $"{Mon(who)} sacrifie des PV et maximise son Attaque !";
+                break;
+            case "-clearnegativeboost":
+                text = Unless(silent, () => $"Les baisses de stats {De(Mon(who))} sont annulées !");
+                break;
+            case "-copyboost":
+                text = $"{Mon(who)} copie les changements de stats {De(Mon(line.Arg(1)))} !";
+                break;
+            case "-start":
+                text = Unless(silent, () => StartText(line, who, of));
+                break;
+            case "-end":
+                text = Unless(silent, () => EndText(line, who));
+                break;
+            case "-activate":
+                text = ActivateText(line, who, of);
+                break;
+            case "-singleturn":
+                text = SingleTurnText(who, Effect(line.Arg(1)).Name);
+                break;
+            case "-singlemove":
+                text = SingleMoveText(who, Effect(line.Arg(1)).Name);
+                break;
+            case "-prepare":
+                text = PrepareText(who, line.Arg(1));
+                break;
+            case "-crit":
+                text = "Coup critique !";
+                break;
+            case "-supereffective":
+                text = "C'est super efficace !";
+                break;
+            case "-resisted":
+                text = "Ce n'est pas très efficace…";
+                break;
+            case "-immune":
+                text = ImmuneText(who, line, from);
+                break;
+            case "-miss":
+                text = line.Arg(1).Length > 0 ? $"{Mon(line.Arg(1))} évite l'attaque !" : $"L'attaque {De(Mon(who))} échoue !";
+                break;
+            case "-fail":
+                text = FailText(line, who, from);
+                break;
+            case "-notarget":
+                text = "Mais il n'y a pas de cible…";
+                break;
+            case "-hitcount":
+                text = $"Touché {line.Arg(1)} fois !";
+                break;
+            case "-item":
+                text = Unless(silent, () => ItemText(who, BattleNames.Item(line.Arg(1)), from, of));
+                break;
+            case "-enditem":
+                text = Unless(silent, () => EndItemText(who, line, from, of));
+                break;
+            case "-ability":
+                text = Unless(silent, () => AbilityText(who, line, from, of));
+                break;
+            case "-transform":
+                text = $"{Mon(who)} se transforme en {BattleProtocol.Who(line.Arg(1)).Name} !";
+                break;
+            case "cant":
+                text = CantText(who, line.Arg(1), line.Arg(2));
+                break;
+            default:
+                Unhandled.Add(string.Join('|', [line.Kind, .. line.Args]));
+                return Nothing;
+        }
+        return (text, BattleCue.None, SideOf(who));
+    }
+
+    /// <summary>« -singlemove » : Prélèvement Destin, Rancune (Frénésie : rien en jeu).</summary>
+    private string? SingleMoveText(string who, string move) => move switch
+    {
+        "Destiny Bond" => $"{Mon(who)} veut emmener son adversaire avec lui !",
+        "Grudge" => $"{Mon(who)} veut que son adversaire lui garde rancune !",
+        _ => null,
+    };
+
+    /// <summary>« -fieldactivate » : Jackpot, Requiem.</summary>
+    private static string? FieldActivateText(string effect) => effect switch
+    {
+        "Pay Day" => "Des pièces sont éparpillées partout !",
+        "Perish Song" => "Tous les Pokémon qui entendent le Requiem seront K.O. dans trois tours !",
+        _ => null,
+    };
 
     private string? DamageText(string who, string? from, string? of)
     {
@@ -340,15 +426,15 @@ public sealed class BattleView(string viewer)
             ("", "brn") => $"{Mon(who)} souffre de sa brûlure !",
             ("", "psn" or "tox") => $"{Mon(who)} souffre du poison !",
             ("", "Leech Seed") => $"Vampigraine draine l'énergie {De(Mon(who))} !",
-            ("", "Sandstorm") => $"La tempête de sable frappe {Mon(who)} !",
+            ("", Sandstorm) => $"La tempête de sable frappe {Mon(who)} !",
             ("", "Hail") => $"La grêle frappe {Mon(who)} !",
             ("", "Recoil") => $"{Mon(who)} est blessé par le contrecoup !",
-            ("", "confusion") => "Il se blesse dans sa confusion !",
+            ("", Confusion) => "Il se blesse dans sa confusion !",
             ("", "Spikes") => $"{Mon(who)} est blessé par les Picots !",
             ("", "Curse") => $"{Mon(who)} est touché par la malédiction !",
             ("", "Nightmare") => $"{Mon(who)} est pris dans un cauchemar !",
-            ("ability", "Liquid Ooze") => $"{Mon(who)} aspire le Suintement !",
-            ("ability", _) => $"{Mon(who)} est blessé par {BattleNames.Ability(name)} {De(Mon(of ?? who))} !",
+            (AbilityEffect, "Liquid Ooze") => $"{Mon(who)} aspire le Suintement !",
+            (AbilityEffect, _) => $"{Mon(who)} est blessé par {BattleNames.Ability(name)} {De(Mon(of ?? who))} !",
             ("item", _) => $"{Mon(who)} est blessé par {BattleNames.Item(name)} !",
             ("move", _) => $"{Mon(who)} est blessé par {BattleNames.Move(name)} !",
             _ => $"{Mon(who)} est blessé !",
@@ -362,11 +448,11 @@ public sealed class BattleView(string viewer)
         {
             ("", "") => $"{Mon(who)} récupère des PV !",
             ("", "drain") => $"L'énergie {De(Mon(of ?? who))} est drainée !",
-            ("", "Ingrain") => $"{Mon(who)} absorbe des nutriments avec ses racines !",
+            ("", Ingrain) => $"{Mon(who)} absorbe des nutriments avec ses racines !",
             ("move", "Wish") => $"Le vœu {De(wisher ?? BattleProtocol.Who(who).Name)} se réalise !",
             ("item", _) when name.EndsWith("Berry", StringComparison.Ordinal) => $"{Mon(who)} récupère des PV !",
             ("item", _) => $"{Mon(who)} récupère des PV grâce à {BattleNames.Item(name)} !",
-            ("ability", _) => $"{BattleNames.Ability(name)} {De(Mon(who))} lui rend des PV !",
+            (AbilityEffect, _) => $"{BattleNames.Ability(name)} {De(Mon(who))} lui rend des PV !",
             _ => $"{Mon(who)} récupère des PV !",
         };
     }
@@ -376,7 +462,7 @@ public sealed class BattleView(string viewer)
         var (kind, name) = Effect(from);
         if (kind == "move" && name == "Rest")
             return $"{Mon(who)} s'endort et récupère des PV !";
-        if (kind == "ability")
+        if (kind == AbilityEffect)
             return $"{Mon(who)} est {StatusAdjective(status)} par {BattleNames.Ability(name)} {De(Mon(of ?? who))} !";
         return status switch
         {
@@ -392,7 +478,7 @@ public sealed class BattleView(string viewer)
 
     private string CureText(string who, string status, string? from)
     {
-        var prefix = Effect(from) is ("ability", var ability) ? $"{BattleNames.Ability(ability)} {De(Mon(who))} ! " : "";
+        var prefix = Effect(from) is (AbilityEffect, var ability) ? $"{BattleNames.Ability(ability)} {De(Mon(who))} ! " : "";
         return prefix + status switch
         {
             "slp" => $"{Mon(who)} se réveille !",
@@ -427,7 +513,7 @@ public sealed class BattleView(string viewer)
             {
                 "RainDance" => "La pluie s'arrête.",
                 "SunnyDay" => "Le soleil redevient normal.",
-                "Sandstorm" => "La tempête de sable se calme.",
+                Sandstorm => "La tempête de sable se calme.",
                 "Hail" => "La grêle s'arrête.",
                 _ => null,
             };
@@ -438,17 +524,17 @@ public sealed class BattleView(string viewer)
             {
                 "RainDance" => "La pluie continue de tomber.",
                 "SunnyDay" => "Le soleil brille fort.",
-                "Sandstorm" => "La tempête de sable fait rage.",
+                Sandstorm => "La tempête de sable fait rage.",
                 "Hail" => "La grêle continue de tomber.",
                 _ => null,
             };
         }
-        var prefix = Effect(from) is ("ability", var ability) ? $"{BattleNames.Ability(ability)} {De(Mon(of ?? ""))} ! " : "";
+        var prefix = Effect(from) is (AbilityEffect, var ability) ? $"{BattleNames.Ability(ability)} {De(Mon(of ?? ""))} ! " : "";
         return prefix + kind switch
         {
             "RainDance" => "Il commence à pleuvoir !",
             "SunnyDay" => "Le soleil brille !",
-            "Sandstorm" => "Une tempête de sable se lève !",
+            Sandstorm => "Une tempête de sable se lève !",
             "Hail" => "Il commence à grêler !",
             _ => "Le temps change !",
         };
@@ -480,7 +566,7 @@ public sealed class BattleView(string viewer)
             return $"{Mon(who)} a stocké {effect["stockpile".Length..]} fois !";
         return (kind, name) switch
         {
-            (_, "confusion") => line.Has("fatigue") ? $"{Mon(who)} est épuisé et devient confus !" : $"{Mon(who)} devient confus !",
+            (_, Confusion) => line.Has("fatigue") ? $"{Mon(who)} est épuisé et devient confus !" : $"{Mon(who)} devient confus !",
             (_, "Substitute") => $"{Mon(who)} crée un clone !",
             (_, "Leech Seed") => $"{Mon(who)} est infecté par Vampigraine !",
             (_, "Disable") => $"{BattleNames.Move(line.Arg(2))} {De(Mon(who))} est bloquée !",
@@ -489,23 +575,23 @@ public sealed class BattleView(string viewer)
             (_, "Torment") => $"{Mon(who)} est tourmenté !",
             (_, "Yawn") => $"{Mon(who)} commence à somnoler…",
             (_, "Focus Energy") => $"{Mon(who)} se concentre !",
-            (_, "Attract") when Effect(line.Tag("from")).Kind == "ability" =>
+            (_, Attract) when Effect(line.Tag("from")).Kind == AbilityEffect =>
                 $"{Mon(who)} tombe amoureux {De(Mon(of ?? who))} grâce à {BattleNames.Ability(Effect(line.Tag("from")).Name)} !",
-            (_, "Attract") => $"{Mon(who)} tombe amoureux !",
+            (_, Attract) => $"{Mon(who)} tombe amoureux !",
             (_, "Curse") => $"{Mon(of ?? who)} sacrifie des PV et maudit {Mon(who)} !",
             (_, "Nightmare") => $"{Mon(who)} fait un cauchemar !",
             (_, "Foresight") => $"{Mon(who)} est identifié !",
             (_, "Bide") => $"{Mon(who)} accumule de l'énergie !",
             (_, "Uproar") => line.Has("upkeep") ? $"{Mon(who)} fait toujours un brouhaha !" : $"{Mon(who)} provoque un brouhaha !",
             (_, "Charge") => $"{Mon(who)} se charge d'électricité !",
-            (_, "Ingrain") => $"{Mon(who)} plante ses racines !",
+            (_, Ingrain) => $"{Mon(who)} plante ses racines !",
             (_, "Imprison") => $"{Mon(who)} scelle les capacités de son adversaire !",
             (_, "Mud Sport") => "L'électricité perd de sa puissance !",
             (_, "Water Sport") => "Le feu perd de sa puissance !",
             (_, "Future Sight") => $"{Mon(who)} prévoit une attaque !",
             (_, "Doom Desire") => $"{Mon(who)} choisit {BattleNames.Move("Doom Desire")} comme destin !",
             (_, "typechange") => $"{Mon(who)} devient de type {BattleNames.Type(line.Arg(2))} !",
-            ("ability", "Flash Fire") => $"{BattleNames.Ability(name)} {De(Mon(who))} renforce ses attaques Feu !",
+            (AbilityEffect, "Flash Fire") => $"{BattleNames.Ability(name)} {De(Mon(who))} renforce ses attaques Feu !",
             _ => Unknown(line),
         };
     }
@@ -515,19 +601,19 @@ public sealed class BattleView(string viewer)
         var (_, name) = Effect(line.Arg(1));
         return name switch
         {
-            "confusion" => $"{Mon(who)} n'est plus confus !",
+            Confusion => $"{Mon(who)} n'est plus confus !",
             "Substitute" => $"Le clone {De(Mon(who))} disparaît…",
             "Disable" => $"{Mon(who)} n'est plus entravé !",
             "Encore" => $"L'effet d'Encore sur {Mon(who)} prend fin !",
             "Taunt" => $"{Mon(who)} n'est plus provoqué !",
-            "Attract" => $"{Mon(who)} n'est plus amoureux !",
+            Attract => $"{Mon(who)} n'est plus amoureux !",
             "Bind" or "Wrap" or "Clamp" or "Fire Spin" or "Whirlpool" or "Sand Tomb" => $"{Mon(who)} est libéré de {BattleNames.Move(name)} !",
             "Nightmare" => $"{Mon(who)} ne fait plus de cauchemar !",
             "Uproar" => $"{Mon(who)} se calme !",
             "Bide" => $"{Mon(who)} libère l'énergie accumulée !",
             "Future Sight" => $"{Mon(who)} subit l'attaque {BattleNames.Move(name)} !",
             "Doom Desire" => $"{Mon(who)} subit {BattleNames.Move(name)} !",
-            "Charge" or "Yawn" or "Focus Energy" or "Leech Seed" or "Ingrain" or "Foresight" or "Torment" or "Mud Sport"
+            "Charge" or "Yawn" or "Focus Energy" or "Leech Seed" or Ingrain or "Foresight" or "Torment" or "Mud Sport"
                 or "Water Sport" or "Imprison" or "Curse" or "typechange" or "Flash Fire" => null,
             _ when name.StartsWith("stockpile", StringComparison.Ordinal) || name.StartsWith("perish", StringComparison.Ordinal) => null,
             _ => Unknown(line),
@@ -542,9 +628,9 @@ public sealed class BattleView(string viewer)
         {
             (_, "Protect") => $"{Mon(who)} se protège !",
             (_, "Substitute") => $"Le clone encaisse les dégâts à la place {De(Mon(who))} !",
-            (_, "confusion") => $"{Mon(who)} est confus !",
+            (_, Confusion) => $"{Mon(who)} est confus !",
             (_, "trapped") => $"{Mon(who)} ne peut plus s'enfuir !",
-            (_, "Attract") => $"{Mon(who)} est amoureux {De(other)} !",
+            (_, Attract) => $"{Mon(who)} est amoureux {De(other)} !",
             (_, "Beat Up") => $"Attaque {De(of ?? "")} !",
             (_, "Bide") => $"{Mon(who)} accumule de l'énergie !",
             (_, "Bind") => $"{Mon(who)} est ligoté par {other} !",
@@ -557,7 +643,7 @@ public sealed class BattleView(string viewer)
             (_, "Endure") => $"{Mon(who)} tient bon !",
             (_, "Grudge") => $"{BattleNames.Move(line.Arg(2))} {De(Mon(who))} perd tous ses PP à cause de la rancune !",
             (_, "Heal Bell") => "Un carillon retentit !",
-            (_, "Ingrain") => $"{Mon(who)} est retenu par ses racines !",
+            (_, Ingrain) => $"{Mon(who)} est retenu par ses racines !",
             (_, "Lock-On" or "Mind Reader") => $"{Mon(who)} vise {other} !",
             (_, "Magnitude") => $"Ampleur {line.Arg(2)} !",
             (_, "Mimic") => $"{Mon(who)} apprend {BattleNames.Move(line.Arg(2))} !",
@@ -572,8 +658,8 @@ public sealed class BattleView(string viewer)
             ("item", _) when line.Arg(2).Length > 0 =>
                 $"{Mon(who)} restaure les PP de {BattleNames.Move(line.Arg(2))} avec {BattleNames.Item(name)} !",
             ("item", _) => $"{BattleNames.Item(name)} {De(Mon(who))} agit !",
-            ("ability", "Suction Cups") => $"{Mon(who)} s'accroche avec {BattleNames.Ability(name)} !",
-            ("ability", _) => $"{BattleNames.Ability(name)} {De(Mon(who))} !",
+            (AbilityEffect, "Suction Cups") => $"{Mon(who)} s'accroche avec {BattleNames.Ability(name)} !",
+            (AbilityEffect, _) => $"{BattleNames.Ability(name)} {De(Mon(who))} !",
             _ => Unknown(line),
         };
     }
@@ -603,9 +689,9 @@ public sealed class BattleView(string viewer)
 
     private string ImmuneText(string who, BattleLine line, string? from)
     {
-        if (Effect(from) is ("ability", var ability))
+        if (Effect(from) is (AbilityEffect, var ability))
             return $"Ça n'affecte pas {Mon(who)} grâce à {BattleNames.Ability(ability)} !";
-        if (line.Arg(1) == "confusion")
+        if (line.Arg(1) == Confusion)
             return $"{Mon(who)} ne peut pas être confus !";
         return $"Ça n'affecte pas {Mon(who)}…";
     }
@@ -613,7 +699,7 @@ public sealed class BattleView(string viewer)
     private string FailText(BattleLine line, string who, string? from)
     {
         var what = line.Arg(1);
-        if (Effect(from) is ("ability", var ability))
+        if (Effect(from) is (AbilityEffect, var ability))
         {
             return what == "unboost"
                 ? $"{BattleNames.Ability(ability)} {De(Mon(who))} empêche la baisse de ses stats !"
@@ -657,7 +743,7 @@ public sealed class BattleView(string viewer)
         var ability = BattleNames.Ability(line.Arg(1));
         return Effect(from) switch
         {
-            ("ability", "Trace") => $"{Mon(who)} copie {ability} {De(Mon(of ?? who))} grâce à {BattleNames.Ability("Trace")} !",
+            (AbilityEffect, "Trace") => $"{Mon(who)} copie {ability} {De(Mon(of ?? who))} grâce à {BattleNames.Ability("Trace")} !",
             ("move", "Role Play") => $"{Mon(who)} copie le talent {ability} {De(Mon(of ?? who))} !",
             ("move", "Skill Swap") => $"{Mon(who)} obtient le talent {ability} !",
             _ when line.Arg(1) == "Pressure" => $"{Mon(who)} exerce une pression !",
@@ -675,7 +761,7 @@ public sealed class BattleView(string viewer)
             "par" => $"{Mon(who)} est paralysé ! Il ne peut pas attaquer !",
             "recharge" => $"{Mon(who)} doit se reposer !",
             "flinch" => $"{Mon(who)} a peur ! Il ne peut pas attaquer !",
-            "Attract" => $"{Mon(who)} est trop amoureux pour attaquer !",
+            Attract => $"{Mon(who)} est trop amoureux pour attaquer !",
             "Truant" => $"{Mon(who)} paresse !",
             "Disable" => $"{BattleNames.Move(move)} {De(Mon(who))} est bloquée !",
             "Taunt" => $"{Mon(who)} ne peut pas utiliser {BattleNames.Move(move)} à cause de la provocation !",

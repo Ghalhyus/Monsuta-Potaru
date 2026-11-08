@@ -158,7 +158,8 @@ public sealed class InventoryService(
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : {Slots} emplacements achetés pour {Cost} ₽ (limite {Limit}).", ownerId, slots, cost, limit);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : {Slots} emplacements achetés pour {Cost} ₽ (limite {Limit}).", ownerId, slots, cost, limit);
         return new(true, $"Collection agrandie : {CollectionCapacity.FormatCount(limit)} emplacements. Solde : {FormatMoney(balance)}.", limit, balance);
     }
 
@@ -204,8 +205,7 @@ public sealed class InventoryService(
             return new(false, $"La modification de l'argent n'est pas prise en charge pour ce jeu ({save.GameName}).");
 
         long balance = 0;
-        var error = await SaveServerChangeAsync(db, ownerId, save, newData, check.Money, "retrait",
-            m => m.Withdrawn += amount,
+        var error = await SaveServerChangeAsync(db, ownerId, new ServerChange(save, newData, check.Money, "retrait", m => m.Withdrawn += amount),
             async now =>
             {
                 // Crédit atomique (deux retraits simultanés depuis deux sauvegardes ne s'écrasent pas).
@@ -217,13 +217,14 @@ public sealed class InventoryService(
                     await db.SaveChangesAsync();
                 }
                 balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstAsync();
-                AddOperation(db, ownerId, now, WalletOperationKind.WithdrawFromSave, amount, balance, save);
+                AddOperation(db, ownerId, now, save, new WalletEntry(WalletOperationKind.WithdrawFromSave, amount, balance));
                 return null;
             });
         if (error is not null)
             return new(false, error);
 
-        logger.LogInformation("Utilisateur {User} : {Amount} ₽ retirés de la sauvegarde {Id}.", ownerId, amount, save.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : {Amount} ₽ retirés de la sauvegarde {Id}.", ownerId, amount, save.Id);
         return new(true, $"{FormatMoney(amount)} retirés de « {label} ». Solde : {FormatMoney(balance)}.", balance);
     }
 
@@ -290,14 +291,7 @@ public sealed class InventoryService(
         pcQuantities ??= new Dictionary<int, int>();
         if (bagQuantities.Values.Concat(pcQuantities.Values).Any(q => q < 0))
             return new(false, "Les quantités ne peuvent pas être négatives.");
-        // Ce qui bouge à chaque endroit, puis le total par objet (ce qui entre dans l'inventaire ou en sort).
-        var moves = new Dictionary<BagPlace, Dictionary<int, int>>
-        {
-            [BagPlace.Bag] = Ordered(bagQuantities.Where(q => q.Value > 0).ToDictionary()).ToDictionary(),
-            [BagPlace.Pc] = Ordered(pcQuantities.Where(q => q.Value > 0).ToDictionary()).ToDictionary(),
-        };
-        var wanted = Ordered(moves.Values.SelectMany(m => m).GroupBy(m => m.Key).ToDictionary(g => g.Key, g => g.Sum(m => m.Value)))
-            .ToDictionary();
+        var (moves, wanted) = Moves(bagQuantities, pcQuantities);
         if (wanted.Count == 0)
             return new(false, "Choisis au moins un objet.");
 
@@ -312,25 +306,12 @@ public sealed class InventoryService(
         if (moves[BagPlace.Pc].Count > 0 && !hasPc)
             return new(false, "Cette sauvegarde n'a pas de PC d'objets.");
 
-        if (deposit)
-        {
-            var owned = await db.OwnedItems.Where(i => i.OwnerId == ownerId).ToDictionaryAsync(i => i.ItemId, i => i.Count);
-            foreach (var (item, quantity) in wanted)
-            {
-                if (quantity > owned.GetValueOrDefault(item))
-                    return new(false, $"Ton inventaire ne contient que {owned.GetValueOrDefault(item)} × {info.ItemName(item)}.");
-            }
-        }
+        if (deposit && await MissingItemAsync(db, ownerId, wanted) is { } missing)
+            return new(false, missing);
 
         // Modifie le sac et le PC, puis vérifie en relisant le fichier que le jeu a bien pris les nouvelles quantités.
-        foreach (var (place, quantities) in moves.Where(m => m.Value.Count > 0))
-        {
-            var refused = deposit
-                ? SaveBag.Deposit(sav, quantities, info.ItemName, save.GameName, place)
-                : SaveBag.Withdraw(sav, quantities, info.ItemName, place);
-            if (refused is not null)
-                return new(false, refused);
-        }
+        if (ChangeBag(sav, moves, deposit, save.GameName) is { } refused)
+            return new(false, refused);
         var expectedBag = SaveBag.ReadItems(sav, BagPlace.Bag);
         var expectedPc = SaveBag.ReadItems(sav, BagPlace.Pc);
         var newData = sav.Write().ToArray();
@@ -339,44 +320,89 @@ public sealed class InventoryService(
             return new(false, $"La modification du sac n'est pas prise en charge pour ce jeu ({save.GameName}).");
 
         var details = hasPc ? Describe(moves) : Describe(wanted);
-        var error = await SaveServerChangeAsync(db, ownerId, save, newData, check.Money, deposit ? "depot-objets" : "retrait-objets",
-            m => m.ItemsChanged = true,
-            async now =>
-            {
-                foreach (var (item, quantity) in wanted)
-                {
-                    if (deposit)
-                    {
-                        // Débit conditionnel et atomique : un autre onglet a pu utiliser ces objets entre-temps.
-                        var debited = await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.ItemId == item && i.Count >= quantity)
-                            .ExecuteUpdateAsync(i => i.SetProperty(x => x.Count, x => x.Count - quantity));
-                        if (debited == 0)
-                            return $"Ton inventaire ne contient plus assez de {info.ItemName(item)} (utilisé depuis un autre onglet ?).";
-                    }
-                    else
-                    {
-                        var credited = await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.ItemId == item)
-                            .ExecuteUpdateAsync(i => i.SetProperty(x => x.Count, x => x.Count + quantity));
-                        if (credited == 0)
-                            db.OwnedItems.Add(new OwnedItem { OwnerId = ownerId, ItemId = item, Count = quantity });
-                    }
-                }
-                if (deposit)
-                    await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.Count == 0).ExecuteDeleteAsync();
-
-                var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
-                var kind = deposit ? WalletOperationKind.DepositItemsToSave : WalletOperationKind.WithdrawItemsFromSave;
-                AddOperation(db, ownerId, now, kind, 0, balance, save, details);
-                return null;
-            });
+        var change = new ServerChange(save, newData, check.Money, deposit ? "depot-objets" : "retrait-objets", m => m.ItemsChanged = true);
+        var error = await SaveServerChangeAsync(db, ownerId, change, async now =>
+        {
+            if (await MoveOwnedItemsAsync(db, ownerId, wanted, deposit) is { } failure)
+                return failure;
+            var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
+            var kind = deposit ? WalletOperationKind.DepositItemsToSave : WalletOperationKind.WithdrawItemsFromSave;
+            AddOperation(db, ownerId, now, save, new WalletEntry(kind, 0, balance, details));
+            return null;
+        });
         if (error is not null)
             return new(false, error);
 
-        logger.LogInformation("Utilisateur {User} : objets {Direction} la sauvegarde {Id} ({Details}).",
-            ownerId, deposit ? "déposés dans" : "retirés de", save.Id, details);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : objets {Direction} la sauvegarde {Id} ({Details}).",
+                ownerId, deposit ? "déposés dans" : "retirés de", save.Id, details);
         return deposit
             ? new(true, $"Déposé dans « {label} » : {details}. Télécharge la sauvegarde depuis « Mes sauvegardes » pour les avoir dans ton jeu.")
             : new(true, $"Retiré de « {label} » : {details}.");
+    }
+
+    /// <summary>Ce qui bouge à chaque endroit (sac, PC), puis le total par objet (ce qui entre dans l'inventaire ou en sort).</summary>
+    private (Dictionary<BagPlace, Dictionary<int, int>> Moves, Dictionary<int, int> Wanted) Moves(
+        IReadOnlyDictionary<int, int> bagQuantities, IReadOnlyDictionary<int, int> pcQuantities)
+    {
+        var moves = new Dictionary<BagPlace, Dictionary<int, int>>
+        {
+            [BagPlace.Bag] = Ordered(bagQuantities.Where(q => q.Value > 0).ToDictionary()).ToDictionary(),
+            [BagPlace.Pc] = Ordered(pcQuantities.Where(q => q.Value > 0).ToDictionary()).ToDictionary(),
+        };
+        var wanted = Ordered(moves.Values.SelectMany(m => m).GroupBy(m => m.Key).ToDictionary(g => g.Key, g => g.Sum(m => m.Value)))
+            .ToDictionary();
+        return (moves, wanted);
+    }
+
+    /// <summary>Premier objet que l'inventaire n'a pas en assez grand nombre pour ce dépôt (message), ou null.</summary>
+    private async Task<string?> MissingItemAsync(ApplicationDbContext db, string ownerId, Dictionary<int, int> wanted)
+    {
+        var owned = await db.OwnedItems.Where(i => i.OwnerId == ownerId).ToDictionaryAsync(i => i.ItemId, i => i.Count);
+        return wanted.Where(w => w.Value > owned.GetValueOrDefault(w.Key))
+            .Select(w => $"Ton inventaire ne contient que {owned.GetValueOrDefault(w.Key)} × {info.ItemName(w.Key)}.")
+            .FirstOrDefault();
+    }
+
+    /// <summary>Dépose ou retire les objets à chaque endroit du sac. Refus du sac (message), ou null.</summary>
+    private string? ChangeBag(PKHeX.Core.SaveFile sav, Dictionary<BagPlace, Dictionary<int, int>> moves, bool deposit, string gameName)
+    {
+        foreach (var (place, quantities) in moves.Where(m => m.Value.Count > 0))
+        {
+            var refused = deposit
+                ? SaveBag.Deposit(sav, quantities, info.ItemName, gameName, place)
+                : SaveBag.Withdraw(sav, quantities, info.ItemName, place);
+            if (refused is not null)
+                return refused;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Débite (dépôt) ou crédite (retrait) l'inventaire des objets transférés. Message si un objet manque (utilisé depuis un
+    /// autre onglet), ou null.
+    /// </summary>
+    private async Task<string?> MoveOwnedItemsAsync(ApplicationDbContext db, string ownerId, Dictionary<int, int> wanted, bool deposit)
+    {
+        foreach (var (item, quantity) in wanted)
+        {
+            if (!deposit)
+            {
+                var credited = await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.ItemId == item)
+                    .ExecuteUpdateAsync(i => i.SetProperty(x => x.Count, x => x.Count + quantity));
+                if (credited == 0)
+                    db.OwnedItems.Add(new OwnedItem { OwnerId = ownerId, ItemId = item, Count = quantity });
+                continue;
+            }
+            // Débit conditionnel et atomique : un autre onglet a pu utiliser ces objets entre-temps.
+            var debited = await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.ItemId == item && i.Count >= quantity)
+                .ExecuteUpdateAsync(i => i.SetProperty(x => x.Count, x => x.Count - quantity));
+            if (debited == 0)
+                return $"Ton inventaire ne contient plus assez de {info.ItemName(item)} (utilisé depuis un autre onglet ?).";
+        }
+        if (deposit)
+            await db.OwnedItems.Where(i => i.OwnerId == ownerId && i.Count == 0).ExecuteDeleteAsync();
+        return null;
     }
 
     private List<ItemStack> Stacks(IReadOnlyDictionary<int, int> items) => Ordered(items).Select(i => Stack(i.Key, i.Value)).ToList();
@@ -408,15 +434,22 @@ public sealed class InventoryService(
     // ---------- Modification d'une sauvegarde stockée ----------
 
     /// <summary>
-    /// Enregistre <paramref name="newData"/> (déjà vérifié) comme nouvelle version de la sauvegarde stockée, pose ou complète la
-    /// trace « modifiée sur le serveur » (<paramref name="describe"/> y ajoute la nature du changement), puis applique le changement
-    /// au compte (<paramref name="applyToAccount"/> : porte-monnaie, objets, journal), le tout dans une seule transaction.
-    /// Copie de sécurité avant et après. Renvoie un message d'erreur (rien n'est enregistré), ou null si c'est fait.
+    /// Changement d'une sauvegarde stockée par le site : <paramref name="NewData"/> (déjà vérifié), l'argent qu'elle contient
+    /// ensuite, le nom de ses copies de sécurité (« retrait » : retrait-avant, retrait-apres), et la nature du changement
+    /// ajoutée à la trace « modifiée sur le serveur » (<paramref name="Describe"/>).
     /// </summary>
-    private async Task<string?> SaveServerChangeAsync(
-        ApplicationDbContext db, string ownerId, StoredSave save, byte[] newData, long moneyAfter, string backup,
-        Action<SaveModification> describe, Func<DateTime, Task<string?>> applyToAccount)
+    private sealed record ServerChange(StoredSave Save, byte[] NewData, long MoneyAfter, string Backup, Action<SaveModification> Describe);
+
+    /// <summary>
+    /// Enregistre le fichier du changement comme nouvelle version de la sauvegarde stockée, pose ou complète la trace « modifiée
+    /// sur le serveur », puis applique le changement au compte (<paramref name="applyToAccount"/> : porte-monnaie, objets,
+    /// journal), le tout dans une seule transaction. Copie de sécurité avant et après. Renvoie un message d'erreur (rien n'est
+    /// enregistré), ou null si c'est fait.
+    /// </summary>
+    private async Task<string?> SaveServerChangeAsync(ApplicationDbContext db, string ownerId, ServerChange change,
+        Func<DateTime, Task<string?>> applyToAccount)
     {
+        var (save, newData, moneyAfter, backup, describe) = change;
         await storedSaves.WriteBackupAsync(ownerId, save, $"{backup}-avant");
 
         var now = DateTime.UtcNow;
@@ -429,7 +462,10 @@ public sealed class InventoryService(
         // Trace rattachée à la partie (et non à la sauvegarde stockée) : elle survit à une suppression.
         var modification = await db.SaveModifications.FindAsync(save.IdentityKey);
         if (modification is null)
-            db.SaveModifications.Add(modification = new SaveModification { IdentityKey = save.IdentityKey });
+        {
+            modification = new SaveModification { IdentityKey = save.IdentityKey };
+            db.SaveModifications.Add(modification);
+        }
         modification.PlayTimeSeconds = save.PlayTimeSeconds; // une modification du serveur ne change pas le temps de jeu
         modification.MoneyAfter = moneyAfter;
         modification.DataHash = SaveModification.Hash(newData);
@@ -453,17 +489,19 @@ public sealed class InventoryService(
         return null;
     }
 
-    private static void AddOperation(ApplicationDbContext db, string ownerId, DateTime at, WalletOperationKind kind, long amount,
-        long balanceAfter, StoredSave save, string details = "") =>
+    /// <summary>Ligne du journal du porte-monnaie : opération, montant, solde après, détails.</summary>
+    private sealed record WalletEntry(WalletOperationKind Kind, long Amount, long BalanceAfter, string Details = "");
+
+    private static void AddOperation(ApplicationDbContext db, string ownerId, DateTime at, StoredSave save, WalletEntry entry) =>
         db.WalletOperations.Add(new WalletOperation
         {
             OwnerId = ownerId,
             At = at,
-            Kind = kind,
-            Amount = amount,
-            BalanceAfter = balanceAfter,
+            Kind = entry.Kind,
+            Amount = entry.Amount,
+            BalanceAfter = entry.BalanceAfter,
             StoredSaveId = save.Id,
             SaveLabel = WalletOperation.SaveLabelOf(save),
-            Details = details,
+            Details = entry.Details,
         });
 }

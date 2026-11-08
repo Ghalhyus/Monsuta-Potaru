@@ -145,33 +145,41 @@ def cache_de(zone):
     return cache
 
 
-def taille(zone, libres_avant):
-    """Carte d'une taille : sol, décors, feuillages, cases bloquées et cases libres (la terre des îlots). libres_avant :
-    cases libres de la taille d'avant, qui doivent le rester (un agrandissement ne reprend rien)."""
-    cache = cache_de(zone)
-    # Îlots visibles : coupés à la lisière, sans les bouts où l'on ne marche presque pas
+def ilots_visibles(cache):
+    """Îlots visibles : coupés à la lisière, sans les bouts où l'on ne marche presque pas."""
     forme = set()
     for ilot_ in ILOTS:
         for morceau in morceaux_de(nettoyer(ilot_ - cache)):
             if len(terre_de(morceau)) >= 4:
                 forme |= morceau
-    terre = terre_de(forme)
+    return forme
+
+
+def tuile_de_sable(forme, x, y, r):
+    """Sable d'un îlot : son rivage, sinon parfois un détail, sinon du sable uni."""
+    i = bordure(forme, x, y, *RIVAGE)
+    if i is not None:
+        return t("sable", i)
+    return t("sable_details", r.randrange(4)) if r.random() < 0.1 else t("sable", SABLE_UNI)
+
+
+def sol_de(forme):
+    """Sol de la carte : le sable des îlots, de l'eau (parfois avec un détail) partout ailleurs."""
     sol_ = [[0] * L for _ in range(H)]
-    decors_ = [[0] * L for _ in range(H)]
-    devant_ = [[0] * L for _ in range(H)]
-    bloque_ = [[(x, y) not in terre for x in range(L)] for y in range(H)]
     for y in range(H):
         for x in range(L):
             r = tirage(x, y, 3)
             if (x, y) in forme:
-                i = bordure(forme, x, y, *RIVAGE)
-                sol_[y][x] = (t("sable", i) if i is not None
-                              else t("sable_details", r.randrange(4)) if r.random() < 0.1 else t("sable", SABLE_UNI))
+                sol_[y][x] = tuile_de_sable(forme, x, y, r)
             else:
                 sol_[y][x] = t("eau_details", r.randrange(3)) if r.random() < 0.04 else t("eau_unie", 0)
-    grilles = {"decors": decors_, "devant": devant_}
-    # Récif en quinconce dans la mer cachée : un gros rocher (2 × 2) dont les quatre cases sont cachées, puis un petit
-    # rocher sur chaque case cachée qui reste (aucune case bloquée sans décor : parc.js la prendrait pour de l'eau libre)
+    return sol_
+
+
+def poser_recif(grilles, bloque_, cache):
+    """Récif en quinconce dans la mer cachée : un gros rocher (2 × 2) dont les quatre cases sont cachées, puis un petit
+    rocher sur chaque case cachée qui reste (aucune case bloquée sans décor : parc.js la prendrait pour de l'eau libre)."""
+    decors_ = grilles["decors"]
     for y in range(-1, H, 2):
         for x in range(-1 + (y // 2) % 2, L, 2):
             cases = [(x + i, y + j) for i in (0, 1) for j in (0, 1)]
@@ -182,23 +190,46 @@ def taille(zone, libres_avant):
         bloque_[y][x] = True
         if not decors_[y][x]:
             decors_[y][x] = t("decors", tirage(x, y, 2).choice(PETITS_RECIFS))
-    # Rochers animés tout entiers dans la zone, hors de ce qui est caché
+
+
+def poser_rochers(grilles, bloque_, cache, zone):
+    """Rochers animés tout entiers dans la zone, hors de ce qui est caché."""
     for objet_ in objets:
         tuiles = objet_["tuiles"]
         if any((x, y) in cache or not dans(zone, x, y) or grilles[calque][y][x] for calque, x, y, _, _ in tuiles):
             continue
         ecrire(grilles, bloque_, tuiles)
-    perdues = libres_avant - terre
-    if perdues:
-        sys.exit(f"Zone {zone} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
-    # Toute la terre doit être reliée par la mer libre (sans rocher) : les nageurs vont d'un îlot à l'autre (sans terre,
-    # parc.js part de l'eau au centre de la vue de départ)
+
+
+def mer_libre(zone, terre, bloque_, decors_):
+    """Mer libre (sans rocher) de la zone. Toute la terre doit y être reliée : les nageurs vont d'un îlot à l'autre (sans
+    terre, parc.js part de l'eau au centre de la vue de départ)."""
     zx, zy, zl, zh = zone
     mer = {(x, y) for y in range(zy, zy + zh) for x in range(zx, zx + zl) if bloque_[y][x] and not decors_[y][x]}
     dx, dy, dl, dh = DEPART
-    if not terre <= relies(terre | mer) or (dx + dl // 2, dy + dh // 2) not in relies(terre | mer):
+    reliees = relies(terre | mer)
+    if not terre.issubset(reliees) or (dx + dl // 2, dy + dh // 2) not in reliees:
         sys.exit(f"Zone {zone} : un îlot, ou le centre de la vue de départ, n'est pas relié au reste par la mer libre")
-    return sol_, decors_, devant_, bloque_, terre, mer
+    return mer
+
+
+def taille(zone, libres_avant):
+    """Carte d'une taille : sol, décors, feuillages, cases bloquées et cases libres (la terre des îlots). libres_avant :
+    cases libres de la taille d'avant, qui doivent le rester (un agrandissement ne reprend rien)."""
+    cache = cache_de(zone)
+    forme = ilots_visibles(cache)
+    terre = terre_de(forme)
+    sol_ = sol_de(forme)
+    decors_ = [[0] * L for _ in range(H)]
+    devant_ = [[0] * L for _ in range(H)]
+    bloque_ = [[(x, y) not in terre for x in range(L)] for y in range(H)]
+    grilles = {"decors": decors_, "devant": devant_}
+    poser_recif(grilles, bloque_, cache)
+    poser_rochers(grilles, bloque_, cache, zone)
+    perdues = libres_avant - terre
+    if perdues:
+        sys.exit(f"Zone {zone} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
+    return sol_, decors_, devant_, bloque_, terre, mer_libre(zone, terre, bloque_, decors_)
 
 
 # --- Écriture des .tmx -----------------------------------------------------------------------

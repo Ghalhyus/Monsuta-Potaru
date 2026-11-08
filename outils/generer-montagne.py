@@ -136,7 +136,7 @@ for m in MASSIFS:
         forme2 = plateau(sx0, sx1, shaut, sbas, sgraine, relief=1.0)
         tuiles2, emprise2, pose2, plein2 = etage(forme2, sfaces, "sommet")
         # Le sommet tient sur le dessus du plateau, avec une case d'herbe tout autour
-        if not voisins8(emprise2) <= plein:
+        if not voisins8(emprise2).issubset(plein):
             sys.exit(f"Sommet {m['sommet']} : déborde du dessus de son plateau : {sorted(voisins8(emprise2) - plein)[:8]}")
         tuiles.update(tuiles2)
         sols.update(dict.fromkeys(plein2, "sommet"))
@@ -217,7 +217,7 @@ foret -= voisins8(eau)
 carte.lisiere = set(foret)
 for m in massifs:
     if voisins8(m["emprise"]) & foret:
-        sys.exit(f"Massif {sorted(m['emprise'])[0]} : dans la forêt de bordure : {sorted(voisins8(m['emprise']) & foret)[:8]}")
+        sys.exit(f"Massif {min(m['emprise'])} : dans la forêt de bordure : {sorted(voisins8(m['emprise']) & foret)[:8]}")
 
 
 # --- Sol : herbe de chaque étage, rivière à bordures automatiques ----------------------------
@@ -236,8 +236,7 @@ def milieu_eau(x, y):
 for x, y in eau:
     i = bordure(riviere_hors, x, y, *EAU[1:])
     sol[y][x] = t("eau", i) if i is not None else milieu_eau(x, y)
-for x, y in tuiles_massifs:
-    occupe_decors.add((x, y))
+occupe_decors.update(tuiles_massifs)
 
 
 # --- Objets ------------------------------------------------------------------------------
@@ -259,7 +258,11 @@ for pont_x in PONTS:
         sys.exit(f"Pont {pont_x} : la rivière n'est pas droite sous le pont")
     pont = []
     for y in range(haut_pont, bas_pont + 1):
-        rang = 0 if y == haut_pont else 2 if y == bas_pont else 1
+        rang = 1  # les planches du milieu
+        if y == haut_pont:
+            rang = 0
+        elif y == bas_pont:
+            rang = 2
         for i in range(3):
             tuile = (12, 13, 14, 21, 22, 23, 30, 31, 32)[rang * 3 + i]
             if rang == 1 and i != 1:
@@ -404,13 +407,41 @@ def relier(depart, passage):
     return relies_
 
 
+def poser_objets(grilles, bloque_, foret_, gardees):
+    """Objets du parc entier, s'ils sont tout entiers dans la zone, sans chevaucher la forêt ni bloquer une case libre
+    d'avant (<gardees>). Rend les cases qu'ils bloquent."""
+    bloques_objets = set()
+    for objet_ in objets:
+        tuiles = objet_["tuiles"]
+        if any((x, y) in foret_ or grilles[calque][y][x] or (bloquee and (x, y) in gardees) for calque, x, y, _, bloquee in tuiles):
+            continue
+        ecrire(grilles, bloque_, tuiles)
+        bloques_objets |= {(x, y) for _, x, y, _, bloquee in tuiles if bloquee}
+        for x, y in objet_.get("debloque", ()):
+            bloque_[y][x] = False
+    return bloques_objets
+
+
+def terre_a_pied(cases, decors_, bloque_):
+    """Tous les Pokémon marchent dans la vallée : la terre libre doit être reliée à pied (la rivière se traverse par le
+    pont) ; ce qui ne l'est pas : des buissons, personne n'y va. Rend la case de départ et la terre reliée."""
+    terre = {c for c in cases if not bloque_[c[1]][c[0]]}
+    depart = next(c for c in sorted(terre) if dans(DEPART, *c))
+    terre_reliee = relier(depart, terre)
+    for x, y in terre - terre_reliee:
+        bloque_[y][x] = True
+        if not decors_[y][x]:
+            decors_[y][x] = buisson(x, y)
+    return depart, terre_reliee
+
+
 def taille(zone, libres_avant, sommets_avant):
     """Carte d'une taille : sol, décors, feuillages, cases bloquées, et pour les volants les cases où se poser (terre,
     sommets) et celles qu'ils survolent. Ce qu'une taille montre, la suivante le montre encore (rien n'est repris)."""
     foret_ = foret_de(zone)
     for m in massifs:
         if m["taille"] <= ZONES.index(zone) + 1 and m["emprise"] & foret_:
-            sys.exit(f"Zone {zone} : massif {sorted(m['emprise'])[0]} pas montré tout entier (il déborde de la zone)")
+            sys.exit(f"Zone {zone} : massif {min(m['emprise'])} pas montré tout entier (il déborde de la zone)")
     eau_ = eau  # toute la rivière, à chaque taille (bloquée hors de la zone comme dedans)
     sol_ = sol_de(foret_)
     decors_ = [[0] * L for _ in range(H)]
@@ -425,29 +456,10 @@ def taille(zone, libres_avant, sommets_avant):
             decors_[y][x] = tuile
     planter_arbres(foret_, grilles, bloque_)
     planter_sous_bois(foret_, origine, grilles, bloque_)
-    # Objets du parc entier, s'ils sont tout entiers dans la zone, sans chevaucher la forêt ni bloquer une case libre
-    bloques_objets = set()
-    for objet_ in objets:
-        tuiles = objet_["tuiles"]
-        if any((x, y) in foret_ or grilles[calque][y][x] or (bloquee and ((x, y) in libres_avant or (x, y) in sommets_avant))
-               for calque, x, y, _, bloquee in tuiles):
-            continue
-        ecrire(grilles, bloque_, tuiles)
-        bloques_objets |= {(x, y) for _, x, y, _, bloquee in tuiles if bloquee}
-        for x, y in objet_.get("debloque", ()):
-            bloque_[y][x] = False
-    # Tous les Pokémon marchent dans la vallée : la terre libre doit être reliée à pied (la rivière se traverse par le
-    # pont) ; ce qui ne l'est pas : des buissons, personne n'y va
+    bloques_objets = poser_objets(grilles, bloque_, foret_, libres_avant | sommets_avant)
     zx, zy, zl, zh = zone
     cases = {(x, y) for y in range(zy, zy + zh) for x in range(zx, zx + zl)}
-    terre = {c for c in cases if not bloque_[c[1]][c[0]]}
-    depart = next(c for c in sorted(terre) if dans(DEPART, *c))
-    terre_reliee = relier(depart, terre)
-    for x, y in terre - terre_reliee:
-        bloque_[y][x] = True
-        if not decors_[y][x]:
-            decors_[y][x] = buisson(x, y)
-    terre = terre_reliee
+    depart, terre = terre_a_pied(cases, decors_, bloque_)
     # Seuls les volants montent : où ils se posent (les sommets) et où ils passent (rebords, flancs, eau libre) ; un sommet
     # qu'ils n'atteignent pas depuis la terre n'en est plus un
     sommets_ = {c for c in poses & cases if c not in foret_ and c not in bloques_objets}

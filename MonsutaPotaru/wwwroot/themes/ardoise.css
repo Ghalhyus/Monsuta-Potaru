@@ -19,10 +19,12 @@
     --ard-accent-dark: #c9620f;
     --ard-accent-ink: #a5520c; /* texte orange lisible sur fond clair */
     --ard-accent-soft: #fdf0e4;
+    --ard-accent-soft-rgb: 253, 240, 228; /* la même, pour les fonds des badges (bg-primary de Bootstrap) */
     --ard-accent-ring: rgba(232, 117, 26, .3);
     --ard-bg: #f2f4f7;
     --ard-line: #dfe3e9;
     --ard-head: #f6f7f9;
+    --ard-head-rgb: 246, 247, 249;
     --ard-ink: #1f2933;
     --ard-muted: #66727f;
     --ard-link: #1d6fa5;
@@ -344,8 +346,8 @@ a.ardoise-link.active {
     }
 }
 
-/* Téléphone : le menu s'ouvre par-dessus la page avec le bouton de la barre du haut ; le fil d'Ariane ne garde que la
-   page affichée. */
+/* Téléphone : le menu s'ouvre par-dessus la page avec le bouton de la barre du haut, et le fil d'Ariane ne garde que
+   la page affichée. */
 @media (max-width: 640.98px) {
     .ardoise-menu {
         position: fixed;
@@ -617,11 +619,11 @@ a.ardoise-link.active {
 [data-theme="ardoise"] main .page-header-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
 [data-theme="ardoise"] main .page-header-small .page-header-title { font-size: 1.25rem; }
 [data-theme="ardoise"] main .badge.page-header-count {
-    background-color: var(--ard-accent-soft) !important;
+    --bs-primary-rgb: var(--ard-accent-soft-rgb); /* fond de bg-primary */
     color: var(--ard-accent-ink);
     font-weight: 600;
 }
-[data-theme="ardoise"] main .page-header-description { margin-top: .35rem; max-width: 70rem; color: var(--ard-muted) !important; }
+[data-theme="ardoise"] main .page-header-description { margin-top: .35rem; max-width: 70rem; --bs-secondary-color: var(--ard-muted); /* text-muted */ }
 [data-theme="ardoise"] main .page-header-back { display: inline-block; margin-bottom: .15rem; }
 /* Page d'un autre joueur, sous son en-tête : un simple titre, pas un second bandeau */
 [data-theme="ardoise"] main .page-header-small { padding: 0; background: none; border: 0; box-shadow: none; }
@@ -650,7 +652,7 @@ a.ardoise-link.active {
     border-bottom: 1px solid var(--ard-line);
 }
 [data-theme="ardoise"] main .block-title { font-size: 1rem; font-weight: 600; }
-[data-theme="ardoise"] main .block-count { background-color: var(--ard-head) !important; color: var(--ard-muted) !important; border: 1px solid var(--ard-line); }
+[data-theme="ardoise"] main .block-count { --bs-primary-rgb: var(--ard-head-rgb); color: var(--ard-muted); border: 1px solid var(--ard-line); }
 [data-theme="ardoise"] main .block-body { padding: 1rem; }
 /* Contenu collé aux bords : listes et tableaux sans leur propre cadre */
 [data-theme="ardoise"] main .block-flush > .block-body { padding: 0; }

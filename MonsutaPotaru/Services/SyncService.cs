@@ -83,7 +83,8 @@ public sealed class SyncService(
         var now = DateTime.UtcNow;
         await db.SyncPairingCodes.Where(c => c.OwnerId == ownerId || c.ExpiresAt <= now).ExecuteDeleteAsync();
 
-        for (int attempt = 0; ; attempt++)
+        const int attempts = 4;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             var code = new string(RandomNumberGenerator.GetItems<char>(PairingAlphabet, PairingCodeLength));
             var entry = new SyncPairingCode { Code = code, OwnerId = ownerId, ExpiresAt = now + PairingCodeLifetime };
@@ -93,11 +94,12 @@ public sealed class SyncService(
                 await db.SaveChangesAsync();
                 return new SyncPairingInfo(FormatCode(code), entry.ExpiresAt);
             }
-            catch (DbUpdateException) when (attempt < 3) // code déjà donné à quelqu'un d'autre (très improbable) : un autre
+            catch (DbUpdateException) when (attempt < attempts - 1) // code déjà donné à quelqu'un d'autre (très improbable) : un autre
             {
                 db.Entry(entry).State = EntityState.Detached;
             }
         }
+        throw new System.Diagnostics.UnreachableException(); // la dernière erreur n'est pas rattrapée : elle remonte avant
     }
 
     /// <summary>Annule le code de liaison en cours de ce compte (« Annuler » dans « Synchronisation 3DS »).</summary>
@@ -150,7 +152,8 @@ public sealed class SyncService(
         await tx.CommitAsync();
 
         var account = await AccountNameAsync(db, pairing.OwnerId);
-        logger.LogInformation("Utilisateur {User} : 3DS « {Device} » reliée ({Id}).", pairing.OwnerId, device.Name, device.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : 3DS « {Device} » reliée ({Id}).", pairing.OwnerId, device.Name, device.Id);
         return new(true, $"3DS reliée au compte {account}.", token, account);
     }
 
@@ -194,7 +197,7 @@ public sealed class SyncService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var removed = await db.SyncDevices.Where(d => d.Id == deviceId && d.OwnerId == ownerId).ExecuteDeleteAsync();
-        if (removed > 0)
+        if (removed > 0 && logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Utilisateur {User} : 3DS {Id} retirée.", ownerId, deviceId);
         return removed > 0;
     }
@@ -292,10 +295,22 @@ public sealed class SyncService(
         SAV5B2W2 => ("ds", sav.Version switch { GameVersion.B2 => "B2", GameVersion.W2 => "W2", _ => "B2W2" }),
         SAV6XY or SAV6AO or SAV7SM or SAV7USUM => ("3ds", ((int)sav.Version).ToString()),
         SAV3 => ("gba", ((int)sav.Version).ToString()),
-        SAV1 g1 => ("gb", (g1.Version == GameVersion.YW ? "YW" : "RB") + (g1.Japanese ? "-JP" : "")),
-        SAV2 g2 => ("gb", (g2.Version == GameVersion.C ? "C" : "GS") + (g2.Japanese ? "-JP" : g2.Korean ? "-KO" : "")),
+        SAV1 g1 => ("gb", Gen1Family(g1)),
+        SAV2 g2 => ("gb", Gen2Family(g2)),
         _ => ("autre", ((int)sav.Version).ToString()),
     };
+
+    /// <summary>« RB », « YW », « RB-JP »...</summary>
+    private static string Gen1Family(SAV1 sav) => (sav.Version == GameVersion.YW ? "YW" : "RB") + (sav.Japanese ? "-JP" : "");
+
+    /// <summary>« GS », « C », « GS-JP », « C-KO »...</summary>
+    private static string Gen2Family(SAV2 sav)
+    {
+        var family = sav.Version == GameVersion.C ? "C" : "GS";
+        if (sav.Japanese)
+            return family + "-JP";
+        return sav.Korean ? family + "-KO" : family;
+    }
 
     /// <summary>
     /// Compare la sauvegarde de la console à celle du site, avant de la remplacer. Refusé si ce n'est pas la même partie
@@ -351,7 +366,8 @@ public sealed class SyncService(
             return null;
         await using (var db = await dbFactory.CreateDbContextAsync())
             await RecordLocationAsync(db, caller, saveId, key);
-        logger.LogInformation("Utilisateur {User} : sauvegarde {Id} récupérée par la 3DS {Device} ({Key}).", caller.OwnerId, saveId, caller.DeviceId, key);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : sauvegarde {Id} récupérée par la 3DS {Device} ({Key}).", caller.OwnerId, saveId, caller.DeviceId, key);
         return file;
     }
 
@@ -363,15 +379,19 @@ public sealed class SyncService(
             return;
         var location = await db.SyncSaveLocations.FirstOrDefaultAsync(l => l.DeviceId == caller.DeviceId && l.Key == key);
         if (location is null)
-            db.SyncSaveLocations.Add(location = new SyncSaveLocation { DeviceId = caller.DeviceId, Key = key });
+        {
+            location = new SyncSaveLocation { DeviceId = caller.DeviceId, Key = key };
+            db.SyncSaveLocations.Add(location);
+        }
         location.StoredSaveId = saveId;
         location.UpdatedAt = DateTime.UtcNow;
         try
         {
             await db.SaveChangesAsync();
         }
-        catch (DbUpdateException) // notée au même moment par une autre requête : la sienne vaut autant
+        catch (DbUpdateException)
         {
+            // notée au même moment par une autre requête : la sienne vaut autant
         }
     }
 
@@ -382,8 +402,9 @@ public sealed class SyncService(
 
     private SyncUploadResult Log(SyncCaller caller, string fileName, SyncUploadResult result)
     {
-        logger.LogInformation("Utilisateur {User} : envoi de « {File} » depuis la 3DS {Device} : {Status} {Refusal}.",
-            caller.OwnerId, fileName, caller.DeviceId, result.Status, result.Refusal);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : envoi de « {File} » depuis la 3DS {Device} : {Status} {Refusal}.",
+                caller.OwnerId, fileName, caller.DeviceId, result.Status, result.Refusal);
         return result;
     }
 

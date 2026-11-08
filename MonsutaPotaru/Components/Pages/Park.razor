@@ -16,7 +16,7 @@
 @inject PlayerService Players
 @inject DebugService Debug
 
-<PageTitle>@(!Visitor ? "Parc" : player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}")</PageTitle>
+<PageTitle>@PageName</PageTitle>
 
 @* De 20 à 80 Pokémon de la collection (selon les agrandissements achetés) se promènent sur une carte faite dans Tiled
    (wwwroot/parc/{carte}-{taille}.json, outils/generer-parc.py, generer-plage.py et carte-parc.py) : l'affichage (Phaser)
@@ -320,6 +320,17 @@ else
 }
 
 @code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Parc";
+            return player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}";
+        }
+    }
+
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/parc) : son parc, en lecture seule.</summary>

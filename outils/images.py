@@ -112,8 +112,17 @@ def pokemon_jobs():
         for mine, theirs in folders.items():
             jobs[f"pokemon/{mine}{number}.png"] = f"{POKEAPI}/{theirs}/{number}.png"
 
-    # Formes : PokéAPI range les variétés (formes régionales, Méga...) sous leur propre numéro (10091.png pour Rattata
-    # d'Alola), les autres formes sous <espèce>-<forme>.png (201-b.png). Le site les range toutes sous <espèce>-<forme>.
+    jobs.update(form_jobs(species, folders))
+    jobs.update(female_jobs(species, folders))
+    return jobs, []
+
+
+def form_jobs(species, folders):
+    """
+    Formes : PokéAPI range les variétés (formes régionales, Méga...) sous leur propre numéro (10091.png pour Rattata
+    d'Alola), les autres formes sous <espèce>-<forme>.png (201-b.png). Le site les range toutes sous <espèce>-<forme>.
+    """
+    jobs = {}
     pokemon = {p["id"]: p for p in table("pokemon")}
     species_names = {s["id"]: s["identifier"] for s in table("pokemon_species")}
     for form in table("pokemon_forms"):
@@ -126,13 +135,14 @@ def pokemon_jobs():
         sources = [f"{number}-{name}.png"] + ([f"{form['pokemon_id']}.png"] if form["is_default"] == "1" else [])
         for mine, theirs in folders.items():
             jobs[f"pokemon/{mine}{number}-{name}.png"] = [f"{POKEAPI}/{theirs}/{source}" for source in sources]
+    return jobs
 
-    # Femelles différentes des mâles (Pikachu, Rapasdepic, Hippodocus...), pour la forme de base seulement.
-    for s in table("pokemon_species"):
-        if s["has_gender_differences"] == "1" and int(s["id"]) <= species:
-            for mine, theirs in folders.items():
-                jobs[f"pokemon/{mine}femelle/{s['id']}.png"] = [f"{POKEAPI}/{theirs}/female/{s['id']}.png"]
-    return jobs, []
+
+def female_jobs(species, folders):
+    """Femelles différentes des mâles (Pikachu, Rapasdepic, Hippodocus...), pour la forme de base seulement."""
+    return {f"pokemon/{mine}femelle/{s['id']}.png": [f"{POKEAPI}/{theirs}/female/{s['id']}.png"]
+            for s in table("pokemon_species") if s["has_gender_differences"] == "1" and int(s["id"]) <= species
+            for mine, theirs in folders.items()}
 
 
 def item_jobs():
@@ -171,61 +181,11 @@ def donjon_jobs():
     autre, <CopyOf>, sans planche à elle), et un AnimData.xml réduit à ces animations, écrit tout de suite.
     """
     tracker = json.loads(get(f"{SPRITECOLLAB}/tracker.json"))
-    names = {}  # identifiant d'auteur (Discord) → nom affiché
-    for line in get(f"{SPRITECOLLAB}/credit_names.txt").decode("utf-8").splitlines()[1:]:
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            names[parts[1]] = parts[0]
-    folders = []  # (dossier, nom, auteurs)
-    portraits = []  # (dossier, nom, auteurs, portraits présents)
-    def authors_of(credit):
-        return [names.get(a, a) for a in [credit.get("primary", "")] + credit.get("secondary", []) if a]
-    def walk(node, path, title):
-        if node.get("sprite_complete", 0) > 0 and any(a in node.get("sprite_files", {}) for a in DONJON_ANIMATIONS):
-            folders.append((path, title, authors_of(node.get("sprite_credit", {}))))
-        if node.get("portrait_complete", 0) > 0 and (kept := [p for p in DONJON_PORTRAITS if p in node.get("portrait_files", {})]):
-            portraits.append((path, title, authors_of(node.get("portrait_credit", {})), kept))
-        for key, child in node.get("subgroups", {}).items():
-            walk(child, f"{path}/{key}", f"{title} {child.get('name', '')}".strip())
-    for number, node in tracker.items():
-        walk(node, number, node.get("name", ""))
-
-    def sheets(folder):
-        """Planches nécessaires d'un dossier, d'après son AnimData.xml (réduit et écrit s'il n'est pas déjà là)."""
-        local = OUT / "donjon" / folder / "AnimData.xml"
-        # Le fichier réduit note les animations demandées : si DONJON_ANIMATIONS a changé depuis, il est repris de
-        # SpriteCollab (une animation ajoutée n'y serait pas)
-        root = ElementTree.fromstring(local.read_bytes()) if local.exists() else None
-        if root is not None and root.get("animations") != ",".join(DONJON_ANIMATIONS):
-            root = None
-        reduce = root is None
-        try:
-            if reduce:
-                root = ElementTree.fromstring(get(f"{SPRITECOLLAB}/sprite/{folder}/AnimData.xml"))
-        except urllib.error.URLError as e:
-            return folder, None, f"{folder}/AnimData.xml : {e}"
-        anims = {a.findtext("Name"): a for a in root.iter("Anim")}
-        kept, todo = set(), [a for a in DONJON_ANIMATIONS if a in anims]
-        while todo:  # suit les <CopyOf> jusqu'aux animations qui ont une planche
-            name = todo.pop()
-            if name in kept:
-                continue
-            kept.add(name)
-            if (copy := anims[name].findtext("CopyOf")) and copy in anims:
-                todo.append(copy)
-        if reduce:
-            root.set("animations", ",".join(DONJON_ANIMATIONS))
-            container = root.find("Anims")
-            for anim in list(container):
-                if anim.findtext("Name") not in kept:
-                    container.remove(anim)
-            local.parent.mkdir(parents=True, exist_ok=True)
-            local.write_bytes(ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
-        return folder, [n for n in kept if not anims[n].findtext("CopyOf")], None
+    folders, portraits = donjon_folders(tracker, credit_names())
 
     jobs, missing = {}, []
     with ThreadPoolExecutor(16) as pool:
-        for folder, needed, error in pool.map(sheets, [f for f, _, _ in folders]):
+        for folder, needed, error in pool.map(donjon_sheets, [f for f, _, _ in folders]):
             if error:
                 missing.append(error)
                 continue
@@ -234,14 +194,105 @@ def donjon_jobs():
     for folder, _, _, kept in portraits:
         for name in kept:
             jobs[f"donjon/portraits/{folder}/{name}.png"] = [f"{SPRITECOLLAB}/portrait/{folder}/{name}.png"]
+    write_donjon_forms(tracker)
+    write_donjon_credits(folders, portraits)
+    return jobs, missing
 
-    # Formes de chaque espèce (nom SpriteCollab → dossier), pour que le site retrouve le sprite d'une forme (PokemonSprites).
+
+def credit_names():
+    """Identifiant d'auteur (Discord) → nom affiché, d'après credit_names.txt de SpriteCollab."""
+    names = {}
+    for line in get(f"{SPRITECOLLAB}/credit_names.txt").decode("utf-8").splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            names[parts[1]] = parts[0]
+    return names
+
+
+def authors_of(credit, names):
+    """Auteurs d'un dossier : le principal puis les autres, par leur nom affiché."""
+    return [names.get(a, a) for a in [credit.get("primary", "")] + credit.get("secondary", []) if a]
+
+
+def donjon_folders(tracker, names):
+    """Dossiers de SpriteCollab qui ont des sprites (dossier, nom, auteurs), et ceux qui ont des portraits (dossier, nom,
+    auteurs, portraits présents), dans l'ordre de tracker.json."""
+    folders, portraits = [], []
+    for number, node in tracker.items():
+        walk_tracker(node, number, node.get("name", ""), names, (folders, portraits))
+    return folders, portraits
+
+
+def walk_tracker(node, path, title, names, found):
+    """Parcourt un dossier de tracker.json et ses sous-dossiers (formes, chromatique, femelle)."""
+    folders, portraits = found
+    if node.get("sprite_complete", 0) > 0 and any(a in node.get("sprite_files", {}) for a in DONJON_ANIMATIONS):
+        folders.append((path, title, authors_of(node.get("sprite_credit", {}), names)))
+    if node.get("portrait_complete", 0) > 0 and (kept := [p for p in DONJON_PORTRAITS if p in node.get("portrait_files", {})]):
+        portraits.append((path, title, authors_of(node.get("portrait_credit", {}), names), kept))
+    for key, child in node.get("subgroups", {}).items():
+        walk_tracker(child, f"{path}/{key}", f"{title} {child.get('name', '')}".strip(), names, found)
+
+
+def donjon_sheets(folder):
+    """Planches nécessaires d'un dossier, d'après son AnimData.xml (réduit et écrit s'il n'est pas déjà là)."""
+    local = OUT / "donjon" / folder / "AnimData.xml"
+    root = reduced_anim_data(local)
+    reduce = root is None
+    if reduce:
+        try:
+            root = ElementTree.fromstring(get(f"{SPRITECOLLAB}/sprite/{folder}/AnimData.xml"))
+        except urllib.error.URLError as e:
+            return folder, None, f"{folder}/AnimData.xml : {e}"
+    anims = {a.findtext("Name"): a for a in root.iter("Anim")}
+    kept = kept_animations(anims)
+    if reduce:
+        write_reduced(root, kept, local)
+    return folder, [n for n in kept if not anims[n].findtext("CopyOf")], None
+
+
+def reduced_anim_data(local):
+    """AnimData.xml réduit déjà écrit, s'il note les mêmes animations que DONJON_ANIMATIONS ; sinon None (il est repris de
+    SpriteCollab : une animation ajoutée n'y serait pas)."""
+    root = ElementTree.fromstring(local.read_bytes()) if local.exists() else None
+    if root is not None and root.get("animations") != ",".join(DONJON_ANIMATIONS):
+        return None
+    return root
+
+
+def kept_animations(anims):
+    """Animations gardées : celles de DONJON_ANIMATIONS, et celles qu'elles copient (<CopyOf>) jusqu'à une planche."""
+    kept, todo = set(), [a for a in DONJON_ANIMATIONS if a in anims]
+    while todo:
+        name = todo.pop()
+        if name in kept:
+            continue
+        kept.add(name)
+        if (copy := anims[name].findtext("CopyOf")) and copy in anims:
+            todo.append(copy)
+    return kept
+
+
+def write_reduced(root, kept, local):
+    """Écrit l'AnimData.xml réduit aux animations gardées (et la liste des animations demandées)."""
+    root.set("animations", ",".join(DONJON_ANIMATIONS))
+    container = root.find("Anims")
+    for anim in [a for a in container if a.findtext("Name") not in kept]:
+        container.remove(anim)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
+
+
+def write_donjon_forms(tracker):
+    """Formes de chaque espèce (nom SpriteCollab → dossier), pour que le site retrouve le sprite d'une forme (PokemonSprites)."""
     forms = {number: {child.get("name", ""): key for key, child in node.get("subgroups", {}).items() if child.get("name")}
              for number, node in tracker.items()}
     (OUT / "donjon").mkdir(parents=True, exist_ok=True)
     (OUT / "donjon" / "formes.json").write_text(json.dumps({k: v for k, v in forms.items() if v}, ensure_ascii=False), encoding="utf-8")
 
-    # Auteurs de chaque dossier : la licence CC BY-NC 4.0 demande de les citer.
+
+def write_donjon_credits(folders, portraits):
+    """Auteurs de chaque dossier : la licence CC BY-NC 4.0 demande de les citer."""
     lines = ["Sprites animés : SpriteCollab (PMD Collab, https://sprites.pmdcollab.org), licence CC BY-NC 4.0.",
              f"Auteurs de chaque dossier de sprites (animations {', '.join(DONJON_ANIMATIONS)}) :", ""]
     lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors in folders]
@@ -249,7 +300,6 @@ def donjon_jobs():
     lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors, _ in portraits]
     (OUT / "donjon").mkdir(parents=True, exist_ok=True)
     (OUT / "donjon" / "credits.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return jobs, missing
 
 
 # Living dex : dossier des sprites de chaque groupe de jeux (dossier PokéAPI, avec fond transparent : « transparent » en 1re et

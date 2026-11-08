@@ -11,6 +11,8 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class RealSavesTests : IDisposable
 {
+    private static readonly bool[] NormalAndShiny = [false, true];
+
     private const string Owner = "sacha";
     private readonly TestDatabase _db = new(Owner);
 
@@ -105,7 +107,7 @@ public sealed class RealSavesTests : IDisposable
     public void Pokemon_AllSpeciesHaveAnImage()
     {
         var missing = Enumerable.Range(1, (int)Species.MAX_COUNT - 1)
-            .SelectMany(s => new[] { false, true }.Select(shiny => PokemonSprites.Url((ushort)s, 0, EntityContext.Gen9, false, 0, shiny)))
+            .SelectMany(s => NormalAndShiny.Select(shiny => PokemonSprites.Url((ushort)s, 0, EntityContext.Gen9, false, 0, shiny)))
             .Where(url => !File.Exists(Path.Combine(WebRootWithImages(), url)))
             .ToList();
         Assert.True(missing.Count == 0, $"images manquantes (outils/images.py) : {string.Join(", ", missing.Take(10))}");

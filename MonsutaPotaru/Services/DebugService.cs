@@ -61,7 +61,8 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
             }
         }
         mode.Set(userId, active);
-        logger.LogInformation("Compte {User} : mode debug {State}.", userId, active ? "activé" : "désactivé");
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : mode debug {State}.", userId, active ? "activé" : "désactivé");
         return new(true, active
             ? "Mode debug activé jusqu'à ta déconnexion : argent dans « Inventaire », taille du parc dans « Parc »."
             : "Mode debug désactivé.");
@@ -116,10 +117,9 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
             .Where(p => p.Id == parkId && p.OwnerId == userId && p.Expansions + delta >= 0 && p.Expansions + delta <= ParkService.MaxExpansions)
             .ExecuteUpdateAsync(p => p.SetProperty(x => x.Expansions, x => x.Expansions + delta));
         if (changed == 0)
-            return !await db.Parks.AnyAsync(p => p.Id == parkId && p.OwnerId == userId) ? new(false, "Ce parc n'existe pas.")
-                : new(false, grow
-                    ? $"Ce parc a déjà sa plus grande taille ({ParkService.CapacityOf(ParkService.MaxExpansions)} Pokémon)."
-                    : $"Ce parc a déjà sa plus petite taille ({ParkService.CapacityOf(0)} Pokémon).");
+            return new(false, await db.Parks.AnyAsync(p => p.Id == parkId && p.OwnerId == userId)
+                ? SizeLimitMessage(grow)
+                : "Ce parc n'existe pas.");
 
         var expansions = await db.Parks.Where(p => p.Id == parkId).Select(p => p.Expansions).FirstAsync();
         var capacity = ParkService.CapacityOf(expansions);
@@ -134,10 +134,19 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
             logger.LogInformation("Compte {User} : parc {Park} à {Expansions} agrandissements (mode debug, {Leaving} Pokémon retirés).",
                 userId, parkId, expansions, leaving.Count);
         var message = $"Parc {(grow ? "agrandi" : "réduit")} (mode debug) : il accueille maintenant {capacity} Pokémon.";
-        if (leaving.Count > 0)
-            message += leaving.Count == 1
-                ? " Le dernier arrivé est retourné dans ta collection."
-                : $" Les {leaving.Count} derniers arrivés sont retournés dans ta collection.";
-        return new(true, message, expansions);
+        return new(true, message + LeavingMessage(leaving.Count), expansions);
     }
+
+    /// <summary>Parc déjà à sa plus grande (<paramref name="grow"/>) ou à sa plus petite taille.</summary>
+    private static string SizeLimitMessage(bool grow) => grow
+        ? $"Ce parc a déjà sa plus grande taille ({ParkService.CapacityOf(ParkService.MaxExpansions)} Pokémon)."
+        : $"Ce parc a déjà sa plus petite taille ({ParkService.CapacityOf(0)} Pokémon).";
+
+    /// <summary>Fin du message d'un parc réduit : les Pokémon retournés dans la collection (rien s'il n'y en a pas).</summary>
+    private static string LeavingMessage(int count) => count switch
+    {
+        0 => "",
+        1 => " Le dernier arrivé est retourné dans ta collection.",
+        _ => $" Les {count} derniers arrivés sont retournés dans ta collection.",
+    };
 }

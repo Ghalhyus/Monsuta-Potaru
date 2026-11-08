@@ -63,12 +63,12 @@ public static class PokemonTraits
             return FormKind.Standard;
         var names = FormConverter.GetFormList(species, English.types, English.forms, GameInfo.GenderSymbolASCII, context);
         var name = form < names.Length ? names[form] : "";
-        return name.Contains("Alola") ? FormKind.Alola
-            : name.Contains("Galar") ? FormKind.Galar
-            : name.Contains("Hisui") ? FormKind.Hisui
-            : name.Contains("Paldea") ? FormKind.Paldea
-            : FormKind.Other;
+        return RegionalForms.Where(r => name.Contains(r.Region)).Select(r => r.Kind).DefaultIfEmpty(FormKind.Other).First();
     }
+
+    /// <summary>Formes régionales, d'après le nom anglais de la forme chez PKHeX.</summary>
+    private static readonly (string Region, FormKind Kind)[] RegionalForms =
+        [("Alola", FormKind.Alola), ("Galar", FormKind.Galar), ("Hisui", FormKind.Hisui), ("Paldea", FormKind.Paldea)];
 
     private static readonly GameStrings English = GameInfo.GetStrings("en");
 }

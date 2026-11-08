@@ -140,6 +140,16 @@ public sealed record LivingDexResult(bool Ok, string Message, int? Id = null);
 /// <summary>Jeux qui ont un living dex : 1re à 9e génération (Écarlate / Violet ; pas encore Légendes Z-A).</summary>
 public static class LivingDexGames
 {
+    // Noms des régions et dossiers employés plusieurs fois dans les tables ci-dessous.
+    private const string KantoRegion = "Kanto";
+    private const string JohtoRegion = "Johto";
+    private const string HoennRegion = "Hoenn";
+    private const string SinnohRegion = "Sinnoh";
+    private const string AlolaRegion = "Alola";
+    private const string GalarRegion = "Galar";
+    private const string PaldeaRegion = "Paldea";
+    private const string BlackWhiteSprites = "images/livingdex/noire-blanche/";
+
     private static readonly ushort[] Kanto = Enumerable.Range(1, 151).Select(n => (ushort)n).ToArray();
 
     /// <summary>
@@ -423,7 +433,7 @@ public static class LivingDexGames
         144, 145, 146, 638, 639, 640, 896, 897, 898,
     ];
 
-    /// <summary>Numéro de chaque Pokémon de <see cref="Galar"/> dans le Pokédex du jeu où il apparaît en premier.</summary>
+    /// <summary>Numéro de chaque Pokémon de <see cref=GalarRegion/> dans le Pokédex du jeu où il apparaît en premier.</summary>
     private static readonly int[] GalarNumbers =
     [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -452,7 +462,7 @@ public static class LivingDexGames
         202, 203, 204, 205, 206, 207, 208, 209, 210,
     ];
 
-    private static readonly (string Name, int Count)[] GalarSections = [("Galar", 400), ("Isolarmure", 110), ("Couronneige", 74)];
+    private static readonly (string Name, int Count)[] GalarSections = [(GalarRegion, 400), ("Isolarmure", 110), ("Couronneige", 74)];
 
     /// <summary>Espèces qu'Épée et Bouclier peuvent contenir (664 : PKHeX, sous n'importe quelle forme).</summary>
     private static readonly ushort[] SwordShieldNational = Enumerable.Range(1, 898).Select(n => (ushort)n)
@@ -495,7 +505,7 @@ public static class LivingDexGames
         813, 814, 815, 816, 817, 818, 1020, 1021, 1023, 1022, 1024, 1009, 1010, 1025,
     ];
 
-    /// <summary>Numéro de chaque Pokémon de <see cref="Paldea"/> dans le Pokédex du jeu où il apparaît en premier.</summary>
+    /// <summary>Numéro de chaque Pokémon de <see cref=PaldeaRegion/> dans le Pokédex du jeu où il apparaît en premier.</summary>
     private static readonly int[] PaldeaNumbers =
     [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -527,7 +537,7 @@ public static class LivingDexGames
         230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
     ];
 
-    private static readonly (string Name, int Count)[] PaldeaSections = [("Paldea", 400), ("Septentria", 99), ("Myrtille", 165)];
+    private static readonly (string Name, int Count)[] PaldeaSections = [(PaldeaRegion, 400), ("Septentria", 99), ("Myrtille", 165)];
 
     /// <summary>Espèces qu'Écarlate et Violet peuvent contenir (733 : PKHeX, sous n'importe quelle forme).</summary>
     private static readonly ushort[] ScarletVioletNational = Enumerable.Range(1, 1025).Select(n => (ushort)n)
@@ -555,67 +565,67 @@ public static class LivingDexGames
     // Dossiers et fichiers : à garder en accord avec outils/images.py (LIVINGDEX_SPRITES, LIVINGDEX_COVERS).
     public static readonly IReadOnlyList<LivingDexGameInfo> All =
     [
-        new(LivingDexGame.Red, "Pokémon Rouge", "images/livingdex/jaquettes/rouge.png", "images/livingdex/rouge-bleu/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Blue, "Pokémon Bleu", "images/livingdex/jaquettes/bleu.png", "images/livingdex/rouge-bleu/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Yellow, "Pokémon Jaune", "images/livingdex/jaquettes/jaune.png", "images/livingdex/jaune/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Gold, "Pokémon Or", "images/livingdex/jaquettes/or.png", "images/livingdex/or/", 2, "Johto", Johto, 251),
-        new(LivingDexGame.Silver, "Pokémon Argent", "images/livingdex/jaquettes/argent.png", "images/livingdex/argent/", 2, "Johto", Johto, 251),
-        new(LivingDexGame.Crystal, "Pokémon Cristal", "images/livingdex/jaquettes/cristal.png", "images/livingdex/cristal/", 2, "Johto", Johto, 251),
+        new(LivingDexGame.Red, "Pokémon Rouge", "images/livingdex/jaquettes/rouge.png", "images/livingdex/rouge-bleu/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Blue, "Pokémon Bleu", "images/livingdex/jaquettes/bleu.png", "images/livingdex/rouge-bleu/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Yellow, "Pokémon Jaune", "images/livingdex/jaquettes/jaune.png", "images/livingdex/jaune/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Gold, "Pokémon Or", "images/livingdex/jaquettes/or.png", "images/livingdex/or/", 2, JohtoRegion, Johto, 251),
+        new(LivingDexGame.Silver, "Pokémon Argent", "images/livingdex/jaquettes/argent.png", "images/livingdex/argent/", 2, JohtoRegion, Johto, 251),
+        new(LivingDexGame.Crystal, "Pokémon Cristal", "images/livingdex/jaquettes/cristal.png", "images/livingdex/cristal/", 2, JohtoRegion, Johto, 251),
         // 3e génération : Rubis et Saphir ont les mêmes sprites, Rouge Feu et Vert Feuille aussi (Deoxys à part).
-        new(LivingDexGame.Ruby, "Pokémon Rubis", "images/livingdex/jaquettes/rubis.png", "images/livingdex/rubis-saphir/", 3, "Hoenn", Hoenn, 386),
-        new(LivingDexGame.Sapphire, "Pokémon Saphir", "images/livingdex/jaquettes/saphir.png", "images/livingdex/rubis-saphir/", 3, "Hoenn", Hoenn, 386),
-        new(LivingDexGame.Emerald, "Pokémon Émeraude", "images/livingdex/jaquettes/emeraude.png", "images/livingdex/emeraude/", 3, "Hoenn", Hoenn, 386,
+        new(LivingDexGame.Ruby, "Pokémon Rubis", "images/livingdex/jaquettes/rubis.png", "images/livingdex/rubis-saphir/", 3, HoennRegion, Hoenn, 386),
+        new(LivingDexGame.Sapphire, "Pokémon Saphir", "images/livingdex/jaquettes/saphir.png", "images/livingdex/rubis-saphir/", 3, HoennRegion, Hoenn, 386),
+        new(LivingDexGame.Emerald, "Pokémon Émeraude", "images/livingdex/jaquettes/emeraude.png", "images/livingdex/emeraude/", 3, HoennRegion, Hoenn, 386,
             DeoxysForm: 3),
         new(LivingDexGame.FireRed, "Pokémon Rouge Feu", "images/livingdex/jaquettes/rouge-feu.png", "images/livingdex/rouge-feu-vert-feuille/", 3,
-            "Kanto", Kanto, 386, DeoxysForm: 1),
+            KantoRegion, Kanto, 386, DeoxysForm: 1),
         new(LivingDexGame.LeafGreen, "Pokémon Vert Feuille", "images/livingdex/jaquettes/vert-feuille.png", "images/livingdex/rouge-feu-vert-feuille/", 3,
-            "Kanto", Kanto, 386, DeoxysForm: 2),
+            KantoRegion, Kanto, 386, DeoxysForm: 2),
         // 4e génération : Diamant et Perle ont les mêmes sprites, HeartGold et SoulSilver aussi.
-        new(LivingDexGame.Diamond, "Pokémon Diamant", "images/livingdex/jaquettes/diamant.png", "images/livingdex/diamant-perle/", 4, "Sinnoh", Sinnoh, 493),
-        new(LivingDexGame.Pearl, "Pokémon Perle", "images/livingdex/jaquettes/perle.png", "images/livingdex/diamant-perle/", 4, "Sinnoh", Sinnoh, 493),
-        new(LivingDexGame.Platinum, "Pokémon Platine", "images/livingdex/jaquettes/platine.png", "images/livingdex/platine/", 4, "Sinnoh", SinnohPlatinum, 493),
+        new(LivingDexGame.Diamond, "Pokémon Diamant", "images/livingdex/jaquettes/diamant.png", "images/livingdex/diamant-perle/", 4, SinnohRegion, Sinnoh, 493),
+        new(LivingDexGame.Pearl, "Pokémon Perle", "images/livingdex/jaquettes/perle.png", "images/livingdex/diamant-perle/", 4, SinnohRegion, Sinnoh, 493),
+        new(LivingDexGame.Platinum, "Pokémon Platine", "images/livingdex/jaquettes/platine.png", "images/livingdex/platine/", 4, SinnohRegion, SinnohPlatinum, 493),
         new(LivingDexGame.HeartGold, "Pokémon Or HeartGold", "images/livingdex/jaquettes/heartgold.png", "images/livingdex/heartgold-soulsilver/", 4,
-            "Johto", JohtoHgss, 493),
+            JohtoRegion, JohtoHgss, 493),
         new(LivingDexGame.SoulSilver, "Pokémon Argent SoulSilver", "images/livingdex/jaquettes/soulsilver.png", "images/livingdex/heartgold-soulsilver/", 4,
-            "Johto", JohtoHgss, 493),
+            JohtoRegion, JohtoHgss, 493),
         // 5e génération : PokéAPI n'a que les sprites de Noire / Blanche, repris par Noire 2 / Blanche 2.
-        new(LivingDexGame.Black, "Pokémon Noire", "images/livingdex/jaquettes/noire.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova, 649,
+        new(LivingDexGame.Black, "Pokémon Noire", "images/livingdex/jaquettes/noire.png", BlackWhiteSprites, 5, "Unys", Unova, 649,
             RegionalStart: 0),
-        new(LivingDexGame.White, "Pokémon Blanche", "images/livingdex/jaquettes/blanche.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova, 649,
+        new(LivingDexGame.White, "Pokémon Blanche", "images/livingdex/jaquettes/blanche.png", BlackWhiteSprites, 5, "Unys", Unova, 649,
             RegionalStart: 0),
-        new(LivingDexGame.Black2, "Pokémon Noire 2", "images/livingdex/jaquettes/noire-2.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova2, 649,
+        new(LivingDexGame.Black2, "Pokémon Noire 2", "images/livingdex/jaquettes/noire-2.png", BlackWhiteSprites, 5, "Unys", Unova2, 649,
             RegionalStart: 0),
-        new(LivingDexGame.White2, "Pokémon Blanche 2", "images/livingdex/jaquettes/blanche-2.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova2, 649,
+        new(LivingDexGame.White2, "Pokémon Blanche 2", "images/livingdex/jaquettes/blanche-2.png", BlackWhiteSprites, 5, "Unys", Unova2, 649,
             RegionalStart: 0),
         // 6e génération : les images de la collection (pas de sprites du jeu, SpriteFolder null).
         new(LivingDexGame.X, "Pokémon X", "images/livingdex/jaquettes/x.png", null, 6, "Kalos", Kalos, 721, Sections: KalosSections),
         new(LivingDexGame.Y, "Pokémon Y", "images/livingdex/jaquettes/y.png", null, 6, "Kalos", Kalos, 721, Sections: KalosSections),
-        new(LivingDexGame.OmegaRuby, "Pokémon Rubis Oméga", "images/livingdex/jaquettes/rubis-omega.png", null, 6, "Hoenn", HoennOras, 721),
-        new(LivingDexGame.AlphaSapphire, "Pokémon Saphir Alpha", "images/livingdex/jaquettes/saphir-alpha.png", null, 6, "Hoenn", HoennOras, 721),
+        new(LivingDexGame.OmegaRuby, "Pokémon Rubis Oméga", "images/livingdex/jaquettes/rubis-omega.png", null, 6, HoennRegion, HoennOras, 721),
+        new(LivingDexGame.AlphaSapphire, "Pokémon Saphir Alpha", "images/livingdex/jaquettes/saphir-alpha.png", null, 6, HoennRegion, HoennOras, 721),
         // 7e génération : les images de la collection aussi.
-        new(LivingDexGame.Sun, "Pokémon Soleil", "images/livingdex/jaquettes/soleil.png", null, 7, "Alola", Alola, 802),
-        new(LivingDexGame.Moon, "Pokémon Lune", "images/livingdex/jaquettes/lune.png", null, 7, "Alola", Alola, 802),
-        new(LivingDexGame.UltraSun, "Pokémon Ultra-Soleil", "images/livingdex/jaquettes/ultra-soleil.png", null, 7, "Alola", AlolaUltra, 807),
-        new(LivingDexGame.UltraMoon, "Pokémon Ultra-Lune", "images/livingdex/jaquettes/ultra-lune.png", null, 7, "Alola", AlolaUltra, 807),
-        new(LivingDexGame.LetsGoPikachu, "Pokémon Let's Go, Pikachu", "images/livingdex/jaquettes/lets-go-pikachu.png", null, 7, "Kanto",
+        new(LivingDexGame.Sun, "Pokémon Soleil", "images/livingdex/jaquettes/soleil.png", null, 7, AlolaRegion, Alola, 802),
+        new(LivingDexGame.Moon, "Pokémon Lune", "images/livingdex/jaquettes/lune.png", null, 7, AlolaRegion, Alola, 802),
+        new(LivingDexGame.UltraSun, "Pokémon Ultra-Soleil", "images/livingdex/jaquettes/ultra-soleil.png", null, 7, AlolaRegion, AlolaUltra, 807),
+        new(LivingDexGame.UltraMoon, "Pokémon Ultra-Lune", "images/livingdex/jaquettes/ultra-lune.png", null, 7, AlolaRegion, AlolaUltra, 807),
+        new(LivingDexGame.LetsGoPikachu, "Pokémon Let's Go, Pikachu", "images/livingdex/jaquettes/lets-go-pikachu.png", null, 7, KantoRegion,
             LetsGoKanto, 809, National: LetsGoKanto),
-        new(LivingDexGame.LetsGoEevee, "Pokémon Let's Go, Évoli", "images/livingdex/jaquettes/lets-go-evoli.png", null, 7, "Kanto",
+        new(LivingDexGame.LetsGoEevee, "Pokémon Let's Go, Évoli", "images/livingdex/jaquettes/lets-go-evoli.png", null, 7, KantoRegion,
             LetsGoKanto, 809, National: LetsGoKanto),
         // 8e génération : les images de la collection aussi.
-        new(LivingDexGame.Sword, "Pokémon Épée", "images/livingdex/jaquettes/epee.png", null, 8, "Galar", Galar, 898,
+        new(LivingDexGame.Sword, "Pokémon Épée", "images/livingdex/jaquettes/epee.png", null, 8, GalarRegion, Galar, 898,
             Sections: GalarSections, National: SwordShieldNational, RegionalNumbers: GalarNumbers),
-        new(LivingDexGame.Shield, "Pokémon Bouclier", "images/livingdex/jaquettes/bouclier.png", null, 8, "Galar", Galar, 898,
+        new(LivingDexGame.Shield, "Pokémon Bouclier", "images/livingdex/jaquettes/bouclier.png", null, 8, GalarRegion, Galar, 898,
             Sections: GalarSections, National: SwordShieldNational, RegionalNumbers: GalarNumbers),
         new(LivingDexGame.BrilliantDiamond, "Pokémon Diamant Étincelant", "images/livingdex/jaquettes/diamant-etincelant.png", null, 8,
-            "Sinnoh", Sinnoh, 493),
+            SinnohRegion, Sinnoh, 493),
         new(LivingDexGame.ShiningPearl, "Pokémon Perle Scintillante", "images/livingdex/jaquettes/perle-scintillante.png", null, 8,
-            "Sinnoh", Sinnoh, 493),
+            SinnohRegion, Sinnoh, 493),
         new(LivingDexGame.LegendsArceus, "Légendes Pokémon : Arceus", "images/livingdex/jaquettes/legendes-arceus.png", null, 8,
             "Hisui", Hisui, 905, National: [.. Hisui.Order()]),
         // 9e génération : les images de la collection aussi.
-        new(LivingDexGame.Scarlet, "Pokémon Écarlate", "images/livingdex/jaquettes/ecarlate.png", null, 9, "Paldea", Paldea, 1025,
+        new(LivingDexGame.Scarlet, "Pokémon Écarlate", "images/livingdex/jaquettes/ecarlate.png", null, 9, PaldeaRegion, Paldea, 1025,
             Sections: PaldeaSections, National: ScarletVioletNational, RegionalNumbers: PaldeaNumbers),
-        new(LivingDexGame.Violet, "Pokémon Violet", "images/livingdex/jaquettes/violet.png", null, 9, "Paldea", Paldea, 1025,
+        new(LivingDexGame.Violet, "Pokémon Violet", "images/livingdex/jaquettes/violet.png", null, 9, PaldeaRegion, Paldea, 1025,
             Sections: PaldeaSections, National: ScarletVioletNational, RegionalNumbers: PaldeaNumbers),
     ];
 
@@ -638,90 +648,108 @@ public static class LivingDexGames
     /// </summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav.Generation switch
     {
-        1 => sav.Version switch
-        {
-            GameVersion.YW => [LivingDexGame.Yellow],
-            GameVersion.RD => [LivingDexGame.Red],
-            GameVersion.BU or GameVersion.GN => [LivingDexGame.Blue], // Bleu japonais ou Vert : les sprites de Rouge / Bleu
-            _ => [LivingDexGame.Red, LivingDexGame.Blue], // RB (ou version inconnue)
-        },
-        2 => sav.Version switch
-        {
-            GameVersion.C => [LivingDexGame.Crystal],
-            GameVersion.GD => [LivingDexGame.Gold],
-            GameVersion.SI => [LivingDexGame.Silver],
-            GameVersion.GS => [LivingDexGame.Gold, LivingDexGame.Silver],
-            _ => [LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal], // version inconnue
-        },
-        3 => sav.Version switch
-        {
-            GameVersion.E => [LivingDexGame.Emerald],
-            GameVersion.R => [LivingDexGame.Ruby],
-            GameVersion.S => [LivingDexGame.Sapphire],
-            GameVersion.RS => [LivingDexGame.Ruby, LivingDexGame.Sapphire],
-            GameVersion.FR or GameVersion.LG or GameVersion.FRLG => [LivingDexGame.FireRed, LivingDexGame.LeafGreen],
-            _ => [], // Colosseum, XD
-        },
-        4 => sav.Version switch
-        {
-            GameVersion.Pt => [LivingDexGame.Platinum],
-            GameVersion.D => [LivingDexGame.Diamond],
-            GameVersion.P => [LivingDexGame.Pearl],
-            GameVersion.DP => [LivingDexGame.Diamond, LivingDexGame.Pearl],
-            GameVersion.HG => [LivingDexGame.HeartGold],
-            GameVersion.SS => [LivingDexGame.SoulSilver],
-            GameVersion.HGSS => [LivingDexGame.HeartGold, LivingDexGame.SoulSilver],
-            _ => [], // Battle Revolution
-        },
+        1 => GamesOfGeneration1(sav),
+        2 => GamesOfGeneration2(sav),
+        3 => GamesOfGeneration3(sav),
+        4 => GamesOfGeneration4(sav),
         // Les vraies sauvegardes disent leur jeu ; une sauvegarde vide de PKHeX répond « Any » : les deux jeux de son format.
-        5 => sav.Version switch
-        {
-            GameVersion.B => [LivingDexGame.Black],
-            GameVersion.W => [LivingDexGame.White],
-            GameVersion.B2 => [LivingDexGame.Black2],
-            GameVersion.W2 => [LivingDexGame.White2],
-            _ when sav is SAV5B2W2 => [LivingDexGame.Black2, LivingDexGame.White2],
-            _ => [LivingDexGame.Black, LivingDexGame.White],
-        },
-        6 => sav.Version switch
-        {
-            GameVersion.X => [LivingDexGame.X],
-            GameVersion.Y => [LivingDexGame.Y],
-            GameVersion.OR => [LivingDexGame.OmegaRuby],
-            GameVersion.AS => [LivingDexGame.AlphaSapphire],
-            _ when sav is SAV6AO => [LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire],
-            _ => [LivingDexGame.X, LivingDexGame.Y],
-        },
-        7 => sav.Version switch
-        {
-            GameVersion.SN => [LivingDexGame.Sun],
-            GameVersion.MN => [LivingDexGame.Moon],
-            GameVersion.US => [LivingDexGame.UltraSun],
-            GameVersion.UM => [LivingDexGame.UltraMoon],
-            GameVersion.GP => [LivingDexGame.LetsGoPikachu],
-            GameVersion.GE => [LivingDexGame.LetsGoEevee],
-            _ when sav is SAV7b => [LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee],
-            _ when sav is SAV7USUM => [LivingDexGame.UltraSun, LivingDexGame.UltraMoon],
-            _ => [LivingDexGame.Sun, LivingDexGame.Moon],
-        },
-        8 => sav.Version switch
-        {
-            GameVersion.SW => [LivingDexGame.Sword],
-            GameVersion.SH => [LivingDexGame.Shield],
-            GameVersion.BD => [LivingDexGame.BrilliantDiamond],
-            GameVersion.SP => [LivingDexGame.ShiningPearl],
-            _ when sav is SAV8LA => [LivingDexGame.LegendsArceus],
-            _ when sav is SAV8BS => [LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl],
-            _ => [LivingDexGame.Sword, LivingDexGame.Shield],
-        },
+        5 => GamesOfGeneration5(sav),
+        6 => GamesOfGeneration6(sav),
+        7 => GamesOfGeneration7(sav),
+        8 => GamesOfGeneration8(sav),
         // Légendes Z-A (9e génération aussi chez PKHeX) n'a pas encore de living dex.
-        9 when sav is SAV9SV => sav.Version switch
-        {
-            GameVersion.SL => [LivingDexGame.Scarlet],
-            GameVersion.VL => [LivingDexGame.Violet],
-            _ => [LivingDexGame.Scarlet, LivingDexGame.Violet],
-        },
+        9 when sav is SAV9SV => GamesOfGeneration9(sav),
         _ => [],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration1(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.YW => [LivingDexGame.Yellow],
+        GameVersion.RD => [LivingDexGame.Red],
+        GameVersion.BU or GameVersion.GN => [LivingDexGame.Blue], // Bleu japonais ou Vert : les sprites de Rouge / Bleu
+        _ => [LivingDexGame.Red, LivingDexGame.Blue], // RB (ou version inconnue)
+    };
+
+    private static LivingDexGame[] GamesOfGeneration2(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.C => [LivingDexGame.Crystal],
+        GameVersion.GD => [LivingDexGame.Gold],
+        GameVersion.SI => [LivingDexGame.Silver],
+        GameVersion.GS => [LivingDexGame.Gold, LivingDexGame.Silver],
+        _ => [LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal], // version inconnue
+    };
+
+    private static LivingDexGame[] GamesOfGeneration3(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.E => [LivingDexGame.Emerald],
+        GameVersion.R => [LivingDexGame.Ruby],
+        GameVersion.S => [LivingDexGame.Sapphire],
+        GameVersion.RS => [LivingDexGame.Ruby, LivingDexGame.Sapphire],
+        GameVersion.FR or GameVersion.LG or GameVersion.FRLG => [LivingDexGame.FireRed, LivingDexGame.LeafGreen],
+        _ => [], // Colosseum, XD
+    };
+
+    private static LivingDexGame[] GamesOfGeneration4(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.Pt => [LivingDexGame.Platinum],
+        GameVersion.D => [LivingDexGame.Diamond],
+        GameVersion.P => [LivingDexGame.Pearl],
+        GameVersion.DP => [LivingDexGame.Diamond, LivingDexGame.Pearl],
+        GameVersion.HG => [LivingDexGame.HeartGold],
+        GameVersion.SS => [LivingDexGame.SoulSilver],
+        GameVersion.HGSS => [LivingDexGame.HeartGold, LivingDexGame.SoulSilver],
+        _ => [], // Battle Revolution
+    };
+
+    private static LivingDexGame[] GamesOfGeneration5(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.B => [LivingDexGame.Black],
+        GameVersion.W => [LivingDexGame.White],
+        GameVersion.B2 => [LivingDexGame.Black2],
+        GameVersion.W2 => [LivingDexGame.White2],
+        _ when sav is SAV5B2W2 => [LivingDexGame.Black2, LivingDexGame.White2],
+        _ => [LivingDexGame.Black, LivingDexGame.White],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration6(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.X => [LivingDexGame.X],
+        GameVersion.Y => [LivingDexGame.Y],
+        GameVersion.OR => [LivingDexGame.OmegaRuby],
+        GameVersion.AS => [LivingDexGame.AlphaSapphire],
+        _ when sav is SAV6AO => [LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire],
+        _ => [LivingDexGame.X, LivingDexGame.Y],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration7(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SN => [LivingDexGame.Sun],
+        GameVersion.MN => [LivingDexGame.Moon],
+        GameVersion.US => [LivingDexGame.UltraSun],
+        GameVersion.UM => [LivingDexGame.UltraMoon],
+        GameVersion.GP => [LivingDexGame.LetsGoPikachu],
+        GameVersion.GE => [LivingDexGame.LetsGoEevee],
+        _ when sav is SAV7b => [LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee],
+        _ when sav is SAV7USUM => [LivingDexGame.UltraSun, LivingDexGame.UltraMoon],
+        _ => [LivingDexGame.Sun, LivingDexGame.Moon],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration8(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SW => [LivingDexGame.Sword],
+        GameVersion.SH => [LivingDexGame.Shield],
+        GameVersion.BD => [LivingDexGame.BrilliantDiamond],
+        GameVersion.SP => [LivingDexGame.ShiningPearl],
+        _ when sav is SAV8LA => [LivingDexGame.LegendsArceus],
+        _ when sav is SAV8BS => [LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl],
+        _ => [LivingDexGame.Sword, LivingDexGame.Shield],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration9(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SL => [LivingDexGame.Scarlet],
+        GameVersion.VL => [LivingDexGame.Violet],
+        _ => [LivingDexGame.Scarlet, LivingDexGame.Violet],
     };
 
     /// <summary>
@@ -811,7 +839,7 @@ public static class LivingDexGames
     private static IEnumerable<LivingDexSlot> Megas(LivingDexGameInfo game, ushort species) =>
         Enumerable.Range(1, Math.Max(0, FormCount(game, species) - 1)).Select(f => (byte)f)
             .Where(f => (FormInfo.IsMegaForm(species, f) || FormInfo.IsPrimalForm(species, f)) && Present(game, species, f))
-            .Select(f => (Form: f, Item: (ushort)ItemStorage9ZA.GetExpectedMegaStoneOrPrimalOrb(species, f)))
+            .Select(f => (Form: f, Item: ItemStorage9ZA.GetExpectedMegaStoneOrPrimalOrb(species, f)))
             .Where(m => m.Item == 0 || CanHold(game, m.Item))
             .Select(m => m.Item > 0
                 ? new LivingDexSlot(species, m.Form, AnyForm: true, MegaItem: m.Item, MegaInBag: IsLetsGo(game))
@@ -860,7 +888,7 @@ public static class LivingDexGames
             return [];
         var names = FormConverter.GetFormList(species, EnglishStrings.types, EnglishStrings.forms, GameInfo.GenderSymbolASCII, Context(game));
         return Enumerable.Range(1, Math.Max(0, FormCount(game, species) - 1)).Select(f => (byte)f)
-            .Where(f => f < names.Length && (names[f] is "Alola" or "Galar" or "Hisui" || names[f].StartsWith("Paldea"))
+            .Where(f => f < names.Length && (names[f] is AlolaRegion or GalarRegion or "Hisui" || names[f].StartsWith(PaldeaRegion))
                         && Present(game, species, f) && !FormInfo.IsBattleOnlyForm(species, f, game.Generation))
             .ToList();
     }
@@ -1017,8 +1045,7 @@ public static class LivingDexGames
         var forms = FormConverter.GetFormList(slot.Species, FrenchStrings.types, FrenchStrings.forms, GameInfo.GenderSymbolUnicode, Context(game));
         var form = slot.Form < forms.Length ? forms[slot.Form] : $"{slot.Form}";
         if (slot.MegaItem != 0 || slot.MegaMove != 0)
-            return FormInfo.IsPrimalForm(slot.Species, slot.Form) ? $"Primo-{species}"
-                : form.EndsWith(" X") || form.EndsWith(" Y") ? $"Méga-{species} {form[^1]}" : $"Méga-{species}";
+            return MegaName(slot, species, form);
         if (slot.Gigamax)
             return slot.Species == Urshifu ? $"{species} Gigamax ({FormLabel(slot.Species, form)})" : $"{species} Gigamax";
         return slot.Species switch
@@ -1031,13 +1058,25 @@ public static class LivingDexGames
             Alcremie when mode == LivingDexMode.Complete => $"{species} ({AlcremieCreams[Math.Min(slot.Form, (byte)(AlcremieCreams.Length - 1))]})",
             Zygarde when mode == LivingDexMode.Complete && game.Generation >= 7 => $"{species} ({FormLabel(slot.Species, form)})",
             Kyurem or Hoopa or Necrozma or Calyrex when slot.Form != 0 => $"{species} {form}",
-            _ when slot.Form != 0 && form is "Alola" or "Galar" or "Hisui" or "Paldea" => $"{species} {(form == "Alola" ? "d'" : "de ")}{form}",
+            _ when slot.Form != 0 && form is AlolaRegion or GalarRegion or "Hisui" or PaldeaRegion => RegionalName(species, form),
             _ when slot.Form != 0 && form.StartsWith("Paldea ") => $"{species} de Paldea (race {form[7..]})", // Tauros
             Pikachu when slot.FormsFrom != 0 => "Pikachu Cosplayeur",
             _ when slot.Form != 0 => $"{species} ({FormLabel(slot.Species, form)})",
             _ => species,
         };
     }
+
+    /// <summary>« Primo-Kyogre », « Méga-Dracaufeu X », « Méga-Rayquaza ».</summary>
+    private static string MegaName(LivingDexSlot slot, string species, string form)
+    {
+        if (FormInfo.IsPrimalForm(slot.Species, slot.Form))
+            return $"Primo-{species}";
+        return form.EndsWith(" X") || form.EndsWith(" Y") ? $"Méga-{species} {form[^1]}" : $"Méga-{species}";
+    }
+
+    /// <summary>« Rattata d'Alola », « Caninos de Hisui ».</summary>
+    private static string RegionalName(string species, string region) =>
+        region == AlolaRegion ? $"{species} d'{region}" : $"{species} de {region}";
 
     /// <summary>Crèmes de Charmilly (formes 0 à 8 ; PKHeX abrège : deux « Ruby »).</summary>
     private static readonly string[] AlcremieCreams =
@@ -1057,13 +1096,20 @@ public static class LivingDexGames
         Zygarde or Toxtricity or Dialga or Palkia or Enamorus => $"forme {form}",
         Urshifu => $"style {form}",
         Tatsugiri or Dudunsparce or Gimmighoul => $"forme {form}",
-        Squawkabilly => $"plumage {form switch { "Bleue" => "Bleu", "Blanche" => "Blanc", _ => form }}", // PKHeX : « Bleue », « Blanche »
-        Ogerpon => $"masque {form switch { "Puits" => "du Puits", "Fourneau" => "du Fourneau", "Pierre" => "de la Pierre", _ => form }}",
+        Squawkabilly => $"plumage {SquawkabillyColor(form)}",
+        Ogerpon => $"masque {OgerponMask(form)}",
         Minior => $"noyau {form.Replace("N-", "")}", // PKHeX : « N-Rouge »
         Pichu => "Troizépi", // PKHeX n'a que l'anglais (« Spiky »)
         Keldeo => "forme Décidée", // PKHeX : « Décidé »
         _ => form,
     };
+
+    /// <summary>Couleur de Tapatoès au masculin (PKHeX : « Bleue », « Blanche »).</summary>
+    private static string SquawkabillyColor(string form) => form switch { "Bleue" => "Bleu", "Blanche" => "Blanc", _ => form };
+
+    /// <summary>Masque d'Ogerpon : « du Puits », « du Fourneau », « de la Pierre ».</summary>
+    private static string OgerponMask(string form) =>
+        form switch { "Puits" => "du Puits", "Fourneau" => "du Fourneau", "Pierre" => "de la Pierre", _ => form };
 
     /// <summary>
     /// Image de la même forme dans la collection : celle des cases à partir de la 6e génération, et le remplacement d'un
@@ -1248,7 +1294,8 @@ public sealed class LivingDexService(
         {
             return new(false, $"Tu as déjà un {name}.");
         }
-        logger.LogInformation("Utilisateur {User} : {Game} créé.", ownerId, name);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : {Game} créé.", ownerId, name);
         return new(true, $"{LivingDexGames.Get(game).Name} créé.", dex.Id);
     }
 
@@ -1300,7 +1347,8 @@ public sealed class LivingDexService(
         {
             return new(false, $"Tu as déjà un living dex {name}, ou cette sauvegarde en a déjà un.");
         }
-        logger.LogInformation("Utilisateur {User} : living dex {Game} créé sur la sauvegarde {Save}.", ownerId, game, saveId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : living dex {Game} créé sur la sauvegarde {Save}.", ownerId, game, saveId);
         return new(true, $"Living dex {name} créé.", dex.Id);
     }
 
@@ -1374,38 +1422,58 @@ public sealed class LivingDexService(
         var slots = LivingDexGames.Slots(game, mode);
         var bag = slots.Any(s => s.KeyItem != 0 || s.MegaInBag) ? await BagItemsAsync(db, saveId) : new HashSet<int>();
 
-        var megaCopies = new Dictionary<int, OwnedCopy>(); // index de la case Méga ou Gigamax → son exemplaire
+        var megaCopies = MegaCopies(slots, owned);
+        var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
+        var copies = new SlotCopies(available, megaCopies, BagMegas(slots, available, bag), bag);
+        return slots.Select((slot, index) => Entry(game, mode, slot, index, copies)).ToList();
+    }
+
+    /// <summary>Exemplaires trouvés pour les cases (voir <see cref="EntriesAsync"/>).</summary>
+    private sealed record SlotCopies(List<OwnedCopy> Available, Dictionary<int, OwnedCopy> MegaCopies,
+        Dictionary<int, (OwnedCopy? Copy, string Note)> BagMegas, IReadOnlySet<int> Bag);
+
+    /// <summary>Case Méga ou Gigamax (index) → son exemplaire, pris en premier : il faut un exemplaire de plus pour chacune.</summary>
+    private static Dictionary<int, OwnedCopy> MegaCopies(IReadOnlyList<LivingDexSlot> slots, List<OwnedCopy> owned)
+    {
+        var megaCopies = new Dictionary<int, OwnedCopy>();
         for (var i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
             if (slot.MegaItem == 0 && slot.MegaMove == 0 && !slot.Gigamax || slot.MegaInBag)
                 continue;
-            var copy = owned.FirstOrDefault(p => p.Species == slot.Species && !megaCopies.ContainsValue(p)
-                && (slot.Gigamax ? p.CanGigantamax && LivingDexGames.Fills(slot, p.Species, p.Form, LivingDexMode.Complete)
-                    : slot.MegaItem != 0 ? p.HeldItem == slot.MegaItem : p.KnowsMegaMove));
+            var copy = owned.FirstOrDefault(p => p.Species == slot.Species && !megaCopies.ContainsValue(p) && FillsSpecial(slot, p));
             if (copy is not null)
                 megaCopies[i] = copy;
         }
-        var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
-        var bagMegas = BagMegas(slots, available, bag);
+        return megaCopies;
+    }
 
-        return slots.Select((slot, index) =>
+    /// <summary>L'exemplaire convient-il à cette case Méga ou Gigamax (gemme tenue, capacité connue, facteur Gigamax) ?</summary>
+    private static bool FillsSpecial(LivingDexSlot slot, OwnedCopy p)
+    {
+        if (slot.Gigamax)
+            return p.CanGigantamax && LivingDexGames.Fills(slot, p.Species, p.Form, LivingDexMode.Complete);
+        return slot.MegaItem != 0 ? p.HeldItem == slot.MegaItem : p.KnowsMegaMove;
+    }
+
+    /// <summary>Case du living dex : son exemplaire (ou sa note s'il manque), son nom, son image.</summary>
+    private static LivingDexEntry Entry(LivingDexGameInfo game, LivingDexMode mode, LivingDexSlot slot, int index, SlotCopies copies)
+    {
+        var (copy, note) = slot switch
         {
-            var (copy, note) = slot switch
-            {
-                { MegaInBag: true } => bagMegas[index],
-                { MegaItem: not 0 } or { MegaMove: not 0 } or { Gigamax: true } =>
-                    (megaCopies.GetValueOrDefault(index), MegaNote(slot, megaCopies.ContainsKey(index))),
-                { KeyItem: not 0 } => FindWithItem(available, slot, mode, bag),
-                _ => (Find(available, slot, mode), null),
-            };
-            if (copy is null && slot.Hint is not null)
-                note = slot.Hint;
-            var (section, number) = LivingDexGames.RegionalNumber(game, index);
-            return new LivingDexEntry(mode == LivingDexMode.Regional ? number : slot.Species, slot.Species, slot.Form,
-                LivingDexGames.Name(game, slot, mode), LivingDexGames.Sprite(game, slot), copy?.Id, copy?.Location,
-                LivingDexGames.Fallback(game, slot), note, mode == LivingDexMode.Regional ? section : null);
-        }).ToList();
+            { MegaInBag: true } => copies.BagMegas[index],
+            { MegaItem: not 0 } or { MegaMove: not 0 } or { Gigamax: true } =>
+                (copies.MegaCopies.GetValueOrDefault(index), MegaNote(slot, copies.MegaCopies.ContainsKey(index))),
+            { KeyItem: not 0 } => FindWithItem(copies.Available, slot, mode, copies.Bag),
+            _ => (Find(copies.Available, slot, mode), null),
+        };
+        if (copy is null && slot.Hint is not null)
+            note = slot.Hint;
+        var (section, number) = LivingDexGames.RegionalNumber(game, index);
+        var regional = mode == LivingDexMode.Regional;
+        return new LivingDexEntry(regional ? number : slot.Species, slot.Species, slot.Form,
+            LivingDexGames.Name(game, slot, mode), LivingDexGames.Sprite(game, slot), copy?.Id, copy?.Location,
+            LivingDexGames.Fallback(game, slot), note, regional ? section : null);
     }
 
     /// <summary>
@@ -1414,9 +1482,16 @@ public sealed class LivingDexService(
     /// </summary>
     private static string MegaNote(LivingDexSlot slot, bool filled)
     {
-        var condition = slot.Gigamax ? "avec le facteur Gigamax"
-            : slot.MegaItem != 0 ? $"avec {FrenchStrings.itemlist[slot.MegaItem]}" : $"qui connaît {FrenchStrings.movelist[slot.MegaMove]}";
+        var condition = MegaCondition(slot);
         return filled ? condition : $"il faut un {FrenchStrings.specieslist[slot.Species]} de plus {condition}";
+    }
+
+    /// <summary>« avec le facteur Gigamax », « avec Dracaufite X », « qui connaît Draco-Ascension ».</summary>
+    private static string MegaCondition(LivingDexSlot slot)
+    {
+        if (slot.Gigamax)
+            return "avec le facteur Gigamax";
+        return slot.MegaItem != 0 ? $"avec {FrenchStrings.itemlist[slot.MegaItem]}" : $"qui connaît {FrenchStrings.movelist[slot.MegaMove]}";
     }
 
     /// <summary>
@@ -1457,7 +1532,7 @@ public sealed class LivingDexService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var deleted = await db.LivingDexes.Where(d => d.Id == id && d.OwnerId == ownerId).ExecuteDeleteAsync();
-        if (deleted > 0)
+        if (deleted > 0 && logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Utilisateur {User} : living dex {Id} supprimé.", ownerId, id);
         return deleted > 0;
     }

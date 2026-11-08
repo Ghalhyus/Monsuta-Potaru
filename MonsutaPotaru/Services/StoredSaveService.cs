@@ -142,7 +142,8 @@ public sealed class StoredSaveService(
         }
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : sauvegarde stockée {File} ({Count} Pokémon).", ownerId, fileName, save.PokemonCount);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : sauvegarde stockée {File} ({Count} Pokémon).", ownerId, fileName, save.PokemonCount);
         return new(StoreStatus.Ok, $"Sauvegarde « {fileName} » stockée : {save.PokemonCount} Pokémon ajoutés à ta collection.");
     }
 
@@ -206,7 +207,8 @@ public sealed class StoredSaveService(
         }
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : sauvegarde {Id} mise à jour ({Count} Pokémon).", ownerId, save.Id, save.PokemonCount);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : sauvegarde {Id} mise à jour ({Count} Pokémon).", ownerId, save.Id, save.PokemonCount);
         return new(StoreStatus.Ok, $"Sauvegarde mise à jour : {save.PokemonCount} Pokémon.");
     }
 
@@ -358,7 +360,8 @@ public sealed class StoredSaveService(
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        logger.LogInformation("Utilisateur {User} : sauvegarde {Id} supprimée.", ownerId, save.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : sauvegarde {Id} supprimée.", ownerId, save.Id);
     }
 
     /// <summary>
@@ -375,44 +378,56 @@ public sealed class StoredSaveService(
         var copies = await PokemonFingerprint.FindAsync(db, ownerId, pokemon.Select(p => PokemonFingerprint.Of(p.Pokemon)), exceptSaveId);
         if (PokemonFingerprint.RefusalMessage(copies, PokemonFingerprint.StoreAdvice) is not { } message)
             return null;
-        logger.LogInformation("Utilisateur {User} : sauvegarde refusée, {Count} Pokémon déjà dans le compte.", ownerId, copies.Count);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : sauvegarde refusée, {Count} Pokémon déjà dans le compte.", ownerId, copies.Count);
         return new(StoreStatus.Duplicate, message);
     }
 
-    public static IEnumerable<(PKM Pokemon, string Location)> ReadAllPokemon(SaveFile sav)
-    {
-        if (sav.HasParty)
-        {
-            for (int i = 0; i < sav.PartyCount; i++)
-                if (Valid(sav.GetPartySlotAtIndex(i)) is { } pk)
-                    yield return (pk, $"Équipe {i + 1}");
-        }
+    /// <summary>Pokémon de la sauvegarde : équipe, boîtes, puis les autres emplacements (pension, Boîte Combat...).</summary>
+    public static IEnumerable<(PKM Pokemon, string Location)> ReadAllPokemon(SaveFile sav) =>
+        PartyPokemon(sav).Concat(BoxPokemon(sav)).Concat(ExtraPokemon(sav));
 
-        if (sav.HasBox)
+    private static PKM? Valid(PKM? pk) => pk is null || pk.Species == 0 ? null : pk;
+
+    private static IEnumerable<(PKM Pokemon, string Location)> PartyPokemon(SaveFile sav)
+    {
+        if (!sav.HasParty)
+            yield break;
+        for (int i = 0; i < sav.PartyCount; i++)
         {
-            var named = sav as IBoxDetailName;
-            for (int b = 0; b < sav.BoxCount; b++)
+            if (Valid(sav.GetPartySlotAtIndex(i)) is { } pk)
+                yield return (pk, $"Équipe {i + 1}");
+        }
+    }
+
+    private static IEnumerable<(PKM Pokemon, string Location)> BoxPokemon(SaveFile sav)
+    {
+        if (!sav.HasBox)
+            yield break;
+        var named = sav as IBoxDetailName;
+        for (int b = 0; b < sav.BoxCount; b++)
+        {
+            var name = named?.GetBoxName(b);
+            var boxName = string.IsNullOrWhiteSpace(name) ? $"Boîte {b + 1}" : name;
+            for (int s = 0; s < sav.BoxSlotCount; s++)
             {
-                var name = named?.GetBoxName(b);
-                var boxName = string.IsNullOrWhiteSpace(name) ? $"Boîte {b + 1}" : name;
-                for (int s = 0; s < sav.BoxSlotCount; s++)
-                    if (Valid(sav.GetBoxSlotAtIndex(b, s)) is { } pk)
-                        yield return (pk, $"{boxName}, case {s + 1}");
+                if (Valid(sav.GetBoxSlotAtIndex(b, s)) is { } pk)
+                    yield return (pk, $"{boxName}, case {s + 1}");
             }
         }
+    }
 
+    /// <summary>Emplacements hors équipe et boîtes, numérotés par genre (« Pension 1 », « Pension 2 »).</summary>
+    private static IEnumerable<(PKM Pokemon, string Location)> ExtraPokemon(SaveFile sav)
+    {
         var counts = new Dictionary<StorageSlotType, int>();
-        foreach (var slot in sav.GetExtraSlots(true))
+        foreach (var slot in sav.GetExtraSlots(true).Where(s => s.Type is not (StorageSlotType.Party or StorageSlotType.Box)))
         {
-            if (slot.Type is StorageSlotType.Party or StorageSlotType.Box)
-                continue; // déjà lus ci-dessus
             if (Valid(slot.Read(sav)) is not { } pk)
                 continue;
             counts[slot.Type] = counts.GetValueOrDefault(slot.Type) + 1;
             yield return (pk, $"{SlotTypeName(slot.Type)} {counts[slot.Type]}");
         }
-
-        static PKM? Valid(PKM? pk) => pk is null || pk.Species == 0 ? null : pk;
     }
 
     private static string SlotTypeName(StorageSlotType type) => type switch
@@ -426,7 +441,7 @@ public sealed class StoredSaveService(
     internal static bool TryRead(byte[] data, string fileName, out SaveFile sav)
     {
         // PKHeX peut modifier le tableau : on lui passe une copie pour stocker le fichier d'origine intact.
-        if (SaveUtil.TryGetSaveFile(data.ToArray(), out var parsed, fileName) && parsed is not null)
+        if (SaveUtil.TryGetSaveFile(data.ToArray(), out var parsed, fileName))
         {
             sav = parsed;
             return true;
@@ -482,7 +497,10 @@ public sealed class StoredSaveService(
         // Trace rattachée à la partie (et non à la sauvegarde stockée) : elle survit à une suppression.
         var modification = await db.SaveModifications.FindAsync(save.IdentityKey);
         if (modification is null)
-            db.SaveModifications.Add(modification = new SaveModification { IdentityKey = save.IdentityKey });
+        {
+            modification = new SaveModification { IdentityKey = save.IdentityKey };
+            db.SaveModifications.Add(modification);
+        }
         modification.PlayTimeSeconds = save.PlayTimeSeconds;
         modification.MoneyAfter = sav.Money;
         modification.DataHash = SaveModification.Hash(data);
