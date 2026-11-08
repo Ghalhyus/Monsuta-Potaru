@@ -46,6 +46,13 @@ Tests :
 dotnet test
 ```
 
+Trois sortes de tests (xUnit) : les **services** sur une base SQLite en mémoire (`TestDatabase`) ; les **pages et composants**
+Blazor rendus par [bUnit](https://bunit.dev) avec les vrais services (`PageTestContext` : compte connecté, JavaScript du navigateur
+simulé, deux joueurs sur la même page pour les échanges et les combats) ; le **site entier** démarré par `Program.cs`
+(`SiteFactory`, WebApplicationFactory : base, copies et clés dans un dossier temporaire, jamais `Data/app.db`) pour
+l'inscription, la connexion, les pages du compte (formulaires envoyés au serveur), le rendu serveur de chaque page et
+l'API de la 3DS. Couverture mesurée par SonarCloud (lignes et conditions) : environ 88 %, objectif 70 % (voir « CI/CD »).
+
 `exemple-blanc2.sav` est une sauvegarde de test (Pikachu + Évoli) pour essayer le site sans vraie partie.
 Pour la régénérer : `MONSUTA_POTARU_SAMPLE_OUT=chemin/fichier.sav dotnet test`.
 
@@ -1102,6 +1109,10 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
+| `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
+| `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs` | Pages et composants rendus par bUnit : Inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
 | `deploy/images-serveur.cmd` (`images-serveur.ps1`) | Remplit ou met à jour les images du serveur (`~/monsuta-potaru-images`) et redémarre le site |
@@ -1262,6 +1273,8 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |
 | [SQLite](https://sqlite.org) | Base de données | Domaine public |
 | [xUnit](https://xunit.net), [coverlet](https://github.com/coverlet-coverage/coverlet) | Tests, couverture des tests (envoyée à SonarCloud) | Apache-2.0, MIT |
+| [bUnit](https://bunit.dev) (Egil Hansen et contributeurs), avec [AngleSharp](https://anglesharp.github.io) | Tests des pages et composants Blazor (`PageTestContext`) ; AngleSharp lit aussi les pages HTML dans `SiteTests` | MIT, MIT |
+| [Microsoft.AspNetCore.Mvc.Testing](https://learn.microsoft.com/aspnet/core/test/integration-tests) (Microsoft) | Site entier démarré dans les tests (`SiteFactory`, WebApplicationFactory) | MIT |
 | [SonarScanner for .NET](https://github.com/SonarSource/sonar-scanner-msbuild) (SonarSource), [SonarCloud](https://sonarcloud.io) | Revue de la qualité du code dans la CI (`.github/workflows/ci.yml`), service en ligne gratuit pour les projets publics | LGPL-3.0 (scanner) |
 | [Caddy](https://caddyserver.com), [Docker](https://www.docker.com) | Mise en ligne (HTTPS, conteneurs) | Apache-2.0 |
 | [GitHub Actions](https://github.com/features/actions) : [actions/checkout](https://github.com/actions/checkout), [actions/setup-dotnet](https://github.com/actions/setup-dotnet) | Tests et déploiement (`.github/workflows/ci.yml`, `cd.yml`) | MIT |

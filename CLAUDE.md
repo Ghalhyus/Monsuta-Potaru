@@ -59,7 +59,10 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
 - Une valeur venue du navigateur (`<select>`, champ, `[JSInvokable]`) peut être trafiquée : le service revérifie
   (compte, amitié, visibilité). Détails et méthode de test : `docs/claude/multijoueurs.md`.
 - Tests : xUnit, base SQLite temporaire via `TestDatabase` ; sauvegardes fabriquées en mémoire
-  (`SaveSessionTests.CreateBw2Save`, `CreatePlatinumSave`, `GiveItems`).
+  (`SaveSessionTests.CreateBw2Save`, `CreatePlatinumSave`, `GiveItems`). Pages et composants : bUnit avec
+  `PageTestContext` (vrais services, JavaScript simulé, `RenderAs` pour un deuxième joueur) ; site entier (formulaires du
+  compte, API 3DS, `Program.cs`) : `SiteFactory`. Une page ajoutée ou modifiée a ses tests : couverture SonarCloud ≥ 70 %
+  (`docs/claude/ci-cd.md`).
 - Vraies sauvegardes de l'utilisateur dans `MonsutaPotaru.Tests/Sauvegardes/` (versionnées, exception à `*.sav` dans
   `.gitignore`) : `RealSavesTests` les passe toutes. Quand il en ajoute (fichiers bruts d'un émulateur, souvent sans
   extension) : les ranger sous un nom clair en `.sav` (`rubis-omega.sav`), les inspecter, lancer les tests, s'en servir

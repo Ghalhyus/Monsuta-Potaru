@@ -65,7 +65,7 @@ public sealed class TestDatabase : IDisposable
     }
 
     /// <summary>Seul ContentRootPath sert (chemin des copies de sécurité, absolu ici de toute façon).</summary>
-    private sealed class FakeEnvironment : IWebHostEnvironment
+    internal sealed class FakeEnvironment : IWebHostEnvironment
     {
         public string ApplicationName { get; set; } = "MonsutaPotaru.Tests";
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
