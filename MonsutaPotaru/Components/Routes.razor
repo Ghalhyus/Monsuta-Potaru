@@ -3,6 +3,8 @@
 <CascadingValue Name="SiteTheme" Value="Theme" IsFixed="true">
     <Router AppAssembly="typeof(Program).Assembly">
         <Found Context="routeData">
+            @* Joueur dont la page est affichée (MainLayout recrée la page quand il change, voir PageOwnerOf). *@
+            <CascadingValue Name="PageOwner" Value="PageOwnerOf(routeData)">
             <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
                 <NotAuthorized>
                     @if (context.User.Identity?.IsAuthenticated == true)
@@ -18,6 +20,7 @@
                     }
                 </NotAuthorized>
             </AuthorizeRouteView>
+            </CascadingValue>
             <FocusOnNavigate RouteData="routeData" Selector="h1" />
         </Found>
     </Router>
@@ -26,4 +29,12 @@
 @code {
     /// <summary>Clé du thème du compte (<c>SiteThemes</c>), posée par App.razor.</summary>
     [Parameter] public string? Theme { get; set; }
+
+    /// <summary>
+    /// Pseudo du joueur des pages /joueurs/{Pseudo}/... ; vide pour les pages du compte. Collection, Parc, Inventaire... ont
+    /// deux adresses (la sienne, celle d'un autre joueur) pour un même composant, que Blazor garde d'une adresse à l'autre :
+    /// sans clé, « Ma collection » depuis /joueurs/sacha/collection garderait la collection de sacha.
+    /// </summary>
+    public static string PageOwnerOf(RouteData routeData) =>
+        routeData.RouteValues.TryGetValue("Pseudo", out var pseudo) ? pseudo?.ToString() ?? "" : "";
 }

@@ -4,7 +4,7 @@
 @if (Theme == MonsutaPotaru.Services.SiteThemes.Ardoise)
 {
     <ArdoiseLayout>
-        <MonsutaPotaru.Components.Account.Shared.PseudoGuard>
+        <MonsutaPotaru.Components.Account.Shared.PseudoGuard @key="PageOwner">
             @Body
         </MonsutaPotaru.Components.Account.Shared.PseudoGuard>
     </ArdoiseLayout>
@@ -21,7 +21,7 @@ else
             </div>
 
             <article class="content">
-                <MonsutaPotaru.Components.Account.Shared.PseudoGuard>
+                <MonsutaPotaru.Components.Account.Shared.PseudoGuard @key="PageOwner">
                     @Body
                 </MonsutaPotaru.Components.Account.Shared.PseudoGuard>
             </article>
@@ -38,4 +38,11 @@ else
 @code {
     /// <summary>Clé du thème du compte, transmise par Routes.razor.</summary>
     [CascadingParameter(Name = "SiteTheme")] private string? Theme { get; set; }
+
+    /// <summary>
+    /// Joueur de la page (Routes.PageOwnerOf) : la clé recrée la page quand il change. Collection, Parc, Inventaire...
+    /// lisent le compte affiché une seule fois ; sans elle, « Ma collection » depuis la collection d'un autre joueur
+    /// garderait la sienne.
+    /// </summary>
+    [CascadingParameter(Name = "PageOwner")] private string? PageOwner { get; set; }
 }
