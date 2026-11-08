@@ -50,7 +50,8 @@ public static class BattleTeam
 
     /// <summary>
     /// Forme de Deoxys en 3e génération : celle du jeu (le Pokémon ne l'enregistre pas). Rouge Feu et Vert Feuille ont la même
-    /// sauvegarde : PKHeX répond « Rouge Feu », donc la forme Attaque.
+    /// sauvegarde : PKHeX répond « Rouge Feu » (forme Attaque), <see cref="SaveVersion"/> reconnaît Vert Feuille d'après ses
+    /// Pokémon (forme Défense).
     /// </summary>
     public static string DeoxysForme(GameVersion version) => version switch
     {

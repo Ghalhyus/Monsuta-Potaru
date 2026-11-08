@@ -443,11 +443,26 @@ public sealed class StoredSaveService(
         // PKHeX peut modifier le tableau : on lui passe une copie pour stocker le fichier d'origine intact.
         if (SaveUtil.TryGetSaveFile(data.ToArray(), out var parsed, fileName))
         {
+            SaveVersion.Refine(parsed); // Vert Feuille, que PKHeX prend pour Rouge Feu
             sav = parsed;
             return true;
         }
         sav = null!;
         return false;
+    }
+
+    /// <summary>
+    /// Renomme les sauvegardes de Vert Feuille enregistrées comme « Rouge Feu » avant <see cref="SaveVersion"/> ; appelé au
+    /// démarrage. Relit seulement les sauvegardes notées Rouge Feu (les vraies le restent, sans autre changement).
+    /// </summary>
+    public static async Task FillGameNamesAsync(ApplicationDbContext db, PokemonInfo info)
+    {
+        var fireRed = info.GameName(GameVersion.FR);
+        var saves = await db.StoredSaves.Where(s => s.Generation == 3 && s.GameName == fireRed).ToListAsync();
+        foreach (var save in saves)
+            if (TryRead(save.Data, save.FileName, out var sav))
+                save.GameName = info.GameName(sav);
+        await db.SaveChangesAsync();
     }
 
     private static StoreResult Invalid() => new(StoreStatus.Invalid, "Fichier non reconnu comme une sauvegarde Pokémon.");

@@ -6,6 +6,9 @@ README : « Living dex ». Jeux et modes : `LivingDexGames` (`Services/LivingDex
 - Son entrée dans `All` : jaquette, dossier de sprites, Pokédex régional, dernier numéro national.
 - `For(SaveFile)` : quelle sauvegarde. PKHeX ne distingue pas Rouge de Bleu, Or d'Argent, Rubis de Saphir, Rouge Feu de
   Vert Feuille, ni Diamant de Perle. HeartGold de SoulSilver, si (depuis PKHeX 26 : `soulsilver.sav` est reconnue SoulSilver).
+  Rouge Feu / Vert Feuille : `SaveVersion.Refine` (appelé par `StoredSaveService.TryRead` et `SaveSession.TryLoad`) met
+  `sav.Version` à LG d'après les Pokémon du dresseur ; `For` propose quand même les deux. Une sauvegarde lue directement
+  par `SaveUtil` (certains tests) reste FR. `SaveIdentity` force FR pour ne pas changer la clé.
 - Les formes du mode Complet (`Forms`) : régionales, Méga, Gigamax, d'aspect, lettres de Zarbi ; pas le sexe ;
   **seulement celles qu'une sauvegarde du jeu peut contenir** :
   - les formes de Morphéo n'existent qu'en combat ;

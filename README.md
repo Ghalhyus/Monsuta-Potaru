@@ -70,7 +70,7 @@ Pour simuler « j'ai rejoué un peu » et passer la règle anti-copie de « Mes 
 dépôt d'un Pokémon puis retour au même emplacement, stockage (tous ses Pokémon dans la collection), retrait d'argent,
 retrait de tous les objets du sac et du PC puis dépôt de retour (objets rares, CS et Cristaux Z intacts). Il suffit d'y ajouter un
 fichier pour qu'il soit testé ; sans le dossier, ces tests ne vérifient rien. Actuellement : Rouge, Bleu, Argent (partie
-randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu), SoulSilver, Noire (`noir.sav`), Noire 2, Rubis Oméga, Ultra-Soleil, Épée. SoulSilver : les blocs annexes
+randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu, `SaveVersion` reconnaît Vert Feuille d'après ses Pokémon), SoulSilver, Noire (`noir.sav`), Noire 2, Rubis Oméga, Ultra-Soleil, Épée. SoulSilver : les blocs annexes
 jamais écrits par le jeu (Tour de Combat, vidéos...) restent à zéro, sans somme de contrôle valide, et PKHeX marque à
 l'écriture toutes les boîtes comme modifiées : le fichier change une fois, puis plus. En 1re et 2e génération, le fichier réécrit n'est pas identique octet pour octet (le contenu l'est) :
 le jeu ne prépare ses boîtes qu'au premier changement de boîte et PKHeX les écrit vides en règle ; et une boîte y est une
@@ -365,6 +365,12 @@ reçu le nom actuel du fichier (migration `JournalFileNames`), sauf celles dont 
   par génération + jeu + ID dresseur / ID secret + nom du dresseur (`SaveIdentity`) ; c'est dissuasif, pas infaillible
   (PKHeX permet de modifier ces valeurs). Les jeux de 1re et 2e génération n'ont pas d'ID secret.
 - Tant qu'elle est stockée, la sauvegarde est **refusée dans « Transfert »** (au chargement et à la validation).
+- **Rouge Feu ou Vert Feuille** : les deux jeux ont le même format et PKHeX répond toujours « Rouge Feu ». Le site regarde
+  le jeu d'origine des Pokémon du dresseur (même nom, ID dresseur et ID secret ; pas ceux reçus par échange) : en majorité
+  de Vert Feuille, la sauvegarde est nommée Vert Feuille (et son Deoxys prend la forme Défense en combat). Sans Pokémon du
+  dresseur, elle reste Rouge Feu. Rien n'est écrit dans le fichier (`SaveVersion`, à chaque lecture). L'empreinte
+  (`SaveIdentity`) garde « Rouge Feu » pour les deux, pour ne pas changer au fil de la partie. Les sauvegardes stockées
+  avant sont renommées au démarrage (`StoredSaveService.FillGameNamesAsync`).
 - Une mise à jour avec moins de temps de jeu que la version stockée demande confirmation (ancienne copie ?).
 
 ### Doublons (vieille copie d'une sauvegarde)
@@ -821,7 +827,7 @@ Violet** ; pas encore Légendes Z-A).
   choisi le montre encore ; un jeu qui a déjà son living dex est grisé), puis une de ses **sauvegardes** stockées pas encore liées. PKHeX reconnaît Jaune, Cristal,
   Émeraude, Platine, et depuis PKHeX 26 HeartGold et SoulSilver, mais pas Rouge de Bleu, Or d'Argent, Rubis de Saphir,
   Rouge Feu de Vert Feuille ni Diamant de Perle (même format) : une sauvegarde Rouge / Bleu est proposée pour Rouge comme
-  pour Bleu, de même pour les autres paires (pour Rouge Feu / Vert Feuille, PKHeX répond toujours « Rouge Feu » faute de mieux). À partir
+  pour Bleu, de même pour les autres paires (pour Rouge Feu / Vert Feuille, PKHeX répond toujours « Rouge Feu » faute de mieux ; le site devine Vert Feuille d'après les Pokémon du dresseur, voir « Rouge Feu ou Vert Feuille », mais propose toujours les deux). À partir
   de la 5e génération, chaque sauvegarde dit son jeu (Let's Go, Légendes Arceus et Écarlate / Violet compris). **Un living dex par jeu** et par compte, une
   sauvegarde pour un seul living dex (index uniques).
 - **Comptage** : un Pokémon est enregistré s'il est dans l'**équipe ou les boîtes** de la sauvegarde liée (pas les œufs) ;
@@ -1085,6 +1091,7 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Api/SyncEndpoints.cs` | API du homebrew PokeBank Sync (`/api/sync/...`) et limite d'essais de codes |
 | `MonsutaPotaru/Services/StoredSaveService.cs` | Stockage, mise à jour et suppression des sauvegardes stockées |
 | `MonsutaPotaru/Services/SaveIdentity.cs` | Empreinte d'une sauvegarde (unicité sur le serveur) |
+| `MonsutaPotaru/Services/SaveVersion.cs` | Rouge Feu ou Vert Feuille : jeu d'une sauvegarde deviné d'après le jeu d'origine des Pokémon du dresseur |
 | `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), achat d'emplacements, journal |
 | `MonsutaPotaru/Services/SaveBag.cs` | Objets du sac et du PC d'une sauvegarde (objets, Pokéballs, médicaments, baies, CT/DT par capacité ; jamais les objets rares, Lettres ni CS) : lecture, retrait, dépôt (PKHeX), conversion des numéros d'objets des jeux de 1re à 3e génération |
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |

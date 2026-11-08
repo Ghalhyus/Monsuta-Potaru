@@ -642,8 +642,8 @@ public static class LivingDexGames
     /// <summary>
     /// Jeux possibles pour une sauvegarde : PKHeX reconnaît Jaune, Cristal, Émeraude et Platine, mais pas Rouge de Bleu, Or
     /// d'Argent, Rubis de Saphir, Rouge Feu de Vert Feuille, Diamant de Perle ni HeartGold de SoulSilver (même format) : au
-    /// joueur de choisir. Pour Rouge Feu / Vert Feuille,
-    /// PKHeX répond « Rouge Feu » faute de mieux : les deux sont toujours proposés. À partir de la 5e génération, chaque
+    /// joueur de choisir. Pour Rouge Feu / Vert Feuille, PKHeX répond « Rouge Feu » faute de mieux (<see cref="SaveVersion"/>
+    /// devine d'après les Pokémon du dresseur) : les deux sont toujours proposés. À partir de la 5e génération, chaque
     /// sauvegarde dit son jeu. Aucun pour une sauvegarde d'une autre génération, ni pour Colosseum / XD.
     /// </summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav.Generation switch

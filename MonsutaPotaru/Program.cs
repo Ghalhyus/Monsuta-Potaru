@@ -95,6 +95,7 @@ using (var scope = app.Services.CreateScope())
     await BankService.FillSpriteDetailsAsync(db); // sexe et objet tenu (image) des Pokémon enregistrés avant leur ajout
     await BankService.FillFilterDetailsAsync(db); // types, nature, IV... (filtres de « Ma collection ») des Pokémon plus anciens
     await PokemonFingerprint.FillAsync(db); // empreinte (doublons) des Pokémon plus anciens
+    await StoredSaveService.FillGameNamesAsync(db, scope.ServiceProvider.GetRequiredService<PokemonInfo>()); // Vert Feuille notées Rouge Feu
 }
 PokemonSprites.Load(app.Environment.WebRootPath); // images des Pokémon et de leurs formes
 ParkHabitats.Load(app.Environment.WebRootPath); // types de cases des cartes du parc

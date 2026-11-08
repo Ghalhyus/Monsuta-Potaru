@@ -38,6 +38,7 @@ public sealed class SaveSession
             error = "Cette sauvegarde n'a pas de boîtes PC.";
             return false;
         }
+        SaveVersion.Refine(sav); // Vert Feuille, que PKHeX prend pour Rouge Feu
 
         Save = sav;
         FileName = fileName;
