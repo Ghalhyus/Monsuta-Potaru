@@ -18,6 +18,9 @@
   Pages Blazor : tests bUnit (`PageTestContext`) ; `Program.cs`, `SyncEndpoints`, pages du compte : `SiteFactory`.
 - CD : bouton « Run workflow » de « CD » ; ne relance pas les tests, lit le résultat de la CI du commit (case « Forcer »
   pour passer outre) ; vérifie que `blazor.web.js` répond.
+- Image construite **sur le VPS** à chaque déploiement : `cd.yml` et `publier.ps1` vident ensuite les images inutiles
+  et le cache de construction de plus de 3 jours (`docker builder prune -f --filter until=72h`). Sans ce nettoyage, le
+  cache montait à 20 Go (`docker system df`, ligne « Build Cache »).
 - Le CLI `gh` n'est pas installé : l'utilisateur copie le message d'un échec.
 - Les tests y tournent sous **Linux** (rappelé dans `CLAUDE.md`) : noms de fichiers sensibles à la casse, séparateur `/`,
   culture `fr-FR` par ICU.
