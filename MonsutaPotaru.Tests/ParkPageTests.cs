@@ -113,6 +113,8 @@ public sealed class ParkPageTests : PageTestContext
         await cut.Click("Agrandir le parc");
         await cut.Click("Payer");
         cut.WaitForText("/ 40");
+        // Le message de l'agrandissement, affiché quand le parc redémarre, ne compte pas dans sa hauteur (parc.js)
+        Assert.True(cut.Find(".alert").HasAttribute("data-hors-mesure"));
         await cut.Click("Agrandir le parc");
         await cut.Find(".dialog-backdrop").ClickAsync(new());
 

@@ -513,6 +513,17 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   puis événement `fullscreenchange`), ou demander à l'utilisateur.
 - Textures : planches de SpriteCollab ajoutées à Phaser (`textures.addImage`, une image par case) ; textes à
   `resolution: k` (nets à la caméra).
+- **Redémarrage** (`StartEngine` de `Park.razor` : agrandissement, achat, changement de parc) : le parc se remesure, donc
+  rien de passager ne doit compter dans sa taille (bug du 2026-11-08 : parc plus petit jusqu'à l'actualisation).
+  - Le message au-dessus du parc porte `data-hors-mesure` : `measure` retire sa hauteur (`transientAbove`). Sans ça, il
+    poussait le parc vers le bas, le zoom tombait d'un cran (×4 → ×3 en 1700 × 1320), et le fermer ne remesurait rien :
+    la position change mais pas la taille, le `ResizeObserver` ne voit rien.
+  - `dispose` retire l'ancien canvas tout de suite : `game.destroy` ne le fait qu'à l'image suivante, et pendant ce temps
+    deux canvas allongeaient la page, la barre de défilement rétrécissait la nouvelle mesure.
+  - Nouveau message ou bandeau au-dessus du parc : lui mettre aussi `data-hors-mesure`.
+- **Panneau du navigateur caché** : `requestAnimationFrame` ne tourne pas, Phaser ne démarre pas sa scène (`started`
+  jamais résolu, pas d'écoute de `resize`) ni ne détruit l'ancien jeu. On ne peut y vérifier que la mesure de départ
+  (taille du canvas après `create`), pas les redimensionnements.
 
 ## Déplacer un Pokémon (`parc.js`, propriétaire)
 - `create(container, component, { canMove })` : `Park.razor` passe `canMove = !Visitor`. Rien côté serveur (positions

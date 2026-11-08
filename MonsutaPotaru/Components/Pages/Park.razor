@@ -80,9 +80,11 @@ else
     </Actions>
 </PageHeader>
 
+@* data-hors-mesure : parc.js ne compte pas ce message dans la hauteur du parc (sinon, affiché au redémarrage après un
+   agrandissement ou un achat, il rétrécirait la carte jusqu'à l'actualisation de la page). *@
 @if (message is not null)
 {
-    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert" data-hors-mesure>
         @message
         <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
     </div>

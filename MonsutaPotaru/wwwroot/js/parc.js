@@ -627,6 +627,13 @@ export async function create(container, component, options) {
     // qui tient dans la hauteur visible sous le parc (sur un téléphone : pas plus que la zone entière en largeur). En plein
     // écran : tout l'écran, et le plus grand zoom où la zone « Départ » tient en hauteur ----------
     const isFullscreen = () => document.fullscreenElement === fullscreenTarget;
+    /** Hauteur (pixels CSS, marges comprises) des messages passagers placés avant le parc dans la page. */
+    const transientAbove = () => [...document.querySelectorAll("[data-hors-mesure]")]
+        .filter(e => e.compareDocumentPosition(container) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .reduce((sum, e) => {
+            const style = getComputedStyle(e);
+            return sum + e.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+        }, 0);
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
         if (isFullscreen()) {
@@ -634,7 +641,9 @@ export async function create(container, component, options) {
             return { ratio, zoom: Math.max(1, Math.floor(height / viewH)), width: Math.round(container.clientWidth * ratio), height };
         }
         const width = container.clientWidth || viewW;
-        const top = container.getBoundingClientRect().top + window.scrollY;
+        // Les messages passagers au-dessus du parc ([data-hors-mesure] : « Parc agrandi »...) ne comptent pas : la carte
+        // garde la même taille, qu'ils soient affichés ou non.
+        const top = container.getBoundingClientRect().top + window.scrollY - transientAbove();
         const visible = Math.max(240, window.innerHeight - top - 24) * ratio;
         const fitWidth = Math.round(width * ratio / viewW); // zone à peu près entière en largeur
         const zoom = Math.max(1, Math.round(240 * ratio / viewH), Math.min(Math.floor(visible / viewH), fitWidth));
@@ -1773,6 +1782,9 @@ export async function create(container, component, options) {
             document.removeEventListener("fullscreenchange", onFullscreen);
             if (isFullscreen()) document.exitFullscreen().catch(() => { });
             controls.remove();
+            // Phaser ne détruit le jeu (et son canvas) qu'à l'image suivante : retiré tout de suite, l'ancien canvas
+            // n'allonge pas la page pendant que le nouveau parc se mesure (barre de défilement : parc plus étroit).
+            game.canvas?.remove();
             game.destroy(true);
         },
     };
