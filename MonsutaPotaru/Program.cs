@@ -48,6 +48,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(AccountService.ConfigureIdenti
     .AddSignInManager()
     .AddErrorDescriber<FrenchIdentityErrorDescriber>();
 builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<PreferencesService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddSingleton<DebugMode>(); // comptes en mode debug, en mémoire (jusqu'à la déconnexion)
 builder.Services.AddScoped<DebugService>();

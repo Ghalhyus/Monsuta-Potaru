@@ -146,7 +146,7 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
             "/sauvegardes/3ds", "/amis", "/joueurs", "/joueurs/Sacha", "/joueurs/Sacha/collection", "/joueurs/Sacha/parc",
             "/joueurs/Sacha/inventaire", "/joueurs/Sacha/livingdex", "/joueurs/Inconnu", "/echanges", "/combats",
             "/statistiques", "/administration", "/Account/Manage", "/Account/Manage/Email", "/Account/Manage/ChangePassword",
-            "/Account/Manage/Themes", "/Account/Manage/Visibility", "/Account/Manage/PersonalData",
+            "/Account/Manage/Themes", "/Account/Manage/Preferences", "/Account/Manage/Visibility", "/Account/Manage/PersonalData",
             "/Account/Manage/DeletePersonalData", "/Account/Pseudo",
         ];
         foreach (var url in pages)
@@ -166,6 +166,31 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
             ["Input.Collection"] = "true",
         });
         Assert.Contains("alert-success", visibility);
+
+        // Préférences : tris par défaut enregistrés (une valeur trafiquée donne le tri d'origine), affichés, puis rétablis
+        var (_, sorts) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string>
+        {
+            ["Action"] = "save",
+            ["tri-ct"] = "nom",
+            ["ordre-ct"] = "desc",
+            ["tri-baies"] = "pirate",
+            ["tri-collection"] = "pokedex",
+            ["ordre-collection"] = "asc",
+            ["tri-livingdex"] = "completion",
+            ["ordre-livingdex"] = "desc",
+        });
+        var saved = Parser.ParseDocument(sorts);
+        Assert.Contains("Tris par défaut enregistrés.", saved.QuerySelector(".alert")?.TextContent ?? sorts);
+        Assert.Equal("nom", saved.QuerySelector("select[name=tri-ct] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("desc", saved.QuerySelector("select[name=ordre-ct] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("defaut", saved.QuerySelector("select[name=tri-baies] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("pokedex", saved.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("completion", saved.QuerySelector("select[name=tri-livingdex] option[selected]")?.GetAttribute("value"));
+        var (_, reset) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
+        var original = Parser.ParseDocument(reset);
+        Assert.Contains("Tris d'origine rétablis.", original.QuerySelector(".alert")?.TextContent ?? reset);
+        Assert.Equal("arrivee", original.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("desc", original.QuerySelector("select[name=ordre-collection] option[selected]")?.GetAttribute("value")); // les plus récents d'abord
 
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>

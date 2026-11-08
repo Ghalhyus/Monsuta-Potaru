@@ -172,6 +172,31 @@ public sealed class LivingDexPagesTests : PageTestContext
     }
 
     [Fact]
+    public async Task List_SortFromTheAccount_UnlessTheAddressSaysOtherwise()
+    {
+        await Dexes.CreateGlobalAsync("sacha");
+        SetSorts("sacha", new SortPreferences { LivingDex = new(LivingDexSort.Completion, true) });
+        var cut = Render<LivingDexes>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".livingdex-card")));
+        Assert.Equal("Ordre décroissant", cut.Find(".livingdex-choice button[aria-label]").GetAttribute("aria-label"));
+
+        // Un autre tri s'écrit en entier dans l'adresse ; celui du compte n'y est pas écrit
+        await cut.Find("#dexSort").ChangeAsync(new() { Value = "generation" });
+        Assert.Contains("tri=generation&ordre=desc", Navigation.Uri);
+        Navigation.NavigateTo("livingdex?tri=generation");
+        var byGeneration = Render<LivingDexes>();
+        byGeneration.WaitForAssertion(() => Assert.Equal("Ordre croissant", byGeneration.Find(".livingdex-choice button[aria-label]").GetAttribute("aria-label")));
+        await byGeneration.Find("#dexSort").ChangeAsync(new() { Value = "completion" });
+        Assert.Contains("tri=completion", Navigation.Uri);
+        Assert.DoesNotContain("ordre=", Navigation.Uri);
+        Navigation.NavigateTo("livingdex?tri=completion");
+        var ascending = Render<LivingDexes>();
+        ascending.WaitForAssertion(() => Assert.NotEmpty(ascending.FindAll(".livingdex-card")));
+        await ascending.Find(".livingdex-choice button[aria-label]").ClickAsync(new());
+        Assert.DoesNotContain("tri=", Navigation.Uri);
+    }
+
+    [Fact]
     public async Task List_CreationRefused_SaysWhy()
     {
         var cut = Render<LivingDexes>();

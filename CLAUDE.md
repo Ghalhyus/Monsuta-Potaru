@@ -17,7 +17,7 @@ dans la session, demander à l'utilisateur de le brancher.
 
 | Sujet | Fiche |
 |---|---|
-| Comptes, connexion, rôles, thèmes, pages du compte | `docs/claude/comptes.md` |
+| Comptes, connexion, rôles, thèmes, pages du compte, tris par défaut (« Préférences ») | `docs/claude/comptes.md` |
 | Multijoueurs : pages des joueurs, visibilité, amis, échanges, valeurs trafiquées | `docs/claude/multijoueurs.md` |
 | Combats (Showdown) | `docs/claude/combats.md` |
 | Images des Pokémon et des objets, `outils/images.py`, `PokemonSprites` | `docs/claude/images.md` |

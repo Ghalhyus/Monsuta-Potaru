@@ -27,7 +27,7 @@ document.addEventListener("click", e => {
 // statique, sans Blazor interactif).
 // - « Replier le menu » : attribut data-menu="replie" de la page, gardé dans un cookie qu'App.razor relit (la page
 //   suivante arrive déjà repliée) ;
-// - une rubrique (Sauvegardes, Multijoueurs) s'ouvre et se ferme d'un clic (classe « ouvert ») ;
+// - une rubrique (Sauvegardes, Multijoueurs, le compte en bas du menu) s'ouvre et se ferme d'un clic (classe « ouvert ») ;
 // - téléphone : le bouton de la barre du haut ouvre le menu par-dessus la page (data-menu-ouvert) ; un clic sur un lien
 //   ou à côté le referme ;
 // - le menu du compte (élément details) se referme après un clic dedans ou à côté, et avec Échap.

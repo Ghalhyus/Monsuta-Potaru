@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MonsutaPotaru.Components.Pages;
 using MonsutaPotaru.Data;
+using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
@@ -226,6 +227,42 @@ public sealed class CollectionPageTests : PageTestContext
         var fire = Render<Collection>(p => p.Add(c => c.Pseudo, "ondine"));
         fire.WaitForAssertion(() => Assert.Single(Slots(fire)));
         Assert.Empty(Folders(fire));
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Sort_FromTheAccount_UnlessTheAddressSaysOtherwise()
+    {
+        AddToBank("sacha", 1, 4, 25); // Bulbizarre, Salamèche, puis Pikachu (le plus récent)
+        SetSorts("sacha", new SortPreferences { Collection = new(CollectionSortBy.Name) });
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        var cut = Render<Collection>();
+        cut.WaitForAssertion(() => Assert.Equal(3, Slots(cut).Count));
+        string Order() => cut.Find(".collection-sort button").TextContent;
+        Assert.Equal("↑ A → Z", Order());
+        Assert.Contains("Bulbizarre", Slots(cut)[0].OuterHtml);
+
+        // L'arrivée, qui n'est plus le tri du compte, s'écrit dans l'adresse ; le nom n'y est pas écrit
+        await cut.Find(".collection-sort select").ChangeAsync(new() { Value = "arrivee" });
+        Assert.Contains("tri=arrivee", navigation.Uri);
+        cut.WaitForAssertion(() => Assert.Contains("Pikachu", Slots(cut)[0].OuterHtml));
+        await cut.Find(".collection-sort select").ChangeAsync(new() { Value = "nom" });
+        Assert.DoesNotContain("tri=", navigation.Uri);
+        await cut.Find(".collection-sort button").ClickAsync(new());
+        Assert.Contains("tri=nom&ordre=desc", navigation.Uri);
+        await DisposeComponentsAsync();
+
+        // L'adresse l'emporte (ancien lien « ?ordre=asc » : l'arrivée, les plus anciens d'abord)
+        navigation.NavigateTo("collection?ordre=asc");
+        var old = Render<Collection>();
+        old.WaitForAssertion(() => Assert.Equal("↑ Anciens d'abord", old.Find(".collection-sort button").TextContent));
+        await DisposeComponentsAsync();
+
+        // Chez un autre joueur : le tri de celui qui regarde
+        AddToBank("ondine", 120);
+        navigation.NavigateTo("joueurs/ondine/collection");
+        var visit = Render<Collection>(p => p.Add(c => c.Pseudo, "ondine"));
+        visit.WaitForAssertion(() => Assert.Equal("↑ A → Z", visit.Find(".collection-sort button").TextContent));
         await DisposeComponentsAsync();
     }
 

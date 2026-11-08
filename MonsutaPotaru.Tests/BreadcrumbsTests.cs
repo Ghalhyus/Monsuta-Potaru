@@ -24,6 +24,7 @@ public class BreadcrumbsTests
     [InlineData("statistiques", "Mon compte › Statistiques")]
     [InlineData("Account/Manage", "Mon compte › Profil")]
     [InlineData("Account/Manage/Themes", "Mon compte › Thèmes")]
+    [InlineData("Account/Manage/Preferences", "Mon compte › Préférences")]
     [InlineData("Account/Manage/DeletePersonalData", "Mon compte › Données personnelles › Suppression du compte")]
     [InlineData("Account/Login?ReturnUrl=%2Fparc", "Connexion")]
     [InlineData("page-inconnue", "")]

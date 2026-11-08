@@ -615,8 +615,15 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   pour que le parc accepte des Pokémon ; supprimer `wwwroot/images` après (vérifier d'abord qu'il ne contient que ces
   faux fichiers). Pour `ParkServiceTests` : `PokemonSprites.Load` sur un dossier temporaire du même genre, le temps de
   l'essai, puis remettre le test (`Sprites_AndFamilies` exige les vrais fichiers).
-- Fenêtre de choix : « Seulement ceux du parc » fige la liste des choisis à l'allumage (un Pokémon décoché reste affiché) ;
-  « Tout retirer » ne change rien avant « Valider » ; « Vider le parc » : `ParkService.ClearAsync`, après confirmation.
+- Fenêtre de choix : liste « Pokémon affichés » (`select.park-shown`, `ShownFilter`, 2026-11-08) d'après le parc
+  **enregistré** (`ParkCandidate.InPark`, `OtherPark`), pas d'après les cases cochées : rien ne bouge avant « Valider »
+  (un Pokémon décoché reste affiché pour le recocher). « Dans aucun parc » : `!InPark && OtherPark is null`, les trois
+  choix même avec la Forêt seule ; « Tous » à chaque ouverture. Filtre dans la page seulement : `SetAsync` revérifie tout.
+  `ParkPageTests.Chooser_ShowsAllPokemon_ThoseOfThisPark_OrThoseInNoPark`. « Tout retirer » ne change rien avant
+  « Valider » ; « Vider le parc » : `ParkService.ClearAsync`, après confirmation.
+- **Panneau du navigateur de test masqué** : Phaser ne démarre pas (pas de `requestAnimationFrame`), et « Valider » dans
+  la fenêtre de choix fait tomber le circuit (`setPokemon` → `addTextures` : « Cannot read properties of null (reading
+  'renderer') »). Faire une capture d'écran après le chargement du parc (la carte dessinée) avant d'essayer.
 
 ## Description complète (ancienne section « Parc » du README, déplacée le 2026-11-08)
 
@@ -813,9 +820,10 @@ sous son nom (« Heureux : aime la végétation (80 % du parc). »). Dans la For
 les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
 autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux ; au Volcan (tout
 de type volcan), les Feu, Roche et Dragon heureux, les autres malheureux sauf ceux qu'il laisse indifférents.
-Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
-Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
-pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
+Pour gérer son parc : la liste déroulante de la fenêtre, à droite de la recherche, montre **« Tous les Pokémon »** (par
+défaut, à chaque ouverture), **« Ceux de ce parc »** ou **« Dans aucun parc »** (ni ici ni dans un autre parc), avec la
+recherche et les pastilles ; elle suit le parc enregistré : cocher ou décocher ne la change pas avant « Valider », un
+Pokémon décoché reste affiché pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
 côté de « Choisir les Pokémon », le vide d'un coup après confirmation (`ParkService.ClearAsync`) : ses Pokémon restent dans
 la collection. Ni l'un ni l'autre pour un visiteur. Un clic sur un Pokémon du parc le fait se tourner vers toi et ouvre sa fiche, avec « Retirer du parc ». La fiche n'est
 donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`) : le numéro vient du navigateur, et un visiteur ne

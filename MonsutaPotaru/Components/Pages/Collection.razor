@@ -14,6 +14,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
 <PageTitle>@PageName</PageTitle>
 
@@ -64,7 +65,7 @@ else
             <option value="@s.Id">💾 @(Visitor ? s.Label : s.LabelAndFile)</option>
         }
     </select>
-    @* Tri : critère, puis sens (les œufs restent à la fin). *@
+    @* Tri : critère, puis sens (les œufs restent à la fin) ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »). *@
     <div class="collection-sort">
         <select class="form-select form-select-sm" aria-label="Trier par" value="@SortChoices.First(c => c.By == sort.By).Slug" @onchange="SortChanged">
             @foreach (var choice in SortChoices)
@@ -224,14 +225,10 @@ else
     private const string CompactQueryName = "compact";
 
     /// <summary>Nom de chaque critère dans l'adresse et dans la liste.</summary>
-    private static readonly (CollectionSortBy By, string Slug, string Label)[] SortChoices =
-    [
-        (CollectionSortBy.Arrival, "arrivee", "Arrivée"),
-        (CollectionSortBy.Name, "nom", "Nom"),
-        (CollectionSortBy.Dex, "pokedex", "N° Pokédex"),
-    ];
+    private static IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> SortChoices => SiteSorts.CollectionChoices;
 
     private CollectionSort sort;
+    private CollectionSort defaultSort; // tri par défaut du compte qui regarde (visiteur compris)
 
     private string userId = "";
     private string search = "";
@@ -300,6 +297,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Le tri par défaut est celui du joueur connecté, même sur la collection d'un autre : sa façon de lire une liste.
+        defaultSort = (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).Collection;
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Collection);
@@ -335,21 +334,10 @@ else
         }
     }
 
-    /// <summary>Tri lu dans l'adresse : sens par défaut du critère, sauf « ordre » contraire.</summary>
-    private CollectionSort SortFromAddress()
-    {
-        var by = SortChoices.FirstOrDefault(c => c.Slug == SortFromQuery, SortChoices[0]).By;
-        var descending = OrderFromQuery is "asc" or "desc" ? OrderFromQuery == "desc" : DescendingByDefault(by);
-        return new(by, descending != DescendingByDefault(by));
-    }
+    /// <summary>Tri lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; sans tri, celui du compte.</summary>
+    private CollectionSort SortFromAddress() => SiteSorts.CollectionFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultSort;
 
-    /// <summary>L'arrivée montre les plus récents d'abord ; le nom et le numéro sont croissants.</summary>
-    private static bool DescendingByDefault(CollectionSortBy by) => by == CollectionSortBy.Arrival;
-
-    private bool Descending => DescendingByDefault(sort.By) != sort.Reversed;
-
-    /// <summary>Ordre dans l'adresse (« ?ordre=desc »).</summary>
-    private string OrderParameter => Descending ? "desc" : "asc";
+    private bool Descending => SiteSorts.IsDescending(sort);
 
     /// <summary>Texte du bouton de sens : l'ordre affiché (cliquer l'inverse).</summary>
     private string OrderLabel => (sort.By, Descending) switch
@@ -377,12 +365,9 @@ else
 
     private async Task ApplySort()
     {
-        var slug = SortChoices.First(c => c.By == sort.By).Slug;
-        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
-        {
-            ["tri"] = sort.By == CollectionSortBy.Arrival ? null : slug,
-            ["ordre"] = sort.Reversed ? OrderParameter : null,
-        }), replace: true);
+        // Rien dans l'adresse pour le tri du compte ; sinon critère et sens en entier (« ?tri=arrivee » si le compte trie par nom).
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.CollectionQuery(sort), SiteSorts.CollectionQuery(defaultSort))), replace: true);
         await Reload();
     }
 

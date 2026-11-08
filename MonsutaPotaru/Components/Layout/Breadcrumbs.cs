@@ -100,6 +100,7 @@ public static class Breadcrumbs
             "email" => [new Crumb("Adresse mail", null)],
             "changepassword" => [new Crumb("Mot de passe", null)],
             "themes" => [new Crumb("Thèmes", null)],
+            "preferences" => [new Crumb("Préférences", null)],
             "visibility" => [new Crumb("Visibilité", null)],
             "personaldata" => [new Crumb("Données personnelles", null)],
             "deletepersonaldata" => [new Crumb("Données personnelles", "Account/Manage/PersonalData"), new Crumb("Suppression du compte", null)],

@@ -157,6 +157,25 @@ a.ardoise-link.active {
 .ardoise-subitems .ardoise-link { min-height: 2.1rem; font-size: .85rem; }
 .ardoise-subitems-title { display: none; }
 
+/* Le compte, en bas du menu (au-dessus de « Replier le menu ») : rubrique au pseudo, ou inscription et connexion. La
+   pastille tient la place d'une icône (le pseudo reste aligné sur les autres noms). */
+.ardoise-side-account {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: .5rem .5rem 0;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.ardoise-side-account .ardoise-avatar {
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: 0 -.25rem;
+    font-size: .8rem;
+}
+.ardoise-side-account form { margin: 0; }
+
 /* « Replier le menu » : en bas, double chevron tourné quand le menu est replié */
 .ardoise-collapse {
     flex: none;
@@ -333,6 +352,9 @@ a.ardoise-link.active {
         border-radius: 0 .4rem .4rem 0;
         box-shadow: .5rem .5rem 1.5rem rgba(0, 0, 0, .25);
     }
+    /* Le compte, en bas : ses pages s'ouvrent vers le haut (pas sous le bord de la fenêtre) */
+    html[data-menu="replie"] .ardoise-side-account .ardoise-group:hover > .ardoise-subitems,
+    html[data-menu="replie"] .ardoise-side-account .ardoise-group:focus-within > .ardoise-subitems { top: auto; bottom: 0; }
     html[data-menu="replie"] .ardoise-subitems .ardoise-link { justify-content: flex-start; padding: 0 .6rem; }
     html[data-menu="replie"] .ardoise-subitems .ardoise-label { display: block; }
     html[data-menu="replie"] .ardoise-subitems-title {
@@ -363,6 +385,7 @@ a.ardoise-link.active {
     html[data-menu-ouvert] .ardoise-menu { transform: none; box-shadow: .5rem 0 1.5rem rgba(0, 0, 0, .3); }
     html[data-menu-ouvert] .ardoise-backdrop { position: fixed; inset: 0; z-index: 1044; background: rgba(15, 20, 28, .45); }
     .ardoise-collapse { display: none; }
+    .ardoise-side-account { padding-bottom: .5rem; } /* « Replier le menu » caché : le compte est tout en bas */
     .ardoise-burger {
         display: block;
         flex: none;

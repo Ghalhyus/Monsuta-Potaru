@@ -16,6 +16,13 @@ public class ApplicationUser : IdentityUser
     public string? Theme { get; set; }
 
     /// <summary>
+    /// Tris par défaut choisis dans « Mon compte » → « Préférences » (inventaire, collection, living dex), en JSON (voir
+    /// <see cref="Services.SortPreferences"/>) ; null : les tris d'origine du site.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(1024)]
+    public string? SortPreferences { get; set; }
+
+    /// <summary>
     /// Qui peut voir les pages cochées (<see cref="PublicPages"/>), « Mon compte » → « Visibilité » : tout le monde, les amis
     /// seulement (trouvable dans la recherche pour recevoir des demandes), ou personne (introuvable, ami par code
     /// seulement). Voir <see cref="Services.PlayerService"/>.

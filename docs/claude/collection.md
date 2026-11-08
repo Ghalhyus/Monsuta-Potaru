@@ -9,6 +9,11 @@ README : « Filtres de « Ma collection » », « Mode compact de « Ma collecti
 - `BankPokemon.Fingerprint` (doublons, `PokemonFingerprint`) : même chemin (repère : null ; vide si illisible).
 - `BankPokemon.Gender` et `HeldItem` : voir `images.md`.
 
+## Tri
+- `?tri=` / `?ordre=` (sens réel, `asc` / `desc`), sinon le tri par défaut du compte (« Préférences », voir `comptes.md`).
+  Sans tri par défaut, l'arrivée ; un ancien lien `?ordre=asc` seul reste l'arrivée, les plus anciens d'abord. Les choix
+  du tri et leurs noms : `SiteSorts.CollectionChoices`.
+
 ## Doublons
 - Une sauvegarde dont un Pokémon est déjà dans le compte est refusée.
 - Les Pokémon de test `SaveSessionTests.CreatePk5(espèce, niveau)` ont **tous le même PID** : deux sauvegardes stockées

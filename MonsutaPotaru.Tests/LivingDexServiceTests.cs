@@ -833,8 +833,9 @@ public sealed class LivingDexServiceTests : IDisposable
         Assert.Equal("Violet, Blue, Black, Red, Silver", Order(LivingDexSort.Completion, false));
         Assert.Equal("Red, Silver, Black, Blue, Violet", Order(LivingDexSort.Completion, true));
 
-        Assert.Equal((LivingDexSort.Completion, "completion"), (LivingDexGames.SortFromSlug("completion"), LivingDexGames.SortSlug(LivingDexSort.Completion)));
-        Assert.Equal((LivingDexSort.Generation, (string?)null), (LivingDexGames.SortFromSlug("n-importe-quoi"), LivingDexGames.SortSlug(LivingDexSort.Generation)));
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Completion), SiteSorts.LivingDexFromQuery(new("completion", null)));
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Generation), SiteSorts.LivingDexFromQuery(new("n-importe-quoi", null)));
+        Assert.Equal("generation", SiteSorts.Slug(LivingDexSort.Generation));
     }
 
     [Theory]

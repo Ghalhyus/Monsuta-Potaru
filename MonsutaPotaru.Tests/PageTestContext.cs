@@ -27,6 +27,7 @@ public abstract class PageTestContext : BunitContext
         Services.AddLogging();
         Services.AddSingleton<PokemonInfo>();
         Services.AddScoped<AdminService>();
+        Services.AddScoped<PreferencesService>();
         Services.AddSingleton<DebugMode>();
         Services.AddScoped<DebugService>();
         Services.AddScoped<BankService>();
@@ -144,6 +145,9 @@ public abstract class PageTestContext : BunitContext
         change(user);
         db.SaveChanges();
     }
+
+    /// <summary>Tris par défaut d'un compte (« Mon compte » → « Préférences »).</summary>
+    protected void SetSorts(string userId, SortPreferences sorts) => UpdateUser(userId, u => u.SortPreferences = sorts.ToJson());
 
     /// <summary>Lignes d'une table de la base de test.</summary>
     protected List<T> Rows<T>() where T : class

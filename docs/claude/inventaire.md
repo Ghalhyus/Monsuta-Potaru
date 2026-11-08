@@ -23,6 +23,13 @@ README : « Inventaire ». Code : `SaveBag`, `InventoryService`.
   des valeurs connues dans les tests (Séisme : CT26, DT10, CT149).
 - Les CS ne sont jamais touchées.
 
+## Tri d'un onglet
+- Dans l'adresse (`?tri=nom&ordre=desc`, pour l'onglet affiché), sinon le tri par défaut du compte pour cet onglet
+  (« Préférences », voir `comptes.md`) ; plus de `localStorage` (l'ancienne clé `monsuta-potaru.inventaire.tris` n'est
+  plus lue). Un tri changé reste pour la visite (`sorts`) ; changer d'onglet réécrit `tri` / `ordre` pour le nouvel onglet.
+- `ItemSortBy` / `ItemSort` sont dans `Services/SortPreferences.cs` ; les noms des onglets dans l'adresse :
+  `SiteSorts.InventoryTabs` (aussi les clés des préférences).
+
 ## Ajouter une catégorie d'objets
 Même modèle que les Pokéballs, médicaments, baies et CT :
 - `ItemCategory` et la liste d'objets dans `SaveBag` (`CategoryOf`, `KeyOf`, `Capacity`) ;

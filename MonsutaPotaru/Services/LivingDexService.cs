@@ -1281,12 +1281,6 @@ public static class LivingDexGames
         _ => LivingDexKind.All,
     };
 
-    /// <summary>Tri dans l'adresse (?tri=completion) ; celui par génération n'y figure pas (null), c'est le tri par défaut.</summary>
-    public static string? SortSlug(LivingDexSort sort) => sort == LivingDexSort.Completion ? "completion" : null;
-
-    /// <summary>Tri lu dans l'adresse ; absent ou inconnu : par génération.</summary>
-    public static LivingDexSort SortFromSlug(string? slug) => slug == "completion" ? LivingDexSort.Completion : LivingDexSort.Generation;
-
     /// <summary>
     /// Progression affichée dans les barres, avec une décimale arrondie vers le bas : « 57,3 % » ; 100 % seulement quand
     /// tout y est (999 sur 1 000 donne 99,9 %).

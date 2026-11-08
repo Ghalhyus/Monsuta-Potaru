@@ -125,13 +125,12 @@ public sealed class InventoryPageTests : PageTestContext
     }
 
     [Fact]
-    public async Task Preferences_ReadFromTheBrowser_AreApplied()
+    public async Task Preferences_ViewFromTheBrowser_SortFromTheAccount()
     {
         await StoreWithItems();
         JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.affichage").SetResult("grille");
         JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.colonnes").SetResult("3");
-        JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.tris")
-            .SetResult("""{"medicaments":"quantite:desc","baies":"nom","inconnu":"nom"}""");
+        SetSorts("sacha", new SortPreferences { Inventory = new Dictionary<ItemCategory, ItemSort> { [ItemCategory.Medicine] = new(ItemSortBy.Quantity, true) } });
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("inventaire?onglet=medicaments&source=tout");
         var cut = Render<Inventory>();
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".item-tile")));
@@ -143,12 +142,57 @@ public sealed class InventoryPageTests : PageTestContext
     [Fact]
     public async Task Preferences_Unreadable_AreIgnored()
     {
-        JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.tris").SetResult("pas du json");
+        UpdateUser("sacha", u => u.SortPreferences = "pas du json"); // tris d'origine
         JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.affichage").SetException(new Microsoft.JSInterop.JSException("bloqué"));
         var cut = Render<Inventory>();
         cut.WaitForText("Porte-monnaie");
         Assert.Contains("Liste", cut.Text());
         await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Sort_FromTheAddress_ElseTheAccount_KeptPerTabForTheVisit()
+    {
+        await StoreWithItems();
+        SetSorts("sacha", new SortPreferences { Inventory = new Dictionary<ItemCategory, ItemSort> { [ItemCategory.Berries] = new(ItemSortBy.Name) } });
+        var navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        navigation.NavigateTo("inventaire?onglet=objets&tri=quantite&ordre=desc");
+        var cut = Render<Inventory>();
+        cut.WaitForText("Stockage");
+        string Order() => cut.Find(".inventory-sort button").TextContent;
+        Assert.Equal("↓ Décroissant", Order()); // l'adresse l'emporte
+
+        // Le tri du compte (ici celui d'origine) n'est pas écrit dans l'adresse ; un autre, si
+        await cut.Find(".inventory-sort select").ChangeAsync(new() { Value = "defaut" });
+        Assert.DoesNotContain("tri=", navigation.Uri);
+        Assert.Equal("↑ Croissant", Order());
+        await cut.Find(".inventory-sort select").ChangeAsync(new() { Value = "nom" });
+        Assert.Contains("tri=nom", navigation.Uri);
+
+        // Baies : le tri du compte (par nom) ; le tri d'origine choisi s'écrit alors en entier
+        await cut.FindAll("[role=tab]").First(t => t.TextContent.Contains("Baies")).ClickAsync(new());
+        Assert.Contains("onglet=baies", navigation.Uri);
+        Assert.DoesNotContain("tri=", navigation.Uri);
+        Assert.Equal("↑ A → Z", Order());
+        await cut.Find(".inventory-sort select").ChangeAsync(new() { Value = "defaut" });
+        Assert.Contains("tri=defaut", navigation.Uri);
+
+        // Retour aux objets : le tri choisi pendant la visite revient, dans l'adresse
+        await cut.FindAll("[role=tab]").First(t => t.TextContent.Contains("Objets")).ClickAsync(new());
+        Assert.Contains("tri=nom", navigation.Uri);
+        Assert.Equal("↑ A → Z", Order());
+        await cut.Find(".inventory-sort button").ClickAsync(new());
+        Assert.Contains("ordre=desc", navigation.Uri);
+    }
+
+    [Fact]
+    public async Task Visitor_SeesTheInventory_WithHisOwnSorts()
+    {
+        await StoreWithItems("ondine", "Ondine");
+        SetSorts("sacha", new SortPreferences { Inventory = new Dictionary<ItemCategory, ItemSort> { [ItemCategory.Items] = new(ItemSortBy.Name, true) } });
+        SetSorts("ondine", new SortPreferences { Inventory = new Dictionary<ItemCategory, ItemSort> { [ItemCategory.Items] = new(ItemSortBy.Quantity) } });
+        var cut = Render<Inventory>(p => p.Add(c => c.Pseudo, "ondine"));
+        cut.WaitForAssertion(() => Assert.Equal("↓ Z → A", cut.Find(".inventory-sort button").TextContent)); // ceux de sacha
     }
 
     [Fact]

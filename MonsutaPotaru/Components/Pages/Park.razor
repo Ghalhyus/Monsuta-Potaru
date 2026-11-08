@@ -168,11 +168,11 @@ else
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <input type="search" class="form-control form-control-sm flex-grow-1 w-auto" placeholder="Rechercher (espèce ou surnom)…"
                        aria-label="Rechercher un Pokémon" @bind="search" @bind:event="oninput" />
-                <div class="form-check form-switch mb-0 small text-nowrap">
-                    <input class="form-check-input" type="checkbox" role="switch" id="parkOnly"
-                           checked="@(parkOnly is not null)" @onchange="ToggleParkOnly" />
-                    <label class="form-check-label" for="parkOnly">Seulement ceux du parc</label>
-                </div>
+                <select class="form-select form-select-sm w-auto park-shown" aria-label="Pokémon affichés" @bind="shownFilter">
+                    <option value="@ShownFilter.All">Tous les Pokémon</option>
+                    <option value="@ShownFilter.ThisPark">Ceux de ce parc</option>
+                    <option value="@ShownFilter.NoPark">Dans aucun parc</option>
+                </select>
             </div>
             <div class="mb-2">
                 <CollectionFilterChips Value="criteria" ValueChanged="CriteriaChanged" Abilities="abilities" />
@@ -183,7 +183,7 @@ else
             }
             else if (shown.Count == 0)
             {
-                <p class="text-muted small">@(parkOnly is { Count: 0 } ? "Aucun Pokémon n'est choisi pour le parc." : "Aucun Pokémon ne correspond.")</p>
+                <p class="text-muted small">@(EmptyMessage())</p>
             }
             else
             {
@@ -371,9 +371,9 @@ else
     private PokemonCriteria criteria = PokemonCriteria.None; // pastilles de la fenêtre de choix
     private List<int> abilities = []; // talents de la collection, pour la pastille « Talent »
     private string? chooserMessage;
-    // « Seulement ceux du parc » : les Pokémon choisis au moment où l'interrupteur est allumé. La liste reste figée : un
-    // Pokémon décoché ne disparaît pas, on peut le recocher.
-    private HashSet<int>? parkOnly;
+    // Liste « Pokémon affichés » : d'après le parc enregistré (InPark, OtherPark), pas d'après les cases cochées : la liste
+    // ne bouge pas avant « Valider », un Pokémon décoché reste affiché pour pouvoir le recocher. « Tous » à chaque ouverture.
+    private ShownFilter shownFilter = ShownFilter.All;
     private bool confirmClear; // fenêtre de confirmation de « Vider le parc »
 
     private BankPokemon? selected;
@@ -613,7 +613,7 @@ else
             return;
         search = "";
         chooserMessage = null;
-        parkOnly = null;
+        shownFilter = ShownFilter.All;
         criteria = PokemonCriteria.None;
         abilities = await BankStore.ListAbilitiesAsync(userId);
         candidates = await Parks.ListCandidatesAsync(userId, ParkId);
@@ -659,11 +659,25 @@ else
         chooserMessage = null;
     }
 
-    private void ToggleParkOnly(ChangeEventArgs e) => parkOnly = e.Value is true ? [.. chosen] : null;
+    /// <summary>Choix de la liste « Pokémon affichés » de la fenêtre de choix.</summary>
+    private enum ShownFilter { All, ThisPark, NoPark }
 
     private bool Matches(ParkCandidate c) =>
-        (parkOnly is null || parkOnly.Contains(c.Id))
+        shownFilter switch
+        {
+            ShownFilter.ThisPark => c.InPark,
+            ShownFilter.NoPark => !c.InPark && c.OtherPark is null,
+            _ => true,
+        }
         && MatchesSearch(c);
+
+    /// <summary>Message quand la recherche, les pastilles et la liste « Pokémon affichés » ne laissent aucun Pokémon.</summary>
+    private string EmptyMessage() =>
+        !string.IsNullOrWhiteSpace(search) || !criteria.IsEmpty
+            ? "Aucun Pokémon ne correspond."
+            : shownFilter == ShownFilter.ThisPark
+                ? "Ce parc n'a pas encore de Pokémon."
+                : "Tous tes Pokémon vivent déjà dans un parc.";
 
     private bool MatchesSearch(ParkCandidate c) =>
         string.IsNullOrWhiteSpace(search)
