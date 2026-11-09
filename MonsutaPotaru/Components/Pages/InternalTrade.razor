@@ -1,0 +1,480 @@
+@page "/echange-interne"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Services
+@inject TradeService TradeStore
+@inject NavigationManager Navigation
+
+<PageTitle>Échange interne</PageTitle>
+
+@* Échange d'un Pokémon entre deux sauvegardes stockées du joueur, comme entre deux consoles : 1. les deux sauvegardes (dans
+   l'adresse : ?de=3&vers=5), 2. le Pokémon que la première envoie, 3. celui qu'elle reçoit de la seconde, 4. la
+   confirmation (évolutions annoncées). « Retour » revient à l'étape précédente en gardant le choix fait. Rien n'est écrit
+   avant « Échanger » : même mécanique que l'échange entre amis (TradeService.ExecuteInternalAsync), qui revérifie les
+   sauvegardes (au compte, différentes, compatibles) et les Pokémon (empreinte). Pas compté dans les statistiques. *@
+
+<PageHeader Title="Échange interne" Icon="bi-arrow-left-right-nav-menu">
+    <Description>
+        Échange un Pokémon entre deux de tes sauvegardes stockées, comme avec un câble entre deux consoles. Les Pokémon qui
+        évoluent par échange évoluent en arrivant.
+    </Description>
+</PageHeader>
+
+@if (message is not null)
+{
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+        @message
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+    </div>
+}
+
+@if (saves is null)
+{
+    <p class="text-muted">Chargement des sauvegardes…</p>
+}
+else if (!saves.Any(s => s.Partners.Count > 0))
+{
+    <p>
+        Il te faut deux sauvegardes stockées qui peuvent échanger sur console (deux jeux d'une même génération qui échangent entre eux, ou Rouge / Bleu / Jaune avec
+        Or / Argent / Cristal). Ajoutes-en dans <a href="sauvegardes">Mes sauvegardes</a>.
+    </p>
+}
+else
+{
+    @* Étapes 2 et 3 : le repère, le titre, les boutons, le Pokémon choisi et la recherche restent visibles sous la barre du
+       haut pendant que la grille défile (internal-trade-sticky, app.css). *@
+    @if (!Choosing)
+    {
+        @Steps
+    }
+
+    @switch (step)
+    {
+        case Step.Saves:
+            var firstSave = SaveOf(firstId);
+            var secondSave = SaveOf(secondId);
+            <Block Title="1. Choisis les deux sauvegardes">
+                <p class="small text-muted">
+                    Deux sauvegardes peuvent échanger si leurs jeux le peuvent sur console : Noire et Noire 2, Platine et HeartGold,
+                    Rubis et Rouge Feu, deux parties du même jeu…, ou Rouge / Bleu / Jaune avec Or / Argent / Cristal par le
+                    Time Capsule. L'échange porte sur la version stockée : si tu as joué depuis, mets-la d'abord à jour dans
+                    <a href="sauvegardes">Mes sauvegardes</a>.
+                </p>
+                <div class="internal-trade-choose">
+                    <label class="form-label small mb-1" for="internal-trade-first">Première sauvegarde</label>
+                    <select id="internal-trade-first" class="form-select internal-trade-first" value="@(firstId?.ToString() ?? "")" @onchange="FirstChosen">
+                        <option value="">Choisis une sauvegarde…</option>
+                        @foreach (var s in saves)
+                        {
+                            <option value="@s.Save.Id" disabled="@(s.Partners.Count == 0)">
+                                @s.Save.LabelAndFile@(s.Partners.Count == 0 ? " (aucune sauvegarde compatible)" : "")
+                            </option>
+                        }
+                    </select>
+                    @SaveWarning(firstSave?.Save)
+
+                    <label class="form-label small mb-1 mt-3" for="internal-trade-second">Seconde sauvegarde</label>
+                    <select id="internal-trade-second" class="form-select internal-trade-second" value="@(secondId?.ToString() ?? "")"
+                            disabled="@(firstSave is null)" @onchange="SecondChosen">
+                        <option value="">@(firstSave is null ? "Choisis d'abord la première…" : "Choisis une sauvegarde…")</option>
+                        @if (firstSave is not null)
+                        {
+                            @foreach (var s in saves.Where(s => firstSave.Partners.Contains(s.Save.Id)))
+                            {
+                                <option value="@s.Save.Id">@s.Save.LabelAndFile</option>
+                            }
+                        }
+                    </select>
+                    @SaveWarning(secondSave?.Save)
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button type="button" class="btn btn-primary" disabled="@(!PairReady)" @onclick="StartPair">Valider</button>
+                </div>
+            </Block>
+            break;
+
+        case Step.Send:
+            <div class="internal-trade-sticky">
+                @Steps
+                <Block Title="2. Choisis le Pokémon envoyé">
+                    <Actions>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Back">← Retour</button>
+                        <button type="button" class="btn btn-primary" disabled="@(busy || sent is null)" @onclick="ValidateSend">Valider</button>
+                    </Actions>
+                    <ChildContent>
+                        <p>Pokémon que <strong>« @First.Label »</strong> envoie à <strong>« @Second.Label »</strong> :</p>
+                        @Choice(sent)
+                        @Search(sendable, searchSend, v => searchSend = v)
+                    </ChildContent>
+                </Block>
+            </div>
+            <Block Class="internal-trade-grid">
+                @Grid(sendable, sent, c => sent = c, searchSend,
+                    $"Aucun : « {Second.Label} » ne peut recevoir aucun Pokémon de « {First.Label} ».")
+            </Block>
+            break;
+
+        case Step.Receive:
+            <div class="internal-trade-sticky">
+                @Steps
+                <Block Title="3. Choisis le Pokémon reçu">
+                    <Actions>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Back">← Retour</button>
+                        <button type="button" class="btn btn-primary" disabled="@(busy || received is null)" @onclick="ValidateReceive">Valider</button>
+                    </Actions>
+                    <ChildContent>
+                        <p>
+                            Pokémon que <strong>« @First.Label »</strong> reçoit de <strong>« @Second.Label »</strong>, en échange
+                            de @sent!.Name :
+                        </p>
+                        @Choice(received)
+                        @Search(receivable, searchReceive, v => searchReceive = v)
+                    </ChildContent>
+                </Block>
+            </div>
+            <Block Class="internal-trade-grid">
+                @Grid(receivable, received, c => received = c, searchReceive,
+                    $"Aucun : « {First.Label} » ne peut recevoir aucun Pokémon de « {Second.Label} ».")
+            </Block>
+            break;
+
+        case Step.Confirm:
+            <Block Title="4. Confirme l'échange">
+                <Actions>
+                    <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Back">← Retour</button>
+                    <button type="button" class="btn btn-primary" disabled="@(busy || preview is null)" @onclick="Trade">Échanger</button>
+                </Actions>
+                <ChildContent>
+                    <div class="row g-3 mb-3">
+                        @foreach (var (from, to, pokemon, evolution) in new[] { (First, Second, sent!, preview?.FirstEvolution), (Second, First, received!, preview?.SecondEvolution) })
+                        {
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <div class="small text-muted mb-1">« @from.Label » envoie à « @to.Label »</div>
+                                        <TradePokemon Pokemon="pokemon" />
+                                        @if (evolution is not null)
+                                        {
+                                            <div class="small mt-2 internal-trade-evolution">✨ @evolution</div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (preview is null)
+                    {
+                        <p class="text-muted small">Vérification…</p>
+                    }
+                    <div class="alert alert-warning small mb-0">
+                        Seule la copie du serveur est modifiée : <strong>tes jeux n'ont pas encore cet échange.</strong> Après
+                        l'échange, télécharge les deux sauvegardes depuis « Mes sauvegardes » et remplace celles de tes jeux. Leur
+                        mise à jour reste bloquée en attendant.
+                    </div>
+                </ChildContent>
+            </Block>
+            break;
+
+        case Step.Done:
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-primary" href="sauvegardes">Mes sauvegardes</a>
+                <button type="button" class="btn btn-outline-secondary" @onclick="NewTrade">Nouvel échange</button>
+            </div>
+            break;
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    /// <summary>Première sauvegarde dans l'adresse (« ?de=3 ») : elle envoie le Pokémon de l'étape 2.</summary>
+    [SupplyParameterFromQuery(Name = "de")] private int? FirstParam { get; set; }
+
+    /// <summary>Seconde sauvegarde dans l'adresse (« ?vers=5 »).</summary>
+    [SupplyParameterFromQuery(Name = "vers")] private int? SecondParam { get; set; }
+
+    private enum Step { Saves, Send, Receive, Confirm, Done }
+
+    private static readonly string[] StepNames = ["Sauvegardes", "Pokémon envoyé", "Pokémon reçu", "Confirmation"];
+
+    private string userId = "";
+    private List<InternalTradeSave>? saves;
+    private Step step;
+    private (int?, int?)? shownPair; // paire de l'adresse déjà prise en compte
+    private int? firstId, secondId; // choix des listes de l'étape 1 (gardés au retour)
+    private List<TradeCandidate>? sendable, receivable;
+    private TradeCandidate? sent, received;
+    private TradePreview? preview;
+    private string searchSend = "", searchReceive = "";
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    private static readonly System.Globalization.CompareInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR").CompareInfo;
+
+    private StoredSaveInfo First => SaveOf(firstId)!.Save;
+    private StoredSaveInfo Second => SaveOf(secondId)!.Save;
+
+    private InternalTradeSave? SaveOf(int? id) => id is null ? null : saves?.FirstOrDefault(s => s.Save.Id == id);
+
+    /// <summary>Les deux sauvegardes choisies peuvent échanger (selon la liste du serveur ; le service revérifie).</summary>
+    private bool PairReady => SaveOf(firstId) is { } first && secondId is { } second && first.Partners.Contains(second);
+
+    protected override async Task OnInitializedAsync()
+    {
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        saves = await TradeStore.InternalSavesAsync(userId);
+    }
+
+    /// <summary>
+    /// Paire de l'adresse : valable, l'échange commence à l'étape 2 ; absente, étape 1 (en gardant les choix des listes) ;
+    /// pas valable (sauvegarde d'un autre compte, incompatible, supprimée), étape 1 avec un message.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (saves is null || shownPair == (FirstParam, SecondParam))
+            return;
+        shownPair = (FirstParam, SecondParam);
+        if (FirstParam is null && SecondParam is null)
+        {
+            step = Step.Saves;
+            return;
+        }
+        (firstId, secondId) = (FirstParam, SecondParam);
+        if (!PairReady)
+        {
+            (firstId, secondId) = (SaveOf(FirstParam)?.Partners.Count > 0 ? FirstParam : null, null);
+            Show("Ces deux sauvegardes ne peuvent pas échanger : choisis-en deux autres.", error: true);
+            step = Step.Saves;
+            return;
+        }
+        sent = received = null;
+        await LoadSendable();
+    }
+
+    private void Show(string text, bool error)
+    {
+        message = text;
+        messageIsError = error;
+    }
+
+    private void FirstChosen(ChangeEventArgs e)
+    {
+        firstId = int.TryParse(e.Value?.ToString(), out var id) && SaveOf(id) is not null ? id : null;
+        if (!PairReady)
+            secondId = null;
+    }
+
+    private void SecondChosen(ChangeEventArgs e) =>
+        secondId = int.TryParse(e.Value?.ToString(), out var id) && SaveOf(firstId)?.Partners.Contains(id) == true ? id : null;
+
+    /// <summary>Étape 1 validée : la paire va dans l'adresse (OnParametersSetAsync passe à l'étape 2).</summary>
+    private void StartPair()
+    {
+        if (!PairReady)
+            return;
+        message = null;
+        Navigation.NavigateTo($"echange-interne?de={firstId}&vers={secondId}");
+    }
+
+    /// <summary>Étape 2 : les Pokémon de la première sauvegarde que la seconde peut recevoir (le choix gardé s'il y est encore).</summary>
+    private async Task LoadSendable()
+    {
+        step = Step.Send;
+        sendable = null;
+        sendable = await TradeStore.CandidatesAsync(userId, firstId!.Value, userId, secondId!.Value);
+        sent = sendable.FirstOrDefault(c => c == sent);
+    }
+
+    private async Task ValidateSend()
+    {
+        if (sent is null || busy)
+            return;
+        message = null;
+        step = Step.Receive;
+        receivable = null;
+        receivable = await TradeStore.InternalReceivableAsync(userId, firstId!.Value, sent, secondId!.Value);
+        received = receivable.FirstOrDefault(c => c == received && c.Problem is null);
+    }
+
+    private async Task ValidateReceive()
+    {
+        if (sent is null || received is null || received.Problem is not null || busy)
+            return;
+        message = null;
+        step = Step.Confirm;
+        preview = null;
+        preview = await TradeStore.InternalPreviewAsync(userId, firstId!.Value, sent, secondId!.Value, received);
+        if (preview.Problem is { } problem)
+            await Failed(problem, preview.Retry);
+    }
+
+    private async Task Trade()
+    {
+        if (sent is null || received is null || preview is null || busy)
+            return;
+        busy = true;
+        try
+        {
+            var outcome = await TradeStore.ExecuteInternalAsync(userId, firstId!.Value, sent, secondId!.Value, received);
+            if (!outcome.Ok)
+            {
+                await Failed(outcome.FirstMessage, outcome.Retry);
+                return;
+            }
+            Show(outcome.FirstMessage, error: false);
+            step = Step.Done;
+            saves = await TradeStore.InternalSavesAsync(userId); // « modifiée par le site » sur les deux
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    /// <summary>Échange impossible : on rechoisit les Pokémon (une sauvegarde a changé), ou les sauvegardes.</summary>
+    private async Task Failed(string text, bool retry)
+    {
+        Show(text, error: true);
+        sent = received = null;
+        preview = null;
+        saves = await TradeStore.InternalSavesAsync(userId);
+        if (retry && PairReady)
+        {
+            await LoadSendable();
+            return;
+        }
+        shownPair = null;
+        Navigation.NavigateTo("echange-interne");
+    }
+
+    /// <summary>« Retour » : l'étape précédente, avec le choix déjà fait.</summary>
+    private async Task Back()
+    {
+        message = null;
+        switch (step)
+        {
+            case Step.Send:
+                Navigation.NavigateTo("echange-interne"); // étape 1, les listes gardent la paire
+                break;
+            case Step.Receive:
+                await LoadSendable();
+                break;
+            case Step.Confirm:
+                await ValidateSend();
+                break;
+        }
+    }
+
+    private void NewTrade()
+    {
+        message = null;
+        sent = received = null;
+        preview = null;
+        shownPair = null;
+        step = Step.Saves;
+        Navigation.NavigateTo("echange-interne");
+    }
+
+    private static bool Matches(TradeCandidate c, string search) =>
+        search.Trim() is not { Length: > 0 } text
+        || new[] { c.Name, c.SpeciesName, c.Location }.Any(s => French.IndexOf(s, text,
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0);
+
+    /// <summary>« modifiée par le site, pas encore téléchargée » sous une sauvegarde choisie.</summary>
+    private static RenderFragment SaveWarning(StoredSaveInfo? save) => __builder =>
+    {
+        @if (save is { MustDownloadBeforeUpdate: true })
+        {
+            <div class="small text-warning-emphasis mt-1">
+                Modifiée par le site (@save.ServerChanges) et pas encore téléchargée : l'échange porte sur la version du serveur.
+            </div>
+        }
+    };
+
+    /// <summary>Le Pokémon choisi à l'étape affichée, au-dessus de la grille.</summary>
+    private static RenderFragment Choice(TradeCandidate? chosen) => __builder =>
+    {
+        <div class="card mb-2 internal-trade-choice">
+            <div class="card-body py-2">
+                @if (chosen is null)
+                {
+                    <em class="text-muted">Choisis un Pokémon ci-dessous, puis valide.</em>
+                }
+                else
+                {
+                    <TradePokemon Pokemon="chosen" />
+                }
+            </div>
+        </div>
+    };
+
+    /// <summary>Étapes 2 et 3 : le haut de la page reste visible pendant que la grille défile.</summary>
+    private bool Choosing => step is Step.Send or Step.Receive;
+
+    /// <summary>Repère des quatre étapes (faites, en cours, à venir).</summary>
+    private RenderFragment Steps => __builder =>
+    {
+        <ol class="internal-trade-steps" aria-label="Étapes de l'échange">
+            @for (int i = 0; i < StepNames.Length; i++)
+            {
+                var index = i;
+                var state = (int)step > index || step == Step.Done ? "done" : (int)step == index ? "current" : "";
+                <li class="internal-trade-step @state" aria-current="@((int)step == index ? "step" : null)">
+                    <span class="internal-trade-step-number">@(state == "done" ? "✓" : (index + 1).ToString())</span>
+                    <span>@StepNames[index]</span>
+                </li>
+            }
+        </ol>
+    };
+
+    /// <summary>Recherche (nom, espèce, place) au-dessus de la grille ; absente s'il n'y a aucun Pokémon.</summary>
+    private RenderFragment Search(List<TradeCandidate>? candidates, string search, Action<string> setSearch) => __builder =>
+    {
+        @if (candidates is { Count: > 0 })
+        {
+            <input type="search" class="form-control form-control-sm internal-trade-search" placeholder="Rechercher (nom, espèce, boîte)…"
+                   aria-label="Rechercher un Pokémon" value="@search" @oninput="e => setSearch(e.Value?.ToString() ?? string.Empty)" />
+        }
+    };
+
+    /// <summary>Grille de Pokémon filtrée par la recherche ; un Pokémon avec une raison est grisé.</summary>
+    private RenderFragment Grid(List<TradeCandidate>? candidates, TradeCandidate? chosen, Action<TradeCandidate> choose,
+        string search, string empty) => __builder =>
+    {
+        @if (candidates is null)
+        {
+            <p class="text-muted small mb-0">Chargement…</p>
+        }
+        else if (candidates.Count == 0)
+        {
+            <p class="text-muted small mb-0">@empty</p>
+        }
+        else
+        {
+            var shown = candidates.Where(c => Matches(c, search)).ToList();
+            @if (shown.Count == 0)
+            {
+                <p class="text-muted small mb-0">Aucun Pokémon ne correspond à « @search.Trim() ».</p>
+            }
+            <div class="trade-candidates">
+                @foreach (var candidate in shown)
+                {
+                    var c = candidate;
+                    <button type="button" class="trade-candidate @(chosen == c ? "selected" : "")" title="@(c.Problem ?? c.Location)"
+                            disabled="@(busy || c.Problem is not null)" @onclick="() => choose(c)">
+                        <img src="@c.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
+                        <span class="trade-candidate-name">@c.Name@(c.IsShiny ? " ✨" : "")</span>
+                        <span class="small text-muted">@(c.IsEgg ? "Œuf" : $"N.{c.Level}") · @c.Location</span>
+                        @if (c.Problem is not null)
+                        {
+                            <span class="small text-danger">Impossible</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    };
+}

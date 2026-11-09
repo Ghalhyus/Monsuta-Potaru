@@ -32,6 +32,26 @@ README : « Multijoueurs », « Échanges ».
   par ses méthodes sous verrou, les pages s'abonnent à `TradeSession.Changed`.
 - La page du second à valider écrit les deux sauvegardes.
 - Confirmation de départ (`NavigationLock`) : se teste en remplaçant `window.confirm` dans la page.
+- Compatibilité : `TradeFamily` (contexte PKHeX + Time Capsule + région Game Boy), la même pour l'échange entre amis et
+  l'échange interne. `SAV1.Japanese`, `SAV2.Japanese` / `Korean`. Conversion PK1 ↔ PK2 par `EntityConverter` ;
+  `IsCompatiblePKM` ne suffit pas vers Rouge / Bleu : `ConvertFor` vérifie aussi `MaxSpeciesID`, `MaxMoveID` et refuse
+  les œufs. Un Pokémon de 5e génération n'a pas de dresseur actuel (`HandlingTrainerName` vide).
+- Mécanique commune : `PrepareAsync` (relecture, empreintes, œufs, conversion, évolution sur des copies) puis
+  `WriteAsync` (transaction, copies, trace anti-copie ; ligne `TradeRecords` pour les amis seulement).
+
+## Échange interne (`Pages/InternalTrade.razor`)
+- Étapes : `Step` (Saves, Send, Receive, Confirm, Done). Seule la paire est dans l'adresse (`?de=&vers=`, traitée dans
+  `OnParametersSetAsync`, une fois par paire : `shownPair`) ; les Pokémon choisis restent en mémoire. « Retour » de
+  l'étape 2 navigue vers `echange-interne` sans paire : les listes gardent `firstId` / `secondId`.
+- Choix revérifiés : liste du serveur pour les `<select>` (`Partners`), puis le service (`ReadPairAsync`, `PrepareAsync`
+  avec le compte pour les deux côtés). La confirmation appelle `InternalPreviewAsync` (rien d'écrit) pour annoncer les
+  évolutions et détecter un changement avant « Échanger ».
+- Échec avec `Retry` : retour à l'étape 2, Pokémon relus ; sinon retour à l'étape 1, sauvegardes relues.
+- Pas de visiteur, pas de `NavigationLock` (rien en cours chez un autre joueur).
+- Étapes 2 et 3 : repère, titre, boutons, Pokémon choisi et recherche dans `.internal-trade-sticky` (collé sous la barre
+  du haut, 3,5 rem, à partir de 641 px de large et 600 px de haut, comme la barre de « Ma collection ») ; la grille est
+  dans un second bloc. L'espace sous le bloc collé est un `padding` du bandeau (fond de la page), pas une marge du bloc :
+  sinon la grille se voit entre les deux.
 
 ## Valeurs trafiquées (Blazor Server)
 - La valeur d'un événement (`<select>`, champ, `[JSInvokable]`) vient du navigateur. Un service appelé avec l'identifiant

@@ -92,6 +92,6 @@ public sealed class TradesPageTests : PageTestContext
         await MakeFriends("sacha", "pierre");
         var cut = Render<Trades>();
         await cut.Find("select.trade-friend").ChangeAsync(new() { Value = "pierre" });
-        cut.WaitForText("aucune sauvegarde stockée de la même génération");
+        cut.WaitForText("aucune paire de sauvegardes stockées qui puissent échanger");
     }
 }

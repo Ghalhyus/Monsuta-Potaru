@@ -160,8 +160,11 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 `/echanges`, `Pages/Trades.razor` ; mécanique `Services/TradeService.cs`, déroulé en direct `Services/TradeHub.cs`
 (singleton : un redémarrage annule les échanges en cours).
 
-- Entre deux sauvegardes stockées du **même contexte de jeu** de PKHeX (Noire ↔ Noire 2, Platine ↔ HeartGold ; pas Let's
-  Go ↔ Soleil, ni Épée ↔ Diamant Étincelant), avec un ami, en direct. Le serveur revérifie l'amitié avant de montrer les
+- Entre deux sauvegardes stockées **qui échangent sur console** (`TradeFamily`, même règle pour l'échange interne) : même
+  contexte de jeu de PKHeX (Noire ↔ Noire 2, Platine ↔ HeartGold ; pas Let's Go ↔ Soleil, ni Épée ↔ Diamant Étincelant),
+  plus le Time Capsule (Rouge / Bleu / Jaune ↔ Or / Argent / Cristal : espèces et attaques de la 1re génération, sans
+  œuf) ; en 1re et 2e génération, pas de japonais ↔ non japonais (Or / Argent coréens : avec les non japonais de 2e
+  génération seulement). Les conditions de progression du jeu ne sont pas vérifiées. Avec un ami, en direct. Le serveur revérifie l'amitié avant de montrer les
   sauvegardes de l'autre (`TradeService.SavePairsAsync`). Demande valable 10 minutes, un échange à la fois.
 - Chacun choisit le Pokémon qu'il **reçoit** (équipe et boîtes, hors cases verrouillées, œufs compris), parmi ceux que sa
   sauvegarde accepte (`SaveFile.IsCompatiblePKM` après conversion) ; validation par les deux.
@@ -173,6 +176,13 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
 - **Statistiques** (`/statistiques`, `Pages/Statistics.razor`) : tables `TradeRecords` et `BattleRecords`, sans clé
   étrangère (elles survivent à la suppression du compte du partenaire).
+- **Échange interne** (`/echange-interne?de=3&vers=5`, à la racine du menu, `Pages/InternalTrade.razor`) : entre deux
+  sauvegardes stockées du même compte (deux parties du même jeu comprises, jamais une avec elle-même), en 4 étapes (les
+  sauvegardes, le Pokémon envoyé par la première, celui qu'elle reçoit de la seconde, la confirmation avec les évolutions
+  annoncées), « Retour » à chaque étape. Même mécanique et mêmes refus que l'échange entre amis
+  (`TradeService.ExecuteInternalAsync`, sauvegardes revérifiées : au compte, différentes, compatibles) ; un œuf qui
+  laisserait une équipe sans Pokémon est grisé (`InternalReceivableAsync`). Sauvegarde pas encore téléchargée acceptée
+  (avertissement). **Pas compté** dans `TradeRecords` ni dans les statistiques.
 
 ### Tris par défaut (« Mon compte » → « Préférences »)
 
@@ -287,7 +297,8 @@ Une sauvegarde dont un Pokémon est déjà **ailleurs dans le compte** (stockage
 jour ; une mise à jour ne se compare pas à sa version précédente, et le contrôle passe avant la question du temps de jeu),
 la 3DS (`raison` : `Duplicate`) et « Transfert » (au chargement ; la validation refuse aussi le dépôt d'un Pokémon déjà
 au stockage interne, avant les retraits). Revers acceptés : Pokémon d'événement à PID fixe ou d'échange en jeu, et un
-Pokémon échangé entre deux parties du même compte. Empreinte calculée à l'enregistrement, et au démarrage pour les plus
+Pokémon échangé en jeu entre deux parties du même compte (l'« Échange interne » le fait sans ce souci : le Pokémon passe
+d'une sauvegarde à l'autre sur le serveur). Empreinte calculée à l'enregistrement, et au démarrage pour les plus
 anciens (migration `PokemonFingerprints`). Détails : `docs/claude/collection.md`.
 
 ### Synchronisation depuis une 3DS
@@ -467,7 +478,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/FriendService.cs` | Amis : code ami, demandes (par pseudo ou par code), acceptation, refus, annulation, retrait, listes, compteur du menu |
 | `MonsutaPotaru/Components/Pages/Friends.razor` | « Multijoueurs » → « Amis » : onglets Amis (recherche, retrait) et Demandes (code ami, reçues, envoyées) |
 | `MonsutaPotaru/Data/Friendship.cs` | Tables des amitiés (deux lignes par amitié) et des demandes d'ami |
-| `MonsutaPotaru/Services/TradeService.cs` | Échanges : sauvegardes compatibles, Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
+| `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement) |
 | `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combats » : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (interface façon Platine) |
@@ -482,6 +493,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleView.cs` | Combat vu par un joueur : terrain, PV, statuts, météo, étapes à animer, messages en français |
 | `MonsutaPotaru/Services/Battle/BattleNames.cs` | Noms anglais de Showdown → noms français de PKHeX (espèces, capacités, objets, talents, types) |
 | `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échanges » : demandes, choix de l'ami et des sauvegardes, échange en direct |
+| `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo) : échanges, combats |
 | `MonsutaPotaru/Data/TradeRecord.cs` | Table des échanges réussis (statistiques, succès) |

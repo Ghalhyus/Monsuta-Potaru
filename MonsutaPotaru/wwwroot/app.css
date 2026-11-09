@@ -555,6 +555,29 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .trade-candidate:disabled { cursor: default; opacity: .7; }
 .trade-candidate img, .trade-pokemon-sprite { width: 56px; height: 56px; object-fit: contain; image-rendering: pixelated; }
 .trade-candidate-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Échange interne : étapes numérotées, choix des sauvegardes ---------- */
+.internal-trade-steps { display: flex; flex-wrap: wrap; gap: .4rem 1.25rem; padding: 0; margin: 0 0 1rem; list-style: none; }
+.internal-trade-step { display: flex; align-items: center; gap: .4rem; color: var(--bs-secondary-color); }
+.internal-trade-step-number {
+    display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+    border: 2px solid var(--bs-border-color); font-size: .85rem; font-weight: 600;
+}
+.internal-trade-step.current { color: var(--bs-body-color); font-weight: 600; }
+.internal-trade-step.current .internal-trade-step-number { border-color: var(--bs-primary); background: var(--bs-primary); color: #fff; }
+.internal-trade-step.done .internal-trade-step-number { border-color: var(--bs-success); color: var(--bs-success); }
+.internal-trade-choose { max-width: 36rem; }
+.internal-trade-choice { max-width: 36rem; }
+.internal-trade-search { max-width: 22rem; }
+/* L'espace sous le bloc est dans le bandeau (fond de la page) : la grille qui défile disparaît avant le bloc. */
+.internal-trade-sticky { padding-bottom: .75rem; }
+.internal-trade-sticky > .block, [data-theme="ardoise"] main .internal-trade-sticky > .block { margin-bottom: 0; }
+@media (min-width: 641px) and (min-height: 600px) {
+    /* Étapes 2 et 3 : le repère, les boutons, le Pokémon choisi et la recherche restent sous la barre du haut (3,5 rem)
+       pendant que la grille défile ; fond de la page dessous, pour cacher la grille qui passe. */
+    .internal-trade-sticky { position: sticky; top: 3.5rem; z-index: 3; padding-top: .75rem; margin-top: -.75rem; background: var(--bs-body-bg); }
+    [data-theme="ardoise"] .internal-trade-sticky { background: var(--ard-bg); }
+}
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1rem; max-width: 40rem; }
 .stat-value { font-size: 2rem; font-weight: 600; line-height: 1.2; }
 
@@ -720,6 +743,10 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 
 .bi-list-nested-nav-menu {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-list-nested' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M4.5 11.5A.5.5 0 0 1 5 11h10a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zm-2-4A.5.5 0 0 1 3 7h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm-2-4A.5.5 0 0 1 1 3h10a.5.5 0 0 1 0 1H1a.5.5 0 0 1-.5-.5z'/%3E%3C/svg%3E");
+}
+
+.bi-arrow-left-right-nav-menu {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-arrow-left-right' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5m14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5'/%3E%3C/svg%3E");
 }
 
 .bi-lightning-nav-menu {

@@ -28,7 +28,7 @@ public sealed class TradeServiceTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     /// <summary>Noire 2 de <paramref name="ot"/> : l'équipe, puis la boîte 1 (Pokémon propres au dresseur : pas de doublons).</summary>
-    private static byte[] Bw2(string ot, ushort tid, ushort[] party, params ushort[] box)
+    internal static byte[] Bw2(string ot, ushort tid, ushort[] party, params ushort[] box)
     {
         var sav = new SAV5B2W2 { OT = ot, TID16 = tid, SID16 = 1, PlayedHours = 10 };
         var n = 0;
