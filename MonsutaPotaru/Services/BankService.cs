@@ -308,10 +308,10 @@ public sealed class BankService(
         await using var db = await dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        // La sauvegarde a pu être stockée (depuis un autre onglet) après son chargement dans « Transfert ».
+        // La sauvegarde a pu être stockée (depuis un autre onglet) après son chargement dans « Dépôt / Retrait ».
         var key = SaveIdentity.Of(sav).Key;
         if (await db.StoredSaves.AnyAsync(s => s.IdentityKey == key))
-            throw new InvalidOperationException("Cette sauvegarde est maintenant stockée sur le serveur : elle ne peut plus être utilisée dans « Transfert ».");
+            throw new InvalidOperationException("Cette sauvegarde est maintenant stockée sur le serveur : elle ne peut plus être utilisée dans « Dépôt / Retrait ».");
 
         // Un Pokémon déjà au stockage interne ne peut pas y entrer une seconde fois (vieille copie de la sauvegarde) : la
         // page refuse déjà une telle sauvegarde au chargement, ceci couvre un dépôt fait entre-temps depuis un autre onglet.

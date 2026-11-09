@@ -32,13 +32,34 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     /// <summary>Toutes les demandes reçues : la pastille du menu « Multijoueurs ».</summary>
     protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests;
 
-    /// <summary>Menu « Sauvegardes » ouvert : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
-    protected bool savesOpen => currentUrl is { } url && (url == "sauvegardes" || url.StartsWith("sauvegardes/") || url.StartsWith("sauvegardes?"));
+    // Rubriques du menu : fermées, chacune ouverte d'elle-même sur l'une de ses pages (puis ouvertes et fermées d'un clic).
 
-    /// <summary>Menu « Multijoueurs » ouvert : sur la recherche ou les pages d'un joueur.</summary>
-    protected bool playersOpen => currentUrl is { } url
-        && (url == "joueurs" || url.StartsWith("joueurs/") || url.StartsWith("joueurs?") || url == "amis" || url.StartsWith("amis?")
-            || url == "echanges" || url.StartsWith("echanges?") || url == "combats" || url.StartsWith("combats?"));
+    /// <summary>Rubrique « Mes Pokémon » ouverte : sur « Ma collection », « Parc », « Dépôt / Retrait » ou « Échange interne ».</summary>
+    protected bool pokemonOpen => IsOn("collection", "parc", "transfert", "banque", "echange-interne");
+
+    /// <summary>Rubrique « Inventaire » ouverte : sur « Banque d'objets » ou « Transfert d'inventaire ».</summary>
+    protected bool inventoryOpen => IsOn("inventaire");
+
+    /// <summary>Rubrique « Défis » ouverte : sur la liste des living dex ou l'un d'eux.</summary>
+    protected bool challengesOpen => IsOn("livingdex");
+
+    /// <summary>Rubrique « Sauvegardes » ouverte : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
+    protected bool savesOpen => IsOn("sauvegardes");
+
+    /// <summary>Rubrique « Multijoueurs » ouverte : sur la recherche, les pages d'un joueur, « Amis », « Échange » ou « Combat ».</summary>
+    protected bool playersOpen => IsOn("joueurs", "amis", "echanges", "combats");
+
+    /// <summary>
+    /// La page affichée est l'une de ces pages ou une page sous elles (« livingdex/3 », « collection?tri=nom ») ; la
+    /// collection d'un autre joueur (« joueurs/sacha/collection ») relève de « joueurs ».
+    /// </summary>
+    private bool IsOn(params string[] pages)
+    {
+        if (currentUrl is not { } url)
+            return false;
+        var first = url.Split(['/', '?', '#'])[0];
+        return pages.Any(p => string.Equals(first, p, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Menu du pseudo ouvert : sur les paramètres du profil ou les statistiques.</summary>
     protected bool accountOpen => currentUrl is { } url && (url.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase) || url == "statistiques");
@@ -52,7 +73,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Trades.RequestsChanged += OnTradeRequestsChanged;
         Battles.RequestsChanged += OnBattleRequestsChanged;
 
-        // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Inventaire » après un retrait).
+        // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Banque d'objets » après un retrait).
         userId = AuthState is null ? null : (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId is not null)
         {

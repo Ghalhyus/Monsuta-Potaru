@@ -45,7 +45,7 @@ else
             Vert Feuille, Diamant, Perle, Platine, Or HeartGold, Argent SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y,
             Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier,
             Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate, Violet). Le <strong>living dex global</strong>, lui,
-            compte les Pokémon de ton stockage interne (« Transfert »), tous jeux confondus, avec un mode de plus : Ultime, chaque
+            compte les Pokémon de ton stockage interne (« Dépôt / Retrait »), tous jeux confondus, avec un mode de plus : Ultime, chaque
             forme de chaque espèce ; le <strong>global chromatique</strong>, pareil avec tes chromatiques. Chaque jeu (sauf la
             1re génération) peut aussi avoir son <strong>living dex chromatique</strong>, sur une autre sauvegarde : seuls ses
             chromatiques comptent, dans le Pokédex régional pour l'instant.
@@ -118,7 +118,7 @@ else
             @if (game is { } globalGame && GlobalLivingDex.IsGlobal(globalGame))
             {
                 <p class="small text-muted mb-3">
-                    Il compte les Pokémon de ton stockage interne (« Transfert »), pas ceux des sauvegardes : pas de sauvegarde à
+                    Il compte les Pokémon de ton stockage interne (« Dépôt / Retrait »), pas ceux des sauvegardes : pas de sauvegarde à
                     choisir. Modes National, Complet et Ultime (toutes les formes, femelles, Méga, Gigamax...).
                     @(globalGame == LivingDexGame.GlobalShiny
                         ? "Seuls tes chromatiques comptent ; ce qui n'a jamais existé en chromatique n'est pas demandé."

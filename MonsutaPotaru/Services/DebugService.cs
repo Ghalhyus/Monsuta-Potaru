@@ -64,7 +64,7 @@ public sealed class DebugService(IDbContextFactory<ApplicationDbContext> dbFacto
         if (logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Compte {User} : mode debug {State}.", userId, active ? "activé" : "désactivé");
         return new(true, active
-            ? "Mode debug activé jusqu'à ta déconnexion : argent dans « Inventaire », taille du parc dans « Parc »."
+            ? "Mode debug activé jusqu'à ta déconnexion : argent dans « Banque d'objets », taille du parc dans « Parc »."
             : "Mode debug désactivé.");
     }
 

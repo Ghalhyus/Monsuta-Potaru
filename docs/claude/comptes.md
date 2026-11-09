@@ -48,6 +48,21 @@ README : « Comptes », « Administration », « Thèmes ».
   commentaires, textes, README). Seul thème à cadre propre (`ArdoiseLayout`, choisi par `MainLayout` via la valeur en
   cascade `SiteTheme` de `Routes.razor`) : un lien ou une rubrique ajoutés au menu vont dans `NavMenu` **et**
   `ArdoiseLayout`, une nouvelle page dans `Breadcrumbs.For` (sinon fil d'Ariane vide), un compteur dans `SiteMenuBase`.
+- **Rubriques du menu** (2026-11-09) : Mes Pokémon, Inventaire, Défis, Multijoueurs, Sauvegardes, dans cet ordre, entre
+  Accueil et Administration. Une page ajoutée va dans sa rubrique des deux menus, dans la propriété « ouverte »
+  (`pokemonOpen`, `inventoryOpen`, `challengesOpen`, `playersOpen`, `savesOpen` : `IsOn` compare le premier segment de
+  l'adresse, donc `joueurs/x/inventaire` ouvre Multijoueurs, pas Inventaire), dans `Breadcrumbs.For` (« Rubrique › Page »,
+  la rubrique sans lien) et dans `SiteMenusTests`. Une rubrique sans page à elle n'a pas de lien.
+- Noms des pages = libellé du menu = titre (`PageTitle`, `PageHeader`) = dernière étape du fil d'Ariane : « Dépôt /
+  Retrait » (`/transfert`), « Banque d'objets » (`/inventaire` ; « Inventaire » sur la page d'un autre joueur, onglet de
+  `PlayerHeader`), « Échange » (`/echanges`), « Combat » (`/combats`), « Living dex » (typo française, comme « Ma
+  collection »). Les adresses n'ont pas suivi les noms (choix de l'utilisateur) ; un texte qui cite une page reprend son nom.
+- Deux pages sous une même adresse de base (`inventaire`, `inventaire/transfert`) : `NavLinkMatch.All` sur la première,
+  sinon les deux s'allument (en .NET 10, `All` ignore la chaîne de requête).
+- Porte-monnaie : `WalletLink.razor` dans la barre du haut, dans tous les thèmes (Ardoise : `ardoise-wallet` ; Classique et
+  Pokédex : `top-wallet`, seul dans la `top-row` de `MainLayout`, à droite même sur téléphone). Le menu ne l'affiche
+  plus. Pokédex : la règle des liens de `main` doit l'exclure (`:not(.top-wallet)`), sinon il passe en bleu sur le rouge.
+- Icônes des rubriques : `bi-pokeball-nav-menu` (dessin du site, traits blancs), `bi-bag-nav-menu`, `bi-trophy-nav-menu`.
 - Le cadre Ardoise sert aussi aux pages du compte (rendu statique) : aucun `@onclick` dedans, tout par `app.js`. La
   classe `ouvert` d'une rubrique est posée par Blazor (page de la rubrique) puis changée par `app.js` : Blazor ne la
   réécrit que si sa propre valeur change.

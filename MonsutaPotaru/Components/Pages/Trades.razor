@@ -11,7 +11,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>Échanges</PageTitle>
+<PageTitle>Échange</PageTitle>
 
 @* Multijoueurs → Échanges : avec un ami, entre deux sauvegardes stockées compatibles (TradeFamily : comme sur console). Demande (valable
    TradeHub.RequestLifetime), puis chacun choisit le Pokémon de l'autre qu'il veut, les deux valident, et le site échange
@@ -19,7 +19,7 @@
    Quitter la page pendant un échange demande confirmation, puis l'annule pour les deux. *@
 <NavigationLock ConfirmExternalNavigation="InTrade" OnBeforeInternalNavigation="BeforeLeaving" />
 
-<PageHeader Title="Échanges" Icon="bi-list-nested-nav-menu" />
+<PageHeader Title="Échange" Icon="bi-list-nested-nav-menu" />
 
 @if (message is not null)
 {

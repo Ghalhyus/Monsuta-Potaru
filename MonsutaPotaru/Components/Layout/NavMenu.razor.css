@@ -35,13 +35,6 @@
     background-size: cover;
 }
 
-.nav-balance {
-    margin-left: .35rem;
-    font-size: .8rem;
-    opacity: .8;
-    white-space: nowrap;
-}
-
 .nav-item {
     font-size: 0.9rem;
     padding-bottom: 0.5rem;

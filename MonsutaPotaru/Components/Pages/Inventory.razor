@@ -43,7 +43,7 @@ else
 }
 <div class="inventory-layout">
 <div class="inventory-main">
-    <PageHeader Title="Inventaire" Small="Visitor" Icon="@(Visitor ? null : "bi-bag-nav-menu")">
+    <PageHeader Title="@(Visitor ? "Inventaire" : "Banque d'objets")" Small="Visitor" Icon="@(Visitor ? null : "bi-bag-nav-menu")">
         <Aside>
             @if (!Visitor)
             {
@@ -450,7 +450,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
         get
         {
             if (!Visitor)
-                return "Inventaire";
+                return "Banque d'objets"; // nom de la page dans le menu ; « Inventaire » est sa rubrique
             return player is null ? "Joueur introuvable" : $"Inventaire de {player.Pseudo}";
         }
     }

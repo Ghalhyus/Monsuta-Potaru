@@ -1,0 +1,23 @@
+@* Porte-monnaie dans la barre du haut (tous les thèmes) : solde lu dans WalletState, rafraîchi par les menus
+   (SiteMenuBase) et par la page « Banque d'objets » après un retrait ; rien sans compte. *@
+@implements IDisposable
+@using MonsutaPotaru.Services
+@inject WalletState Wallet
+
+@if (Wallet.Balance is { } balance)
+{
+    <a class="@Class" href="inventaire" title="Ton porte-monnaie (Banque d'objets)">
+        <span class="bi bi-bag-nav-menu" aria-hidden="true"></span>@InventoryService.FormatMoney(balance)
+    </a>
+}
+
+@code {
+    /// <summary>Classe du lien : « ardoise-wallet » (thème Ardoise) ou « top-wallet » (Classique, Pokédex).</summary>
+    [Parameter] public string Class { get; set; } = "top-wallet";
+
+    protected override void OnInitialized() => Wallet.Changed += OnWalletChanged;
+
+    private void OnWalletChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Wallet.Changed -= OnWalletChanged;
+}

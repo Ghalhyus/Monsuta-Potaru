@@ -121,7 +121,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             var available = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
             return new(false, $"Un nouveau parc coûte {InventoryService.FormatMoney(ParkPrice)}, ton porte-monnaie contient " +
                               $"{InventoryService.FormatMoney(available)} : il manque {InventoryService.FormatMoney(ParkPrice - available)}. " +
-                              "Retire de l'argent d'une sauvegarde depuis « Inventaire ».", Balance: available);
+                              "Retire de l'argent d'une sauvegarde depuis « Banque d'objets ».", Balance: available);
         }
 
         var parkId = await db.Parks.Where(p => p.OwnerId == ownerId && p.Landscape == landscape).Select(p => p.Id).FirstAsync();
@@ -170,7 +170,7 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
             var available = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
             return new(false, $"L'agrandissement coûte {InventoryService.FormatMoney(ExpansionPrice)}, ton porte-monnaie contient " +
                               $"{InventoryService.FormatMoney(available)} : il manque {InventoryService.FormatMoney(ExpansionPrice - available)}. " +
-                              "Retire de l'argent d'une sauvegarde depuis « Inventaire ».", Balance: available);
+                              "Retire de l'argent d'une sauvegarde depuis « Banque d'objets ».", Balance: available);
         }
 
         var park = await db.Parks.Where(p => p.Id == parkId).Select(p => new { p.Expansions, p.Landscape }).FirstAsync();

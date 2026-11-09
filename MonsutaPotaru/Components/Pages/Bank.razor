@@ -14,9 +14,9 @@
 @inject PokemonInfo Info
 @inject IJSRuntime JS
 
-<PageTitle>Transfert et stockage interne</PageTitle>
+<PageTitle>Dépôt / Retrait</PageTitle>
 
-<PageHeader Title="Transfert et stockage interne" Icon="bi-list-nested-nav-menu" />
+<PageHeader Title="Dépôt / Retrait" Icon="bi-list-nested-nav-menu" />
 
 <CollectionGauge Usage="usage" Pending="@(Session.Deposits.Count - Session.Withdrawals.Count)" OnPurchase="OnPurchase" />
 

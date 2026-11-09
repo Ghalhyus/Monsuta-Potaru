@@ -11,7 +11,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>Combats</PageTitle>
+<PageTitle>Combat</PageTitle>
 
 @* Multijoueurs → Combats : avec un ami, entre deux sauvegardes stockées de même génération (la 3e pour l'instant).
    Demande (valable BattleHub.RequestLifetime), choix des équipes, puis combat en direct dans le simulateur de Showdown
@@ -19,7 +19,7 @@
    choix a BattleTiming.Decision ; quitter la page pendant le combat demande confirmation, puis abandonne. *@
 <NavigationLock ConfirmExternalNavigation="InBattle" OnBeforeInternalNavigation="BeforeLeaving" />
 
-<PageHeader Title="Combats" Icon="bi-lightning-nav-menu" />
+<PageHeader Title="Combat" Icon="bi-lightning-nav-menu" />
 
 @if (message is not null)
 {

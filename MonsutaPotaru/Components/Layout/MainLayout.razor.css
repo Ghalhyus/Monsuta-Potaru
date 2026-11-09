@@ -42,8 +42,9 @@ main {
     }
 
 @media (max-width: 640.98px) {
+    /* Le porte-monnaie (seul dans la barre) reste à droite, comme dans le thème Ardoise */
     .top-row {
-        justify-content: space-between;
+        justify-content: flex-end;
     }
 
     .top-row ::deep a, .top-row ::deep .btn-link {

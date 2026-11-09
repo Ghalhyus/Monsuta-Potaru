@@ -1,8 +1,6 @@
 ﻿@* Menu des thèmes Classique et Pokédex. Compteurs et adresse de la page : SiteMenuBase (communs au thème Ardoise). *@
 @inherits SiteMenuBase
 
-@using MonsutaPotaru.Services
-
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Monsuta Potaru</a>
@@ -19,58 +17,59 @@
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Accueil
             </NavLink>
         </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="transfert">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Transfert
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="collection">
-                <span class="bi bi-grid-nav-menu" aria-hidden="true"></span> Ma collection
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="parc">
-                <span class="bi bi-tree-nav-menu" aria-hidden="true"></span> Parc
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="inventaire">
-                <span class="bi bi-bag-nav-menu" aria-hidden="true"></span> Inventaire
-                @if (Wallet.Balance is { } balance)
-                {
-                    <span class="nav-balance">· @InventoryService.FormatMoney(balance)</span>
-                }
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="livingdex">
-                <span class="bi bi-book-nav-menu" aria-hidden="true"></span> Living dex
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="echange-interne">
-                <span class="bi bi-arrow-left-right-nav-menu" aria-hidden="true"></span> Échange interne
-            </NavLink>
-        </div>
-        @* Menu repliable (élément HTML details : marche aussi sur les pages de compte, sans interactivité), ouvert de
-           lui-même sur l'une de ses pages. *@
+        @* Rubriques repliables (élément HTML details : marchent aussi sur les pages de compte, sans interactivité), chacune
+           ouverte d'elle-même sur l'une de ses pages (SiteMenuBase). *@
         <div class="nav-item nav-group px-3">
-            <details open="@savesOpen">
+            <details open="@pokemonOpen">
                 <summary class="nav-link">
-                    <span class="bi bi-save-nav-menu" aria-hidden="true"></span> Sauvegardes
+                    <span class="bi bi-pokeball-nav-menu" aria-hidden="true"></span> Mes Pokémon
                 </summary>
                 <div class="nav-subitems">
-                    <NavLink class="nav-link" href="sauvegardes" Match="NavLinkMatch.All">
-                        <span class="bi bi-folder-nav-menu" aria-hidden="true"></span> Mes sauvegardes
+                    <NavLink class="nav-link" href="collection">
+                        <span class="bi bi-grid-nav-menu" aria-hidden="true"></span> Ma collection
                     </NavLink>
-                    <NavLink class="nav-link" href="sauvegardes/3ds">
-                        <span class="bi bi-controller-nav-menu" aria-hidden="true"></span> Synchronisation 3DS
+                    <NavLink class="nav-link" href="parc">
+                        <span class="bi bi-tree-nav-menu" aria-hidden="true"></span> Parc
+                    </NavLink>
+                    <NavLink class="nav-link" href="transfert">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Dépôt / Retrait
+                    </NavLink>
+                    <NavLink class="nav-link" href="echange-interne">
+                        <span class="bi bi-arrow-left-right-nav-menu" aria-hidden="true"></span> Échange interne
                     </NavLink>
                 </div>
             </details>
         </div>
-        @* Multijoueurs : trouver un joueur par son pseudo et consulter ses pages publiques (lecture seule). *@
+        @* Le solde du porte-monnaie est dans la barre du haut (WalletLink, MainLayout). *@
+        <div class="nav-item nav-group px-3">
+            <details open="@inventoryOpen">
+                <summary class="nav-link">
+                    <span class="bi bi-bag-nav-menu" aria-hidden="true"></span> Inventaire
+                </summary>
+                <div class="nav-subitems">
+                    <NavLink class="nav-link" href="inventaire" Match="NavLinkMatch.All">
+                        <span class="bi bi-bag-nav-menu" aria-hidden="true"></span> Banque d'objets
+                    </NavLink>
+                    <NavLink class="nav-link" href="inventaire/transfert">
+                        <span class="bi bi-arrow-left-right-nav-menu" aria-hidden="true"></span> Transfert d'inventaire
+                    </NavLink>
+                </div>
+            </details>
+        </div>
+        <div class="nav-item nav-group px-3">
+            <details open="@challengesOpen">
+                <summary class="nav-link">
+                    <span class="bi bi-trophy-nav-menu" aria-hidden="true"></span> Défis
+                </summary>
+                <div class="nav-subitems">
+                    <NavLink class="nav-link" href="livingdex">
+                        <span class="bi bi-book-nav-menu" aria-hidden="true"></span> Living dex
+                    </NavLink>
+                </div>
+            </details>
+        </div>
+        @* Multijoueurs : trouver un joueur par son pseudo et consulter ses pages publiques (lecture seule), amis, échanges
+           et combats. Fermée : le total des demandes reçues ; ouverte : le détail sur chaque page. *@
         <div class="nav-item nav-group px-3">
             <details open="@playersOpen">
                 <summary class="nav-link">
@@ -92,14 +91,14 @@
                         }
                     </NavLink>
                     <NavLink class="nav-link" href="echanges">
-                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Échanges
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Échange
                         @if (tradeRequests > 0)
                         {
                             <span class="badge bg-danger ms-2" title="Demandes d'échange reçues">@tradeRequests</span>
                         }
                     </NavLink>
                     <NavLink class="nav-link" href="combats">
-                        <span class="bi bi-lightning-nav-menu" aria-hidden="true"></span> Combats
+                        <span class="bi bi-lightning-nav-menu" aria-hidden="true"></span> Combat
                         @if (battleRequests > 0)
                         {
                             <span class="badge bg-danger ms-2" title="Demandes de combat reçues">@battleRequests</span>
@@ -108,6 +107,22 @@
                 </div>
             </details>
         </div>
+        <div class="nav-item nav-group px-3">
+            <details open="@savesOpen">
+                <summary class="nav-link">
+                    <span class="bi bi-save-nav-menu" aria-hidden="true"></span> Sauvegardes
+                </summary>
+                <div class="nav-subitems">
+                    <NavLink class="nav-link" href="sauvegardes" Match="NavLinkMatch.All">
+                        <span class="bi bi-folder-nav-menu" aria-hidden="true"></span> Mes sauvegardes
+                    </NavLink>
+                    <NavLink class="nav-link" href="sauvegardes/3ds">
+                        <span class="bi bi-controller-nav-menu" aria-hidden="true"></span> Synchronisation 3DS
+                    </NavLink>
+                </div>
+            </details>
+        </div>
+
 
         <AuthorizeView>
             <Authorized>

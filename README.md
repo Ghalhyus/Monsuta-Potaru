@@ -82,10 +82,10 @@ liste sans trou, tassée à l'écriture comme le fait le jeu (un Pokémon dépos
 ## Fonctionnement
 
 Le mode d'emploi du site, pour les joueurs, est dans le **[guide du joueur](https://docs.google.com/document/d/1cCz7BaDp5PWYgcoyKmB7m63tj9R6L9jGBg1o5HDLijM/edit)**
-(Google Doc, un chapitre par menu). Ici, seulement les règles que le code doit respecter et où elles sont ; le détail de
+(Google Doc, un chapitre par rubrique du menu). Ici, seulement les règles que le code doit respecter et où elles sont ; le détail de
 chaque sujet est dans sa fiche `docs/claude/` (voir `CLAUDE.md`).
 
-1. L'utilisateur charge sa sauvegarde (`.sav`, `.dsv`…) dans « Transfert ».
+1. L'utilisateur charge sa sauvegarde (`.sav`, `.dsv`…) dans « Dépôt / Retrait » (`/transfert`).
 2. Il dépose / retire des Pokémon : les changements restent **en attente** (en mémoire, `SaveSession`) et sont annulables.
 3. « Valider et télécharger » : la base est mise à jour dans une transaction, une copie *avant/après* de la
    sauvegarde est écrite dans `Data/backups/<id utilisateur>/`, et la sauvegarde modifiée est téléchargée.
@@ -176,7 +176,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
 - **Statistiques** (`/statistiques`, `Pages/Statistics.razor`) : tables `TradeRecords` et `BattleRecords`, sans clé
   étrangère (elles survivent à la suppression du compte du partenaire).
-- **Échange interne** (`/echange-interne?de=3&vers=5`, à la racine du menu, `Pages/InternalTrade.razor`) : entre deux
+- **Échange interne** (`/echange-interne?de=3&vers=5`, rubrique « Mes Pokémon », `Pages/InternalTrade.razor`) : entre deux
   sauvegardes stockées du même compte (deux parties du même jeu comprises, jamais une avec elle-même), en 4 étapes (les
   sauvegardes, le Pokémon envoyé par la première, celui qu'elle reçoit de la seconde, la confirmation avec les évolutions
   annoncées), « Retour » à chaque étape. Même mécanique et mêmes refus que l'échange entre amis
@@ -213,7 +213,14 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - Les styles du menu sont isolés par composant (`NavMenu.razor.css`) : les sélecteurs d'un thème commencent par `html`
   pour passer devant. `app.css` fixe certaines couleurs en dur (`.btn-primary`, `.btn-link`, anneau du focus) : un thème
   doit les écraser explicitement.
-- Compteurs du menu (porte-monnaie, demandes) : `Components/Layout/SiteMenuBase.cs`, communs aux deux menus.
+- **Menu en rubriques**, le même dans les deux menus (`NavMenu`, `ArdoiseLayout`) : Accueil ; Mes Pokémon (Ma collection,
+  Parc, Dépôt / Retrait, Échange interne) ; Inventaire (Banque d'objets, Transfert d'inventaire) ; Défis (Living dex) ;
+  Multijoueurs (Rechercher un joueur, Amis, Échange, Combat) ; Sauvegardes (Mes sauvegardes, Synchronisation 3DS) ;
+  Administration (administrateurs seulement). Chaque rubrique est fermée et s'ouvre d'elle-même sur l'une de ses pages
+  (`SiteMenuBase`, `pokemonOpen`…), puis d'un clic. Le nom d'une page est le même dans le menu, son titre et le fil
+  d'Ariane ; les adresses n'ont pas changé (`/transfert`, `/inventaire`, `/livingdex`, `/echanges`, `/combats`).
+- Compteurs du menu (demandes reçues) : `Components/Layout/SiteMenuBase.cs`, communs aux deux menus. Le porte-monnaie
+  est dans la barre du haut, dans tous les thèmes (`Components/Layout/WalletLink.razor`).
 - **Une nouvelle page** : un `Shared/PageHeader.razor` en tête (titre h1, nombre, description, actions, icône), des
   `Shared/Block.razor` pour ses parties (titre h2 ; `Flush` : liste collée aux bords).
 
@@ -234,7 +241,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   écouteur d'`app.js` s'en charge. Pas d'`<ImportMap />` (script écrit dans la page) : `parc.js` est chargé par son
   chemin, et charge Phaser par le sien (`wwwroot/lib/phaser`, servi par le site). Test
   `SecurityHeadersTests.Pages_HaveNoInlineScript`.
-- **Fichiers envoyés** : 8 Mo au plus depuis le navigateur (« Mes sauvegardes », « Transfert » :
+- **Fichiers envoyés** : 8 Mo au plus depuis le navigateur (« Mes sauvegardes », « Dépôt / Retrait » :
   `StoredSaveService.ReadUploadAsync`), 4 Mo depuis la 3DS (`SyncEndpoints.MaxSaveBytes`).
 - **Ce que le navigateur envoie peut être trafiqué** (valeurs d'événements, arguments des méthodes appelées par
   JavaScript) : les services revérifient le compte, l'amitié (`TradeService.SavePairsAsync`) et la visibilité
@@ -266,7 +273,7 @@ sont dans la collection en **lecture seule** (ni retrait vers un jeu, ni téléc
 
 - **Une partie stockée une seule fois sur tout le serveur**, tous comptes confondus : génération + jeu + ID dresseur / ID
   secret + nom du dresseur (`SaveIdentity`) ; dissuasif, pas infaillible. Pas d'ID secret en 1re et 2e génération.
-- Tant qu'elle est stockée, la sauvegarde est **refusée dans « Transfert »** (au chargement et à la validation).
+- Tant qu'elle est stockée, la sauvegarde est **refusée dans « Dépôt / Retrait »** (au chargement et à la validation).
 - Mise à jour avec moins de temps de jeu : confirmation demandée.
 - **Suppression** : « télécharger et supprimer » ou « supprimer sans télécharger », ce second choix refusé par le serveur
   (`StoredSaveService.DeleteWithoutDownloadAsync`) tant qu'une version modifiée sur le serveur n'a pas été téléchargée.
@@ -295,7 +302,7 @@ Un Pokémon déposé peut réapparaître dans une **vieille copie** de sa sauveg
 Une sauvegarde dont un Pokémon est déjà **ailleurs dans le compte** (stockage interne ou autre sauvegarde stockée ;
 **jamais entre comptes**) est **refusée**, avec 5 noms au plus dans le message : « Mes sauvegardes » (ajout et mise à
 jour ; une mise à jour ne se compare pas à sa version précédente, et le contrôle passe avant la question du temps de jeu),
-la 3DS (`raison` : `Duplicate`) et « Transfert » (au chargement ; la validation refuse aussi le dépôt d'un Pokémon déjà
+la 3DS (`raison` : `Duplicate`) et « Dépôt / Retrait » (au chargement ; la validation refuse aussi le dépôt d'un Pokémon déjà
 au stockage interne, avant les retraits). Revers acceptés : Pokémon d'événement à PID fixe ou d'échange en jeu, et un
 Pokémon échangé en jeu entre deux parties du même compte (l'« Échange interne » le fait sans ce souci : le Pokémon passe
 d'une sauvegarde à l'autre sur le serveur). Empreinte calculée à l'enregistrement, et au démarrage pour les plus
@@ -481,7 +488,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement) |
-| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combats » : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (interface façon Platine) |
+| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (interface façon Platine) |
 | `MonsutaPotaru/Services/Battle/BattleHub.cs` | Combats en direct (singleton, en mémoire) : demande, équipes, simulateur, choix vérifiés, minuteur, abandon, fin |
 | `MonsutaPotaru/Services/Battle/BattleService.cs` | Combats : sauvegardes compatibles entre amis, Pokémon proposés pour l'équipe, équipe vérifiée, statistiques |
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
@@ -492,7 +499,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
 | `MonsutaPotaru/Services/Battle/BattleView.cs` | Combat vu par un joueur : terrain, PV, statuts, météo, étapes à animer, messages en français |
 | `MonsutaPotaru/Services/Battle/BattleNames.cs` | Noms anglais de Showdown → noms français de PKHeX (espèces, capacités, objets, talents, types) |
-| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échanges » : demandes, choix de l'ami et des sauvegardes, échange en direct |
+| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
 | `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo) : échanges, combats |
@@ -510,7 +517,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, description, actions, icône (bandeau dans le thème Ardoise) |
 | `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec ses actions (panneau blanc dans le thème Ardoise) |
 | `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable (le compte en bas, `ArdoiseLayoutTests`), barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
-| `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes |
+| `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes (`SiteMenusTests`) |
+| `MonsutaPotaru/Components/Layout/WalletLink.razor` | Porte-monnaie de la barre du haut (tous les thèmes), tenu à jour en direct |
 | `MonsutaPotaru/Components/Layout/Breadcrumbs.cs` | Fil d'Ariane du thème Ardoise, déduit de l'adresse de la page (`BreadcrumbsTests`) |
 | `MonsutaPotaru/Data/SiteSetting.cs` | Table des réglages du site (code d'invitation) et rôles des comptes (`SiteRoles`) |
 | `MonsutaPotaru/Services/AccountService.cs` | Comptes : règles du pseudo, inscription, connexion par l'adresse (blocage après 5 échecs), choix du pseudo des anciens comptes, changement d'adresse ; réglages d'Identity, messages d'Identity en français |
@@ -521,7 +529,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/CollectionFolders.cs` | Mode compact de « Ma collection » : dossiers par espèce (clé, nombre, place dans le tri) et cases de la grille quand des dossiers sont ouverts |
 | `MonsutaPotaru/Services/PokemonFingerprint.cs` | Empreinte d'un Pokémon et recherche de ses doublons dans le compte (vieille copie d'une sauvegarde) |
 | `MonsutaPotaru/Services/PokemonInfo.cs` | Noms français (dont « Rouge / Bleu », « Or / Argent », « Diamant / Perle », « Or HeartGold / Argent SoulSilver » pour les groupes de jeux : une sauvegarde de ces jeux ne dit pas lequel des deux ; migrations `GameNames` et `GameGroupNames` pour les noms déjà enregistrés), sprites, légalité |
-| `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Transfert et stockage interne » (`/transfert`) : boîtes, glisser-déposer, sélection multiple |
+| `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Dépôt / Retrait » (`/transfert`, rubrique « Mes Pokémon ») : boîtes, glisser-déposer, sélection multiple |
 | `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
@@ -540,7 +548,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage, Volcan, Désert, Océan, Grotte, Montagne, Donjon) : nom, carte, pictogramme, textes de la page, et qui ne peut pas y vivre (`Refusal` : l'océan, seulement les nageurs ; `ChooserNote` : la remarque de la fenêtre de choix, à l'océan et à la montagne) |
 | `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
-| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
+| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » (rubrique « Défis ») : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
 | `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu (avec le Charme Chroma pour un chromatique), ou Master Ball / Charme Chroma pour les globaux |
 | `MonsutaPotaru/Components/Pages/LivingDexPage.razor` | Page d'un living dex : grille des sprites du jeu (silhouettes des manquants), progression, fiche au clic |
@@ -558,7 +566,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), transfert direct entre deux sauvegardes, achat d'emplacements, journal |
 | `MonsutaPotaru/Services/SaveBag.cs` | Objets du sac et du PC d'une sauvegarde (objets, Pokéballs, médicaments, baies, CT/DT par capacité ; jamais les objets rares, Lettres ni CS) : lecture, retrait, dépôt (PKHeX), conversion des numéros d'objets des jeux de 1re à 3e génération |
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |
-| `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Inventaire » (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
+| `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Banque d'objets » (`/inventaire`, rubrique « Inventaire » ; « Inventaire » sur la page d'un autre joueur) (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
 | `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés), récapitulatif, « Valider » / « Annuler » |
 | `MonsutaPotaru/wwwroot/js/transfert-objets.js` | Glisser-déposer de cette page (événements pointeur : souris, appui long au doigt ; image qui suit, défilement près des bords) |
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |
@@ -583,7 +591,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `ArdoiseLayoutTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, Inventaire, Transfert d'inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
@@ -742,7 +750,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
-| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus ») et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
+| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |
 | [SQLite](https://sqlite.org) | Base de données | Domaine public |
 | [xUnit](https://xunit.net), [coverlet](https://github.com/coverlet-coverage/coverlet) | Tests, couverture des tests (envoyée à SonarCloud) | Apache-2.0, MIT |

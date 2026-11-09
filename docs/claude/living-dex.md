@@ -237,7 +237,7 @@ Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, c
   (suppression en cascade), ce que la confirmation de « Mes sauvegardes » signale.
 - **Living dex global** (`Services/GlobalLivingDex.cs`, jeu `LivingDexGame.Global`) : un par compte, choisi en tête de
   « + Créer un living dex », **sans sauvegarde** (`LivingDex.StoredSaveId` null, migration `GlobalLivingDex`) : il compte
-  les Pokémon du **stockage interne** (« Transfert »), pas ceux des sauvegardes stockées ni les œufs, et **pas les
+  les Pokémon du **stockage interne** (« Dépôt / Retrait »), pas ceux des sauvegardes stockées ni les œufs, et **pas les
   chromatiques** (ignorés même s'ils pourraient remplir une case) ; chaque exemplaire
   ne remplit qu'une case (d'abord les cases qui en demandent un de plus, puis les formes exactes, puis « n'importe quelle
   forme »), dans l'ordre des dépôts. Carte et page : la **Master Ball** (image de l'objet) à la place d'une jaquette

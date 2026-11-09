@@ -34,6 +34,13 @@ html[data-theme="pokedex"] main > .top-row {
     background: linear-gradient(rgba(0, 0, 0, .18), rgba(0, 0, 0, .18)), var(--dex-red);
     border-bottom: 2px solid var(--dex-hinge);
 }
+/* Porte-monnaie sur le rouge de la barre du haut */
+html[data-theme="pokedex"] main > .top-row .top-wallet {
+    color: #fff;
+    border-color: rgba(255, 255, 255, .45);
+}
+html[data-theme="pokedex"] main > .top-row .top-wallet:hover { border-color: #fff; color: #fff; }
+html[data-theme="pokedex"] main > .top-row .top-wallet .bi { filter: none; }
 /* Lentille bleue cerclée de blanc, puis trois voyants (rouge, jaune, vert), devant le nom du site */
 html[data-theme="pokedex"] .sidebar .navbar-brand {
     display: flex;
@@ -228,8 +235,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
 /* ---------- Le reste du site ---------- */
 
 /* Liens (app.css les fixe en bleu) : bleu de la lentille, rouge au survol */
-[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card) { color: #1a6f9a; }
-[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):hover { color: var(--dex-red); }
+[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):not(.top-wallet) { color: #1a6f9a; }
+[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):not(.top-wallet):hover { color: var(--dex-red); }
 
 /* Cases à cocher, barres de progression, listes : plus de bleu de Bootstrap */
 [data-theme="pokedex"] main .form-check-input:checked {

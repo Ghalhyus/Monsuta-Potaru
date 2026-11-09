@@ -36,7 +36,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   (« Forêt : 20 → 40 Pokémon ») ; achat d'un parc : `BuyPark` (libellés dans `Inventory.razor`).
 - `SetAsync` au-dessus de la capacité : accepté seulement si les Pokémon voulus sont tous déjà au parc (anciens parcs de
   30 ou de 25). La fenêtre de choix suit la même règle (`!c.InPark`).
-- Après l'achat, `Park.razor` rafraîchit `WalletState` (solde du menu) et redémarre le parc (`StartEngine` : `dispose`
+- Après l'achat, `Park.razor` rafraîchit `WalletState` (porte-monnaie de la barre du haut) et redémarre le parc (`StartEngine` : `dispose`
   puis `create` avec `map` = `ParkLandscapes.MapName` et `size = Expansions + 1`) ; de même après un achat ou un
   changement de parc dans la liste.
 - **Planches gardées par le module** (`sheets`) d'un jeu de Phaser à l'autre : une texture doit être recréée dans chaque
@@ -646,7 +646,7 @@ toute la largeur de la page, où vivent jusqu'à **20 Pokémon** de la
 collection, stockage interne ou sauvegardes stockées, de **toutes les générations** (hors œufs ; `ParkService.BaseCapacity`).
 **Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **25 000 ₽** du porte-monnaie (40 000 ₽ jusqu'au 2026-11-07 ; `ParkService.ExpansionPrice`) pour **20 Pokémon de
 plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
-solde (bouton grisé s'il manque de l'argent, avec un lien vers « Inventaire ») ; la taille et le débit sont vérifiés dans
+solde (bouton grisé s'il manque de l'argent, avec un lien vers « Banque d'objets ») ; la taille et le débit sont vérifiés dans
 les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
 journal de l'inventaire (« Agrandissement du parc », « Forêt : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
 carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite) les garde : on peut en

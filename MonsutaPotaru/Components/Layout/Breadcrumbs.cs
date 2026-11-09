@@ -5,12 +5,16 @@ public sealed record Crumb(string Label, string? Href);
 
 /// <summary>
 /// Fil d'Ariane de la barre du haut du thème Ardoise (<c>ArdoiseLayout</c>) : le chemin de la page dans le menu
-/// (« Multijoueurs › Échanges », « Multijoueurs › Rechercher un joueur › Sacha › Parc »), déduit de son adresse.
+/// (« Mes Pokémon › Dépôt / Retrait », « Multijoueurs › Rechercher un joueur › Sacha › Parc »), déduit de son adresse.
 /// </summary>
 public static class Breadcrumbs
 {
-    /// <summary>Rubrique du menu des pages entre joueurs.</summary>
+    // Rubriques du menu (simples titres, sans page à elles : pas de lien).
+    private const string MyPokemon = "Mes Pokémon";
+    private const string Inventory = "Inventaire";
+    private const string Challenges = "Défis";
     private const string Multiplayer = "Multijoueurs";
+    private const string Saves = "Sauvegardes";
 
     /// <summary>Étapes pour une adresse relative à la racine du site (« joueurs/Sacha/parc?x=1 ») ; vide pour une page inconnue.</summary>
     public static IReadOnlyList<Crumb> For(string? relativeUrl)
@@ -22,19 +26,19 @@ public static class Breadcrumbs
 
         return Lower(parts[0]) switch
         {
-            "transfert" or "banque" => [new("Transfert", null)],
-            "collection" => [new("Ma collection", null)],
-            "parc" => [new("Parc", null)],
-            "inventaire" when parts.Length > 1 && Lower(parts[1]) == "transfert" => [new("Inventaire", "inventaire"), new("Transfert d'inventaire", null)],
-            "inventaire" => [new("Inventaire", null)],
-            "livingdex" => LivingDex(parts.Skip(1).ToArray(), "livingdex"),
-            "echange-interne" => [new("Échange interne", null)],
-            "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new("Sauvegardes", null), new("Synchronisation 3DS", null)],
-            "sauvegardes" => [new("Sauvegardes", null), new("Mes sauvegardes", null)],
+            "collection" => [new(MyPokemon, null), new("Ma collection", null)],
+            "parc" => [new(MyPokemon, null), new("Parc", null)],
+            "transfert" or "banque" => [new(MyPokemon, null), new("Dépôt / Retrait", null)],
+            "echange-interne" => [new(MyPokemon, null), new("Échange interne", null)],
+            "inventaire" when parts.Length > 1 && Lower(parts[1]) == "transfert" => [new(Inventory, null), new("Transfert d'inventaire", null)],
+            "inventaire" => [new(Inventory, null), new("Banque d'objets", null)],
+            "livingdex" => [new(Challenges, null), .. LivingDex(parts.Skip(1).ToArray(), "livingdex")],
             "joueurs" => Player(parts),
             "amis" => [new(Multiplayer, null), new("Amis", null)],
-            "echanges" => [new(Multiplayer, null), new("Échanges", null)],
-            "combats" => [new(Multiplayer, null), new("Combats", null)],
+            "echanges" => [new(Multiplayer, null), new("Échange", null)],
+            "combats" => [new(Multiplayer, null), new("Combat", null)],
+            "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new(Saves, null), new("Synchronisation 3DS", null)],
+            "sauvegardes" => [new(Saves, null), new("Mes sauvegardes", null)],
             "administration" => [new("Administration", null)],
             "statistiques" => [new("Mon compte", "Account/Manage"), new("Statistiques", null)],
             "account" => Account(parts.Skip(1).ToArray()),

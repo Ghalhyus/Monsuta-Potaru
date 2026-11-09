@@ -5,8 +5,6 @@
    compte passe par wwwroot/js/app.js, jamais par un @onclick. *@
 @inherits SiteMenuBase
 
-@using MonsutaPotaru.Services
-
 <div class="ardoise">
     <aside class="ardoise-menu" id="ardoise-menu" aria-label="Menu du site">
         <a class="ardoise-brand" href="" title="Monsuta Potaru">
@@ -18,38 +16,50 @@
             <NavLink class="ardoise-link" href="" Match="NavLinkMatch.All" title="Accueil">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Accueil</span>
             </NavLink>
-            <NavLink class="ardoise-link" href="transfert" title="Transfert">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Transfert</span>
-            </NavLink>
-            <NavLink class="ardoise-link" href="collection" title="Ma collection">
-                <span class="bi bi-grid-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Ma collection</span>
-            </NavLink>
-            <NavLink class="ardoise-link" href="parc" title="Parc">
-                <span class="bi bi-tree-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Parc</span>
-            </NavLink>
-            <NavLink class="ardoise-link" href="inventaire" title="Inventaire">
-                <span class="bi bi-bag-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Inventaire</span>
-            </NavLink>
-            <NavLink class="ardoise-link" href="livingdex" title="Living dex">
-                <span class="bi bi-book-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Living dex</span>
-            </NavLink>
-            <NavLink class="ardoise-link" href="echange-interne" title="Échange interne">
-                <span class="bi bi-arrow-left-right-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Échange interne</span>
-            </NavLink>
-
-            @* Rubriques : ouvertes d'elles-mêmes sur l'une de leurs pages (classe « ouvert »), ouvertes et fermées d'un clic
-               (app.js). Menu replié : leurs pages s'affichent à côté, au survol. *@
-            <div class="ardoise-group @(savesOpen ? "ouvert" : "")">
-                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(savesOpen ? "true" : "false")" title="Sauvegardes">
-                    <span class="bi bi-save-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Sauvegardes</span>
+            @* Rubriques : ouvertes d'elles-mêmes sur l'une de leurs pages (classe « ouvert », SiteMenuBase), ouvertes et
+               fermées d'un clic (app.js). Menu replié : leur icône seule, leurs pages à côté au survol. *@
+            <div class="ardoise-group @(pokemonOpen ? "ouvert" : "")">
+                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(pokemonOpen ? "true" : "false")" title="Mes Pokémon">
+                    <span class="bi bi-pokeball-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Mes Pokémon</span>
                 </button>
                 <div class="ardoise-subitems">
-                    <span class="ardoise-subitems-title">Sauvegardes</span>
-                    <NavLink class="ardoise-link" href="sauvegardes" Match="NavLinkMatch.All">
-                        <span class="ardoise-label">Mes sauvegardes</span>
+                    <span class="ardoise-subitems-title">Mes Pokémon</span>
+                    <NavLink class="ardoise-link" href="collection">
+                        <span class="ardoise-label">Ma collection</span>
                     </NavLink>
-                    <NavLink class="ardoise-link" href="sauvegardes/3ds">
-                        <span class="ardoise-label">Synchronisation 3DS</span>
+                    <NavLink class="ardoise-link" href="parc">
+                        <span class="ardoise-label">Parc</span>
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="transfert">
+                        <span class="ardoise-label">Dépôt / Retrait</span>
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="echange-interne">
+                        <span class="ardoise-label">Échange interne</span>
+                    </NavLink>
+                </div>
+            </div>
+            <div class="ardoise-group @(inventoryOpen ? "ouvert" : "")">
+                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(inventoryOpen ? "true" : "false")" title="Inventaire">
+                    <span class="bi bi-bag-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Inventaire</span>
+                </button>
+                <div class="ardoise-subitems">
+                    <span class="ardoise-subitems-title">Inventaire</span>
+                    <NavLink class="ardoise-link" href="inventaire" Match="NavLinkMatch.All">
+                        <span class="ardoise-label">Banque d'objets</span>
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="inventaire/transfert">
+                        <span class="ardoise-label">Transfert d'inventaire</span>
+                    </NavLink>
+                </div>
+            </div>
+            <div class="ardoise-group @(challengesOpen ? "ouvert" : "")">
+                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(challengesOpen ? "true" : "false")" title="Défis">
+                    <span class="bi bi-trophy-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Défis</span>
+                </button>
+                <div class="ardoise-subitems">
+                    <span class="ardoise-subitems-title">Défis</span>
+                    <NavLink class="ardoise-link" href="livingdex">
+                        <span class="ardoise-label">Living dex</span>
                     </NavLink>
                 </div>
             </div>
@@ -74,18 +84,32 @@
                         }
                     </NavLink>
                     <NavLink class="ardoise-link" href="echanges">
-                        <span class="ardoise-label">Échanges</span>
+                        <span class="ardoise-label">Échange</span>
                         @if (tradeRequests > 0)
                         {
                             <span class="ardoise-badge" title="Demandes d'échange reçues">@tradeRequests</span>
                         }
                     </NavLink>
                     <NavLink class="ardoise-link" href="combats">
-                        <span class="ardoise-label">Combats</span>
+                        <span class="ardoise-label">Combat</span>
                         @if (battleRequests > 0)
                         {
                             <span class="ardoise-badge" title="Demandes de combat reçues">@battleRequests</span>
                         }
+                    </NavLink>
+                </div>
+            </div>
+            <div class="ardoise-group @(savesOpen ? "ouvert" : "")">
+                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(savesOpen ? "true" : "false")" title="Sauvegardes">
+                    <span class="bi bi-save-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Sauvegardes</span>
+                </button>
+                <div class="ardoise-subitems">
+                    <span class="ardoise-subitems-title">Sauvegardes</span>
+                    <NavLink class="ardoise-link" href="sauvegardes" Match="NavLinkMatch.All">
+                        <span class="ardoise-label">Mes sauvegardes</span>
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="sauvegardes/3ds">
+                        <span class="ardoise-label">Synchronisation 3DS</span>
                     </NavLink>
                 </div>
             </div>
@@ -173,12 +197,7 @@
             <div class="ardoise-topbar-end">
                 <AuthorizeView>
                     <Authorized>
-                        @if (Wallet.Balance is { } balance)
-                        {
-                            <a class="ardoise-wallet" href="inventaire" title="Ton porte-monnaie (Inventaire)">
-                                <span class="bi bi-bag-nav-menu" aria-hidden="true"></span>@InventoryService.FormatMoney(balance)
-                            </a>
-                        }
+                        <WalletLink Class="ardoise-wallet" />
                         @* Menu du compte : élément details (marche sans interactivité) ; app.js le referme après un clic. *@
                         <details class="ardoise-account">
                             <summary title="Ton compte">

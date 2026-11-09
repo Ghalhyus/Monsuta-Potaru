@@ -4,10 +4,10 @@
 @inject BankService BankStore
 @inject WalletState Wallet
 @* Jauge d'occupation de la collection (stockage interne + sauvegardes stockées), avec son bouton « Agrandir » qui ouvre la
-   fenêtre d'achat d'emplacements. Même composant sur « Transfert », « Ma collection » et « Mes sauvegardes ». *@
+   fenêtre d'achat d'emplacements. Même composant sur « Dépôt / Retrait », « Ma collection » et « Mes sauvegardes ». *@
 
 @{
-    var projected = Usage.Used + Pending; // avec les dépôts / retraits en attente de « Transfert »
+    var projected = Usage.Used + Pending; // avec les dépôts / retraits en attente de « Dépôt / Retrait »
     var percent = Usage.Limit == 0 ? 100 : Math.Clamp(projected * 100 / Usage.Limit, 0, 100);
 }
 <div class="capacity mb-3">
@@ -114,7 +114,7 @@
             var cost = n * CollectionCapacity.LotPrice;
             if (cost <= balance)
                 return null;
-            return $"Il te faut {InventoryService.FormatMoney(cost)}, ton porte-monnaie contient {InventoryService.FormatMoney(balance)} : il manque {InventoryService.FormatMoney(cost - balance)}. Retire de l'argent d'une sauvegarde depuis « Inventaire ».";
+            return $"Il te faut {InventoryService.FormatMoney(cost)}, ton porte-monnaie contient {InventoryService.FormatMoney(balance)} : il manque {InventoryService.FormatMoney(cost - balance)}. Retire de l'argent d'une sauvegarde depuis « Banque d'objets ».";
         }
     }
 

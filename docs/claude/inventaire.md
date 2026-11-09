@@ -51,7 +51,7 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   ne voit pas (20 objets différents dans le sac de Rouge / Bleu, seuil de 80 CT avec l'autre endroit) est refusé par le
   service à la validation, avec son message.
 - Tri : un par colonne et par onglet, pour la visite seulement (pas dans l'adresse : deux colonnes), au départ celui du
-  compte (`PreferencesService`, `SortPreferences.InventoryFor`), comme la page « Inventaire ».
+  compte (`PreferencesService`, `SortPreferences.InventoryFor`), comme la page « Banque d'objets ».
 - Glisser : `wwwroot/js/transfert-objets.js` (module, `init(root, dotnet)` → `dispose`), appelle `Drop(colonne, objet)`
   (`[JSInvokable]`, revérifié). Champ du compteur recréé à chaque saisie (`@key` avec `typed`) : sinon un nombre ramené
   dans les bornes à la même valeur qu'avant reste affiché tel que tapé (Blazor ne réécrit pas un attribut inchangé).
