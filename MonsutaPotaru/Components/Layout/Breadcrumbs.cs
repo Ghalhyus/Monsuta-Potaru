@@ -25,6 +25,7 @@ public static class Breadcrumbs
             "transfert" or "banque" => [new("Transfert", null)],
             "collection" => [new("Ma collection", null)],
             "parc" => [new("Parc", null)],
+            "inventaire" when parts.Length > 1 && Lower(parts[1]) == "transfert" => [new("Inventaire", "inventaire"), new("Transfert d'inventaire", null)],
             "inventaire" => [new("Inventaire", null)],
             "livingdex" => LivingDex(parts.Skip(1).ToArray(), "livingdex"),
             "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new("Sauvegardes", null), new("Synchronisation 3DS", null)],

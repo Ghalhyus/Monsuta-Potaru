@@ -1,0 +1,656 @@
+@page "/inventaire/transfert"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Services
+@inject InventoryService InventoryStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject PokemonInfo Info
+@implements IAsyncDisposable
+
+<PageTitle>Transfert d'inventaire</PageTitle>
+
+@* Transfert d'objets directement d'une sauvegarde stockée à une autre, sans passer par l'inventaire interne : la sauvegarde
+   de gauche, puis celle de droite (dans l'adresse : ?gauche=3&droite=5), puis les objets glissés d'une colonne à l'autre,
+   dans les deux sens. Rien n'est écrit avant « Valider », qui modifie les deux sauvegardes en une seule opération
+   (InventoryService.TransferBetweenSavesAsync, mêmes règles qu'un retrait et un dépôt). Glisser à la souris ou au doigt :
+   wwwroot/js/transfert-objets.js ; chaque objet a aussi un bouton flèche qui fait la même chose. *@
+
+<div class="transfer-page" @ref="root">
+    <PageHeader Title="Transfert d'inventaire" Icon="bi-bag-nav-menu" BackHref="inventaire" BackLabel="Inventaire">
+        <Description>
+            Fais passer des objets d'une de tes sauvegardes stockées à une autre : choisis-les, glisse les objets d'une colonne
+            à l'autre (ou utilise les flèches), puis valide.
+        </Description>
+    </PageHeader>
+
+    @if (message is not null)
+    {
+        <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+            @message
+            <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+        </div>
+    }
+
+    @if (saves is null)
+    {
+        <p class="text-muted">Chargement des sauvegardes…</p>
+    }
+    else if (saves.Count < 2)
+    {
+        <p>
+            Il faut au moins deux sauvegardes stockées pour transférer des objets de l'une à l'autre. Ajoutes-en dans
+            <a href="sauvegardes">Mes sauvegardes</a>.
+        </p>
+    }
+    else
+    {
+        <div class="transfer-layout">
+            @foreach (var s in Sides)
+            {
+                var side = s;
+                var save = SaveOf(side);
+                var other = SaveOf(OtherSide(side));
+                var state = columns[side];
+                <section class="transfer-column transfer-column-@SideSlug(side)" data-side="@SideSlug(side)"
+                         aria-label="@(side == Side.Left ? "Sauvegarde de gauche" : "Sauvegarde de droite")">
+                    @if (save is null)
+                    {
+                        @ChooseSave(side)
+                    }
+                    else
+                    {
+                        <div class="transfer-save">
+                            <div class="transfer-save-name">
+                                <strong>@save.Label</strong> <span class="small text-muted text-nowrap">(@save.TrainerId)</span>
+                                <span class="d-block small text-muted">@save.FileName</span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => ChangeSave(side)">Changer</button>
+                        </div>
+
+                        @if (save.HasPc)
+                        {
+                            @* Sac ou PC d'objets (1re à 3e génération) : on glisse depuis et vers l'endroit affiché. *@
+                            <ul class="nav nav-pills mb-2" role="tablist">
+                                @foreach (var p in Places)
+                                {
+                                    var place = p;
+                                    <li class="nav-item" role="presentation">
+                                        <button type="button" role="tab" class="nav-link py-1 @(state.Place == place ? "active" : "")"
+                                                aria-selected="@(state.Place == place ? "true" : "false")" @onclick="() => state.Place = place">
+                                            @(place == BagPlace.Pc ? "PC" : "Sac")
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        var rows = Rows(side);
+                        <ul class="nav nav-tabs mb-2" role="tablist">
+                            @foreach (var category in ItemCategories.All)
+                            {
+                                var c = category.Category;
+                                var inTab = rows.Where(r => r.Item.Category == c).ToList();
+                                <li class="nav-item" role="presentation">
+                                    <button type="button" role="tab" class="nav-link @(state.Tab == c ? "active" : "")"
+                                            aria-selected="@(state.Tab == c ? "true" : "false")" @onclick="() => state.Tab = c">
+                                        @category.Title
+                                        @if (inTab.Any(r => r.Incoming > 0 || r.Outgoing > 0))
+                                        {
+                                            <span class="badge bg-primary ms-1" title="Objets qui bougent dans cet onglet">@inTab.Count(r => r.Incoming > 0 || r.Outgoing > 0)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-light ms-1" title="Quantité totale">@CollectionCapacity.FormatCount(inTab.Sum(r => r.Item.Count))</span>
+                                        }
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <input type="search" class="form-control form-control-sm inventory-search" placeholder="Rechercher par nom…"
+                                   aria-label="Rechercher par nom" @bind="state.Search" @bind:event="oninput" />
+                            <div class="inventory-sort">
+                                <select class="form-select form-select-sm" aria-label="Trier cet onglet" value="@SortSlugs[state.SortBy]"
+                                        @onchange="e => SortChanged(state, e)">
+                                    @foreach (var (by, slug) in SortSlugs)
+                                    {
+                                        <option value="@slug">Tri : @SortLabel(by)</option>
+                                    }
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre"
+                                        @onclick="() => state.Descending = !state.Descending">@OrderLabel(state)</button>
+                            </div>
+                        </div>
+
+                        var all = rows.Where(r => r.Item.Category == state.Tab).ToList();
+                        var shown = Sort(all.Where(r => Matches(r, state)), state);
+                        @if (all.Count == 0)
+                        {
+                            <p class="text-muted small">Rien dans cette catégorie dans @(state.Place == BagPlace.Pc ? "ce PC" : "ce sac").</p>
+                        }
+                        else if (shown.Count == 0)
+                        {
+                            <p class="text-muted small">Rien ne correspond à « @state.Search.Trim() » dans cet onglet.</p>
+                        }
+                        else
+                        {
+                            <ul class="transfer-items list-unstyled mb-0">
+                                @foreach (var row in shown)
+                                {
+                                    var r = row;
+                                    var greyed = r.Problem is not null;
+                                    var n = CounterValue(side, r);
+                                    <li class="item-tile transfer-item @(greyed ? "transfer-item-greyed" : "") @(r.Incoming > 0 ? "transfer-item-incoming" : "")"
+                                        data-item="@r.Item.ItemId" data-draggable="@(r.Max > 0 && !busy ? "true" : "false")"
+                                        title="@(r.Problem is { } why ? $"Ne peut pas aller dans « {other!.Label} » : {why}" : null)">
+                                        <ItemSprite Url="@r.Item.SpriteUrl" Size="32" />
+                                        <span class="item-name">
+                                            @r.Item.Name
+                                            @if (r.Incoming > 0)
+                                            {
+                                                <span class="badge bg-primary ms-1" title="Reçu de l'autre sauvegarde">+@r.Incoming</span>
+                                            }
+                                            @if (r.Outgoing > 0)
+                                            {
+                                                <span class="badge text-bg-secondary ms-1" title="Envoyé à l'autre sauvegarde">−@r.Outgoing</span>
+                                            }
+                                        </span>
+                                        <span class="item-count">× @CollectionCapacity.FormatCount(r.Item.Count)</span>
+                                        @if (other is not null)
+                                        {
+                                            <span class="transfer-actions">
+                                                <span class="transfer-counter input-group input-group-sm">
+                                                    <button type="button" class="btn btn-outline-secondary" aria-label="@($"Un de moins : {r.Item.Name}")"
+                                                            disabled="@(busy || n <= 1)" @onclick="() => SetCounter(side, r, n - 1)">−</button>
+                                                    @* Recréé après chaque saisie (@key) : un nombre ramené dans les bornes s'affiche même s'il ne change pas la valeur rendue. *@
+                                                    <input @key="(r.Item.ItemId, typed)" type="number" class="form-control text-center" min="1" max="@r.Max" step="1"
+                                                           aria-label="@($"Nombre de {r.Item.Name} à transférer")" disabled="@(busy || r.Max == 0)"
+                                                           value="@(r.Max == 0 ? 0 : n)" @onchange="e => TypeCounter(side, r, e.Value)" />
+                                                    <button type="button" class="btn btn-outline-secondary" aria-label="@($"Un de plus : {r.Item.Name}")"
+                                                            disabled="@(busy || n >= r.Max)" @onclick="() => SetCounter(side, r, n + 1)">+</button>
+                                                </span>
+                                                <button type="button" class="btn btn-sm btn-outline-primary transfer-send" disabled="@(busy || r.Max == 0)"
+                                                        aria-label="@($"Envoyer {n} × {r.Item.Name} vers « {other.Label} »")" title="@($"Envoyer vers « {other.Label} »")"
+                                                        @onclick="() => Send(side, r.Item.ItemId)">
+                                                    <span aria-hidden="true">@(side == Side.Left ? "→" : "←")</span>
+                                                </button>
+                                            </span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                </section>
+            }
+
+            <div class="transfer-middle">
+                <span class="transfer-arrows" aria-hidden="true">⟷</span>
+                <button type="button" class="btn btn-primary" disabled="@(busy || pending.Count == 0)" @onclick="Validate">Valider</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@(busy || pending.Count == 0)" @onclick="Reset">Annuler</button>
+                @if (pending.Count > 0)
+                {
+                    <span class="small text-muted text-center">@PendingSummary</span>
+                }
+            </div>
+        </div>
+
+        @if (pending.Count > 0 && SaveOf(Side.Left) is { } left && SaveOf(Side.Right) is { } right)
+        {
+            @* Récapitulatif de ce que « Valider » va écrire, sens par sens. *@
+            <div class="transfer-recap mt-3">
+                @foreach (var (from, to) in new[] { (left, right), (right, left) })
+                {
+                    var lines = Recap(from == left ? Side.Left : Side.Right).ToList();
+                    @if (lines.Count > 0)
+                    {
+                        <div class="small fw-semibold">« @from.Label » → « @to.Label »</div>
+                        <ul class="small">
+                            @foreach (var line in lines)
+                            {
+                                <li>@line</li>
+                            }
+                        </ul>
+                    }
+                }
+                <div class="alert alert-warning small mb-0">
+                    Seule la copie du serveur est modifiée : <strong>tes jeux n'ont pas encore ces changements.</strong> Après la
+                    validation, télécharge les deux sauvegardes depuis « Mes sauvegardes » et remplace celles de tes jeux. Leur mise
+                    à jour reste bloquée en attendant.
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    /// <summary>Sauvegarde de gauche dans l'adresse (« ?gauche=3 »).</summary>
+    [SupplyParameterFromQuery(Name = "gauche")] private int? LeftParam { get; set; }
+
+    /// <summary>Sauvegarde de droite dans l'adresse (« ?droite=5 »).</summary>
+    [SupplyParameterFromQuery(Name = "droite")] private int? RightParam { get; set; }
+
+    private enum Side { Left, Right }
+
+    private static readonly Side[] Sides = [Side.Left, Side.Right];
+    private static Side OtherSide(Side side) => side == Side.Left ? Side.Right : Side.Left;
+    private static string SideSlug(Side side) => side == Side.Left ? "gauche" : "droite";
+
+    private static readonly BagPlace[] Places = [BagPlace.Bag, BagPlace.Pc];
+
+    /// <summary>Critère de tri d'une colonne, comme sur la page « Inventaire ».</summary>
+    private enum ItemSortBy { Default, Name, Quantity }
+
+    private static readonly IReadOnlyDictionary<ItemSortBy, string> SortSlugs = new Dictionary<ItemSortBy, string>
+    {
+        [ItemSortBy.Default] = "defaut",
+        [ItemSortBy.Name] = "nom",
+        [ItemSortBy.Quantity] = "quantite",
+    };
+
+    /// <summary>Ce que chaque colonne affiche : endroit (sac ou PC), onglet, recherche et tri (pour cette visite).</summary>
+    private sealed class ColumnState
+    {
+        public BagPlace Place { get; set; }
+        public ItemCategory Tab { get; set; }
+        public string Search { get; set; } = "";
+        public ItemSortBy SortBy { get; set; }
+        public bool Descending { get; set; }
+    }
+
+    /// <summary>Objets en attente de « Valider » : de l'endroit <c>FromPlace</c> d'une colonne à l'endroit <c>ToPlace</c> de l'autre.</summary>
+    private readonly record struct Move(Side From, BagPlace FromPlace, BagPlace ToPlace, int ItemId);
+
+    /// <summary>
+    /// Ligne d'une colonne : l'objet avec la quantité qu'il aura après « Valider » (<see cref="ItemStack.Count"/>), ce qui
+    /// arrive et ce qui part, le plus qu'on puisse encore envoyer vers l'endroit affiché de l'autre colonne, et pourquoi il ne
+    /// peut pas y aller (grisé).
+    /// </summary>
+    private sealed record Row(ItemStack Item, int Incoming, int Outgoing, int Max, string? Problem);
+
+    private ElementReference root;
+    private IJSObjectReference? module;
+    private IJSObjectReference? dragging;
+    private DotNetObjectReference<InventoryTransfer>? selfRef;
+
+    private string userId = "";
+    private List<ItemSource>? saves;
+    private int? leftId, rightId;
+    private readonly Dictionary<Side, ColumnState> columns = new() { [Side.Left] = new(), [Side.Right] = new() };
+    private Dictionary<Move, int> pending = [];
+    /// <summary>Compteur de chaque objet (colonne, endroit, objet) ; absent : 1.</summary>
+    private Dictionary<(Side Side, BagPlace Place, int ItemId), int> counters = [];
+    private int typed; // saisies des compteurs (voir le @key de leur champ)
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    private static readonly System.Globalization.CultureInfo FrenchCulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+    private static readonly System.Globalization.CompareInfo French = FrenchCulture.CompareInfo;
+
+    protected override async Task OnInitializedAsync() =>
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+
+    protected override void OnParametersSet() => SelectSaves(LeftParam, RightParam == LeftParam ? null : RightParam);
+
+    /// <summary>Sauvegardes des deux colonnes ; un changement efface les objets en attente (ils concernaient l'ancienne).</summary>
+    private void SelectSaves(int? left, int? right)
+    {
+        if (left == leftId && right == rightId)
+            return;
+        (leftId, rightId) = (left, right);
+        ClearPending();
+        foreach (var side in Sides)
+            columns[side].Place = BagPlace.Bag;
+        FirstTabsWithItems();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        // Lecture des sacs après le premier affichage (pas deux fois avec le pré-rendu), puis le glisser-déposer.
+        saves = await InventoryStore.ListItemSourcesAsync(userId);
+        FirstTabsWithItems();
+        StateHasChanged();
+        selfRef = DotNetObjectReference.Create(this);
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/transfert-objets.js");
+        if (module is not null)
+            dragging = await module.InvokeAsync<IJSObjectReference>("init", root, selfRef);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (dragging is not null)
+            {
+                await dragging.InvokeVoidAsync("dispose");
+                await dragging.DisposeAsync();
+            }
+            if (module is not null)
+                await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit fermé : le navigateur a déjà tout oublié
+        }
+        selfRef?.Dispose();
+    }
+
+    // ---------- Choix des sauvegardes ----------
+
+    /// <summary>Sauvegarde choisie pour une colonne ; null si aucune (ou plus au compte).</summary>
+    private ItemSource? SaveOf(Side side)
+    {
+        var id = side == Side.Left ? leftId : rightId;
+        return id is null ? null : saves?.FirstOrDefault(s => s.SaveId == id && s.Unsupported is null);
+    }
+
+    /// <summary>Liste des sauvegardes d'une colonne vide : à droite, seulement une fois celle de gauche choisie.</summary>
+    private RenderFragment ChooseSave(Side side) => __builder =>
+    {
+        var other = SaveOf(OtherSide(side));
+        if (side == Side.Right && other is null)
+        {
+            <p class="text-muted small mb-0">Choisis d'abord la sauvegarde de gauche.</p>
+            return;
+        }
+        <p class="small text-muted">
+            @(side == Side.Left ? "Choisis la première sauvegarde." : "Choisis la seconde sauvegarde.")
+        </p>
+        <div class="list-group">
+            @foreach (var candidate in saves!.Where(s => s.SaveId != other?.SaveId))
+            {
+                var s = candidate;
+                <button type="button" class="list-group-item list-group-item-action" disabled="@(s.Unsupported is not null)" @onclick="() => Choose(side, s.SaveId)">
+                    <span class="d-block"><strong>@s.Label</strong> <span class="small text-muted text-nowrap">(@s.TrainerId)</span></span>
+                    <span class="d-block small text-muted">@s.FileName</span>
+                    @if (s.Unsupported is { } why)
+                    {
+                        <span class="d-block small text-muted">@why</span>
+                    }
+                </button>
+            }
+        </div>
+    };
+
+    /// <summary>Choisit (ou retire, <paramref name="saveId"/> null) la sauvegarde d'une colonne, gardée dans l'adresse.</summary>
+    private void Choose(Side side, int? saveId)
+    {
+        if (busy)
+            return;
+        message = null;
+        SelectSaves(side == Side.Left ? saveId : leftId, side == Side.Right ? saveId : rightId);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(SideSlug(side), saveId), replace: true);
+    }
+
+    private void ChangeSave(Side side) => Choose(side, null);
+
+    /// <summary>Chaque colonne ouvre le premier onglet qui a des objets.</summary>
+    private void FirstTabsWithItems()
+    {
+        foreach (var side in Sides)
+        {
+            if (SaveOf(side) is not { } save)
+                continue;
+            var items = save.ItemsIn(columns[side].Place);
+            columns[side].Tab = ItemCategories.All.Select(c => c.Category).FirstOrDefault(c => items.Any(i => i.Category == c), ItemCategory.Items);
+        }
+    }
+
+    // ---------- Lignes d'une colonne ----------
+
+    private int Pending(Side from, BagPlace fromPlace, BagPlace toPlace, int itemId) =>
+        pending.GetValueOrDefault(new Move(from, fromPlace, toPlace, itemId));
+
+    /// <summary>Ce qui part de cet endroit de cette colonne (vers n'importe quel endroit de l'autre).</summary>
+    private int Outgoing(Side side, BagPlace place, int itemId) =>
+        pending.Where(p => p.Key.From == side && p.Key.FromPlace == place && p.Key.ItemId == itemId).Sum(p => p.Value);
+
+    /// <summary>Ce qui arrive à cet endroit de cette colonne (de n'importe quel endroit de l'autre).</summary>
+    private int Incoming(Side side, BagPlace place, int itemId) =>
+        pending.Where(p => p.Key.From != side && p.Key.ToPlace == place && p.Key.ItemId == itemId).Sum(p => p.Value);
+
+    /// <summary>
+    /// Objets de l'endroit affiché d'une colonne, avec ce qui arrive de l'autre : quantité après « Valider », et ce qu'on peut
+    /// envoyer vers l'endroit affiché de l'autre colonne. Une CT porte son numéro dans le jeu de cette colonne (« CT26 Séisme »).
+    /// </summary>
+    private List<Row> Rows(Side side)
+    {
+        var save = SaveOf(side)!;
+        var place = columns[side].Place;
+        var stacks = save.ItemsIn(place).ToDictionary(i => i.ItemId);
+        foreach (var arriving in pending.Keys.Where(k => k.From != side && k.ToPlace == place).Select(k => k.ItemId).Distinct())
+        {
+            if (!stacks.ContainsKey(arriving))
+                stacks[arriving] = new ItemStack(arriving, SaveBag.CategoryOf(arriving) ?? ItemCategory.Items, Info.ShortItemName(arriving),
+                    PokemonInfo.ItemSpriteUrl(arriving), 0);
+        }
+        var rows = new List<Row>();
+        // Ordre de l'inventaire : par catégorie, par numéro d'objet, les CT par nom de capacité.
+        var byMove = StringComparer.Create(FrenchCulture, ignoreCase: true);
+        foreach (var stack in stacks.Values.OrderBy(s => s.Category).ThenBy(s => s.Category == ItemCategory.Machines ? SortName(s) : "", byMove).ThenBy(s => s.ItemId))
+        {
+            var incoming = Incoming(side, place, stack.ItemId);
+            var outgoing = Outgoing(side, place, stack.ItemId);
+            var (max, problem) = Sendable(side, stack, outgoing);
+            var name = save.MachineLabels.TryGetValue(stack.ItemId, out var label) ? $"{label} {stack.Name}" : stack.Name;
+            rows.Add(new Row(stack with { Name = name, Count = stack.Count - outgoing + incoming }, incoming, outgoing, max, problem));
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// Le plus qu'on puisse encore envoyer de cet objet vers l'endroit affiché de l'autre colonne (en annulant d'abord ce qui
+    /// en est venu), et pourquoi il ne peut pas y aller : les règles d'un dépôt (<see cref="SaveBag.Capacity"/>).
+    /// </summary>
+    private (int Max, string? Problem) Sendable(Side side, ItemStack stack, int outgoing)
+    {
+        var otherSide = OtherSide(side);
+        if (SaveOf(otherSide) is not { } other)
+            return (0, null);
+        var place = columns[side].Place;
+        var target = columns[otherSide].Place;
+        var itemId = stack.ItemId;
+        var back = Pending(otherSide, target, place, itemId); // venu de là-bas : le renvoyer l'annule
+        var left = stack.Count - outgoing; // ce qui reste de la sauvegarde elle-même
+        string? problem = null;
+        var room = 0;
+        if (other.LockedMachines.Contains(itemId))
+            problem = $"elle en a déjà au moins {SaveBag.LimitedMachineThreshold}";
+        else if (!other.CapacityIn(target).TryGetValue(itemId, out var capacity))
+            problem = Unknown(other, stack, target);
+        else
+        {
+            var there = other.CountIn(itemId, target) - Outgoing(otherSide, target, itemId) + Incoming(otherSide, target, itemId);
+            room = Math.Max(0, capacity - there);
+            if (room == 0 && back == 0)
+                problem = $"{(target == BagPlace.Pc ? "PC" : "sac")} plein ({capacity} au maximum)";
+        }
+        var max = back + Math.Max(0, Math.Min(left, room));
+        return (max, max > 0 ? null : problem);
+    }
+
+    /// <summary>Objet que l'endroit de l'autre sauvegarde ne peut pas recevoir : refusé par le PC, CT absente, inconnu du jeu.</summary>
+    private static string Unknown(ItemSource other, ItemStack stack, BagPlace target)
+    {
+        if (target == BagPlace.Pc && other.Capacity.ContainsKey(stack.ItemId))
+            return "ne se range pas dans le PC";
+        return stack.Category == ItemCategory.Machines
+            ? $"aucune CT ni DT n'apprend cette capacité dans {other.GameName}"
+            : $"n'existe pas dans {other.GameName}, ou y est un objet rare";
+    }
+
+    // ---------- Compteurs et envois ----------
+
+    /// <summary>Valeur du compteur, entre 1 et le maximum de la ligne.</summary>
+    private int CounterValue(Side side, Row row) =>
+        Math.Clamp(counters.GetValueOrDefault((side, columns[side].Place, row.Item.ItemId), 1), 1, Math.Max(1, row.Max));
+
+    private void SetCounter(Side side, Row row, int value) =>
+        counters[(side, columns[side].Place, row.Item.ItemId)] = Math.Clamp(value, 1, Math.Max(1, row.Max));
+
+    /// <summary>Nombre saisi : ramené entre 1 et le maximum ; autre chose qu'un nombre remet 1.</summary>
+    private void TypeCounter(Side side, Row row, object? value)
+    {
+        SetCounter(side, row, int.TryParse(value?.ToString(), out var n) ? n : 1);
+        typed++;
+    }
+
+    /// <summary>
+    /// Envoie le nombre du compteur de cet objet vers l'endroit affiché de l'autre colonne : ce qui en était venu est d'abord
+    /// rendu, le reste part de cette sauvegarde. La valeur vient du navigateur (glisser-déposer) : tout est revérifié ici.
+    /// </summary>
+    private void Send(Side side, int itemId)
+    {
+        if (busy || SaveOf(side) is null || SaveOf(OtherSide(side)) is null)
+            return;
+        var row = Rows(side).FirstOrDefault(r => r.Item.ItemId == itemId);
+        if (row is null || row.Max == 0)
+            return;
+        var count = CounterValue(side, row);
+        var place = columns[side].Place;
+        var target = columns[OtherSide(side)].Place;
+        var back = new Move(OtherSide(side), target, place, itemId);
+        var undone = Math.Min(count, pending.GetValueOrDefault(back));
+        Change(back, -undone);
+        Change(new Move(side, place, target, itemId), count - undone);
+        message = null;
+    }
+
+    private void Change(Move move, int delta)
+    {
+        if (delta == 0)
+            return;
+        var value = pending.GetValueOrDefault(move) + delta;
+        if (value > 0)
+            pending[move] = value;
+        else
+            pending.Remove(move);
+    }
+
+    /// <summary>Objet lâché sur l'autre colonne (wwwroot/js/transfert-objets.js) : comme son bouton flèche.</summary>
+    [JSInvokable]
+    public Task Drop(string fromSide, int itemId) => InvokeAsync(() =>
+    {
+        var side = fromSide == SideSlug(Side.Left) ? Side.Left : fromSide == SideSlug(Side.Right) ? Side.Right : (Side?)null;
+        if (side is { } s)
+            Send(s, itemId);
+        StateHasChanged();
+    });
+
+    private void ClearPending()
+    {
+        pending = [];
+        counters = [];
+    }
+
+    /// <summary>« Annuler » : les deux colonnes comme au départ.</summary>
+    private void Reset()
+    {
+        if (!busy)
+            ClearPending();
+    }
+
+    private string PendingSummary
+    {
+        get
+        {
+            var total = pending.Values.Sum();
+            return $"{CollectionCapacity.FormatCount(total)} objet{(total > 1 ? "s" : "")} à transférer";
+        }
+    }
+
+    /// <summary>Lignes du récapitulatif pour ce qui part d'une colonne : « 5 × Potion (sac → PC) ».</summary>
+    private IEnumerable<string> Recap(Side from)
+    {
+        var withPlaces = SaveOf(Side.Left)!.HasPc || SaveOf(Side.Right)!.HasPc;
+        foreach (var (move, count) in pending.Where(p => p.Key.From == from).OrderBy(p => SaveBag.CategoryOf(p.Key.ItemId)).ThenBy(p => p.Key.ItemId))
+        {
+            var places = withPlaces ? $" ({PlaceLabel(from, move.FromPlace)} → {PlaceLabel(OtherSide(from), move.ToPlace)})" : "";
+            yield return $"{count} × {Info.ItemName(move.ItemId)}{places}";
+        }
+    }
+
+    private string PlaceLabel(Side side, BagPlace place) => SaveOf(side)!.HasPc ? (place == BagPlace.Pc ? "PC" : "sac") : "sac";
+
+    /// <summary>« Valider » : les deux sauvegardes modifiées en une seule opération, revérifiée par le service.</summary>
+    private async Task Validate()
+    {
+        if (busy || pending.Count == 0 || leftId is not { } left || rightId is not { } right)
+            return;
+        busy = true;
+        try
+        {
+            var moves = pending.Select(p => new SaveItemMove(p.Key.From == Side.Left ? left : right, p.Key.FromPlace, p.Key.ToPlace,
+                p.Key.ItemId, p.Value)).ToList();
+            var result = await InventoryStore.TransferBetweenSavesAsync(userId, left, right, moves);
+            message = result.Message;
+            messageIsError = !result.Ok;
+            if (result.Ok)
+            {
+                ClearPending();
+                saves = await InventoryStore.ListItemSourcesAsync(userId); // les sacs ont changé
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Transfert impossible : {ex.Message}";
+            messageIsError = true;
+        }
+        finally { busy = false; }
+    }
+
+    // ---------- Recherche et tri ----------
+
+    private bool Matches(Row row, ColumnState state) =>
+        string.IsNullOrWhiteSpace(state.Search)
+        || French.IndexOf(row.Item.Name, state.Search.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+
+    /// <summary>Nouveau critère de tri : croissant.</summary>
+    private static void SortChanged(ColumnState state, ChangeEventArgs e)
+    {
+        state.SortBy = SortSlugs.FirstOrDefault(x => x.Value == e.Value?.ToString()).Key;
+        state.Descending = false;
+    }
+
+    private static string SortLabel(ItemSortBy by) => by switch
+    {
+        ItemSortBy.Name => "Nom",
+        ItemSortBy.Quantity => "Quantité",
+        _ => "Par défaut",
+    };
+
+    private static string OrderLabel(ColumnState state) => (state.SortBy, state.Descending) switch
+    {
+        (ItemSortBy.Name, false) => "↑ A → Z",
+        (ItemSortBy.Name, true) => "↓ Z → A",
+        (_, false) => "↑ Croissant",
+        (_, true) => "↓ Décroissant",
+    };
+
+    /// <summary>Lignes dans l'ordre de la colonne ; « Par défaut » garde l'ordre de l'inventaire.</summary>
+    private List<Row> Sort(IEnumerable<Row> rows, ColumnState state)
+    {
+        var byName = Comparer<string>.Create((a, b) => French.Compare(a, b, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace));
+        return (state.SortBy, state.Descending) switch
+        {
+            (ItemSortBy.Name, false) => rows.OrderBy(r => SortName(r.Item), byName).ToList(),
+            (ItemSortBy.Name, true) => rows.OrderByDescending(r => SortName(r.Item), byName).ToList(),
+            (ItemSortBy.Quantity, false) => rows.OrderBy(r => r.Item.Count).ThenBy(r => SortName(r.Item), byName).ToList(),
+            (ItemSortBy.Quantity, true) => rows.OrderByDescending(r => r.Item.Count).ThenBy(r => SortName(r.Item), byName).ToList(),
+            (_, true) => rows.Reverse().ToList(),
+            _ => rows.ToList(),
+        };
+    }
+
+    /// <summary>Nom pour le tri : celui de la capacité pour une CT (sans son numéro, qui change d'un jeu à l'autre).</summary>
+    private string SortName(ItemStack item) => SaveBag.MoveOf(item.ItemId) is { } move ? Info.MoveName(move) : item.Name;
+}

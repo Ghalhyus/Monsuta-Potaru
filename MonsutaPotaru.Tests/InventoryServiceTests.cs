@@ -989,5 +989,117 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.Equal("125 000 ₽", InventoryService.FormatMoney(125_000).Replace(' ', ' ').Replace(' ', ' '));
     }
 
+    // ---------- Transfert direct entre deux sauvegardes ----------
+
+    private async Task<int> StorePlatinum()
+    {
+        Assert.True((await _saves.AddAsync("sacha", "platine.sav", SaveSessionTests.CreatePlatinumSave())).Ok);
+        return (await _saves.ListAsync("sacha")).Single(s => s.FileName == "platine.sav").Id;
+    }
+
+    [Fact]
+    public async Task TransferBetweenSaves_MovesItemsBothWays_InOneOperation()
+    {
+        var platine = await StorePlatinum(); // 10 Potion, 30 Poké Ball, CT26 Séisme, 3 CT06 Toxik...
+        var b2 = await Store(items: [(PokeBall, 3), (HealthFeather, 2)]);
+        var platineBefore = await StoredItems(platine);
+
+        var result = await _inventory.TransferBetweenSavesAsync("sacha", platine, b2,
+        [
+            new(platine, BagPlace.Bag, BagPlace.Bag, Potion, 5),
+            new(platine, BagPlace.Bag, BagPlace.Bag, EarthquakeTM, 1), // CT26 en Platine, CT26 aussi en Noir 2
+            new(platine, BagPlace.Bag, BagPlace.Bag, ToxicTM, 1), // réutilisable en Noir 2 : une seule
+            new(b2, BagPlace.Bag, BagPlace.Bag, PokeBall, 2),
+            new(b2, BagPlace.Bag, BagPlace.Bag, Potion, 0), // ignoré
+        ]);
+        Assert.True(result.Ok, result.Message);
+        Assert.Contains("Télécharge les deux sauvegardes", result.Message);
+
+        var platineAfter = await StoredItems(platine);
+        Assert.Equal(platineBefore[Potion] - 5, platineAfter[Potion]);
+        Assert.Equal(platineBefore[PokeBall] + 2, platineAfter[PokeBall]);
+        Assert.False(platineAfter.ContainsKey(EarthquakeTM));
+        Assert.Equal(platineBefore[ToxicTM] - 1, platineAfter[ToxicTM]);
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 1, [HealthFeather] = 2, [Potion] = 5, [EarthquakeTM] = 1, [ToxicTM] = 1 },
+            await StoredItems(b2));
+        Assert.Empty(await InventoryItems()); // l'inventaire interne n'est pas touché
+
+        // Une ligne de journal par sauvegarde ; les deux parties sont « modifiées sur le serveur ».
+        var journal = await _inventory.ListOperationsAsync("sacha");
+        Assert.Equal(2, journal.Count);
+        Assert.All(journal, o => Assert.Equal(WalletOperationKind.TransferItemsBetweenSaves, o.Kind));
+        var platineLine = journal.Single(o => o.SaveFileName == "platine.sav");
+        Assert.Matches("^Envoyé à .* — Ludo : 5 × Potion, ", platineLine.Details);
+        Assert.Contains(" · Reçu : 2 × ", platineLine.Details);
+        Assert.StartsWith("Envoyé à Platine", journal.Single(o => o.SaveFileName == "Ludo.sav").Details);
+        Assert.All(await _saves.ListAsync("sacha"), s => Assert.True(s.MustDownloadBeforeUpdate));
+        Assert.All(await _saves.ListAsync("sacha"), s => Assert.True(s.ItemsChangedOnServer));
+    }
+
+    [Fact]
+    public async Task TransferBetweenSaves_InOneDirection_SaysWhereItCameFrom()
+    {
+        var platine = await StorePlatinum();
+        var b2 = await Store(items: [(PokeBall, 3)]);
+        Assert.True((await _inventory.TransferBetweenSavesAsync("sacha", platine, b2, [new(platine, BagPlace.Bag, BagPlace.Bag, Potion, 2)])).Ok);
+        var journal = await _inventory.ListOperationsAsync("sacha");
+        Assert.StartsWith("Reçu de Platine", journal.Single(o => o.SaveFileName == "Ludo.sav").Details);
+    }
+
+    [Fact]
+    public async Task TransferBetweenSaves_RefusesAndChangesNothing()
+    {
+        var platine = await StorePlatinum();
+        var b2 = await Store(items: [(PokeBall, 3), (HealthFeather, 2)]);
+        var someoneElses = await Store(owner: "ondine", ot: "Ondine", items: [(PokeBall, 3)]);
+        var (platineBefore, b2Before) = (await StoredItems(platine), await StoredItems(b2));
+
+        async Task Refused(string expected, int first, int second, params SaveItemMove[] moves)
+        {
+            var result = await _inventory.TransferBetweenSavesAsync("sacha", first, second, moves);
+            Assert.False(result.Ok);
+            Assert.Contains(expected, result.Message);
+        }
+        await Refused("deux sauvegardes différentes", platine, platine, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, Potion, 1));
+        await Refused("n'existe plus", platine, someoneElses, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, Potion, 1));
+        await Refused("Glisse au moins un objet", platine, b2);
+        await Refused("négatives", platine, b2, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, Potion, -1));
+        await Refused("autre sauvegarde", platine, b2, new SaveItemMove(someoneElses, BagPlace.Bag, BagPlace.Bag, PokeBall, 1));
+        // Une Plume Santé n'existe pas en Platine : la Potion, qui pouvait passer, ne passe pas non plus.
+        await Refused("n'existe pas dans Platine", platine, b2,
+            new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, Potion, 1), new SaveItemMove(b2, BagPlace.Bag, BagPlace.Bag, HealthFeather, 1));
+        await Refused("aucune CT ni DT", platine, b2, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, FocusPunchTM, 1));
+        await Refused("accepte 1 au plus", platine, b2, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, ToxicTM, 2));
+        await Refused("ne contient que", platine, b2, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Bag, Potion, 11));
+        await Refused("n'a pas de PC", platine, b2, new SaveItemMove(platine, BagPlace.Bag, BagPlace.Pc, Potion, 1));
+
+        Assert.Equal(platineBefore, await StoredItems(platine));
+        Assert.Equal(b2Before, await StoredItems(b2));
+        Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
+        Assert.All(await _saves.ListAsync("sacha"), s => Assert.False(s.ModifiedOnServer));
+    }
+
+    [Fact]
+    public async Task TransferBetweenSaves_ReachesThePcOfFirstGenerationGames()
+    {
+        Assert.True((await _saves.AddAsync("sacha", "rouge.sav", RedFile(bag: [(20, 3)], pc: [(20, 2), (40, 4)]))).Ok); // Potion ; Potion, Super Bonbon
+        var red = (await _saves.ListAsync("sacha")).Single().Id;
+        var b2 = await Store(items: [(PokeBall, 3)]);
+
+        var result = await _inventory.TransferBetweenSavesAsync("sacha", red, b2,
+        [
+            new(red, BagPlace.Pc, BagPlace.Bag, RareCandy, 4),
+            new(b2, BagPlace.Bag, BagPlace.Pc, PokeBall, 2),
+        ]);
+        Assert.True(result.Ok, result.Message);
+
+        var source = (await _inventory.ListItemSourcesAsync("sacha")).Single(s => s.SaveId == red);
+        Assert.Equal(new[] { (PokeBall, 2), (Potion, 2) }, source.PcItems!.Select(i => (i.ItemId, i.Count)).Order());
+        Assert.Equal(3, source.CountIn(Potion, BagPlace.Bag));
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 1, [RareCandy] = 4 }, await StoredItems(b2));
+        var line = (await _inventory.ListOperationsAsync("sacha")).Single(o => o.SaveFileName == "rouge.sav");
+        Assert.Contains("(PC)", line.Details);
+    }
+
     public void Dispose() => _db.Dispose();
 }

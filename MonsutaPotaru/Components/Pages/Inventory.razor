@@ -97,6 +97,8 @@ else
             {
                 <button class="btn btn-outline-primary" @onclick="() => OpenItems(deposit: false)">Retirer d'une sauvegarde</button>
                 <button class="btn btn-outline-primary" @onclick="() => OpenItems(deposit: true)" disabled="@(items.Count == 0)">Déposer dans une sauvegarde</button>
+                @* D'une sauvegarde à une autre sans passer par l'inventaire interne : page « Transfert d'inventaire ». *@
+                <a class="btn btn-outline-primary" href="inventaire/transfert">Transfert entre sauvegardes</a>
             }
         </Actions>
         <ChildContent>
@@ -925,6 +927,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
         WalletOperationKind.BuyCollectionSlots => "Achat d'emplacements",
         WalletOperationKind.WithdrawItemsFromSave => "Objets retirés d'une sauvegarde",
         WalletOperationKind.DepositItemsToSave => "Objets déposés dans une sauvegarde",
+        WalletOperationKind.TransferItemsBetweenSaves => "Objets transférés entre sauvegardes",
         WalletOperationKind.ExpandPark => "Agrandissement du parc",
         WalletOperationKind.BuyPark => "Achat d'un parc",
         WalletOperationKind.DebugCredit => "Argent ajouté (mode debug)",
@@ -932,7 +935,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
     };
 
     private static bool IsItemOperation(WalletOperationKind kind) =>
-        kind is WalletOperationKind.WithdrawItemsFromSave or WalletOperationKind.DepositItemsToSave;
+        kind is WalletOperationKind.WithdrawItemsFromSave or WalletOperationKind.DepositItemsToSave or WalletOperationKind.TransferItemsBetweenSaves;
 
     private void OpenItems(bool deposit)
     {

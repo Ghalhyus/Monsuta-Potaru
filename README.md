@@ -203,7 +203,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   nôtre la contient. En `Development` seulement, les scripts de rechargement de Visual Studio (`localhost:*`) sont permis.
 - **Aucun script écrit dans la page** : la CSP ne l'exécuterait pas. Les scripts du site sont dans `wwwroot/js` :
   `app.js` (chargé dans le `<head>` d'`App.razor` : images de remplacement, téléchargement, largeur d'écran, grille de
-  l'inventaire, glisser-déposer, fermeture du menu sur téléphone) et `parc.js`. Pas de `onerror` / `onclick` dans le
+  l'inventaire, glisser-déposer, fermeture du menu sur téléphone), `parc.js` et `transfert-objets.js` (modules chargés
+  par leur page). Pas de `onerror` / `onclick` dans le
   HTML : une image absente prend `data-remplacement="images/…/inconnu.png"` (ou `data-cacher-si-absente`), un seul
   écouteur d'`app.js` s'en charge. Pas d'`<ImportMap />` (script écrit dans la page) : `parc.js` est chargé par son
   chemin, et charge Phaser par le sien (`wwwroot/lib/phaser`, servi par le site). Test
@@ -363,6 +364,14 @@ utilisées. Détails : `docs/claude/images.md`.
   par sac. **CT à usage unique** : à 80 exemplaires ou plus dans une sauvegarde (sac et PC), cette CT y est cachée et
   bloquée, un dépôt ne peut pas l'y amener (`SaveBag.LimitedMachineThreshold`).
 - Après un retrait ou un dépôt, la sauvegarde est **modifiée sur le serveur** (voir « Sauvegardes stockées »).
+- **Transfert entre deux sauvegardes** (`/inventaire/transfert?gauche=3&droite=5`, `Pages/InventoryTransfer.razor`,
+  `InventoryService.TransferBetweenSavesAsync`) : sans passer par l'inventaire interne, dans les deux sens, glisser-déposer
+  (souris, ou appui long au doigt : `wwwroot/js/transfert-objets.js`) ou bouton flèche, compteur par objet (1 au départ,
+  borné à ce que l'objet a et à la place dans l'autre). Mêmes règles qu'un retrait puis un dépôt : un objet refusé par
+  l'autre jeu est grisé (raison au survol) ; CT par capacité ; onglets Sac / PC de la 1re à la 3e génération. Rien n'est
+  écrit avant « Valider » : dans chaque sauvegarde, retraits puis dépôts ; les deux écrites en **une seule transaction**
+  (refus de l'une : aucune ne change), copies avant/après, **les deux modifiées sur le serveur**, une ligne de journal
+  par sauvegarde (`TransferItemsBetweenSaves` : envoyé, reçu).
 
 ### Parc
 
@@ -514,10 +523,12 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/StoredSaveService.cs` | Stockage, mise à jour et suppression des sauvegardes stockées |
 | `MonsutaPotaru/Services/SaveIdentity.cs` | Empreinte d'une sauvegarde (unicité sur le serveur) |
 | `MonsutaPotaru/Services/SaveVersion.cs` | Rouge Feu ou Vert Feuille : jeu d'une sauvegarde deviné d'après le jeu d'origine des Pokémon du dresseur |
-| `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), achat d'emplacements, journal |
+| `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), transfert direct entre deux sauvegardes, achat d'emplacements, journal |
 | `MonsutaPotaru/Services/SaveBag.cs` | Objets du sac et du PC d'une sauvegarde (objets, Pokéballs, médicaments, baies, CT/DT par capacité ; jamais les objets rares, Lettres ni CS) : lecture, retrait, dépôt (PKHeX), conversion des numéros d'objets des jeux de 1re à 3e génération |
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |
 | `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Inventaire » (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
+| `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés), récapitulatif, « Valider » / « Annuler » |
+| `MonsutaPotaru/wwwroot/js/transfert-objets.js` | Glisser-déposer de cette page (événements pointeur : souris, appui long au doigt ; image qui suit, défilement près des bords) |
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |
 | `MonsutaPotaru/Components/Shared/ItemSprite.razor` | Image d'un objet ; celle de l'objet inconnu quand le site n'en a pas |
 | `MonsutaPotaru/Services/PokemonCriteria.cs` | Filtres de « Ma collection » : valeurs choisies, requête en base, lecture et écriture dans l'adresse |
@@ -540,7 +551,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs` | Pages et composants rendus par bUnit : Inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs` | Pages et composants rendus par bUnit : Inventaire, Transfert d'inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |

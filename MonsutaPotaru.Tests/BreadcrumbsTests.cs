@@ -12,6 +12,8 @@ public class BreadcrumbsTests
     [InlineData("transfert", "Transfert")]
     [InlineData("banque", "Transfert")]
     [InlineData("collection?tri=numero", "Ma collection")]
+    [InlineData("inventaire", "Inventaire")]
+    [InlineData("inventaire/transfert?gauche=1&droite=2", "Inventaire › Transfert d'inventaire")]
     [InlineData("livingdex", "Living dex")]
     [InlineData("livingdex/12", "Living dex › Détail")]
     [InlineData("sauvegardes", "Sauvegardes › Mes sauvegardes")]

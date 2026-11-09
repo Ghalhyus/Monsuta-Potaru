@@ -32,3 +32,18 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   une nouvelle catégorie (les bonbons, envisagée) se teste avant elle dans `CategoryOf`.
 - Objets rares, Lettres, Cristaux Z et CS : jamais touchés.
 - Pas de migration : la table `OwnedItems` stocke une clé par objet.
+
+## Transfert entre deux sauvegardes (`Pages/InventoryTransfer.razor`)
+- Service : `InventoryService.TransferBetweenSavesAsync(owner, gauche, droite, SaveItemMove[])`, un déplacement par
+  (sauvegarde de départ, endroit de départ, endroit d'arrivée, objet). Dans chaque sauvegarde : `SaveBag.Withdraw` de tous
+  les endroits, puis `SaveBag.Deposit` (un objet envoyé libère sa place), fichier relu (`Written`), puis
+  `SaveServerChangeAsync` avec **les deux** changements (liste) : une transaction, deux traces `SaveModification`.
+- Page : les objets en attente sont gardés par (colonne, endroit de départ, endroit d'arrivée, objet). Renvoyer un objet
+  vers l'endroit d'où il vient annule d'abord l'envoi inverse. Le maximum d'une ligne (`Sendable`) reprend
+  `ItemSource.CapacityIn` et `LockedMachines` de l'autre sauvegarde, sur l'état après les envois en attente ; ce que la page
+  ne voit pas (20 objets différents dans le sac de Rouge / Bleu, seuil de 80 CT avec l'autre endroit) est refusé par le
+  service à la validation, avec son message.
+- Glisser : `wwwroot/js/transfert-objets.js` (module, `init(root, dotnet)` → `dispose`), appelle `Drop(colonne, objet)`
+  (`[JSInvokable]`, revérifié). Champ du compteur recréé à chaque saisie (`@key` avec `typed`) : sinon un nombre ramené
+  dans les bornes à la même valeur qu'avant reste affiché tel que tapé (Blazor ne réécrit pas un attribut inchangé).
+- Le glisser au doigt n'a pas pu être essayé sur un vrai téléphone (l'émulation du navigateur envoie des clics de souris).
