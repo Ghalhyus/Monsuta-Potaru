@@ -168,6 +168,30 @@ public sealed class MigrationsTests : IDisposable
     }
 
     [Fact]
+    public async Task StatisticsVisibility_ChecksTheNewPage_ForEveryAccount()
+    {
+        const string before = "20261108182428_SortPreferences"; // juste avant StatisticsVisibility
+        using (var db = NewContext())
+        {
+            // Comptes ajoutés avant Friends : ensuite, des colonnes sans valeur par défaut (Audience) demanderaient le modèle actuel.
+            await db.GetService<IMigrator>().MigrateAsync("20261026185115_ProfileVisibility");
+            await AddUserAsync(db, "sacha", "Sacha");
+            await AddUserAsync(db, "ondine", "Ondine");
+            await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET PublicPages = 2 WHERE Id = 'ondine';"); // le parc seul
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            Assert.Equal([PublicPages.Park | PublicPages.Statistics, PublicPages.All],
+                await db.Users.OrderBy(u => u.Id).Select(u => u.PublicPages).ToListAsync());
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : la case disparaît
+            Assert.Equal([2, 15], await db.Database.SqlQueryRaw<int>("SELECT PublicPages AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task ParkLandscapes_TurnsEachPark_IntoAForest()
     {
         const string before = "20261031095313_ParkExpansions"; // juste avant ParkLandscapes

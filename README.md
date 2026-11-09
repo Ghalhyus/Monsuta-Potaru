@@ -122,7 +122,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 
 - **Rechercher un joueur** (`/joueurs`, `Pages/PlayerSearch.razor`) : 2 caractères du pseudo au moins, casse et accents
   ignorés, parmi les profils trouvables. Profil : `/joueurs/{pseudo}` (`Pages/PlayerProfilePage.razor`,
-  `Shared/PlayerHeader.razor`). Collection, Parc, Inventaire et Living dex ont une seconde adresse
+  `Shared/PlayerHeader.razor`). Collection, Parc, Inventaire, Living dex et Statistiques ont une seconde adresse
   (`/joueurs/{pseudo}/collection`...) en **lecture seule** : aucun bouton qui modifie, copie ou télécharge (et les actions
   refusent un visiteur), ni journal, ni noms de fichiers, ni ID de dresseur (`PokemonCard.HideTrainerId`).
 - **Visibilité** (colonnes `Audience` et `PublicPages`) : Tout le monde (défaut), Amis seulement (trouvable, pages pour
@@ -174,8 +174,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   des œufs. Les deux sauvegardes sont écrites dans une même transaction (copies `echange-avant` / `echange-apres`) et
   marquées modifiées sur le serveur (`SaveModification.PokemonTraded`).
 - Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
-- **Statistiques** (`/statistiques`, `Pages/Statistics.razor`) : tables `TradeRecords` et `BattleRecords`, sans clé
-  étrangère (elles survivent à la suppression du compte du partenaire).
+- Comptés dans les **statistiques** (voir « Statistiques ») : table `TradeRecords`.
 - **Échange interne** (`/echange-interne?de=3&vers=5`, rubrique « Mes Pokémon », `Pages/InternalTrade.razor`) : entre deux
   sauvegardes stockées du même compte (deux parties du même jeu comprises, jamais une avec elle-même), en 4 étapes (les
   sauvegardes, le Pokémon envoyé par la première, celui qu'elle reçoit de la seconde, la confirmation avec les évolutions
@@ -465,6 +464,25 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
 - Images : `outils/images.py livingdex` (sprites PokéAPI, jaquettes Bulbagarden Archives) ; sans elles, l'image de la
   collection (`LivingDexGames.Fallback`).
 
+### Statistiques
+
+Détails : `docs/claude/statistiques.md`.
+
+- `/statistiques` (menu du pseudo) et `/joueurs/{pseudo}/statistiques` (case « Statistiques » de « Visibilité », cochée
+  pour tous les comptes à son arrivée : migration `StatisticsVisibility`). Onglets à gauche, en ligne au-dessus sur un
+  écran étroit : **Générale**, **Défis**, **Multijoueurs** (`?onglet=defis`, `?onglet=multijoueurs`). Chaque onglet est
+  calculé à son ouverture, sans cache (`Services/StatisticsService.cs`).
+- **Argent dépensé** : toutes les sorties du porte-monnaie (montants négatifs du journal : emplacements, agrandissements,
+  parcs). **Argent déposé** : le solde plus l'argent dépensé (un aller-retour d'argent ne compte pas deux fois).
+- **Living dex** : les normaux (globaux compris) et les chromatiques **à part**. Pourcentage = **moyenne** des
+  pourcentages des living dex (chacun pèse autant ; fractions exactes, arrondi vers le bas comme les barres : 100 %
+  seulement quand tous sont complets). Un living dex ne compte que dans les modes qu'il a (`LivingDexGames.Modes` : un
+  Rouge, « National seul », n'entre ni dans le régional ni dans le complet) ; le **général** prend chacun dans son plus
+  grand mode (Complet, Ultime pour les globaux, son seul mode pour un chromatique d'un jeu). **Complété** : 100 % dans le
+  mode. Même comptage que la vue générale (`LivingDexService.ProgressAsync`).
+- **Échange** et **Combat** : tables `TradeRecords` et `BattleRecords`, sans clé étrangère (elles survivent à la
+  suppression du compte du partenaire) ; l'échange interne n'y est pas.
+
 ### Taille de la collection
 
 Chaque compte a une limite (stockage interne + sauvegardes stockées, œufs compris) : 1 000 au départ. Toute opération qui
@@ -502,7 +520,9 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
 | `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo) : échanges, combats |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex), Multijoueurs (échanges, combats) |
+| `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
+| `MonsutaPotaru/Services/StatisticsService.cs` | Statistiques : argent déposé et dépensé, moyennes des living dex |
 | `MonsutaPotaru/Data/TradeRecord.cs` | Table des échanges réussis (statistiques, succès) |
 | `MonsutaPotaru/Components/Pages/PlayerSearch.razor` | « Multijoueurs » → « Rechercher un joueur » (`/joueurs`) |
 | `MonsutaPotaru/Components/Pages/PlayerProfilePage.razor` | Profil d'un joueur (`/joueurs/{pseudo}`) : ses pages publiques en onglets |

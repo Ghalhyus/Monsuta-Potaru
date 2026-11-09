@@ -1,0 +1,69 @@
+@using MonsutaPotaru.Services
+
+@* Statistiques d'un groupe de living dex (page « Statistiques », onglet « Défis ») : la moyenne de leurs pourcentages en
+   barres (général, régional, national, complet, avec le nombre de living dex comptés), puis combien sont complets dans
+   chaque mode. *@
+<Block Title="@Title" Count="@(Stats.Count > 0 ? Stats.Count.ToString() : null)">
+    @if (Stats.Count == 0)
+    {
+        <p class="text-muted mb-0">
+            @(Shiny ? "Aucun living dex chromatique pour l'instant." : "Aucun living dex pour l'instant.")
+            @if (!Visitor)
+            {
+                <text>Crée-en un dans <a href="livingdex">Living dex</a>.</text>
+            }
+        </p>
+    }
+    else
+    {
+        <p class="text-muted small">
+            Moyenne de @(Visitor ? "ses" : "tes") living dex, chacun compté dans les modes qu'il propose ; le général prend
+            chacun dans son plus grand mode (@(Shiny ? "son seul mode pour celui d'un jeu, Ultime pour le global" : "Complet, Ultime pour le global")).
+        </p>
+        <div class="stat-bars">
+            @foreach (var (label, average) in Rows)
+            {
+                <div class="stat-bar-label">@label</div>
+                @if (average.Count == 0)
+                {
+                    <div class="stat-bar-none text-muted small">Aucun living dex n'a ce mode.</div>
+                }
+                else
+                {
+                    <LivingDexProgress Owned="average.Tenths" Total="1000" ValueText="@($"{average.Percent}, moyenne de {Dexes(average.Count)}")" />
+                    <div class="stat-bar-count text-muted small">@Dexes(average.Count)</div>
+                }
+            }
+        </div>
+        <div class="stat-tiles mt-3">
+            @foreach (var (label, average) in Completed)
+            {
+                <div class="card">
+                    <div class="card-body">
+                        <div class="small text-muted">@label</div>
+                        <div class="stat-value">@(average.Count == 0 ? "—" : $"{average.Completed} / {average.Count}")</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</Block>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public LivingDexStats Stats { get; set; } = default!;
+
+    /// <summary>Statistiques d'un autre joueur : « ses », sans lien vers la création.</summary>
+    [Parameter] public bool Visitor { get; set; }
+
+    /// <summary>Living dex chromatiques : autres textes.</summary>
+    [Parameter] public bool Shiny { get; set; }
+
+    private IEnumerable<(string, LivingDexAverage)> Rows =>
+        [("Général", Stats.General), ("Régional", Stats.Regional), ("National", Stats.National), ("Complet", Stats.Complete)];
+
+    private IEnumerable<(string, LivingDexAverage)> Completed =>
+        [("Régionaux complétés", Stats.Regional), ("Nationaux complétés", Stats.National), ("Complets complétés", Stats.Complete)];
+
+    private static string Dexes(int count) => count == 1 ? "1 living dex" : $"{count} living dex";
+}

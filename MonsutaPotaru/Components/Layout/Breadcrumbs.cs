@@ -76,6 +76,7 @@ public static class Breadcrumbs
             "inventaire" => [new Crumb("Inventaire", null)],
             "parc" => [new Crumb("Parc", null)],
             "livingdex" => LivingDex(parts.Skip(3).ToArray(), playerHref + "/livingdex"),
+            "statistiques" => [new Crumb("Statistiques", null)],
             _ => [],
         });
         return crumbs;

@@ -62,7 +62,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     }
 
     /// <summary>Menu du pseudo ouvert : sur les paramètres du profil ou les statistiques.</summary>
-    protected bool accountOpen => currentUrl is { } url && (url.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase) || url == "statistiques");
+    protected bool accountOpen => currentUrl is { } url && (url.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase) || IsOn("statistiques"));
 
     protected override async Task OnInitializedAsync()
     {

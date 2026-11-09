@@ -56,6 +56,10 @@
                         <InputCheckbox class="form-check-input" id="page-livingdex" @bind-Value="Input.LivingDex" />
                         <label class="form-check-label" for="page-livingdex">Living dex</label>
                     </div>
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" id="page-statistics" @bind-Value="Input.Statistics" />
+                        <label class="form-check-label" for="page-statistics">Statistiques (argent, living dex, échanges et combats)</label>
+                    </div>
                 </fieldset>
                 <button type="submit" class="w-100 btn btn-lg btn-primary">Enregistrer</button>
             </EditForm>
@@ -94,6 +98,7 @@
             Park = visibility.Pages.HasFlag(PublicPages.Park),
             Inventory = visibility.Pages.HasFlag(PublicPages.Inventory),
             LivingDex = visibility.Pages.HasFlag(PublicPages.LivingDex),
+            Statistics = visibility.Pages.HasFlag(PublicPages.Statistics),
         };
     }
 
@@ -102,7 +107,8 @@
         if (user is null)
             return; // compte supprimé : page redirigée
         var pages = (Input.Collection ? PublicPages.Collection : 0) | (Input.Park ? PublicPages.Park : 0)
-            | (Input.Inventory ? PublicPages.Inventory : 0) | (Input.LivingDex ? PublicPages.LivingDex : 0);
+            | (Input.Inventory ? PublicPages.Inventory : 0) | (Input.LivingDex ? PublicPages.LivingDex : 0)
+            | (Input.Statistics ? PublicPages.Statistics : 0);
         var result = await Players.SetVisibilityAsync(user.Id, Input.Audience, pages);
         if (!result.Ok)
         {
@@ -119,5 +125,6 @@
         public bool Park { get; set; }
         public bool Inventory { get; set; }
         public bool LivingDex { get; set; }
+        public bool Statistics { get; set; }
     }
 }

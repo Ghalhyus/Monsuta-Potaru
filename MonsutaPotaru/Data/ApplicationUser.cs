@@ -49,7 +49,9 @@ public enum PublicPages
     Park = 2,
     Inventory = 4,
     LivingDex = 8,
-    All = Collection | Park | Inventory | LivingDex,
+    /// <summary>Page « Statistiques » (argent, living dex, échanges, combats) ; cochée pour tous à son arrivée.</summary>
+    Statistics = 16,
+    All = Collection | Park | Inventory | LivingDex | Statistics,
 }
 
 /// <summary>Qui peut voir les pages d'un joueur (« Mon compte » → « Visibilité »).</summary>

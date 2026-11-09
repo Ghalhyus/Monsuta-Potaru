@@ -22,6 +22,9 @@ README : « Multijoueurs », « Échanges ».
   qui regarde : un ami (ou le joueur lui-même) voit les pages d'un profil « Amis seulement » ; « Personne » reste
   introuvable, même des amis.
 - Profil caché, page non visible, compte sans pseudo : même réponse (`PlayerHidden`), administrateurs compris.
+- Pages visibles : `PublicPages` (drapeaux) et `PlayerService.Pages` (onglets du profil, ordre). Une nouvelle page : son
+  drapeau dans `All`, sa case dans `Visibility.razor`, une migration SQL pour les comptes existants (`StatisticsVisibility`,
+  cochée pour tous ; le modèle ne change pas), son étape dans `Breadcrumbs.Player`.
 
 ## Amis
 - `FriendService` ; amitiés en double (une ligne par compte).

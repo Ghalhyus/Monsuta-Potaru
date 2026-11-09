@@ -40,6 +40,7 @@ public sealed class ArdoiseLayoutTests : PageTestContext
 
     [Theory]
     [InlineData("statistiques")]
+    [InlineData("statistiques?onglet=defis")]
     [InlineData("Account/Manage/Themes")]
     public void SideMenu_AccountOpensOnItsPages(string url)
     {

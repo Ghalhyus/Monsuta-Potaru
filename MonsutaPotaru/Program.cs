@@ -69,6 +69,7 @@ builder.Services.AddScoped<StoredSaveService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<ParkService>();
 builder.Services.AddScoped<LivingDexService>();
+builder.Services.AddScoped<StatisticsService>(); // page « Statistiques »
 builder.Services.AddScoped<WalletState>();
 builder.Services.AddScoped<SaveSession>();
 builder.Services.AddScoped<SyncService>();

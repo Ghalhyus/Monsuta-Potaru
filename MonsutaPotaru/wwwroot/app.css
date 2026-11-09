@@ -580,6 +580,11 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 }
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1rem; max-width: 40rem; }
 .stat-value { font-size: 2rem; font-weight: 600; line-height: 1.2; }
+/* Statistiques des living dex : le mode, sa barre (moyenne), le nombre de living dex comptés. */
+.stat-bars { display: grid; grid-template-columns: auto minmax(8rem, 1fr) auto; align-items: center; gap: .6rem 1rem; max-width: 40rem; }
+.stat-bar-label { font-weight: 600; }
+.stat-bar-none { grid-column: span 2; }
+.stat-bar-count { white-space: nowrap; }
 
 /* ---------- Combats (Multijoueurs) : interface inspirée de Pokémon Platine ---------- */
 .battle-friend { max-width: 22rem; }

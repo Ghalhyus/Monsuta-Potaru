@@ -1,95 +1,261 @@
 @page "/statistiques"
+@page "/joueurs/{Pseudo}/statistiques"
 @attribute [Authorize]
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Data
 @using MonsutaPotaru.Services
+@inject StatisticsService Stats
 @inject TradeService Trades
 @inject BattleService Battles
+@inject PlayerService Players
+@inject NavigationManager Navigation
 
-<PageTitle>Statistiques</PageTitle>
+<PageTitle>@(player is null ? "Statistiques" : $"Statistiques de {player.Pseudo}")</PageTitle>
 
-@* Statistiques du joueur (menu de son pseudo), base des futurs succès : échanges et combats. *@
-
-<PageHeader Title="Statistiques" Icon="bi-grid-nav-menu" />
-
-<Block Title="Échanges">
-    @if (stats is null)
+@* Statistiques du joueur (menu de son pseudo), base des futurs succès : onglets à gauche (en ligne au-dessus sur un
+   écran étroit), « ?onglet=defis » dans l'adresse. Chaque onglet calcule ses chiffres quand on l'ouvre (StatisticsService,
+   sans cache), gardés pour la visite. Aussi sur le profil d'un autre joueur (/joueurs/{pseudo}/statistiques), si sa
+   « Visibilité » le permet : les mêmes chiffres, sans les liens vers ses pages. *@
+@if (Visitor && player is null)
+{
+    @if (playerChecked)
     {
-        <p class="text-muted">Chargement…</p>
+        <PlayerHidden />
+    }
+}
+else
+{
+    @if (player is not null)
+    {
+        <PlayerHeader Player="player" Current="PublicPages.Statistics" />
+        <PageHeader Title="Statistiques" Small="true" />
     }
     else
     {
-        <div class="stat-tiles">
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Échanges réussis</div>
-                    <div class="stat-value">@stats.Total</div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Partenaires différents</div>
-                    <div class="stat-value">@stats.Partners</div>
-                </div>
-            </div>
-        </div>
-        @if (stats.Total == 0)
-        {
-            <p class="text-muted small mt-3">Aucun échange pour l'instant : propose-en un à un ami dans <a href="echanges">Échanges</a>.</p>
-        }
+        <PageHeader Title="Statistiques" Icon="bi-grid-nav-menu">
+            <Description>Ton argent, tes living dex, tes échanges et tes combats.</Description>
+        </PageHeader>
     }
-</Block>
 
-<Block Title="Combats">
-    @if (battles is null)
-    {
-        <p class="text-muted">Chargement…</p>
-    }
-    else
-    {
-        <div class="stat-tiles">
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Victoires</div>
-                    <div class="stat-value">@battles.Won</div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Défaites</div>
-                    <div class="stat-value">@battles.Lost</div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Matchs nuls</div>
-                    <div class="stat-value">@battles.Draws</div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body">
-                    <div class="small text-muted">Adversaires différents</div>
-                    <div class="stat-value">@battles.Opponents</div>
-                </div>
-            </div>
+    <div class="row">
+        <div class="col-lg-3 col-xxl-2">
+            <ul class="nav nav-pills flex-lg-column mb-3 stats-tabs" aria-label="Statistiques">
+                @foreach (var (value, title) in Tabs)
+                {
+                    <li class="nav-item">
+                        <a class="nav-link @(tab == value ? "active" : "")" aria-current="@(tab == value ? "page" : null)"
+                           href="@TabHref(value)">@title</a>
+                    </li>
+                }
+            </ul>
         </div>
-        @if (battles.Total == 0)
-        {
-            <p class="text-muted small mt-3">Aucun combat pour l'instant : défie un ami dans <a href="combats">Combat</a>.</p>
-        }
-    }
-</Block>
+        <div class="col-lg-9 col-xxl-10">
+            @switch (tab)
+            {
+                case StatsTab.General:
+                    <Block Title="Argent">
+                        @if (money is null)
+                        {
+                            <p class="text-muted">Chargement…</p>
+                        }
+                        else
+                        {
+                            <div class="stat-tiles">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Argent déposé</div>
+                                        <div class="stat-value">@InventoryService.FormatMoney(money.Deposited)</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Argent dépensé</div>
+                                        <div class="stat-value">@InventoryService.FormatMoney(money.Spent)</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-muted small mt-3 mb-0">
+                                Argent déposé : @(Visitor ? "son" : "ton") porte-monnaie (@InventoryService.FormatMoney(money.Balance)) et ce
+                                qui a été dépensé sur le site. Argent dépensé : emplacements de stockage, parcs et agrandissements.
+                            </p>
+                        }
+                    </Block>
+                    break;
+
+                case StatsTab.Challenges:
+                    @if (livingDex is not { } dex)
+                    {
+                        <Block Title="Living dex">
+                            <p class="text-muted">Chargement…</p>
+                        </Block>
+                    }
+                    else
+                    {
+                        <LivingDexStatsBlock Title="Living dex" Stats="dex.Normal" Visitor="Visitor" />
+                        <LivingDexStatsBlock Title="Living dex chromatiques" Stats="dex.Shiny" Visitor="Visitor" Shiny="true" />
+                    }
+                    break;
+
+                default:
+                    <Block Title="Échange">
+                        @if (trades is null)
+                        {
+                            <p class="text-muted">Chargement…</p>
+                        }
+                        else
+                        {
+                            <div class="stat-tiles">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Échanges réussis</div>
+                                        <div class="stat-value">@trades.Total</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Partenaires différents</div>
+                                        <div class="stat-value">@trades.Partners</div>
+                                    </div>
+                                </div>
+                            </div>
+                            @if (trades.Total == 0 && !Visitor)
+                            {
+                                <p class="text-muted small mt-3 mb-0">Aucun échange pour l'instant : propose-en un à un ami dans <a href="echanges">Échange</a>.</p>
+                            }
+                        }
+                    </Block>
+
+                    <Block Title="Combat">
+                        @if (battles is null)
+                        {
+                            <p class="text-muted">Chargement…</p>
+                        }
+                        else
+                        {
+                            <div class="stat-tiles">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Victoires</div>
+                                        <div class="stat-value">@battles.Won</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Défaites</div>
+                                        <div class="stat-value">@battles.Lost</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Matchs nuls</div>
+                                        <div class="stat-value">@battles.Draws</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Adversaires différents</div>
+                                        <div class="stat-value">@battles.Opponents</div>
+                                    </div>
+                                </div>
+                            </div>
+                            @if (battles.Total == 0 && !Visitor)
+                            {
+                                <p class="text-muted small mt-3 mb-0">Aucun combat pour l'instant : défie un ami dans <a href="combats">Combat</a>.</p>
+                            }
+                        }
+                    </Block>
+                    break;
+            }
+        </div>
+    </div>
+}
 
 @code {
+    /// <summary>Onglets de la page, dans l'ordre affiché.</summary>
+    public enum StatsTab { General, Challenges, Multiplayer }
+
+    /// <summary>Onglet et son titre ; le nom dans l'adresse vient de <see cref="TabSlug"/>.</summary>
+    private static readonly (StatsTab Tab, string Title)[] Tabs =
+        [(StatsTab.General, "Générale"), (StatsTab.Challenges, "Défis"), (StatsTab.Multiplayer, "Multijoueurs")];
+
+    /// <summary>Nom de l'onglet dans l'adresse (« ?onglet=defis ») ; rien pour « Générale », l'onglet par défaut.</summary>
+    public static string? TabSlug(StatsTab tab) => tab switch
+    {
+        StatsTab.Challenges => "defis",
+        StatsTab.Multiplayer => "multijoueurs",
+        _ => null,
+    };
+
+    /// <summary>Onglet d'après l'adresse : « Générale » pour un nom inconnu.</summary>
+    public static StatsTab TabFromSlug(string? slug) => slug?.ToLowerInvariant() switch
+    {
+        "defis" => StatsTab.Challenges,
+        "multijoueurs" => StatsTab.Multiplayer,
+        _ => StatsTab.General,
+    };
+
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private TradeStats? stats;
+    /// <summary>Pseudo d'un autre joueur (Multijoueurs) : ses statistiques, si sa visibilité le permet.</summary>
+    [Parameter] public string? Pseudo { get; set; }
+
+    [SupplyParameterFromQuery(Name = "onglet")] private string? TabFromQuery { get; set; }
+
+    private bool Visitor => Pseudo is not null;
+    private PlayerProfile? player;
+    private bool playerChecked;
+    private string? userId;
+    private StatsTab tab;
+
+    // Chiffres de chaque onglet, calculés à sa première ouverture et gardés pour la visite.
+    private MoneyStats? money;
+    private (LivingDexStats Normal, LivingDexStats Shiny)? livingDex;
+    private TradeStats? trades;
     private BattleRecordStats? battles;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        var userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-        stats = await Trades.StatsAsync(userId);
-        battles = await Battles.StatsAsync(userId);
+        tab = TabFromSlug(TabFromQuery);
+        var viewerId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier);
+        string? shown;
+        if (Visitor)
+        {
+            player = await Players.FindAsync(viewerId, Pseudo, PublicPages.Statistics);
+            playerChecked = true;
+            shown = player?.Id;
+        }
+        else
+        {
+            player = null;
+            shown = viewerId ?? "";
+        }
+        if (shown is null)
+            return;
+        if (shown != userId)
+        {
+            // Autre joueur (lien d'un profil à l'autre) : on recompte tout.
+            userId = shown;
+            money = null;
+            livingDex = null;
+            trades = null;
+            battles = null;
+        }
+        switch (tab)
+        {
+            case StatsTab.General:
+                money ??= await Stats.MoneyAsync(userId);
+                break;
+            case StatsTab.Challenges:
+                livingDex ??= await Stats.LivingDexAsync(userId);
+                break;
+            default:
+                trades ??= await Trades.StatsAsync(userId);
+                battles ??= await Battles.StatsAsync(userId);
+                break;
+        }
     }
+
+    private string TabHref(StatsTab value) => Navigation.GetUriWithQueryParameter("onglet", TabSlug(value));
 }

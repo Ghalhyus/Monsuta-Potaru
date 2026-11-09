@@ -85,6 +85,10 @@ README : « Living dex ». Jeux et modes : `LivingDexGames` (`Services/LivingDex
 - Tests : `ShinyLivingDexTests` ; une deuxième copie d'une vraie sauvegarde est refusée (même identité, ou mêmes Pokémon :
   anti-copie) : fabriquer une autre partie (`SaveSessionTests.CreatePlatinumSave`) ou insérer la ligne en base.
 
+## Statistiques
+- `LivingDexService.ProgressAsync` : chaque living dex dans tous ses modes, même comptage que `ListAsync` / `GetAsync`
+  (une lecture par sauvegarde). Moyennes et règles : `statistiques.md`.
+
 ## Images et jaquettes
 - Les tests n'exigent **pas** ces images (la CI les copie du VPS, qui ne les reçoit qu'au déploiement) : tester le chemin,
   pas la présence.

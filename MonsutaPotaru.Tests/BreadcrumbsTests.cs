@@ -29,6 +29,8 @@ public class BreadcrumbsTests
     [InlineData("joueurs/Sacha/inventaire", "Multijoueurs › Rechercher un joueur › Sacha › Inventaire")]
     [InlineData("joueurs/Sacha/livingdex/3", "Multijoueurs › Rechercher un joueur › Sacha › Living dex › Détail")]
     [InlineData("statistiques", "Mon compte › Statistiques")]
+    [InlineData("statistiques?onglet=multijoueurs", "Mon compte › Statistiques")]
+    [InlineData("joueurs/Sacha/statistiques", "Multijoueurs › Rechercher un joueur › Sacha › Statistiques")]
     [InlineData("Account/Manage", "Mon compte › Profil")]
     [InlineData("Account/Manage/Themes", "Mon compte › Thèmes")]
     [InlineData("Account/Manage/Preferences", "Mon compte › Préférences")]

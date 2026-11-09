@@ -37,6 +37,7 @@ public sealed class PlayerService(IDbContextFactory<ApplicationDbContext> dbFact
         new(PublicPages.Park, "Parc", "parc"),
         new(PublicPages.Inventory, "Inventaire", "inventaire"),
         new(PublicPages.LivingDex, "Living dex", "livingdex"),
+        new(PublicPages.Statistics, "Statistiques", "statistiques"),
     ];
 
     /// <summary>Adresse d'une page d'un joueur (le pseudo peut contenir des espaces et des accents).</summary>

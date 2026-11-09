@@ -148,6 +148,15 @@ public sealed record LivingDexView(int Id, LivingDexGameInfo Game, string SaveLa
     public int Owned => Entries.Count(e => e.Owned);
 }
 
+/// <summary>Progression d'un living dex dans chacun de ses modes (statistiques, <see cref="LivingDexService.ProgressAsync"/>).</summary>
+public sealed record LivingDexCompletion(LivingDexGameInfo Game, IReadOnlyList<LivingDexModeProgress> Modes);
+
+/// <summary>Pokémon possédés sur le nombre de cases d'un mode ; complet quand tout y est.</summary>
+public sealed record LivingDexModeProgress(LivingDexMode Mode, int Owned, int Total)
+{
+    public bool Complete => Total > 0 && Owned == Total;
+}
+
 /// <summary>Sauvegarde stockée qui peut recevoir un living dex, et les jeux possibles (Rouge ou Bleu, Or ou Argent : au choix).</summary>
 public sealed record LivingDexCandidate(int SaveId, string Label, IReadOnlyList<LivingDexGame> Games);
 
@@ -1328,6 +1337,33 @@ public sealed class LivingDexService(
         return summaries;
     }
 
+    /// <summary>
+    /// Progression de chaque living dex du compte dans chacun de ses modes (statistiques), chaque sauvegarde lue une fois.
+    /// Même comptage que la vue générale et la page d'un living dex.
+    /// </summary>
+    public async Task<List<LivingDexCompletion>> ProgressAsync(string ownerId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var dexes = await db.LivingDexes.AsNoTracking().Where(d => d.OwnerId == ownerId)
+            .Select(d => new { d.Game, d.Shiny, d.StoredSaveId }).ToListAsync();
+        var result = new List<LivingDexCompletion>();
+        foreach (var d in dexes.OrderBy(d => d.Game).ThenBy(d => d.Shiny))
+        {
+            var game = LivingDexGames.Get(d.Game, d.Shiny);
+            var modes = LivingDexGames.Modes(game);
+            Dictionary<LivingDexMode, List<LivingDexEntry>> entries;
+            if (d.StoredSaveId is { } saveId)
+                entries = await EntriesAsync(db, game, saveId, modes);
+            else
+            {
+                var copies = await GlobalCopiesAsync(db, ownerId, game.Shiny);
+                entries = modes.ToDictionary(m => m, m => GlobalEntries(copies, m, game.Shiny));
+            }
+            result.Add(new(game, [.. modes.Select(m => new LivingDexModeProgress(m, entries[m].Count(e => e.Owned), entries[m].Count))]));
+        }
+        return result;
+    }
+
     /// <summary>Mode affiché : celui demandé s'il est proposé, sinon le National, sinon le seul mode du living dex (chromatique d'un jeu).</summary>
     private static LivingDexMode ShownMode(IReadOnlyList<LivingDexMode> modes, LivingDexMode mode)
     {
@@ -1463,21 +1499,11 @@ public sealed class LivingDexService(
     /// stockées, ni les œufs), dans l'ordre des dépôts (<see cref="GlobalLivingDex.Assign"/>) : les non chromatiques pour le
     /// global, les seuls chromatiques pour le global chromatique (images chromatiques).
     /// </summary>
-    private static async Task<List<LivingDexEntry>> GlobalEntriesAsync(ApplicationDbContext db, string ownerId, LivingDexMode mode, bool shiny)
+    private static async Task<List<LivingDexEntry>> GlobalEntriesAsync(ApplicationDbContext db, string ownerId, LivingDexMode mode, bool shiny) =>
+        GlobalEntries(await GlobalCopiesAsync(db, ownerId, shiny), mode, shiny);
+
+    private static List<LivingDexEntry> GlobalEntries(IReadOnlyList<GlobalLivingDex.Copy> copies, LivingDexMode mode, bool shiny)
     {
-        var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny)
-            .OrderBy(p => p.DepositedAt).ThenBy(p => p.Id)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, Data = GlobalDataSpecies.Contains(p.Species) ? p.Data : null })
-            .ToListAsync();
-        var copies = rows.Select(p =>
-        {
-            var pk = p.Data is null ? null : EntityFormat.GetFromBytes(p.Data, (EntityContext)p.Context);
-            return new GlobalLivingDex.Copy(p.Id, p.Species, p.Form, (EntityContext)p.Context, p.Gender, p.HeldItem ?? 0,
-                p.Species == (ushort)Species.Alcremie && pk is IFormArgument sweet ? (byte)sweet.FormArgument : null,
-                pk is IGigantamax { CanGigantamax: true },
-                p.Species == LivingDexGames.Rayquaza && pk is not null && pk.HasMove(LivingDexGames.DragonAscent));
-        }).ToList();
         var slots = GlobalLivingDex.Slots(mode, shiny);
         var assigned = GlobalLivingDex.Assign(slots, copies, mode);
         return slots.Select((slot, i) =>
@@ -1485,6 +1511,24 @@ public sealed class LivingDexService(
             var sprite = GlobalLivingDex.Sprite(slot, shiny);
             return new LivingDexEntry(slot.Species, slot.Species, slot.Form, slot.Name, sprite, assigned[i]?.Id,
                 assigned[i] is null ? null : GlobalLabel, sprite, GlobalLivingDex.Note(slot, assigned[i] is not null));
+        }).ToList();
+    }
+
+    /// <summary>Exemplaires du stockage interne pour le living dex global (ou global chromatique), dans l'ordre des dépôts.</summary>
+    private static async Task<List<GlobalLivingDex.Copy>> GlobalCopiesAsync(ApplicationDbContext db, string ownerId, bool shiny)
+    {
+        var rows = await db.BankPokemon.AsNoTracking()
+            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny)
+            .OrderBy(p => p.DepositedAt).ThenBy(p => p.Id)
+            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, Data = GlobalDataSpecies.Contains(p.Species) ? p.Data : null })
+            .ToListAsync();
+        return rows.Select(p =>
+        {
+            var pk = p.Data is null ? null : EntityFormat.GetFromBytes(p.Data, (EntityContext)p.Context);
+            return new GlobalLivingDex.Copy(p.Id, p.Species, p.Form, (EntityContext)p.Context, p.Gender, p.HeldItem ?? 0,
+                p.Species == (ushort)Species.Alcremie && pk is IFormArgument sweet ? (byte)sweet.FormArgument : null,
+                pk is IGigantamax { CanGigantamax: true },
+                p.Species == LivingDexGames.Rayquaza && pk is not null && pk.HasMove(LivingDexGames.DragonAscent));
         }).ToList();
     }
 
@@ -1497,12 +1541,30 @@ public sealed class LivingDexService(
     /// prennent aussi d'abord le leur, qui a le facteur Gigamax. Living dex chromatique : les seuls chromatiques, sans les
     /// cases des espèces jamais chromatiques (retirées à la fin : les autres gardent leur numéro du Pokédex régional).
     /// </summary>
-    private static async Task<List<LivingDexEntry>> EntriesAsync(ApplicationDbContext db, LivingDexGameInfo game, int saveId, LivingDexMode mode)
+    private static async Task<List<LivingDexEntry>> EntriesAsync(ApplicationDbContext db, LivingDexGameInfo game, int saveId, LivingDexMode mode) =>
+        (await EntriesAsync(db, game, saveId, [mode]))[mode];
+
+    /// <summary>Cases de plusieurs modes, la sauvegarde lue une seule fois (statistiques : <see cref="ProgressAsync"/>).</summary>
+    private static async Task<Dictionary<LivingDexMode, List<LivingDexEntry>>> EntriesAsync(ApplicationDbContext db,
+        LivingDexGameInfo game, int saveId, IReadOnlyList<LivingDexMode> modes)
     {
         var owned = await OwnedAsync(db, saveId, game.Shiny);
-        var slots = LivingDexGames.Slots(game, mode);
-        var bag = slots.Any(s => s.KeyItem != 0 || s.MegaInBag) ? await BagItemsAsync(db, saveId) : new HashSet<int>();
+        IReadOnlySet<int>? bag = null; // le sac n'est lu que si un mode en a besoin
+        var result = new Dictionary<LivingDexMode, List<LivingDexEntry>>();
+        foreach (var mode in modes)
+        {
+            var slots = LivingDexGames.Slots(game, mode);
+            if (bag is null && slots.Any(s => s.KeyItem != 0 || s.MegaInBag))
+                bag = await BagItemsAsync(db, saveId);
+            result[mode] = Entries(game, mode, slots, owned, bag ?? new HashSet<int>());
+        }
+        return result;
+    }
 
+    /// <summary>Cases d'un mode avec leur exemplaire, parmi les Pokémon de la sauvegarde (voir <see cref="EntriesAsync"/>).</summary>
+    private static List<LivingDexEntry> Entries(LivingDexGameInfo game, LivingDexMode mode, IReadOnlyList<LivingDexSlot> slots,
+        List<OwnedCopy> owned, IReadOnlySet<int> bag)
+    {
         var megaCopies = MegaCopies(slots, owned);
         var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
         var copies = new SlotCopies(available, megaCopies, BagMegas(slots, available, bag), bag);
