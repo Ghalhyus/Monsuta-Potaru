@@ -9,6 +9,7 @@
 @inject LivingDexService Dexes
 @inject NavigationManager Navigation
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
 <PageTitle>@PageName</PageTitle>
 
@@ -181,7 +182,7 @@ else
 {
     @* Progression de toutes les cartes dans un mode, gardé dans l'adresse (?mode=regional) ; une carte s'ouvre dans ce mode.
        Filtre Tous / Normaux / Chromatiques (?filtre=chromatiques) et tri à côté, gardés aussi (?tri=completion&ordre=desc) :
-       par complétion, dans le mode affiché. *@
+       par complétion, dans le mode affiché ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »). *@
     <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
         <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Living dex affichés">
             @foreach (var (k, label) in Kinds)
@@ -203,9 +204,11 @@ else
         </div>
         <div class="d-flex align-items-center gap-2 livingdex-choice">
             <label class="small text-nowrap" for="dexSort">Trier par</label>
-            <select id="dexSort" class="form-select form-select-sm w-auto" value="@LivingDexGames.SortSlug(sort)" @onchange="SortChosen">
-                <option value="">Génération</option>
-                <option value="completion">Complétion</option>
+            <select id="dexSort" class="form-select form-select-sm w-auto" value="@SiteSorts.Slug(sort)" @onchange="SortChosen">
+                @foreach (var (_, slug, label) in SiteSorts.LivingDexChoices)
+                {
+                    <option value="@slug">@label</option>
+                }
             </select>
             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleOrder"
                     title="@(descending ? "Décroissant : clique pour trier en croissant" : "Croissant : clique pour trier en décroissant")"
@@ -276,6 +279,7 @@ else
     private LivingDexKind kind;
     private LivingDexSort sort;
     private bool descending;
+    private LivingDexOrder? defaultOrder; // tri par défaut du compte qui regarde (visiteur compris) ; null : pas encore lu
     private readonly HashSet<byte> openGenerations = [];
     private List<LivingDexSummary>? dexes;
     private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex normal (globaux compris, même cachés par le mode Ultime)
@@ -294,6 +298,8 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        // Le tri par défaut est celui du joueur connecté, même chez un autre joueur : sa façon de lire une liste.
+        defaultOrder ??= (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).LivingDex;
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.LivingDex);
@@ -305,8 +311,7 @@ else
         else
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         mode = LivingDexGames.ModeFromSlug(ModeFromQuery);
-        sort = LivingDexGames.SortFromSlug(SortFromQuery);
-        descending = OrderFromQuery == "desc";
+        (sort, descending) = SiteSorts.LivingDexFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultOrder.Value;
         kind = LivingDexGames.KindFromSlug(KindFromQuery);
         dexes = await Dexes.ListAsync(userId, mode);
         taken = await Dexes.TakenGamesAsync(userId);
@@ -334,12 +339,15 @@ else
 
     /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
     private void SortChosen(ChangeEventArgs e) =>
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tri",
-            LivingDexGames.SortSlug(LivingDexGames.SortFromSlug(e.Value?.ToString()))), replace: true);
+        ApplyOrder(new(SiteSorts.LivingDexChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.LivingDexChoices[0]).By, descending));
 
-    /// <summary>Inverse le sens du tri (croissant par défaut, absent de l'adresse).</summary>
-    private void ToggleOrder() =>
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("ordre", descending ? null : "desc"), replace: true);
+    /// <summary>Inverse le sens du tri.</summary>
+    private void ToggleOrder() => ApplyOrder(new(sort, !descending));
+
+    /// <summary>Tri gardé dans l'adresse : rien pour celui du compte, sinon critère et sens en entier (« ?tri=generation »).</summary>
+    private void ApplyOrder(LivingDexOrder order) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.LivingDexQuery(order), SiteSorts.LivingDexQuery(defaultOrder ?? default))), replace: true);
 
     /// <summary>Page du living dex, dans le mode de la vue générale s'il le propose (le National n'est pas écrit).</summary>
     private string CardLink(LivingDexSummary d)

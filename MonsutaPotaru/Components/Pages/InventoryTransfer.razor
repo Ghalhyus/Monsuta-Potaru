@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject PokemonInfo Info
+@inject PreferencesService Preferences
 @implements IAsyncDisposable
 
 <PageTitle>Transfert d'inventaire</PageTitle>
@@ -114,15 +115,15 @@
                             <input type="search" class="form-control form-control-sm inventory-search" placeholder="Rechercher par nom…"
                                    aria-label="Rechercher par nom" @bind="state.Search" @bind:event="oninput" />
                             <div class="inventory-sort">
-                                <select class="form-select form-select-sm" aria-label="Trier cet onglet" value="@SortSlugs[state.SortBy]"
+                                <select class="form-select form-select-sm" aria-label="Trier cet onglet" value="@SiteSorts.Slug(SortOf(state).By)"
                                         @onchange="e => SortChanged(state, e)">
-                                    @foreach (var (by, slug) in SortSlugs)
+                                    @foreach (var (_, slug, label) in SiteSorts.ItemChoices)
                                     {
-                                        <option value="@slug">Tri : @SortLabel(by)</option>
+                                        <option value="@slug">Tri : @label</option>
                                     }
                                 </select>
                                 <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre"
-                                        @onclick="() => state.Descending = !state.Descending">@OrderLabel(state)</button>
+                                        @onclick="() => Reverse(state)">@OrderLabel(SortOf(state))</button>
                             </div>
                         </div>
 
@@ -244,24 +245,16 @@
 
     private static readonly BagPlace[] Places = [BagPlace.Bag, BagPlace.Pc];
 
-    /// <summary>Critère de tri d'une colonne, comme sur la page « Inventaire ».</summary>
-    private enum ItemSortBy { Default, Name, Quantity }
-
-    private static readonly IReadOnlyDictionary<ItemSortBy, string> SortSlugs = new Dictionary<ItemSortBy, string>
-    {
-        [ItemSortBy.Default] = "defaut",
-        [ItemSortBy.Name] = "nom",
-        [ItemSortBy.Quantity] = "quantite",
-    };
-
-    /// <summary>Ce que chaque colonne affiche : endroit (sac ou PC), onglet, recherche et tri (pour cette visite).</summary>
+    /// <summary>
+    /// Ce que chaque colonne affiche : endroit (sac ou PC), onglet, recherche, et le tri choisi pour chaque onglet pendant la
+    /// visite (absent : celui du compte, « Mon compte » → « Préférences », comme sur la page « Inventaire »).
+    /// </summary>
     private sealed class ColumnState
     {
         public BagPlace Place { get; set; }
         public ItemCategory Tab { get; set; }
         public string Search { get; set; } = "";
-        public ItemSortBy SortBy { get; set; }
-        public bool Descending { get; set; }
+        public Dictionary<ItemCategory, ItemSort> Sorts { get; } = [];
     }
 
     /// <summary>Objets en attente de « Valider » : de l'endroit <c>FromPlace</c> d'une colonne à l'endroit <c>ToPlace</c> de l'autre.</summary>
@@ -280,6 +273,7 @@
     private DotNetObjectReference<InventoryTransfer>? selfRef;
 
     private string userId = "";
+    private SortPreferences preferences = SortPreferences.Default; // tris par défaut du compte
     private List<ItemSource>? saves;
     private int? leftId, rightId;
     private readonly Dictionary<Side, ColumnState> columns = new() { [Side.Left] = new(), [Side.Right] = new() };
@@ -294,8 +288,11 @@
     private static readonly System.Globalization.CultureInfo FrenchCulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
     private static readonly System.Globalization.CompareInfo French = FrenchCulture.CompareInfo;
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnInitializedAsync()
+    {
         userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        preferences = await Preferences.SortsAsync(userId);
+    }
 
     protected override void OnParametersSet() => SelectSaves(LeftParam, RightParam == LeftParam ? null : RightParam);
 
@@ -614,21 +611,17 @@
         string.IsNullOrWhiteSpace(state.Search)
         || French.IndexOf(row.Item.Name, state.Search.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 
+    /// <summary>Tri de l'onglet affiché d'une colonne : celui choisi pendant la visite, sinon celui du compte.</summary>
+    private ItemSort SortOf(ColumnState state) =>
+        state.Sorts.TryGetValue(state.Tab, out var sort) ? sort : preferences.InventoryFor(state.Tab);
+
     /// <summary>Nouveau critère de tri : croissant.</summary>
-    private static void SortChanged(ColumnState state, ChangeEventArgs e)
-    {
-        state.SortBy = SortSlugs.FirstOrDefault(x => x.Value == e.Value?.ToString()).Key;
-        state.Descending = false;
-    }
+    private static void SortChanged(ColumnState state, ChangeEventArgs e) =>
+        state.Sorts[state.Tab] = new ItemSort(SiteSorts.ItemChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.ItemChoices[0]).By);
 
-    private static string SortLabel(ItemSortBy by) => by switch
-    {
-        ItemSortBy.Name => "Nom",
-        ItemSortBy.Quantity => "Quantité",
-        _ => "Par défaut",
-    };
+    private void Reverse(ColumnState state) => state.Sorts[state.Tab] = SortOf(state) with { Descending = !SortOf(state).Descending };
 
-    private static string OrderLabel(ColumnState state) => (state.SortBy, state.Descending) switch
+    private static string OrderLabel(ItemSort sort) => (sort.By, sort.Descending) switch
     {
         (ItemSortBy.Name, false) => "↑ A → Z",
         (ItemSortBy.Name, true) => "↓ Z → A",
@@ -640,7 +633,8 @@
     private List<Row> Sort(IEnumerable<Row> rows, ColumnState state)
     {
         var byName = Comparer<string>.Create((a, b) => French.Compare(a, b, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace));
-        return (state.SortBy, state.Descending) switch
+        var sort = SortOf(state);
+        return (sort.By, sort.Descending) switch
         {
             (ItemSortBy.Name, false) => rows.OrderBy(r => SortName(r.Item), byName).ToList(),
             (ItemSortBy.Name, true) => rows.OrderByDescending(r => SortName(r.Item), byName).ToList(),

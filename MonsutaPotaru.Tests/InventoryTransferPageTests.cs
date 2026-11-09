@@ -174,6 +174,33 @@ public sealed class InventoryTransferPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task EachColumn_StartsWithTheSortsOfTheAccount()
+    {
+        // Médicaments : par quantité décroissante (« Mon compte » → « Préférences ») ; les autres onglets par défaut.
+        SetSorts("sacha", new SortPreferences { Inventory = new Dictionary<ItemCategory, ItemSort> { [ItemCategory.Medicine] = new(ItemSortBy.Quantity, true) } });
+        var platine = await StorePlatinum();
+        var b2 = await StoreBw2(items: [(PokeBall, 3), (Potion, 50)]);
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"inventaire/transfert?gauche={platine}&droite={b2}");
+        var cut = Render<InventoryTransfer>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".transfer-column-gauche .transfer-item")));
+        Assert.Contains("Croissant", Text(Column(cut, "gauche"))); // Objets : par défaut
+
+        await Tab(cut, "gauche", "Médicaments");
+        Assert.Equal("quantite", cut.Find(".transfer-column-gauche .inventory-sort select").GetAttribute("value"));
+        Assert.Contains("Décroissant", Text(Column(cut, "gauche")));
+        var counts = cut.FindAll(".transfer-column-gauche .item-count").Select(c => int.Parse(c.TextContent.Replace("×", "").Trim())).ToList();
+        Assert.Equal(counts.OrderDescending(), counts);
+
+        // Un tri choisi dans une colonne ne touche ni l'autre colonne, ni les autres onglets
+        await cut.Find(".transfer-column-gauche .inventory-sort button").ClickAsync(new());
+        Assert.Contains("Croissant", Text(Column(cut, "gauche")));
+        await Tab(cut, "droite", "Médicaments");
+        Assert.Contains("Décroissant", Text(Column(cut, "droite")));
+        await Tab(cut, "gauche", "Objets");
+        Assert.Equal("defaut", cut.Find(".transfer-column-gauche .inventory-sort select").GetAttribute("value"));
+    }
+
+    [Fact]
     public async Task FirstGenerationSave_HasBagAndPcTabs()
     {
         var red = await StoreReal("sacha", "rouge.sav");

@@ -23,6 +23,13 @@ README : « Inventaire ». Code : `SaveBag`, `InventoryService`.
   des valeurs connues dans les tests (Séisme : CT26, DT10, CT149).
 - Les CS ne sont jamais touchées.
 
+## Tri d'un onglet
+- Dans l'adresse (`?tri=nom&ordre=desc`, pour l'onglet affiché), sinon le tri par défaut du compte pour cet onglet
+  (« Préférences », voir `comptes.md`) ; plus de `localStorage` (l'ancienne clé `monsuta-potaru.inventaire.tris` n'est
+  plus lue). Un tri changé reste pour la visite (`sorts`) ; changer d'onglet réécrit `tri` / `ordre` pour le nouvel onglet.
+- `ItemSortBy` / `ItemSort` sont dans `Services/SortPreferences.cs` ; les noms des onglets dans l'adresse :
+  `SiteSorts.InventoryTabs` (aussi les clés des préférences).
+
 ## Ajouter une catégorie d'objets
 Même modèle que les Pokéballs, médicaments, baies et CT :
 - `ItemCategory` et la liste d'objets dans `SaveBag` (`CategoryOf`, `KeyOf`, `Capacity`) ;
@@ -43,6 +50,8 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   `ItemSource.CapacityIn` et `LockedMachines` de l'autre sauvegarde, sur l'état après les envois en attente ; ce que la page
   ne voit pas (20 objets différents dans le sac de Rouge / Bleu, seuil de 80 CT avec l'autre endroit) est refusé par le
   service à la validation, avec son message.
+- Tri : un par colonne et par onglet, pour la visite seulement (pas dans l'adresse : deux colonnes), au départ celui du
+  compte (`PreferencesService`, `SortPreferences.InventoryFor`), comme la page « Inventaire ».
 - Glisser : `wwwroot/js/transfert-objets.js` (module, `init(root, dotnet)` → `dispose`), appelle `Drop(colonne, objet)`
   (`[JSInvokable]`, revérifié). Champ du compteur recréé à chaque saisie (`@key` avec `typed`) : sinon un nombre ramené
   dans les bornes à la même valeur qu'avant reste affiché tel que tapé (Blazor ne réécrit pas un attribut inchangé).

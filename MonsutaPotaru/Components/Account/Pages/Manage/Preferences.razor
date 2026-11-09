@@ -1,0 +1,138 @@
+@page "/Account/Manage/Preferences"
+
+@using MonsutaPotaru.Data
+@using MonsutaPotaru.Services
+
+@inject PreferencesService PreferenceStore
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Préférences</PageTitle>
+
+@* Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et de la vue générale des living dex : appliqués
+   quand l'adresse ne précise pas de tri, chez soi comme chez les autres joueurs. Rendu statique : un formulaire envoyé au
+   serveur, des listes HTML simples (name="tri-…" / "ordre-…"), relues avec les règles de l'adresse (SiteSorts). *@
+<Block Title="Tris par défaut">
+    <StatusMessage Message="@message" />
+    <p>
+        Choisis comment chaque liste est triée quand tu l'ouvres.<br/>
+        Tu peux toujours changer le tri sur la page : il vaut pourta visite.<br/> 
+        Ton choix est gardé dans ton compte et s'applique aussi aux pages des autres joueurs que tu consultes.
+    </p>
+
+    @* Une partie titrée par page triée (un Block dans le Block : un panneau à en-tête dans Ardoise, un sous-titre
+       ailleurs) ; l'inventaire à gauche, la collection et les living dex à droite sur un écran large. *@
+    <form method="post" @formname="sorts" @onsubmit="OnSubmitAsync">
+        <AntiforgeryToken />
+        <div class="row g-3">
+            <div class="col-xl-6">
+                <Block Title="Inventaire" Class="h-100 mb-0">
+                    <p class="form-text mt-0">Un tri pour chaque onglet.</p>
+                    @foreach (var category in ItemCategories.All)
+                    {
+                        var key = SiteSorts.InventoryTabs[category.Category];
+                        var current = SiteSorts.ItemQuery(saved.InventoryFor(category.Category));
+                        @SortRow(key, category.Title, ItemOptions, current)
+                    }
+                </Block>
+            </div>
+            <div class="col-xl-6">
+                <Block Title="Ma collection">
+                    @SortRow(CollectionKey, "Pokémon", CollectionOptions, CollectionDisplay(saved.Collection))
+                    <p class="form-text">Arrivée décroissante : les plus récents d'abord. Les œufs restent toujours à la fin.</p>
+                </Block>
+                <Block Title="Living dex" Class="mb-0">
+                    @SortRow(LivingDexKey, "Vue générale", LivingDexOptions, SiteSorts.LivingDexQuery(saved.LivingDex))
+                    <p class="form-text">Le living dex global reste toujours en tête.</p>
+                </Block>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="submit" name="Action" value="save" class="btn btn-primary">Enregistrer</button>
+            <button type="submit" name="Action" value="reset" class="btn btn-outline-secondary">Revenir aux tris d'origine</button>
+        </div>
+    </form>
+</Block>
+
+@code {
+    private const string CollectionKey = "collection", LivingDexKey = "livingdex";
+
+    private static readonly IReadOnlyList<(string Slug, string Label)> ItemOptions = [.. SiteSorts.ItemChoices.Select(c => (c.Slug, c.Label))];
+    private static readonly IReadOnlyList<(string Slug, string Label)> CollectionOptions = [.. SiteSorts.CollectionChoices.Select(c => (c.Slug, c.Label))];
+    private static readonly IReadOnlyList<(string Slug, string Label)> LivingDexOptions = [.. SiteSorts.LivingDexChoices.Select(c => (c.Slug, c.Label))];
+
+    private string? message;
+    private ApplicationUser? user;
+    private SortPreferences saved = SortPreferences.Default;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "sorts")]
+    private string? Action { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        if (user is null)
+            return; // redirigé : compte supprimé
+        saved = await PreferenceStore.SortsAsync(user.Id);
+    }
+
+    /// <summary>
+    /// Une ligne : le critère et le sens. Le sens est toujours écrit en clair (« asc » / « desc »), y compris pour la
+    /// collection, où l'arrivée est décroissante par défaut.
+    /// </summary>
+    private static RenderFragment SortRow(string key, string label, IReadOnlyList<(string Slug, string Label)> options, SortQuery current) => __builder =>
+    {
+        var descending = current.Ordre == "desc";
+        <div class="row g-2 align-items-center mb-2">
+            <label class="col-sm-4 col-form-label col-form-label-sm" for="tri-@key">@label</label>
+            <div class="col-sm-4">
+                <select id="tri-@key" name="tri-@key" class="form-select form-select-sm">
+                    @foreach (var (slug, text) in options)
+                    {
+                        <option value="@slug" selected="@(slug == current.Tri)">@text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-4">
+                <select name="ordre-@key" class="form-select form-select-sm" aria-label="Sens du tri : @label">
+                    <option value="asc" selected="@(!descending)">↑ Croissant</option>
+                    <option value="desc" selected="@descending">↓ Décroissant</option>
+                </select>
+            </div>
+        </div>
+    };
+
+    /// <summary>Tri de la collection tel que la ligne l'affiche : le sens réel (l'arrivée est décroissante par défaut).</summary>
+    private static SortQuery CollectionDisplay(CollectionSort sort) =>
+        new(SiteSorts.Slug(sort.By), SiteSorts.IsDescending(sort) ? "desc" : "asc");
+
+    private async Task OnSubmitAsync()
+    {
+        if (user is null)
+            return; // compte supprimé : page redirigée
+        // Valeurs du formulaire relues comme une adresse : une valeur inconnue (trafiquée) donne le tri d'origine.
+        var sorts = Action == "reset" ? SortPreferences.Default : new SortPreferences
+        {
+            Inventory = SiteSorts.InventoryTabs.ToDictionary(t => t.Key, t => SiteSorts.ItemFromQuery(Posted(t.Value)) ?? default),
+            Collection = SiteSorts.CollectionFromQuery(Posted(CollectionKey)) ?? default,
+            LivingDex = SiteSorts.LivingDexFromQuery(Posted(LivingDexKey)) ?? default,
+        };
+        var result = await PreferenceStore.SetSortsAsync(user.Id, sorts);
+        if (!result.Ok)
+        {
+            message = AccountService.AsError(result.Message);
+            return;
+        }
+        RedirectManager.RedirectToCurrentPageWithStatus(Action == "reset" ? "Tris d'origine rétablis." : result.Message, HttpContext);
+    }
+
+    /// <summary>Critère et sens envoyés pour une ligne (« tri-ct », « ordre-ct ») ; absents : chaîne vide (tri d'origine).</summary>
+    private SortQuery Posted(string key)
+    {
+        var form = HttpContext.Request.Form;
+        return new(form[$"tri-{key}"].FirstOrDefault() ?? "", form[$"ordre-{key}"].FirstOrDefault() ?? "");
+    }
+}

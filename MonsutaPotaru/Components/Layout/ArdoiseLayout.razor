@@ -1,5 +1,5 @@
-@* Cadre du thème Ardoise (choisi par MainLayout) : menu latéral sombre repliable en colonne d'icônes, barre du haut avec
-   le fil d'Ariane, le porte-monnaie et le menu du compte. Styles : wwwroot/themes/ardoise.css. Compteurs et adresse de la
+@* Cadre du thème Ardoise (choisi par MainLayout) : menu latéral sombre repliable en colonne d'icônes (le compte en bas),
+   barre du haut avec le fil d'Ariane, le porte-monnaie et le menu du compte. Styles : wwwroot/themes/ardoise.css. Compteurs et adresse de la
    page : SiteMenuBase (communs au menu des autres thèmes).
    Doit marcher sans interactivité (pages du compte, rendu statique) : replier le menu, ouvrir une rubrique ou le menu du
    compte passe par wwwroot/js/app.js, jamais par un @onclick. *@
@@ -93,6 +93,45 @@
                 </NavLink>
             </AuthorizeView>
         </nav>
+
+        @* Le compte, en bas du menu (en plus de la pastille de la barre du haut) : rubrique au pseudo, ouverte d'elle-même
+           sur ses pages ; menu replié, la pastille seule et ses pages à côté, au survol. Sans compte : inscription et
+           connexion. *@
+        <div class="ardoise-side-account">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="ardoise-group @(accountOpen ? "ouvert" : "")">
+                        <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(accountOpen ? "true" : "false")" title="Ton compte">
+                            <span class="ardoise-avatar" aria-hidden="true">@Initial(context.User.Identity?.Name)</span><span class="ardoise-label">@context.User.Identity?.Name</span>
+                        </button>
+                        <div class="ardoise-subitems">
+                            <span class="ardoise-subitems-title">@context.User.Identity?.Name</span>
+                            <NavLink class="ardoise-link" href="Account/Manage">
+                                <span class="ardoise-label">Paramètres du profil</span>
+                            </NavLink>
+                            <NavLink class="ardoise-link" href="statistiques">
+                                <span class="ardoise-label">Statistiques</span>
+                            </NavLink>
+                            <form action="Account/Logout" method="post">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                                <button type="submit" class="ardoise-link">
+                                    <span class="ardoise-label">Déconnexion</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="ardoise-link" href="Account/Register" title="Inscription">
+                        <span class="bi bi-person-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Inscription</span>
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="Account/Login" title="Connexion">
+                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Connexion</span>
+                    </NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
 
         <button type="button" class="ardoise-link ardoise-collapse" title="Replier ou déplier le menu">
             <span class="ardoise-collapse-icon" aria-hidden="true"></span><span class="ardoise-label">Replier le menu</span>

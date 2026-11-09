@@ -111,8 +111,8 @@ attaques ou objets absents du jeu, génération antérieure).
   pour la connexion, 10 par heure pour l'inscription (`AccountLimiter`, IP transmise par Caddy) ; les mauvais mots de
   passe de « Mon compte » (`CheckPasswordAsync`) comptent avec ceux de la connexion ; un seul message pour tout échec, et
   le mot de passe est vérifié même pour une adresse inconnue (durée de réponse identique).
-- **Mon compte** : Profil, Adresse mail (changée directement, aucun mail envoyé), Mot de passe, Visibilité, Thèmes,
-  Données personnelles (JSON ; suppression du compte et de tout ce qu'il contient).
+- **Mon compte** : Profil, Adresse mail (changée directement, aucun mail envoyé), Mot de passe, Thèmes, Préférences
+  (tris par défaut, voir ci-dessous), Visibilité, Données personnelles (JSON ; suppression du compte et de tout ce qu'il contient).
 - **Retirés** : téléphone, double authentification, connexions externes, mot de passe oublié, confirmation par mail
   (migration `RemovePhoneAndTwoFactor`). Un mot de passe oublié passe par l'administrateur.
 
@@ -174,6 +174,20 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - **Statistiques** (`/statistiques`, `Pages/Statistics.razor`) : tables `TradeRecords` et `BattleRecords`, sans clé
   étrangère (elles survivent à la suppression du compte du partenaire).
 
+### Tris par défaut (« Mon compte » → « Préférences »)
+
+`Account/Pages/Manage/Preferences.razor`, `Services/SortPreferences.cs` (`SiteSorts`, `SortPreferences`,
+`PreferencesService`) ; détails : `docs/claude/comptes.md`.
+
+- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et celui de la vue générale des living dex,
+  gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
+  seuls les tris différents de l'origine y sont écrits).
+- **Priorité** : l'adresse (`?tri=`, `?ordre=`), sinon le compte. Un tri choisi sur la page s'écrit dans l'adresse, sauf
+  s'il est celui du compte ; sinon en entier (`?tri=arrivee` quand le compte trie par nom). L'inventaire ne retient plus
+  ses tris dans le navigateur ; un tri changé dans un onglet est gardé pendant la visite.
+- Chez un autre joueur, ce sont les tris **du visiteur** ; ceux du propriétaire ne sont jamais lus.
+- Formulaire et adresse lus par les mêmes fonctions (`SiteSorts.*FromQuery`) : une valeur inconnue donne le tri d'origine.
+
 ### Thèmes
 
 `Account/Pages/Manage/Themes.razor`, liste et défaut dans `Services/SiteThemes.cs` ; détails : `docs/claude/comptes.md`.
@@ -182,7 +196,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   changement de défaut). Le serveur pose la clé sur la page dès le premier rendu (`<html data-theme="...">`, `App.razor`).
 - **Ardoise** (défaut, `wwwroot/themes/ardoise.css`) : le seul thème à cadre propre (`Components/Layout/ArdoiseLayout.razor`,
   choisi par `MainLayout` d'après la valeur en cascade `SiteTheme`) : menu repliable (cookie `menu=replie`, relu par
-  `App.razor`), fil d'Ariane (`Components/Layout/Breadcrumbs.cs`), menu du compte en `details` ; tout marche sans
+  `App.razor`), fil d'Ariane (`Components/Layout/Breadcrumbs.cs`), menu du compte en `details` dans la barre du haut
+  **et** en bas du menu latéral (rubrique au pseudo ; sans compte : Inscription, Connexion) ; tout marche sans
   interactivité (clics gérés par `wwwroot/js/app.js`). **Pokédex** (`wwwroot/themes/pokedex.css`, tout sous
   `[data-theme="pokedex"]`) ; **Classique** (aucun style à lui).
 - Les styles du menu sont isolés par composant (`NavMenu.razor.css`) : les sélecteurs d'un thème commencent par `html`
@@ -344,7 +359,8 @@ utilisées. Détails : `docs/claude/images.md`.
 - Page : porte-monnaie et « Stockage » des objets, un onglet par catégorie (`?onglet=baies`), source `?source=interne`
   (« Tout » additionne l'interne et les sauvegardes ; une sauvegarde est en lecture seule, les transferts passent par les
   fenêtres). Grille : colonnes automatiques mesurées par le navigateur (`.item-grid-probe`, `watchGridColumns` dans
-  `wwwroot/js/app.js`) ou fixées au curseur ; vue, colonnes et tris retenus par le navigateur.
+  `wwwroot/js/app.js`) ou fixées au curseur ; vue et colonnes retenues par le navigateur ; tri de l'onglet dans l'adresse (`?tri=nom&ordre=desc`),
+  sinon celui du compte (« Tris par défaut »).
 - **Argent** : « Retirer de l'argent » prend la somme dans la **copie stockée** et la crédite au porte-monnaie, en une
   transaction (copie avant/après). Pas encore de transfert vers une sauvegarde.
 - **Objets** dans les deux sens (objets, Pokéballs, médicaments, baies, CT / DT), plusieurs catégories par opération ; sac
@@ -393,6 +409,8 @@ chaque paysage, générateurs, types de cases, comportement, tests) : `docs/clau
 - **Bonheur** (`ParkHabitats.MoodOf`, d'après la feuille « Habitat » de l'utilisateur) : malheureux si un habitat qu'il
   n'aime pas couvre 50 % ou plus de la zone « Parc », sinon heureux si un habitat qu'il aime en couvre plus de 50 %, sinon
   normal ; un double type aime un habitat si l'un de ses types l'aime.
+- Fenêtre « Choisir les Pokémon » : liste « Tous les Pokémon » (par défaut) / « Ceux de ce parc » / « Dans aucun parc »,
+  d'après le parc enregistré (rien ne bouge avant « Valider ») ; un filtre d'affichage seulement, `SetAsync` revérifie.
 - La fiche n'est donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`). Positions et déplacements à la
   souris ne sont pas enregistrés (navigateur seulement). Visiteurs : rien qui modifie.
 
@@ -418,9 +436,9 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
   sprites dans `chromatique/` (jusqu'à la 5e génération), sinon images chromatiques de la collection ; jaquette avec le
   Charme Chroma.
 - Vue générale : `?mode=regional|complet|ultime`, `?filtre=chromatiques|normaux` (global chromatique compris dans
-  « chromatiques », `LivingDexGames.Matches`), `?tri=completion`, `?ordre=desc` (`LivingDexGames.Sort` : le chromatique
-  d'un jeu suit son normal) ; une carte sans le mode demandé compte en National, ou dans son seul mode (« Régional
-  seul ») ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
+  « chromatiques », `LivingDexGames.Matches`), `?tri=generation|completion`, `?ordre=desc` (`LivingDexGames.Sort` : le chromatique
+  d'un jeu suit son normal ; sans tri dans l'adresse, celui du compte, voir « Tris par défaut ») ; une carte sans le
+  mode demandé compte en National, ou dans son seul mode (« Régional seul ») ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
   (`Shared/GridColumns.cs`, commun avec « Ma collection »).
 - **Global** (`LivingDexGame.Global`, `StoredSaveId` null) : stockage interne seulement, sans œufs ni chromatiques,
   chaque exemplaire pour une seule case ; formes reconnues par leur nom anglais chez PKHeX ; National 1 025, Complet
@@ -473,11 +491,13 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des living dex |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection et des living dex (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, description, actions, icône (bandeau dans le thème Ardoise) |
 | `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec ses actions (panneau blanc dans le thème Ardoise) |
-| `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable, barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
+| `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable (le compte en bas, `ArdoiseLayoutTests`), barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
 | `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes |
 | `MonsutaPotaru/Components/Layout/Breadcrumbs.cs` | Fil d'Ariane du thème Ardoise, déduit de l'adresse de la page (`BreadcrumbsTests`) |
 | `MonsutaPotaru/Data/SiteSetting.cs` | Table des réglages du site (code d'invitation) et rôles des comptes (`SiteRoles`) |
@@ -515,7 +535,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
 | `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
-| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`) ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`) |
+| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`), sinon celui du compte (« Tris par défaut ») ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |
 | `MonsutaPotaru/Components/Pages/Sync3ds.razor` | « Synchronisation 3DS » : consoles reliées (code de liaison, attente de la console, retrait) |
 | `MonsutaPotaru/Services/SyncService.cs` | Synchronisation 3DS : codes de liaison, jetons, envoi d'une sauvegarde (ajout, mise à jour ou « déjà à jour »), emplacements sur la console, liste, comparaison et téléchargement pour « Récupérer » |
@@ -551,7 +571,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs` | Pages et composants rendus par bUnit : Inventaire, Transfert d'inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `ArdoiseLayoutTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, Inventaire, Transfert d'inventaire, Transfert, Parc, Combats, Échanges, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |

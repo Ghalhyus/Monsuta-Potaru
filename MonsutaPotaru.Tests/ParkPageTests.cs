@@ -31,9 +31,10 @@ public sealed class ParkPageTests : PageTestContext
         foreach (var i in Enumerable.Range(0, count))
             await cut.FindAll(".park-candidates .slot")[i].ClickAsync(new());
         await cut.FindAll(".park-candidates .slot")[count - 1].ClickAsync(new()); // décoché
-        await cut.Find("#parkOnly").ChangeAsync(new() { Value = true });
-        Assert.Equal(count - 1, cut.FindAll(".park-candidates .slot").Count);
-        await cut.Find("#parkOnly").ChangeAsync(new() { Value = false });
+        // « Ceux de ce parc » suit le parc enregistré : rien avant « Valider »
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "ThisPark" });
+        cut.WaitForText("Ce parc n'a pas encore de Pokémon.");
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "All" });
         await cut.Find(".dialog-panel input[type=search]").InputAsync(new() { Value = "zzz" });
         cut.WaitForText("Aucun Pokémon ne correspond.");
         await cut.Find(".dialog-panel input[type=search]").InputAsync(new() { Value = "" });
@@ -94,7 +95,55 @@ public sealed class ParkPageTests : PageTestContext
         var cut = Render<Park>();
         await cut.Click("Choisir les Pokémon");
         cut.WaitForText("Ta collection n'a pas encore de Pokémon.");
-        await cut.Find("#parkOnly").ChangeAsync(new() { Value = true });
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "NoPark" });
+        cut.WaitForText("Ta collection n'a pas encore de Pokémon.");
+    }
+
+    [Fact]
+    public async Task Chooser_ShowsAllPokemon_ThoseOfThisPark_OrThoseInNoPark()
+    {
+        // Pikachu dans la Forêt, Carapuce à la Plage, Bulbizarre et Salamèche dans aucun parc
+        var ids = AddToBank("sacha", 25, 7, 1, 4);
+        GiveMoney("sacha", ParkService.ParkPrice);
+        var forest = (await Parks.ListParksAsync("sacha"))[0].Id;
+        var beach = await Parks.BuyAsync("sacha", ParkLandscape.Beach);
+        Assert.True(beach.Ok, beach.Message);
+        Assert.True((await Parks.SetAsync("sacha", forest, [ids[0]])).Ok);
+        Assert.True((await Parks.SetAsync("sacha", beach.ParkId, [ids[1]])).Ok);
+        var cut = Render<Park>();
+        await cut.Click("Choisir les Pokémon");
+        cut.WaitForText("Pokémon du parc");
+        string[] Shown() => [.. cut.FindAll(".park-candidates .slot").Select(slot => slot.GetAttribute("title")!.Split('(', ')')[1])]; // « Surnom (Espèce) N.10 »
+
+        Assert.Equal("All", cut.Find("select.park-shown").GetAttribute("value"));
+        Assert.Equal(["Bulbizarre", "Salamèche", "Carapuce", "Pikachu"], Shown());
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "ThisPark" });
+        Assert.Equal(["Pikachu"], Shown());
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "NoPark" });
+        Assert.Equal(["Bulbizarre", "Salamèche"], Shown());
+
+        // Cocher ou décocher ne change pas la liste avant « Valider » : Bulbizarre reste dans « aucun parc »
+        await cut.FindAll(".park-candidates .slot")[0].ClickAsync(new());
+        Assert.Equal(["Bulbizarre", "Salamèche"], Shown());
+        Assert.Contains("· 2 / 20", cut.Text());
+        await cut.Find(".dialog-panel input[type=search]").InputAsync(new() { Value = "zzz" });
+        cut.WaitForText("Aucun Pokémon ne correspond.");
+        await cut.Find(".dialog-panel input[type=search]").InputAsync(new() { Value = "" });
+        await cut.Click("Valider");
+        cut.WaitForText("2 / 20");
+
+        // Réouverture : « Tous les Pokémon » ; Bulbizarre est maintenant dans ce parc
+        await cut.Click("Choisir les Pokémon");
+        Assert.Equal("All", cut.Find("select.park-shown").GetAttribute("value"));
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "ThisPark" });
+        Assert.Equal(["Bulbizarre", "Pikachu"], Shown());
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "NoPark" });
+        Assert.Equal(["Salamèche"], Shown());
+        await cut.FindAll(".park-candidates .slot")[0].ClickAsync(new());
+        await cut.Click("Valider");
+        await cut.Click("Choisir les Pokémon");
+        await cut.Find("select.park-shown").ChangeAsync(new() { Value = "NoPark" });
+        cut.WaitForText("Tous tes Pokémon vivent déjà dans un parc.");
     }
 
     [Fact]

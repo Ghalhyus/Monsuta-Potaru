@@ -13,6 +13,7 @@
 @inject PokemonInfo Info
 @inject PlayerService Players
 @inject DebugService Debug
+@inject PreferencesService Preferences
 @implements IAsyncDisposable
 
 <PageTitle>@PageName</PageTitle>
@@ -144,12 +145,13 @@ else
                 </select>
                 <input type="search" class="form-control form-control-sm inventory-search" placeholder="Rechercher par nom…"
                        aria-label="Rechercher par nom" @bind="search" @bind:event="oninput" />
-                @* Tri de l'onglet affiché : chaque onglet garde le sien, retenu par le navigateur. *@
+                @* Tri de l'onglet affiché, dans l'adresse (?tri=nom&ordre=desc) ; sans tri dans l'adresse, celui du compte
+                   (« Mon compte » → « Préférences »). Chaque onglet garde le sien pendant la visite. *@
                 <div class="inventory-sort">
-                    <select class="form-select form-select-sm" aria-label="Trier cet onglet" value="@SortSlugs[CurrentSort.By]" @onchange="SortChanged">
-                        @foreach (var (by, slug) in SortSlugs)
+                    <select class="form-select form-select-sm" aria-label="Trier cet onglet" value="@SiteSorts.Slug(CurrentSort.By)" @onchange="SortChanged">
+                        @foreach (var (_, slug, label) in SiteSorts.ItemChoices)
                         {
-                            <option value="@slug">Tri : @SortLabel(by)</option>
+                            <option value="@slug">Tri : @label</option>
                         }
                     </select>
                     <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre" @onclick="ReverseSort">@OrderLabel</button>
@@ -466,6 +468,10 @@ else if (panel == SidePanel.Detail && detail is { } d)
     /// <summary>Onglet du stockage dans l'adresse (« ?onglet=baies ») : une actualisation garde l'onglet ouvert.</summary>
     [SupplyParameterFromQuery(Name = "onglet")] private string? TabSlug { get; set; }
 
+    /// <summary>Tri de l'onglet affiché dans l'adresse (« ?tri=quantite&amp;ordre=desc ») ; absent : celui du compte.</summary>
+    [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+
     /// <summary>Source du stockage dans l'adresse (« ?source=tout », « ?source=sauvegarde-3 ») ; l'inventaire interne par défaut.</summary>
     [SupplyParameterFromQuery(Name = "source")] private string? SourceParam { get; set; }
 
@@ -480,14 +486,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
     private static string SaveSource(int saveId) => $"sauvegarde-{saveId}";
 
     /// <summary>Nom de chaque onglet dans l'adresse ; « Objets » par défaut.</summary>
-    private static readonly IReadOnlyDictionary<ItemCategory, string> TabSlugs = new Dictionary<ItemCategory, string>
-    {
-        [ItemCategory.Items] = "objets",
-        [ItemCategory.Balls] = "pokeballs",
-        [ItemCategory.Medicine] = "medicaments",
-        [ItemCategory.Berries] = "baies",
-        [ItemCategory.Machines] = "ct",
-    };
+    private static IReadOnlyDictionary<ItemCategory, string> TabSlugs => SiteSorts.InventoryTabs;
 
     /// <summary>Choix « Liste » / « Grille », retenu par le navigateur.</summary>
     private const string ViewStorageKey = "monsuta-potaru.inventaire.affichage";
@@ -502,26 +501,6 @@ else if (panel == SidePanel.Detail && detail is { } d)
     private IJSObjectReference? columnsWatcher;
     private DotNetObjectReference<Inventory>? selfRef;
 
-    /// <summary>
-    /// Critère de tri d'un onglet : « par défaut » (numéro d'objet commun à tous les jeux, qui garde ensemble les Balls, les
-    /// pierres, les potions... ; nom de la capacité pour les CT), nom ou quantité. À égalité de quantité, par nom.
-    /// </summary>
-    private enum ItemSortBy { Default, Name, Quantity }
-
-    /// <summary>Tri d'un onglet : croissant par défaut, <paramref name="Descending"/> l'inverse.</summary>
-    private readonly record struct ItemSort(ItemSortBy By = ItemSortBy.Default, bool Descending = false);
-
-    /// <summary>Nom de chaque critère dans le navigateur (et valeur de la liste).</summary>
-    private static readonly IReadOnlyDictionary<ItemSortBy, string> SortSlugs = new Dictionary<ItemSortBy, string>
-    {
-        [ItemSortBy.Default] = "defaut",
-        [ItemSortBy.Name] = "nom",
-        [ItemSortBy.Quantity] = "quantite",
-    };
-
-    /// <summary>Tri de chaque onglet, retenu par le navigateur (« objets » → « quantite:desc »...).</summary>
-    private const string SortStorageKey = "monsuta-potaru.inventaire.tris";
-
     private static readonly System.Globalization.CompareOptions IgnoreCaseAndAccents =
         System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace;
 
@@ -534,7 +513,8 @@ else if (panel == SidePanel.Detail && detail is { } d)
     private List<ItemSource>? saves; // sacs des sauvegardes stockées, lus après le premier affichage
     private SidePanel panel; // fermé à chaque arrivée sur la page
     private ItemStack? detail; // objet dont le détail est affiché (source « Tout »)
-    private Dictionary<ItemCategory, ItemSort> sorts = []; // tri de chaque onglet ; absent : tri par défaut
+    private Dictionary<ItemCategory, ItemSort> sorts = []; // tri choisi pendant la visite ; absent : celui du compte
+    private SortPreferences preferences = SortPreferences.Default; // tris par défaut du compte qui regarde (visiteur compris)
 
     private string userId = "";
     private long balance;
@@ -567,6 +547,8 @@ else if (panel == SidePanel.Detail && detail is { } d)
 
     protected override async Task OnInitializedAsync()
     {
+        // Les tris par défaut sont ceux du joueur connecté, même sur l'inventaire d'un autre : sa façon de lire une liste.
+        preferences = await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier));
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Inventory);
@@ -600,6 +582,11 @@ else if (panel == SidePanel.Detail && detail is { } d)
     protected override void OnParametersSet()
     {
         tab = TabSlugs.FirstOrDefault(t => t.Value == TabSlug, new(ItemCategory.Items, "objets")).Key;
+        // L'adresse fait foi pour l'onglet affiché ; sans tri, celui du compte (un tri changé dans un autre onglet est gardé).
+        if (SiteSorts.ItemFromQuery(new(SortFromQuery, OrderFromQuery)) is { } fromAddress)
+            sorts[tab] = fromAddress;
+        else
+            sorts.Remove(tab);
         var wanted = string.IsNullOrEmpty(SourceParam) ? DefaultSource : SourceParam;
         if (wanted != source)
         {
@@ -620,7 +607,6 @@ else if (panel == SidePanel.Detail && detail is { } d)
             grid = await JS.InvokeAsync<string?>("localStorage.getItem", ViewStorageKey) == "grille";
             gridColumns = int.TryParse(await JS.InvokeAsync<string?>("localStorage.getItem", ColumnsStorageKey), out var n)
                 && n is >= MinGridColumns and <= MaxGridColumns ? n : null;
-            sorts = ReadSorts(await JS.InvokeAsync<string?>("localStorage.getItem", SortStorageKey));
         }
         catch (JSException)
         {
@@ -636,14 +622,7 @@ else if (panel == SidePanel.Detail && detail is { } d)
 
     // ---------- Tri de chaque onglet ----------
 
-    private ItemSort CurrentSort => sorts.GetValueOrDefault(tab);
-
-    private static string SortLabel(ItemSortBy by) => by switch
-    {
-        ItemSortBy.Name => "Nom",
-        ItemSortBy.Quantity => "Quantité",
-        _ => "Par défaut",
-    };
+    private ItemSort CurrentSort => sorts.TryGetValue(tab, out var sort) ? sort : preferences.InventoryFor(tab);
 
     /// <summary>Texte du bouton de sens : l'ordre affiché (cliquer l'inverse).</summary>
     private string OrderLabel => (CurrentSort.By, CurrentSort.Descending) switch
@@ -675,51 +654,25 @@ else if (panel == SidePanel.Detail && detail is { } d)
 
     private string SortName(ItemStack item) => SaveBag.MoveOf(item.ItemId) is { } move ? Info.MoveName(move) : item.Name;
 
-    private async Task SortChanged(ChangeEventArgs e)
+    private void SortChanged(ChangeEventArgs e)
     {
-        var by = SortSlugs.FirstOrDefault(s => s.Value == e.Value?.ToString()).Key;
-        await SaveSort(new ItemSort(by)); // nouveau critère : croissant
+        var by = SiteSorts.ItemChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.ItemChoices[0]).By;
+        ApplySort(new ItemSort(by)); // nouveau critère : croissant
     }
 
-    private Task ReverseSort() => SaveSort(CurrentSort with { Descending = !CurrentSort.Descending });
+    private void ReverseSort() => ApplySort(CurrentSort with { Descending = !CurrentSort.Descending });
 
-    private async Task SaveSort(ItemSort sort)
+    /// <summary>Tri choisi pour l'onglet affiché : gardé pour la visite et dans l'adresse (rien si c'est celui du compte).</summary>
+    private void ApplySort(ItemSort sort)
     {
-        if (sort == default)
-            sorts.Remove(tab);
-        else
-            sorts[tab] = sort;
-        try
-        {
-            var stored = sorts.ToDictionary(s => TabSlugs[s.Key], s => SortSlugs[s.Value.By] + (s.Value.Descending ? ":desc" : ""));
-            await JS.InvokeVoidAsync("localStorage.setItem", SortStorageKey, System.Text.Json.JsonSerializer.Serialize(stored));
-        }
-        catch (JSException)
-        {
-            // pas retenu : le tri vaut pour cette visite
-        }
+        sorts[tab] = sort;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(SortAddress(tab)), replace: true);
     }
 
-    /// <summary>Tris retenus par le navigateur ; une valeur illisible est ignorée (tri par défaut).</summary>
-    private static Dictionary<ItemCategory, ItemSort> ReadSorts(string? json)
-    {
-        var sorts = new Dictionary<ItemCategory, ItemSort>();
-        try
-        {
-            foreach (var (tabSlug, value) in System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json ?? "{}") ?? [])
-            {
-                var parts = value.Split(':');
-                if (TabSlugs.FirstOrDefault(t => t.Value == tabSlug) is { Value: not null } category
-                    && SortSlugs.FirstOrDefault(s => s.Value == parts[0]) is { Value: not null } by)
-                    sorts[category.Key] = new ItemSort(by.Key, parts.Length > 1 && parts[1] == "desc");
-            }
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            // préférences illisibles : les tris par défaut
-        }
-        return sorts;
-    }
+    /// <summary>« tri » et « ordre » de l'adresse pour un onglet : son tri de la visite, ou rien si c'est celui du compte.</summary>
+    private Dictionary<string, object?> SortAddress(ItemCategory category) => SiteSorts.AddressFor(
+        SiteSorts.ItemQuery(sorts.TryGetValue(category, out var sort) ? sort : preferences.InventoryFor(category)),
+        SiteSorts.ItemQuery(preferences.InventoryFor(category)));
 
     private bool Searching => !string.IsNullOrWhiteSpace(search);
 
@@ -730,7 +683,9 @@ else if (panel == SidePanel.Detail && detail is { } d)
     private void ShowTab(ItemCategory category)
     {
         tab = category;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("onglet", TabSlugs[category]), replace: true);
+        var query = SortAddress(category); // le tri de cet onglet pendant la visite
+        query["onglet"] = TabSlugs[category];
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(query), replace: true);
     }
 
     private void ChangeSource(ChangeEventArgs e)

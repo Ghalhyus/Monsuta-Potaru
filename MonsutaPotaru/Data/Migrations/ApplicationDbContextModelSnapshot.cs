@@ -219,6 +219,10 @@ namespace MonsutaPotaru.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SortPreferences")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Theme")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
