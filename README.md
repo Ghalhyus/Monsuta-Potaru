@@ -501,28 +501,33 @@ migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `
 ### Complétion (100 %)
 
 `/completion`, `Pages/CompletionList.razor` et `Pages/CompletionPage.razor`, table `Completions` (`Data/Completion.cs`,
-migration `CompletionChallenge`), `Services/Completion/` : service (`CompletionService.cs`), lecture d'une partie
-(`Gen1Completion.cs`), tables générées (`Gen1CompletionData.cs`, par `outils/completion_gen1.py`). Détails :
-`docs/claude/completion.md`.
+migration `CompletionChallenge`), `Services/Completion/` : service (`CompletionService.cs`), sections, conditions et
+textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs`, `Gen2Completion.cs`), tables générées
+(`Gen1CompletionData.cs` par `outils/completion_gen1.py`, `Gen2CompletionData.cs` par `outils/completion_gen2.py`).
+Détails : `docs/claude/completion.md`.
 
-- Pour l'instant **Rouge, Bleu et Jaune**, versions internationales (une sauvegarde japonaise a d'autres adresses : pas
-  proposée). **Une complétion par jeu et par compte** (index unique compte + jeu), une sauvegarde pour une seule (index
-  unique) ; la même sauvegarde peut avoir aussi son living dex ; supprimer la sauvegarde supprime sa complétion (cascade).
-  Rouge / Bleu : la sauvegarde est proposée pour les deux jeux.
+- Pour l'instant **Rouge, Bleu, Jaune, Or, Argent et Cristal**, versions internationales (une sauvegarde japonaise ou
+  coréenne a d'autres adresses : pas proposée). **Une complétion par jeu et par compte** (index unique compte + jeu), une
+  sauvegarde pour une seule (index unique) ; la même sauvegarde peut avoir aussi son living dex ; supprimer la sauvegarde
+  supprime sa complétion (cascade). Rouge / Bleu et Or / Argent : la sauvegarde est proposée pour les deux jeux.
 - **Lue dans la sauvegarde liée** à chaque affichage (drapeaux d'événements, objets ramassés, objets cachés, échanges,
   badges, Pokédex « capturé » du jeu, Panthéon, amitié de Pikachu) : à jour à chaque mise à jour de la sauvegarde. Rien
   à cocher à la main.
-- **Cinq sections** au même poids : Histoire (badges, étapes clés, Panthéon ; Jaune : amitié de Pikachu au maximum),
-  Pokédex (les 151, Mew compris), Dresseurs (chacun, rival compris ; pas le Conseil 4, remis à zéro après le Panthéon),
-  Objets (au sol, cachés, jetons cachés, cadeaux, CT des champions, cannes), Rencontres uniques (légendaires, Ronflex,
-  Voltorbe et Électrode de la Centrale, Pokémon offerts, échanges du jeu). **Pourcentage global = moyenne des
-  sections** (fractions exactes, arrondi vers le bas : 100 % seulement quand tout est fait).
+- **Sections** au même poids (pourcentage global = moyenne des sections, fractions exactes, arrondi vers le bas : 100 %
+  seulement quand tout est fait) : Histoire (badges, étapes clés, Ligue ; Jaune : amitié de Pikachu au maximum ; 2e
+  génération : les 16 badges, Red), Pokédex (les 151 ou les 251, Mew et Celebi compris), Dresseurs (chacun, rival
+  compris ; 1re génération : pas le Conseil 4, remis à zéro après le Panthéon), Objets (au sol, cachés, jetons cachés,
+  cadeaux, CT, cannes), Rencontres uniques (légendaires, Ronflex, Pokémon offerts, échanges du jeu…). En 2e génération,
+  une sixième : **Quêtes annexes** (4 puzzles et 26 Zarbi des Ruines d'Alpha, Fratrie des sept jours, Noigrumes de
+  Fargas, Ranch Meumeu, pont Pépite, poupée de Copieuse…). Rien à cocher à la main : une étape sans trace dans la
+  sauvegarde (achats au Casino, Concours de Capture, Tour de Combat…) n'est pas comptée.
 - **Choix exclusifs** (fossile Dôme ou Nautile, Kicklee ou Tygnon) : une seule étape, faite dès que l'un est choisi.
   **Étapes ratées** (plus faisables dans la partie : les Rockets de la Sylphe SARL après Giovanni, le premier combat
-  contre le rival sur la Route 22 après le badge de Pierre) : comptées dans le total, marquées « raté » (choix de
-  l'utilisateur : le 100 % reste strict).
-- Page : `?section=pokedex|dresseurs|objets|rencontres` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
-  groupées par lieu dans l'ordre de l'aventure ; Pokédex en sprites du jeu, comme le living dex.
+  contre le rival sur la Route 22 après le badge de Pierre ; en 2e génération, les Rockets du Puits Ramoloss, du
+  repaire d'Acajou et de la Tour Radio, les passagers du premier voyage de L'Aquaria) : comptées dans le total,
+  marquées « raté » (choix de l'utilisateur : le 100 % reste strict).
+- Page : `?section=pokedex|dresseurs|objets|rencontres|quetes` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
+  groupées par lieu dans l'ordre de l'aventure ; Pokédex et Zarbi en sprites du jeu, comme le living dex.
 
 ### Statistiques
 
@@ -638,10 +643,12 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), création (jeu, puis sauvegarde) |
 | `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
 | `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
-| `MonsutaPotaru/Services/Completion/Gen1Completion.cs` | Sections, étapes et progression (moyenne des sections) ; lecture des conditions des tables dans une sauvegarde de Rouge / Bleu / Jaune, textes des étapes (équipes, objets, CT) |
-| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs` | Tables générées des étapes de Rouge / Bleu et de Jaune (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
+| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde de 1re ou de 2e génération, textes des étapes (équipes, objets, CT) |
+| `MonsutaPotaru/Services/Completion/Gen1Completion.cs`, `Gen2Completion.cs` | Étapes de Rouge / Bleu / Jaune et d'Or / Argent / Cristal (table du jeu, Pokédex, noms des objets) |
+| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs`, `Gen2CompletionData.cs` | Tables générées des étapes de chaque jeu (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
 | `MonsutaPotaru/Data/Completion.cs` | Table des complétions (une par jeu et par compte, supprimée avec sa sauvegarde) |
 | `outils/completion_gen1.py`, `outils/completion_gen1_extract.py` | Génèrent `Gen1CompletionData.cs` d'après les désassemblages pokered et pokeyellow (lieux en français, ordre de l'aventure, étapes choisies à la main dans le script) |
+| `outils/completion_gen2.py`, `outils/completion_gen2_extract.py` | Génèrent `Gen2CompletionData.cs` d'après pokegold et pokecrystal (même principe ; histoire, rencontres et quêtes d'après les check-lists de l'utilisateur) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
 | `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection |
 | `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
@@ -853,6 +860,8 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [Caddy](https://caddyserver.com), [Docker](https://www.docker.com) | Mise en ligne (HTTPS, conteneurs) | Apache-2.0 |
 | [GitHub Actions](https://github.com/features/actions) : [actions/checkout](https://github.com/actions/checkout), [actions/setup-dotnet](https://github.com/actions/setup-dotnet) | Tests et déploiement (`.github/workflows/ci.yml`, `cd.yml`) | MIT |
 | [pokered](https://github.com/pret/pokered) et [pokeyellow](https://github.com/pret/pokeyellow) (pret) | Désassemblages de Rouge / Bleu et de Jaune : numéros des drapeaux d'événements, objets du décor, objets cachés, équipes des dresseurs, échanges et adresses de la sauvegarde, lus par `outils/completion_gen1.py` pour les tables de la complétion (`Services/Completion/Gen1CompletionData.cs`) ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [pokegold](https://github.com/pret/pokegold) et [pokecrystal](https://github.com/pret/pokecrystal) (pret) | Désassemblages d'Or / Argent et de Cristal : drapeaux d'événements, objets, objets cachés, cadeaux, équipes des dresseurs, échanges et octets de la WRAM (scènes, Zarbi), lus par `outils/completion_gen2.py` pour `Services/Completion/Gen2CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| Check-lists de complétion d'Or / Argent et de Cristal (fichiers de l'utilisateur, d'après [Pokébip](https://www.pokebip.com), Eternia et Bulbapedia) | Choix des étapes de l'histoire, des rencontres uniques et des quêtes annexes de la 2e génération (`outils/completion_gen2.py`) | Consultées, textes réécrits |
 | [Bulbapedia](https://bulbapedia.bulbagarden.net) | Référence consultée pour vérifier l'ordre des Noigrumes d'Or/Argent/Cristal | — |
 | [Pokébip](https://www.pokebip.com/page/general/tous-les-rubans), « Tous les rubans » | Liste des rubans, leurs noms français et leurs familles (Panthéon, Concours, Installations de combat, Commémoratifs, Cadeaux), base de ceux que compte le suivi des rubans (`Services/Ribbons.cs` ; façons de les obtenir réécrites) | Consultée, rien de recopié tel quel ; contenu © Pokébip |
 | [Bulbagarden Archives](https://archives.bulbagarden.net) | Jaquettes officielles de Pokémon Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier, Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate et Violet (versions anglaises réduites, « Red/Blue/Yellow/Gold/Silver/Crystal/Ruby/Sapphire/Emerald/FireRed/LeafGreen/Diamond/Pearl/Platinum/HeartGold/SoulSilver/Black/White/Black 2/White 2/X/Y/Omega Ruby/Alpha Sapphire/Sun/Moon/Ultra Sun/Ultra Moon/Lets Go Pikachu/Lets Go Eevee/Sword/Shield/Brilliant Diamond/Shining Pearl/Legends Arceus/Scarlet/Violet EN boxart », Émeraude, Diamant, Perle, HeartGold et SoulSilver en JPEG), images des living dex (`wwwroot/images/livingdex/jaquettes`, par `outils/images.py livingdex`) | Images © Nintendo / Creatures Inc. / GAME FREAK Inc. ; usage de fan, non commercial |

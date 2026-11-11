@@ -21,8 +21,8 @@ public sealed record CompletionResult(bool Ok, string Message, int? Id = null);
 /// <summary>
 /// Complétions d'un compte (« Défis » → « Complétion (100 %) ») : une partie stockée suivie vers le 100 %, lue à chaque
 /// affichage dans la sauvegarde liée (elle suit donc chaque mise à jour, site ou 3DS). Une par jeu et par compte ; une
-/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). Pour l'instant : Rouge, Bleu et Jaune
-/// (<see cref="Gen1Completion"/>).
+/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). Pour l'instant : la 1re et la 2e génération
+/// (<see cref="CompletionGames"/>).
 /// </summary>
 public sealed class CompletionService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
@@ -59,9 +59,7 @@ public sealed class CompletionService(
 
     /// <summary>Étapes lues dans la sauvegarde ; aucune si elle ne se lit plus (elle ne compte alors pour rien).</summary>
     private static List<CompletionStep> Steps(LivingDexGame game, byte[] data, string fileName) =>
-        StoredSaveService.TryRead(data, fileName, out var sav) && sav is SAV1 sav1 && Gen1Completion.For(sav1).Contains(game)
-            ? Gen1Completion.Steps(sav1, game)
-            : [];
+        StoredSaveService.TryRead(data, fileName, out var sav) ? CompletionGames.Steps(sav, game) ?? [] : [];
 
     /// <summary>Jeux qui ont déjà leur complétion sur ce compte (grisés à la création).</summary>
     public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId)
@@ -71,7 +69,7 @@ public sealed class CompletionService(
     }
 
     /// <summary>
-    /// Sauvegardes stockées qui peuvent recevoir une complétion : de 1re génération (versions internationales), pas encore
+    /// Sauvegardes stockées qui peuvent recevoir une complétion : de 1re ou de 2e génération (versions internationales), pas encore
     /// liées à une complétion, avec un jeu libre.
     /// </summary>
     public async Task<List<CompletionCandidate>> ListCandidatesAsync(string ownerId)
@@ -80,7 +78,7 @@ public sealed class CompletionService(
         var taken = await db.Completions.Where(c => c.OwnerId == ownerId).Select(c => c.Game).ToListAsync();
         var linked = db.Completions.Select(c => c.StoredSaveId);
         var saves = await db.StoredSaves.AsNoTracking()
-            .Where(s => s.OwnerId == ownerId && s.Generation == 1 && !linked.Contains(s.Id))
+            .Where(s => s.OwnerId == ownerId && s.Generation <= 2 && !linked.Contains(s.Id))
             .OrderBy(s => s.UploadedAt)
             .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data })
             .ToListAsync();
@@ -89,7 +87,7 @@ public sealed class CompletionService(
         {
             if (!StoredSaveService.TryRead(s.Data, s.FileName, out var sav))
                 continue;
-            var games = Gen1Completion.For(sav).Except(taken).ToList();
+            var games = CompletionGames.For(sav).Except(taken).ToList();
             if (games.Count > 0)
                 candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", games));
         }
@@ -99,7 +97,7 @@ public sealed class CompletionService(
     /// <summary>Complétion d'un jeu sur une sauvegarde stockée du compte.</summary>
     public async Task<CompletionResult> CreateAsync(string ownerId, int saveId, LivingDexGame game)
     {
-        if (!Gen1Completion.Games.Contains(game))
+        if (!CompletionGames.All.Contains(game))
             return new(false, "Ce jeu n'a pas encore de complétion.");
         var gameName = LivingDexGames.Get(game).Name;
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -107,9 +105,9 @@ public sealed class CompletionService(
             .Select(s => new { s.FileName, s.Data }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !Gen1Completion.For(sav).Contains(game))
-            return new(false, sav is SAV1 { Japanese: true }
-                ? "Les sauvegardes japonaises n'ont pas encore de complétion."
+        if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !CompletionGames.For(sav).Contains(game))
+            return new(false, sav is SAV1 { Japanese: true } or SAV2 { Japanese: true } or SAV2 { Korean: true }
+                ? "Les sauvegardes japonaises et coréennes n'ont pas encore de complétion."
                 : $"Cette sauvegarde n'est pas une partie de {gameName}.");
         if (await db.Completions.AnyAsync(c => c.OwnerId == ownerId && c.Game == game))
             return new(false, $"Tu as déjà une complétion de {gameName} : supprime-la pour en créer une autre.");

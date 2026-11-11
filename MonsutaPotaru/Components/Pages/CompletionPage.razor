@@ -44,7 +44,7 @@ else if (view is not null)
                 <LivingDexProgress Owned="view.Progress.Tenths" Total="1000" Class="flex-grow-1"
                                    ValueText="@($"{view.Progress.Percent}, moyenne des sections")" />
             </div>
-            <div class="small text-muted mt-1">Chaque section compte pour un cinquième du total.</div>
+            <div class="small text-muted mt-1">Chaque section compte pour @view.Progress.Share du total.</div>
             @if (!Visitor)
             {
                 @* Sous le titre, comme toutes les actions du site (jamais poussée à droite). *@
@@ -114,7 +114,7 @@ else if (view is not null)
             {
                 var title = $"{step.Label} — {(step.Done ? "capturé" : "pas encore capturé")}";
                 <div class="livingdex-slot @(step.Done ? "" : "missing")" title="@title" aria-label="@title">
-                    <img src="@Sprite(step.Species)" alt="" loading="lazy" data-remplacement="@Fallback(step.Species)" />
+                    <img src="@Sprite(step)" alt="" loading="lazy" data-remplacement="@Fallback(step)" />
                     <span>#@step.Species.ToString("000")</span>
                 </div>
             }
@@ -132,7 +132,7 @@ else if (view is not null)
                         <span class="completion-mark" aria-hidden="true">@Mark(step)</span>
                         @if (step.Species != 0)
                         {
-                            <img src="@Sprite(step.Species)" alt="" loading="lazy" data-remplacement="@Fallback(step.Species)" />
+                            <img src="@Sprite(step)" alt="" loading="lazy" data-remplacement="@Fallback(step)" />
                         }
                         <span>
                             <span class="visually-hidden">@StateText(step) : </span>@step.Label
@@ -222,11 +222,11 @@ else if (view is not null)
         _ => "à faire",
     };
 
-    /// <summary>Sprite du jeu (Rouge / Bleu : couleurs du Super Game Boy ; Jaune : Game Boy Color), comme son living dex.</summary>
-    private string Sprite(ushort species) => LivingDexGames.Sprite(view!.Game, new LivingDexSlot(species, 0));
+    /// <summary>Sprite du jeu (celui de son living dex : Rouge / Bleu en couleurs du Super Game Boy...), forme comprise (Zarbi).</summary>
+    private string Sprite(CompletionStep step) => LivingDexGames.Sprite(view!.Game, new LivingDexSlot(step.Species, step.Form));
 
     /// <summary>Image de la collection, si celle du jeu manque.</summary>
-    private string Fallback(ushort species) => LivingDexGames.Fallback(view!.Game, new LivingDexSlot(species, 0));
+    private string Fallback(CompletionStep step) => LivingDexGames.Fallback(view!.Game, new LivingDexSlot(step.Species, step.Form));
 
     protected override async Task OnParametersSetAsync()
     {

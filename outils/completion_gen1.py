@@ -326,7 +326,7 @@ def emit(rows_rb, rows_y, tm_moves, out):
              '']
     for name, doc, rows in (('RedBlue', 'Rouge et Bleu', rows_rb), ('Yellow', 'Jaune', rows_y)):
         lines.append(f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : les 151).</summary>')
-        lines.append(f'    public static readonly Gen1Row[] {name} =')
+        lines.append(f'    public static readonly CompletionRow[] {name} =')
         lines.append('    [')
         for r in rows:
             args = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]

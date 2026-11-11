@@ -36,8 +36,8 @@ public sealed class CompletionPagesTests : PageTestContext
         await cut.Click("Annuler");
         await cut.Click("+ Ajouter une sauvegarde");
 
-        // Jaune : pas de sauvegarde ; Rouge : la sauvegarde proposée d'office
-        Assert.Equal(3, cut.FindAll("input[name=completionGame]").Count);
+        // Jaune : pas de sauvegarde ; Rouge : la sauvegarde proposée d'office (Rouge, Bleu, Jaune, Or, Argent, Cristal)
+        Assert.Equal(6, cut.FindAll("input[name=completionGame]").Count);
         await cut.FindAll("input[name=completionGame]")[2].ChangeAsync(new() { Value = true });
         cut.WaitForText("Aucune sauvegarde de Pokémon Jaune disponible");
         await cut.FindAll("input[name=completionGame]")[0].ChangeAsync(new() { Value = true });
@@ -121,6 +121,21 @@ public sealed class CompletionPagesTests : PageTestContext
         cut.WaitForText(expected);
         if (query.Contains("pokedex"))
             Assert.Equal(query.Contains("faits") ? 47 : 151, cut.FindAll(".completion-dex .livingdex-slot img[data-remplacement]").Count);
+    }
+
+    [Fact]
+    public async Task Page_SecondGeneration_SixSectionsAndUnown()
+    {
+        var saveId = await StoreReal("sacha", "argent.sav");
+        var id = (await Completions.CreateAsync("sacha", saveId, LivingDexGame.Silver)).Id!.Value;
+        Navigation.NavigateTo($"completion/{id}?section=quetes");
+        var cut = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        cut.WaitForText("Pokémon Argent");
+        Assert.Contains("Chaque section compte pour un sixième du total.", cut.Text());
+        Assert.Equal(6, cut.FindAll(".completion-section").Count);
+        Assert.Contains("Capturer Zarbi Z", cut.Text());
+        // Chaque Zarbi a l'image de sa lettre (sprites d'Argent)
+        Assert.Contains(cut.FindAll(".completion-step img"), i => i.GetAttribute("src") == "images/livingdex/argent/201-z.png");
     }
 
     [Fact]

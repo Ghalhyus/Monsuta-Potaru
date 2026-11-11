@@ -11,7 +11,7 @@ public static class Gen1CompletionData
     public static readonly ushort[] TmMoves = [5, 13, 14, 18, 25, 92, 32, 34, 36, 38, 61, 55, 58, 59, 63, 6, 66, 68, 69, 99, 72, 76, 82, 85, 87, 89, 90, 91, 94, 100, 102, 104, 115, 117, 118, 120, 121, 126, 129, 130, 135, 138, 143, 156, 86, 149, 153, 157, 161, 164, 15, 19, 57, 70, 148];
 
     /// <summary>Étapes de Rouge et Bleu (le Pokédex est ajouté à part : les 151).</summary>
-    public static readonly Gen1Row[] RedBlue =
+    public static readonly CompletionRow[] RedBlue =
     [
         new(CompletionSection.Story, "Bourg Palette", null, "E:34", Label: "Recevoir son premier Pokémon du Prof. Chen"),
         new(CompletionSection.Story, "Bourg Palette", null, "E:56", Label: "Apporter le colis de Jadielle au Prof. Chen"),
@@ -596,7 +596,7 @@ public static class Gen1CompletionData
     ];
 
     /// <summary>Étapes de Jaune (le Pokédex est ajouté à part : les 151).</summary>
-    public static readonly Gen1Row[] Yellow =
+    public static readonly CompletionRow[] Yellow =
     [
         new(CompletionSection.Story, "Bourg Palette", null, "E:34", Label: "Recevoir son premier Pokémon du Prof. Chen"),
         new(CompletionSection.Story, "Bourg Palette", null, "E:56", Label: "Apporter le colis de Jadielle au Prof. Chen"),

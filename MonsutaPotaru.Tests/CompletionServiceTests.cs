@@ -36,13 +36,13 @@ public sealed class CompletionServiceTests : IDisposable
     }
 
     /// <summary>Drapeau d'une étape à condition simple (« E:n ») : son numéro.</summary>
-    private static int EventOf(Gen1Row row)
+    private static int EventOf(CompletionRow row)
     {
         Assert.StartsWith("E:", row.Done);
         return int.Parse(row.Done[2..]);
     }
 
-    private static Gen1Row Story(Gen1Row[] rows, string label) => rows.Single(r => r.Label == label);
+    private static CompletionRow Story(CompletionRow[] rows, string label) => rows.Single(r => r.Label == label);
 
     [Fact]
     public void Tables_HaveFiveSections_AndConditionsInsideTheSave()
@@ -121,22 +121,30 @@ public sealed class CompletionServiceTests : IDisposable
         var all = CompletionSections.All.SelectMany(s => Enumerable.Range(0, 3).Select(_ => Step(s, true))).ToList();
         Assert.Equal(("100,0 %", true), (CompletionProgress.Of(all).Percent, CompletionProgress.Of(all).Complete));
         all[0] = Step(CompletionSection.Story, false);
-        Assert.Equal("93,3 %", CompletionProgress.Of(all).Percent);
+        Assert.Equal("94,4 %", CompletionProgress.Of(all).Percent); // (5 + 2/3) / 6
         Assert.Equal(0, CompletionProgress.Of([]).Tenths);
 
         Assert.Equal("Rencontres uniques", CompletionSections.Name(CompletionSection.Encounters));
         Assert.Equal(CompletionSection.Trainers, CompletionSections.FromSlug("DRESSEURS"));
         Assert.Equal(CompletionSection.Story, CompletionSections.FromSlug("inconnue"));
-        Assert.Equal(["histoire", "pokedex", "dresseurs", "objets", "rencontres"], CompletionSections.All.Select(CompletionSections.Slug));
+        Assert.Equal(["histoire", "pokedex", "dresseurs", "objets", "rencontres", "quetes"], CompletionSections.All.Select(CompletionSections.Slug));
+        Assert.Equal("Quêtes annexes", CompletionSections.Name(CompletionSection.Quests));
+        Assert.Equal(5, progress.Sections.Count); // pas de quêtes dans ces étapes : pas de section vide
+        Assert.Equal("un cinquième", progress.Share);
     }
 
     [Fact]
     public void Games_RedBlueYellow_InternationalOnly()
     {
-        Assert.Equal([LivingDexGame.Red, LivingDexGame.Blue], Gen1Completion.For(new SAV1(LanguageID.French, GameVersion.RB)));
-        Assert.Equal([LivingDexGame.Yellow], Gen1Completion.For(new SAV1(LanguageID.French, GameVersion.YW)));
-        Assert.Empty(Gen1Completion.For(new SAV1(LanguageID.Japanese, GameVersion.RB))); // autres adresses
-        Assert.Empty(Gen1Completion.For(new SAV2(LanguageID.French, GameVersion.GS)));
+        Assert.Equal([LivingDexGame.Red, LivingDexGame.Blue], CompletionGames.For(new SAV1(LanguageID.French, GameVersion.RB)));
+        Assert.Equal([LivingDexGame.Yellow], CompletionGames.For(new SAV1(LanguageID.French, GameVersion.YW)));
+        Assert.Empty(CompletionGames.For(new SAV1(LanguageID.Japanese, GameVersion.RB))); // autres adresses
+        Assert.Equal([LivingDexGame.Gold, LivingDexGame.Silver], CompletionGames.For(new SAV2(LanguageID.French, GameVersion.GS)));
+        Assert.Equal([LivingDexGame.Crystal], CompletionGames.For(new SAV2(LanguageID.French, GameVersion.C)));
+        Assert.Empty(CompletionGames.For(new SAV2(LanguageID.Japanese, GameVersion.C)));
+        Assert.Empty(CompletionGames.For(new SAV2(LanguageID.Korean, GameVersion.GS)));
+        Assert.Empty(CompletionGames.For(new SAV3E()));
+        Assert.Null(CompletionGames.Steps(new SAV1(LanguageID.French, GameVersion.RB), LivingDexGame.Yellow));
     }
 
     [Fact]
@@ -233,7 +241,8 @@ public sealed class CompletionServiceTests : IDisposable
         var blue = await Store("sacha", "bleu.sav");
         var silver = await Store("sacha", "argent.sav");
 
-        Assert.Equal("Ce jeu n'a pas encore de complétion.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Silver)).Message);
+        Assert.Equal("Ce jeu n'a pas encore de complétion.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Ruby)).Message);
+        Assert.Equal("Cette sauvegarde n'est pas une partie de Pokémon Cristal.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Crystal)).Message);
         Assert.Equal("Cette sauvegarde n'existe plus.", (await _completions.CreateAsync("ondine", red, LivingDexGame.Red)).Message);
         Assert.Equal("Cette sauvegarde n'est pas une partie de Pokémon Jaune.", (await _completions.CreateAsync("sacha", red, LivingDexGame.Yellow)).Message);
         Assert.True((await _completions.CreateAsync("sacha", red, LivingDexGame.Red)).Ok);
@@ -241,8 +250,9 @@ public sealed class CompletionServiceTests : IDisposable
             (await _completions.CreateAsync("sacha", blue, LivingDexGame.Red)).Message);
         Assert.Equal("Cette sauvegarde a déjà une complétion.", (await _completions.CreateAsync("sacha", red, LivingDexGame.Blue)).Message);
 
-        // La sauvegarde Bleu reste proposée, pour Bleu seulement (Rouge est pris)
-        Assert.Equal([LivingDexGame.Blue], Assert.Single(await _completions.ListCandidatesAsync("sacha")).Games);
+        // La sauvegarde Bleu reste proposée, pour Bleu seulement (Rouge est pris) ; celle d'Argent, pour Or et Argent
+        Assert.Equal([[LivingDexGame.Blue], [LivingDexGame.Gold, LivingDexGame.Silver]],
+            (await _completions.ListCandidatesAsync("sacha")).Select(c => c.Games));
         Assert.True((await _completions.CreateAsync("sacha", blue, LivingDexGame.Blue)).Ok);
         Assert.Equal(2, (await _completions.ListAsync("sacha")).Count);
     }
