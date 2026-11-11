@@ -65,7 +65,8 @@ else
             <option value="@s.Id">💾 @(Visitor ? s.Label : s.LabelAndFile)</option>
         }
     </select>
-    @* Tri : critère, puis sens (les œufs restent à la fin) ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »). *@
+    @* Tri : critère, puis sens (les œufs restent à la fin) ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »).
+       La quantité n'est proposée qu'en mode compact. *@
     <div class="collection-sort">
         <select class="form-select form-select-sm" aria-label="Trier par" value="@SortChoices.First(c => c.By == sort.By).Slug" @onchange="SortChanged">
             @foreach (var choice in SortChoices)
@@ -215,7 +216,7 @@ else
     [SupplyParameterFromQuery(Name = GridColumns.QueryName)] private int? ColumnsFromQuery { get; set; }
     /// <summary>Origine affichée, gardée dans l'adresse : vide (tout), « banque » ou l'identifiant d'une sauvegarde stockée.</summary>
     [SupplyParameterFromQuery(Name = "source")] private string? SourceFromQuery { get; set; }
-    /// <summary>Tri gardé dans l'adresse : « arrivee » (absent), « nom » ou « pokedex ».</summary>
+    /// <summary>Tri gardé dans l'adresse : « arrivee » (absent), « nom », « pokedex » ou, en mode compact, « quantite ».</summary>
     [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
     /// <summary>Sens gardé dans l'adresse (« asc », « desc ») quand il n'est pas celui du critère (récents d'abord, ou croissant).</summary>
     [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
@@ -224,8 +225,9 @@ else
 
     private const string CompactQueryName = "compact";
 
-    /// <summary>Nom de chaque critère dans l'adresse et dans la liste.</summary>
-    private static IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> SortChoices => SiteSorts.CollectionChoices;
+    /// <summary>Nom de chaque critère dans l'adresse et dans la liste (la quantité en plus en mode compact).</summary>
+    private IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> SortChoices =>
+        compact ? SiteSorts.CollectionCompactChoices : SiteSorts.CollectionChoices;
 
     private CollectionSort sort;
     private CollectionSort defaultSort; // tri par défaut du compte qui regarde (visiteur compris)
@@ -319,10 +321,10 @@ else
     {
         columns = GridColumns.Clamp(ColumnsFromQuery ?? screenColumns);
         var fromQuery = SourceFromQuery ?? "";
-        var sortFromQuery = SortFromAddress();
+        var compactFromQuery = CompactFromQuery == "1";
+        var sortFromQuery = SortFromAddress(compactFromQuery);
         var query = QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query);
         var criteriaFromQuery = PokemonCriteria.FromQuery(name => query.TryGetValue(name, out var value) ? value.ToString() : null);
-        var compactFromQuery = CompactFromQuery == "1";
         if (!sourceInitialized || fromQuery != source || sortFromQuery != sort || criteriaFromQuery.Key != criteria.Key || compactFromQuery != compact)
         {
             sourceInitialized = true;
@@ -334,8 +336,15 @@ else
         }
     }
 
-    /// <summary>Tri lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; sans tri, celui du compte.</summary>
-    private CollectionSort SortFromAddress() => SiteSorts.CollectionFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultSort;
+    /// <summary>
+    /// Tri lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; sans tri, celui du compte, comme pour
+    /// la quantité hors mode compact.
+    /// </summary>
+    private CollectionSort SortFromAddress(bool compactMode)
+    {
+        var fromAddress = SiteSorts.CollectionFromQuery(new(SortFromQuery, OrderFromQuery), compact: true);
+        return fromAddress is { } s && (compactMode || s.By != CollectionSortBy.Quantity) ? s : defaultSort;
+    }
 
     private bool Descending => SiteSorts.IsDescending(sort);
 
@@ -346,6 +355,8 @@ else
         (CollectionSortBy.Arrival, false) => "↑ Anciens d'abord",
         (CollectionSortBy.Name, false) => "↑ A → Z",
         (CollectionSortBy.Name, true) => "↓ Z → A",
+        (CollectionSortBy.Quantity, true) => "↓ Plus nombreux d'abord",
+        (CollectionSortBy.Quantity, false) => "↑ Moins nombreux d'abord",
         (_, false) => "↑ Croissant",
         (_, true) => "↓ Décroissant",
     };
@@ -436,12 +447,22 @@ else
         listVersion++;
     }
 
-    /// <summary>Interrupteur du mode compact : nouvelle adresse (sans ajout à l'historique), dossiers refermés, rechargement.</summary>
+    /// <summary>
+    /// Interrupteur du mode compact : nouvelle adresse (sans ajout à l'historique), dossiers refermés, rechargement. Le tri
+    /// par quantité n'existe qu'en mode compact : en le quittant, c'est le tri du compte qui reprend (et quitte l'adresse).
+    /// </summary>
     private async Task CompactChanged(ChangeEventArgs e)
     {
         compact = e.Value is true;
         openFolders.Clear();
-        Nav.NavigateTo(Nav.GetUriWithQueryParameter(CompactQueryName, compact ? "1" : null), replace: true);
+        var parameters = new Dictionary<string, object?> { [CompactQueryName] = compact ? "1" : null };
+        if (!compact && sort.By == CollectionSortBy.Quantity)
+        {
+            sort = defaultSort;
+            parameters["tri"] = null;
+            parameters["ordre"] = null;
+        }
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(parameters), replace: true);
         await Reload();
     }
 

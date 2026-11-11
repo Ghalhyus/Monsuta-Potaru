@@ -69,6 +69,15 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Equal(new SortQuery("pokedex", null), SiteSorts.CollectionQuery(new(CollectionSortBy.Dex)));
         Assert.True(SiteSorts.IsDescending(default));
 
+        // Quantité : reconnue en mode compact seulement (ailleurs, et dans les préférences, comme une valeur inconnue)
+        Assert.Equal(new CollectionSort(CollectionSortBy.Quantity), SiteSorts.CollectionFromQuery(new("quantite", null), compact: true));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Quantity, true), SiteSorts.CollectionFromQuery(new("quantite", "asc"), compact: true));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Arrival), SiteSorts.CollectionFromQuery(new("quantite", null)));
+        Assert.True(SiteSorts.IsDescending(new(CollectionSortBy.Quantity)));
+        Assert.Equal(new SortQuery("quantite", "asc"), SiteSorts.CollectionQuery(new(CollectionSortBy.Quantity, true)));
+        Assert.Equal(new CollectionSort(), SortPreferences.FromJson("""{"collection":{"tri":"quantite"}}""").Collection);
+        Assert.DoesNotContain(SiteSorts.CollectionChoices, c => c.By == CollectionSortBy.Quantity);
+
         Assert.Null(SiteSorts.LivingDexFromQuery(new(null, null)));
         Assert.Equal(new LivingDexOrder(LivingDexSort.Generation, true), SiteSorts.LivingDexFromQuery(new("generation", "desc")));
         Assert.Equal(new SortQuery("completion", null), SiteSorts.LivingDexQuery(new(LivingDexSort.Completion)));

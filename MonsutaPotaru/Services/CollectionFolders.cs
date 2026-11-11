@@ -27,7 +27,8 @@ public sealed record CollectionGroup(CollectionGroupKey Key, int Count, string S
 
     /// <summary>
     /// Range les dossiers comme leur premier Pokémon dans ce tri (voir <see cref="CollectionSort"/>) : le dossier « Œufs »
-    /// à la fin ; par arrivée, le plus récent du dossier (ou le plus ancien, à l'envers) ; par nom ; par numéro.
+    /// à la fin ; par arrivée, le plus récent du dossier (ou le plus ancien, à l'envers) ; par nom ; par numéro ; par quantité
+    /// (les plus nombreux d'abord, à égalité par numéro croissant dans les deux sens).
     /// </summary>
     public static List<CollectionGroup> Order(IEnumerable<CollectionGroup> groups, CollectionSort sort)
     {
@@ -38,6 +39,8 @@ public sealed record CollectionGroup(CollectionGroupKey Key, int Count, string S
             (CollectionSortBy.Name, true) => eggsLast.ThenByDescending(g => g.SortName, StringComparer.Ordinal).ThenBy(g => g.Key.Species),
             (CollectionSortBy.Dex, false) => eggsLast.ThenBy(g => g.Key.Species),
             (CollectionSortBy.Dex, true) => eggsLast.ThenByDescending(g => g.Key.Species),
+            (CollectionSortBy.Quantity, false) => eggsLast.ThenByDescending(g => g.Count).ThenBy(g => g.Key.Species),
+            (CollectionSortBy.Quantity, true) => eggsLast.ThenBy(g => g.Count).ThenBy(g => g.Key.Species),
             (CollectionSortBy.Arrival, true) => eggsLast.ThenBy(g => g.Oldest).ThenByDescending(g => g.LastPosition).ThenBy(g => g.FirstId),
             _ => eggsLast.ThenByDescending(g => g.Newest).ThenBy(g => g.FirstPosition).ThenByDescending(g => g.LastId),
         };

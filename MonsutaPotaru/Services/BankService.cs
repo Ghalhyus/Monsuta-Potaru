@@ -23,10 +23,11 @@ public readonly record struct CollectionFilter(bool BankOnly = false, int? Store
 }
 
 /// <summary>Critère de tri de « Ma collection ».</summary>
-public enum CollectionSortBy { Arrival, Name, Dex }
+public enum CollectionSortBy { Arrival, Name, Dex, Quantity }
 
 /// <summary>
-/// Tri de « Ma collection » : par arrivée (les plus récents d'abord), par nom d'espèce ou par numéro de Pokédex (croissants) ;
+/// Tri de « Ma collection » : par arrivée (les plus récents d'abord), par nom d'espèce ou par numéro de Pokédex (croissants),
+/// ou, en mode compact seulement, par quantité (les dossiers les plus nombreux d'abord ; leur contenu par arrivée) ;
 /// <paramref name="Reversed"/> inverse ce sens. Les œufs sont toujours à la fin, par arrivée (leur espèce reste cachée) ; à
 /// égalité (même espèce), les plus récents d'abord.
 /// </summary>

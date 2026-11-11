@@ -117,6 +117,9 @@ public sealed class BankServiceTests : IDisposable
         Assert.Equal(["25×2", "133×1", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Name, Reversed: true)));
         Assert.Equal(["25×2", "133×1", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Dex)));
         Assert.Equal(["145×1", "133×1", "25×2", "œufs×1"], await Folders(new(CollectionSortBy.Dex, Reversed: true)));
+        // Quantité : les plus nombreux d'abord, à égalité par numéro croissant dans les deux sens.
+        Assert.Equal(["25×2", "133×1", "145×1", "œufs×1"], await Folders(new(CollectionSortBy.Quantity)));
+        Assert.Equal(["133×1", "145×1", "25×2", "œufs×1"], await Folders(new(CollectionSortBy.Quantity, Reversed: true)));
         // Les filtres passent avant : un dossier ne compte que ce qui correspond.
         Assert.Equal(["25×2"], await Folders(default, "pika"));
     }
@@ -127,6 +130,9 @@ public sealed class BankServiceTests : IDisposable
         var bank = await SortSample();
         var pikachus = await bank.GetRangeAsync("ondine", null, 0, 10, CollectionFilter.All with { Group = new(25) });
         Assert.Equal([105, 102], pikachus.Select(p => p.Id));
+        foreach (var reversed in new[] { false, true }) // par quantité, le contenu d'un dossier : par arrivée, récents d'abord
+            Assert.Equal([105, 102], (await bank.GetRangeAsync("ondine", null, 0, 10, CollectionFilter.All with { Group = new(25) },
+                new(CollectionSortBy.Quantity, reversed))).Select(p => p.Id));
         var eggs = await bank.GetRangeAsync("ondine", null, 0, 10, CollectionFilter.All with { Group = CollectionGroupKey.AllEggs });
         Assert.Equal([103], eggs.Select(p => p.Id));
 

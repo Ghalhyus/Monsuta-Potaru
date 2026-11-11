@@ -25,6 +25,12 @@ README : « Filtres de « Ma collection » », « Mode compact de « Ma collecti
 - `BankService.GetGroupsAsync` : un `GROUP BY` (espèce, œuf) sur la requête filtrée ; l'ordre des dossiers est calculé en
   mémoire (`CollectionGroup.Order`), au plus un millier de lignes. Le contenu d'un dossier : `GetRangeAsync` avec
   `CollectionFilter.Group` ; les espèces seules : `GetItemsAsync` (une requête pour les cases visibles).
+- Tri par quantité (`CollectionSortBy.Quantity`) : seulement en mode compact. `SiteSorts.CollectionCompactChoices` ajoute
+  « quantite » à `CollectionChoices` (qui reste la liste des préférences) ; `CollectionFromQuery(query, compact: true)` le
+  reconnaît, sans `compact` c'est une valeur inconnue (l'arrivée : préférences trafiquées). La page retombe sur le tri du
+  compte hors mode compact (`SortFromAddress`, `CompactChanged` qui retire `tri` / `ordre` de l'adresse). L'ordre des
+  dossiers : `CollectionGroup.Order` ; en base (`BankService.Sorted`), la quantité tombe sur l'arrivée : c'est l'ordre du
+  contenu d'un dossier.
 - `CollectionFolderLayout.Slice` traduit les cases demandées par `Virtualize` en dossiers et tranches de contenu. Ouvrir
   un dossier appelle `Virtualize.RefreshDataAsync` (et non `listVersion++`, qui recréerait la liste et remonterait en
   haut) : la hauteur de défilement est gardée.

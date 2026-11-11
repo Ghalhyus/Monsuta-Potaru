@@ -57,6 +57,13 @@ public static class SiteSorts
         (CollectionSortBy.Dex, "pokedex", "N° Pokédex"),
     ];
 
+    /// <summary>
+    /// Les choix du mode compact : ceux de <see cref="CollectionChoices"/> et la quantité (nombre de Pokémon du dossier), qui
+    /// ne veut rien dire hors mode compact (pas proposée dans les préférences).
+    /// </summary>
+    public static readonly IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> CollectionCompactChoices =
+        [.. CollectionChoices, (CollectionSortBy.Quantity, "quantite", "Quantité")];
+
     public static readonly IReadOnlyList<(LivingDexSort By, string Slug, string Label)> LivingDexChoices =
     [
         (LivingDexSort.Generation, "generation", "Génération"),
@@ -71,7 +78,7 @@ public static class SiteSorts
     ];
 
     public static string Slug(ItemSortBy by) => ItemChoices.First(c => c.By == by).Slug;
-    public static string Slug(CollectionSortBy by) => CollectionChoices.First(c => c.By == by).Slug;
+    public static string Slug(CollectionSortBy by) => CollectionCompactChoices.First(c => c.By == by).Slug;
     public static string Slug(LivingDexSort by) => LivingDexChoices.First(c => c.By == by).Slug;
     public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
 
@@ -86,18 +93,22 @@ public static class SiteSorts
 
     // ---------- Collection : « ordre=asc|desc », le sens réel ----------
 
-    /// <summary>L'arrivée montre les plus récents d'abord ; le nom et le numéro sont croissants.</summary>
-    public static bool DescendingByDefault(CollectionSortBy by) => by == CollectionSortBy.Arrival;
+    /// <summary>L'arrivée montre les plus récents d'abord, la quantité les plus nombreux ; le nom et le numéro sont croissants.</summary>
+    public static bool DescendingByDefault(CollectionSortBy by) => by is CollectionSortBy.Arrival or CollectionSortBy.Quantity;
 
     /// <summary>Le tri montre-t-il le plus grand (ou le plus récent) d'abord ?</summary>
     public static bool IsDescending(CollectionSort sort) => DescendingByDefault(sort.By) != sort.Reversed;
 
-    /// <summary>Tri de la collection lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; null si elle n'en dit rien.</summary>
-    public static CollectionSort? CollectionFromQuery(SortQuery query)
+    /// <summary>
+    /// Tri de la collection lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; null si elle n'en dit
+    /// rien. La quantité n'est reconnue qu'avec <paramref name="compact"/> (sinon, comme une valeur inconnue : l'arrivée).
+    /// </summary>
+    public static CollectionSort? CollectionFromQuery(SortQuery query, bool compact = false)
     {
         if (query.IsEmpty)
             return null;
-        var by = CollectionChoices.FirstOrDefault(c => c.Slug == query.Tri, CollectionChoices[0]).By;
+        var choices = compact ? CollectionCompactChoices : CollectionChoices;
+        var by = choices.FirstOrDefault(c => c.Slug == query.Tri, choices[0]).By;
         var descending = query.Ordre is "asc" or "desc" ? query.Ordre == "desc" : DescendingByDefault(by);
         return new CollectionSort(by, descending != DescendingByDefault(by));
     }

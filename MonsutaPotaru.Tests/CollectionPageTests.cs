@@ -231,6 +231,66 @@ public sealed class CollectionPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task Compact_SortByQuantity_OnlyInCompactMode()
+    {
+        AddToBank("sacha", 133, 25, 25, 1, 25, 7, 7); // Pikachu ×3, Carapuce ×2, Évoli et Bulbizarre seuls
+        SetSorts("sacha", new SortPreferences { Collection = new(CollectionSortBy.Name) });
+        var nav = Services.GetRequiredService<NavigationManager>();
+        var cut = Render<Collection>();
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+        string[] Options() => [.. cut.FindAll(".collection-sort option").Select(o => o.GetAttribute("value")!)];
+        Assert.DoesNotContain("quantite", Options()); // hors mode compact, pas de quantité
+
+        await cut.Find("#collection-compact").ChangeAsync(new() { Value = true });
+        cut.WaitForAssertion(() => Assert.Equal(4, Slots(cut).Count));
+        Assert.Contains("quantite", Options());
+
+        // Les plus nombreux d'abord ; à égalité (Bulbizarre et Évoli seuls), par numéro
+        await cut.Find(".collection-sort select").ChangeAsync(new() { Value = "quantite" });
+        Assert.Contains("tri=quantite", nav.Uri);
+        Assert.DoesNotContain("ordre=", nav.Uri);
+        string Order() => cut.Find(".collection-sort button").TextContent;
+        cut.WaitForAssertion(() => Assert.Equal("↓ Plus nombreux d'abord", Order()));
+        string[] Titles() => [.. Slots(cut).Select(s => s.GetAttribute("title")!)];
+        cut.WaitForAssertion(() => Assert.StartsWith("Pikachu : 3", Titles()[0]));
+        Assert.StartsWith("Carapuce : 2", Titles()[1]);
+        Assert.Contains("(Bulbizarre)", Titles()[2]);
+        Assert.Contains("(Évoli)", Titles()[3]);
+
+        // Inversé : les moins nombreux d'abord, toujours par numéro à égalité
+        await cut.Find(".collection-sort button").ClickAsync(new());
+        Assert.Contains("tri=quantite&ordre=asc", nav.Uri);
+        cut.WaitForAssertion(() => Assert.Equal("↑ Moins nombreux d'abord", Order()));
+        cut.WaitForAssertion(() => Assert.Contains("(Bulbizarre)", Titles()[0]));
+        Assert.Contains("(Évoli)", Titles()[1]);
+        Assert.StartsWith("Carapuce : 2", Titles()[2]);
+        Assert.StartsWith("Pikachu : 3", Titles()[3]);
+
+        // Un dossier ouvert : ses Pokémon par arrivée, les plus récents d'abord
+        await Folders(cut)[1].ClickAsync(new());
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+
+        // Sans le mode compact : le tri du compte reprend, et quitte l'adresse
+        await cut.Find("#collection-compact").ChangeAsync(new() { Value = false });
+        cut.WaitForAssertion(() => Assert.Equal(7, Slots(cut).Count));
+        Assert.DoesNotContain("tri=", nav.Uri);
+        Assert.Equal("↑ A → Z", Order());
+        Assert.DoesNotContain("quantite", Options());
+        await DisposeComponentsAsync();
+
+        // Un lien « ?tri=quantite » sans le mode compact : le tri du compte ; avec : la quantité
+        nav.NavigateTo("collection?tri=quantite");
+        var link = Render<Collection>();
+        link.WaitForAssertion(() => Assert.Equal("↑ A → Z", link.Find(".collection-sort button").TextContent));
+        await DisposeComponentsAsync();
+        nav.NavigateTo("collection?compact=1&tri=quantite&ordre=asc");
+        var compactLink = Render<Collection>();
+        compactLink.WaitForAssertion(() => Assert.Equal("↑ Moins nombreux d'abord", compactLink.Find(".collection-sort button").TextContent));
+        Assert.Equal("quantite", compactLink.Find(".collection-sort select").GetAttribute("value"));
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
     public async Task Sort_FromTheAccount_UnlessTheAddressSaysOtherwise()
     {
         AddToBank("sacha", 1, 4, 25); // Bulbizarre, Salamèche, puis Pikachu (le plus récent)
