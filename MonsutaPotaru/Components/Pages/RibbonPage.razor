@@ -1,0 +1,249 @@
+@page "/rubans/{Id:int}"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Services
+@inject RibbonService RibbonStore
+@inject BankService BankStore
+@inject PokemonInfo Info
+@inject NavigationManager Navigation
+
+<PageTitle>@(view is null ? "Rubans" : $"Rubans de {view.Nickname}")</PageTitle>
+
+@* Un Pokémon suivi : ses rubans par famille (Panthéon, Concours...), en couleur s'il les a, en gris pâle sinon, avec la
+   façon de les obtenir ; filtre Tous / Manquants / Possédés. Un clic sur son image ouvre sa fiche s'il est encore dans le
+   compte. *@
+@if (notFound)
+{
+    <p class="text-muted">Ce suivi n'existe plus. <a href="rubans">Retour aux rubans</a></p>
+}
+else if (view is not null)
+{
+    <div class="livingdex-header mb-3">
+        @if (view.BankId is not null)
+        {
+            <button type="button" class="ribbon-sprite-button" title="Voir la fiche de @view.Nickname" @onclick="OpenDetail">
+                <img class="livingdex-cover ribbon-sprite" src="@view.SpriteUrl" alt="@view.Nickname" data-remplacement="images/pokemon/inconnu.png" />
+            </button>
+        }
+        else
+        {
+            <img class="livingdex-cover ribbon-sprite" src="@view.SpriteUrl" alt="@view.Nickname" data-remplacement="images/pokemon/inconnu.png" />
+        }
+        <div class="flex-grow-1">
+            <a class="small" href="rubans">← Rubans</a>
+            <h1 class="mb-0">@view.Nickname@(view.IsShiny ? " ★" : "")</h1>
+            <div class="small text-muted">@(view.HasNickname ? $"{view.SpeciesName}, " : "")niveau @view.Level</div>
+            <div class="small text-muted mb-2">
+                @(view.Location ?? "Plus dans ta collection : ses derniers rubans connus. Le suivi se remet à jour s'il revient.")
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                @* Les rubans des souvenirs comptent un par un : 88 en tout. *@
+                <strong>@view.Earned / @view.Total</strong>
+                <LivingDexProgress Owned="view.Earned" Total="view.Total" Class="flex-grow-1" />
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        @* Filtre gardé dans l'adresse (?filtre=manquants, possedes), comme dans un living dex. *@
+        <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Rubans affichés">
+            @foreach (var (f, label, count) in Filters)
+            {
+                var value = f;
+                <button type="button" class="btn @(filter == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetFilter(value)">
+                    @label (@count)
+                </button>
+            }
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => confirmDelete = true">Arrêter le suivi</button>
+    </div>
+    @if (confirmDelete)
+    {
+        <div class="alert alert-danger small">
+            Le suivi des rubans de @view.Nickname sera supprimé ; le Pokémon, lui, ne bouge pas.
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-danger" @onclick="Delete">Supprimer</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => confirmDelete = false">Annuler</button>
+            </div>
+        </div>
+    }
+
+    @if (filter == Filter.Missing && view.Earned == view.Total)
+    {
+        <p class="text-success">Complet : il a tous les rubans !</p>
+    }
+    else if (filter == Filter.Owned && view.Earned == 0)
+    {
+        <p class="text-muted">Aucun ruban pour l'instant.</p>
+    }
+    @foreach (var group in view.Ribbons.Where(Shown).GroupBy(r => r.Ribbon.Category))
+    {
+        <h2 class="ribbon-section">@Ribbons.CategoryName(group.Key)</h2>
+        <div class="ribbon-list">
+            @foreach (var r in group)
+            {
+                var ribbon = r;
+                @if (ribbon.Parts is not null)
+                {
+                    @* Souvenir : il réunit plusieurs rubans, un clic ouvre leur détail. *@
+                    <button type="button" class="ribbon-item ribbon-item-button @(ribbon.Owned ? "" : "missing")" aria-haspopup="dialog"
+                            title="Voir le détail de ses rubans" @onclick="() => detail = ribbon">
+                        @RibbonBody(ribbon)
+                    </button>
+                }
+                else
+                {
+                    <div class="ribbon-item @(ribbon.Owned ? "" : "missing")">@RibbonBody(ribbon)</div>
+                }
+            }
+        </div>
+    }
+}
+
+@* ---------- Détail d'un souvenir : chacun de ses rubans ---------- *@
+@if (detail is { Parts: { } parts })
+{
+    <div class="collection-backdrop" @onclick="() => detail = null"></div>
+    <div class="collection-dialog ribbon-dialog card" role="dialog" aria-modal="true" aria-label="@detail.Ribbon.Name">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <img class="ribbon-sprite" src="@detail.Image" alt="" width="48" height="48" data-cacher-si-absente />
+                <div>
+                    <h2 class="h5 mb-0">@detail.Ribbon.Name</h2>
+                    <div class="small text-muted">@StateText(detail) rubans</div>
+                </div>
+            </div>
+            @if (detail.PartsUnknown)
+            {
+                <p class="small text-muted mb-2">
+                    @view?.Nickname est passé en 6e génération ou après : le jeu n'a gardé que le nombre de ces rubans, pas lesquels.
+                </p>
+            }
+            @foreach (var group in parts.GroupBy(p => p.Part.Group))
+            {
+                <h3 class="h6 mt-3">@group.Key</h3>
+                <div class="ribbon-parts">
+                    @foreach (var p in group)
+                    {
+                        <div class="ribbon-item @(p.Owned == false ? "missing" : "")">
+                            <img src="@p.Part.Image" alt="" loading="lazy" data-cacher-si-absente />
+                            <div>
+                                <strong>@p.Part.Name</strong>
+                                <span class="small @(p.Owned == true ? "text-success" : "text-muted")">· @PartText(p)</span>
+                                <div class="small text-muted">@p.Part.HowTo</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            <button type="button" class="btn btn-secondary btn-sm mt-3" @onclick="() => detail = null">Fermer</button>
+        </div>
+    </div>
+}
+
+@* ---------- Fiche du Pokémon ---------- *@
+@if (selectedView is not null)
+{
+    <div class="collection-backdrop" @onclick="CloseDetail"></div>
+    <div class="collection-dialog" role="dialog" aria-modal="true" aria-label="@selectedView.Nickname">
+        <PokemonCard Pokemon="@selectedView">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="small text-muted">@view?.Location</span>
+                <button type="button" class="btn btn-secondary btn-sm ms-auto" @onclick="CloseDetail">Fermer</button>
+            </div>
+        </PokemonCard>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "filtre")] private string? FilterFromQuery { get; set; }
+
+    private string userId = "";
+    private RibbonView? view;
+    private bool notFound;
+    private Filter filter;
+    private bool confirmDelete;
+    private RibbonState? detail; // souvenir dont la fenêtre du détail est ouverte
+
+    /// <summary>Image, nom, état et façon d'obtenir un ruban de la liste.</summary>
+    private static RenderFragment RibbonBody(RibbonState r) => __builder =>
+    {
+        <img src="@r.Image" alt="" loading="lazy" data-cacher-si-absente />
+        <div>
+            <strong>@r.Ribbon.Name</strong>
+            <span class="small @(r.Owned ? "text-success" : "text-muted")">· @StateText(r)</span>
+            <div class="small text-muted">@r.Ribbon.HowTo</div>
+            @if (r.Parts is not null)
+            {
+                <div class="small text-primary">Voir le détail de ses @r.Parts.Count rubans</div>
+            }
+        </div>
+    };
+
+    /// <summary>État d'un ruban d'un souvenir : « Obtenu », « Manquant », ou « Inconnu » quand le jeu n'a gardé que le compteur.</summary>
+    private static string PartText(RibbonPartState p) => p.Owned switch
+    {
+        true => "Obtenu",
+        false => "Manquant",
+        _ => "Inconnu",
+    };
+    private PokemonView? selectedView;
+
+    /// <summary>Cases affichées : toutes, celles où il manque des rubans, ou celles qui en ont (un souvenir entamé : les deux).</summary>
+    private enum Filter { All, Missing, Owned }
+
+    /// <summary>Filtres dans l'adresse ; « Tous » n'y figure pas.</summary>
+    private static readonly Dictionary<Filter, string> FilterSlugs = new() { [Filter.Missing] = "manquants", [Filter.Owned] = "possedes" };
+
+    private IEnumerable<(Filter Filter, string Label, int Count)> Filters =>
+    [
+        (Filter.All, "Tous", view!.Ribbons.Count),
+        (Filter.Missing, "Manquants", view.Ribbons.Count(r => r.Missing)),
+        (Filter.Owned, "Possédés", view.Ribbons.Count(r => r.Owned)),
+    ];
+
+    private bool Shown(RibbonState r) => filter switch
+    {
+        Filter.Missing => r.Missing, // un souvenir entamé est dans les deux
+        Filter.Owned => r.Owned,
+        _ => true,
+    };
+
+    /// <summary>« Obtenu », « Manquant », ou pour un souvenir le compteur : « 23 / 40 ».</summary>
+    private static string StateText(RibbonState r)
+    {
+        if (r.Ribbon.MemoryMax is { } max)
+            return $"{r.Count ?? 0} / {max}";
+        return r.Owned ? "Obtenu" : "Manquant";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        view = await RibbonStore.GetAsync(userId, Id);
+        notFound = view is null;
+        filter = FilterSlugs.FirstOrDefault(f => f.Value == FilterFromQuery) is { Value: not null } found ? found.Key : Filter.All;
+    }
+
+    private void SetFilter(Filter value) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", FilterSlugs.GetValueOrDefault(value)), replace: true);
+
+    private async Task OpenDetail()
+    {
+        if (view?.BankId is not { } id || await BankStore.GetAsync(userId, id) is not { } entry || BankService.ToPkm(entry) is not { } pk)
+            return;
+        selectedView = Info.Describe(pk, entry.IsLegal);
+    }
+
+    private void CloseDetail() => selectedView = null;
+
+    private async Task Delete()
+    {
+        await RibbonStore.DeleteAsync(userId, Id);
+        Navigation.NavigateTo("rubans");
+    }
+}

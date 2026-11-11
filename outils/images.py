@@ -30,6 +30,10 @@ Rassemble les images servies par le site, dans MonsutaPotaru/wwwroot/images/ :
   soleil.png, lune.png, ultra-soleil.png, ultra-lune.png, lets-go-pikachu.png, lets-go-evoli.png, epee.png, bouclier.png,
   diamant-etincelant.png, perle-scintillante.png, legendes-arceus.png, ecarlate.png, violet.png : Bulbagarden Archives,
   versions anglaises, faute de françaises) ;
+- rubans/ : images des rubans comptés par « Défis » → « Rubans » (PKHeX, PKHeX.Drawing.Misc/Resources/img/ribbons, sous
+  leur nom chez PKHeX : rubans/ribbonchampiong3.png ; les deux souvenirs ont aussi leur image dorée,
+  rubans/ribboncountmemorycontest2.png), et les rubans de 3e et 4e génération qu'ils réunissent (rubans/ribbong3coolsuper.png,
+  rubans/ribbonabilitydouble.png...) ;
 - combats : dans les dossiers de la 3e génération des living dex (rubis-saphir/, emeraude/, rouge-feu-vert-feuille/), les
   sprites de dos (dos/<numéro>.png) et chromatiques (chromatique/, dos/chromatique/), mêmes formes, plus Morphéo selon le
   temps (351-sunny.png, 351-rainy.png, 351-snowy.png) ; PokéAPI, versions/generation-iii/<jeu>/back/ et shiny/.
@@ -43,7 +47,7 @@ jeton, seulement des fichiers bruts.
 Les objets qu'aucune source n'a (objets rares, objets de Légendes Arceus, accessoires de pique-nique...)
 gardent inconnu.png : il suffit de déposer leur image sous leur numéro pour la remplacer.
 
-Lancement (Python 3, rien à installer) : python outils/images.py [pokemon] [objets] [donjon] [livingdex] [combats] [--sortie <dossier>]
+Lancement (Python 3, rien à installer) : python outils/images.py [pokemon] [objets] [donjon] [livingdex] [combats] [rubans] [--sortie <dossier>]
 (tout, sans argument ; dans MonsutaPotaru/wwwroot/images, sauf --sortie : le serveur l'utilise pour ~/monsuta-potaru-images, voir
 deploy/images-serveur.ps1). Les images ne sont pas dans le dépôt Git : en local, outils/recuperer-images.cmd les copie
 depuis le serveur, plus vite que les reconstruire.
@@ -404,6 +408,36 @@ def livingdex_jobs():
     return jobs, missing
 
 
+# Rubans comptés par « Défis » → « Rubans » : leur nom chez PKHeX sans « Ribbon », en minuscules. À garder en accord avec
+# Ribbons.All (MonsutaPotaru/Services/Ribbons.cs ; test RibbonsTests.ImagesScript_DownloadsEveryRibbon).
+RIBBONS = ["championg3", "championsinnoh", "championkalos", "championg6hoenn", "championalola", "championgalar", "championpaldea",
+           "countmemorycontest", "mastercoolness", "masterbeauty", "mastercuteness", "mastercleverness", "mastertoughness",
+           "conteststar", "twinklingstar",
+           "countmemorybattle", "battlerskillful", "battlerexpert", "battletreegreat", "battletreemaster", "towermaster", "masterrank",
+           "artist", "effort", "alert", "shock", "downcast", "careless", "relax", "snooze", "smile", "gorgeous", "royal",
+           "gorgeousroyal", "footprint", "legend", "bestfriends", "training", "battleroyale", "hisui",
+           "national", "earth"]
+# Les rubans de 3e et 4e génération que réunissent les deux souvenirs (fenêtre du détail) : Ribbons.ContestParts et BattleParts.
+RIBBON_PARTS = ["g3cool", "g3coolsuper", "g3coolhyper", "g3coolmaster", "g3beauty", "g3beautysuper", "g3beautyhyper",
+                "g3beautymaster", "g3cute", "g3cutesuper", "g3cutehyper", "g3cutemaster", "g3smart", "g3smartsuper",
+                "g3smarthyper", "g3smartmaster", "g3tough", "g3toughsuper", "g3toughhyper", "g3toughmaster", "g4cool",
+                "g4coolgreat", "g4coolultra", "g4coolmaster", "g4beauty", "g4beautygreat", "g4beautyultra",
+                "g4beautymaster", "g4cute", "g4cutegreat", "g4cuteultra", "g4cutemaster", "g4smart", "g4smartgreat",
+                "g4smartultra", "g4smartmaster", "g4tough", "g4toughgreat", "g4toughultra", "g4toughmaster", "winning",
+                "victory", "ability", "abilitygreat", "abilitydouble", "abilitymulti", "abilitypair", "abilityworld"]
+
+
+def rubans_jobs():
+    """Images des rubans (PKHeX), l'image dorée des deux souvenirs (40 rubans de concours, 8 de combat) et celles des
+    rubans qu'ils réunissent."""
+    jobs = {}
+    for key in RIBBONS + RIBBON_PARTS:
+        for suffix in ("", "2") if key.startswith("countmemory") else ("",):
+            name = f"ribbon{key}{suffix}.png"
+            jobs[f"rubans/{name}"] = f"{PKHEX}/PKHeX.Drawing.Misc/Resources/img/ribbons/{name}"
+    return jobs, []
+
+
 def fetch(job):
     """
     Télécharge une image si elle n'est pas déjà là. Une liste d'adresses est une suite d'essais, et une image qui n'y est
@@ -437,7 +471,7 @@ def main():
         del args[i:i + 2]
     failed = False
     parts = {"pokemon": ("Pokémon", pokemon_jobs), "objets": ("objets", item_jobs), "donjon": ("sprites Donjon Mystère", donjon_jobs),
-             "livingdex": ("living dex", livingdex_jobs), "combats": ("combats", combats_jobs)}
+             "livingdex": ("living dex", livingdex_jobs), "combats": ("combats", combats_jobs), "rubans": ("rubans", rubans_jobs)}
     chosen = [parts[a] for a in args if a in parts] or list(parts.values())
     for kind, make in chosen:
         jobs, missing = make()

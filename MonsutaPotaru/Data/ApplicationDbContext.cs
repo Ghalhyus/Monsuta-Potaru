@@ -17,6 +17,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SyncPairingCode> SyncPairingCodes => Set<SyncPairingCode>();
     public DbSet<SyncSaveLocation> SyncSaveLocations => Set<SyncSaveLocation>();
     public DbSet<LivingDex> LivingDexes => Set<LivingDex>();
+    public DbSet<RibbonTracker> RibbonTrackers => Set<RibbonTracker>();
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
@@ -136,6 +137,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(d => d.Owner).WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             // La sauvegarde est supprimée : son living dex aussi (la confirmation de suppression le signale).
             e.HasOne(d => d.StoredSave).WithMany().HasForeignKey(d => d.StoredSaveId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<RibbonTracker>(e =>
+        {
+            e.HasIndex(r => new { r.OwnerId, r.Fingerprint }).IsUnique(); // un suivi par Pokémon et par compte
+            e.HasOne(r => r.Owner).WithMany().HasForeignKey(r => r.OwnerId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<SyncPairingCode>(e =>

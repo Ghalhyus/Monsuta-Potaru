@@ -23,6 +23,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Images des Pokémon et des objets, `outils/images.py`, `PokemonSprites` | `docs/claude/images.md` |
 | Parc | `docs/claude/parc.md` |
 | Living dex (par jeu, global, chromatique) | `docs/claude/living-dex.md` |
+| Rubans : liste des rubans comptés, suivi d'un Pokémon par empreinte, souvenirs | `docs/claude/rubans.md` |
 | Statistiques : argent, moyennes des living dex, échanges et combats, sur le profil | `docs/claude/statistiques.md` |
 | Inventaire : sacs, numéros d'objets, CT, nouvelle catégorie | `docs/claude/inventaire.md` |
 | Pièges de PKHeX (octets, sauvegardes vides) | `docs/claude/pkhex.md` |

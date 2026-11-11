@@ -81,16 +81,16 @@ README : « Comptes », « Administration », « Thèmes ».
 
 ## Préférences : tris par défaut (2026-11-08)
 - Page `Manage/Preferences.razor` (« Préférences », après Thèmes), formulaire statique : des `<select>` HTML simples
-  (`tri-<clé>`, `ordre-<clé>`, clés `objets`… `ct`, `collection`, `livingdex`) relus dans `HttpContext.Request.Form`, deux
+  (`tri-<clé>`, `ordre-<clé>`, clés `objets`… `ct`, `collection`, `livingdex`, `rubans`) relus dans `HttpContext.Request.Form`, deux
   boutons d'envoi (`Action` = `save` / `reset`). Le sens s'y écrit toujours en clair (`asc` / `desc`).
 - Tout passe par `SiteSorts` (`Services/SortPreferences.cs`) : noms dans l'adresse, lecture d'une adresse ou du formulaire
-  (`ItemFromQuery`, `CollectionFromQuery`, `LivingDexFromQuery` ; null = l'adresse n'en dit rien), écriture (`AddressFor` :
+  (`ItemFromQuery`, `CollectionFromQuery`, `LivingDexFromQuery`, `RibbonFromQuery` ; null = l'adresse n'en dit rien), écriture (`AddressFor` :
   rien quand c'est le tri du compte, sinon critère et sens en entier). Un nouveau tri par défaut : ses noms et sa lecture
   là, une propriété de `SortPreferences` (JSON, pas de migration), une ligne du formulaire.
 - Attention au sens de « ordre » : **réel** pour la collection (`asc` / `desc`, l'arrivée est décroissante d'elle-même,
-  `CollectionSort.Reversed` est relatif au critère), « desc » seul pour l'inventaire et les living dex.
+  `CollectionSort.Reversed` est relatif au critère), « desc » seul pour l'inventaire, les living dex et les rubans.
 - Les pages lisent les tris **du compte connecté** (`PreferencesService.SortsAsync`, même en visite chez un autre joueur),
-  dans `OnInitializedAsync` (`OnParametersSetAsync` pour `LivingDexes`, une seule fois).
+  dans `OnInitializedAsync` (`OnParametersSetAsync` pour `LivingDexes` et `RibbonList`, une seule fois).
 - Choix de l'utilisateur : une colonne JSON ; l'adresse puis le compte (l'inventaire a abandonné `localStorage` pour son
   tri) ; un tri par onglet ; ceux du visiteur ; pas de lien depuis les pages vers ce réglage.
 - Dans un test de `SiteFactory`, les accents de la page sont encodés (`&#xE9;`) : lire le texte par AngleSharp

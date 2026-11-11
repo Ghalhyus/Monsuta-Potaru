@@ -142,7 +142,7 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         browser.DefaultRequestHeaders.Add("Cookie", "menu=replie");
         string[] pages =
         [
-            "/", "/transfert", "/collection", "/inventaire", "/inventaire/transfert", "/parc", "/livingdex", "/livingdex/9999", "/sauvegardes",
+            "/", "/transfert", "/collection", "/inventaire", "/inventaire/transfert", "/parc", "/livingdex", "/livingdex/9999", "/rubans", "/rubans/9999", "/sauvegardes",
             "/sauvegardes/3ds", "/amis", "/joueurs", "/joueurs/Sacha", "/joueurs/Sacha/collection", "/joueurs/Sacha/parc",
             "/joueurs/Sacha/inventaire", "/joueurs/Sacha/livingdex", "/joueurs/Inconnu", "/echanges", "/combats",
             "/statistiques", "/administration", "/Account/Manage", "/Account/Manage/Email", "/Account/Manage/ChangePassword",
@@ -178,6 +178,7 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
             ["ordre-collection"] = "asc",
             ["tri-livingdex"] = "completion",
             ["ordre-livingdex"] = "desc",
+            ["tri-rubans"] = "completion",
         });
         var saved = Parser.ParseDocument(sorts);
         Assert.Contains("Tris par défaut enregistrés.", saved.QuerySelector(".alert")?.TextContent ?? sorts);
@@ -186,6 +187,7 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal("defaut", saved.QuerySelector("select[name=tri-baies] option[selected]")?.GetAttribute("value"));
         Assert.Equal("pokedex", saved.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
         Assert.Equal("completion", saved.QuerySelector("select[name=tri-livingdex] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("completion", saved.QuerySelector("select[name=tri-rubans] option[selected]")?.GetAttribute("value"));
         var (_, reset) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
         var original = Parser.ParseDocument(reset);
         Assert.Contains("Tris d'origine rétablis.", original.QuerySelector(".alert")?.TextContent ?? reset);

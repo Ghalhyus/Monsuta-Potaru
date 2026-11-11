@@ -18,6 +18,8 @@ public class BreadcrumbsTests
     [InlineData("echange-interne?de=1&vers=2", "Mes Pokémon › Échange interne")]
     [InlineData("livingdex", "Défis › Living dex")]
     [InlineData("livingdex/12", "Défis › Living dex › Détail")]
+    [InlineData("rubans?tri=nom", "Défis › Rubans")]
+    [InlineData("rubans/7", "Défis › Rubans › Détail")]
     [InlineData("sauvegardes", "Sauvegardes › Mes sauvegardes")]
     [InlineData("sauvegardes/3ds", "Sauvegardes › Synchronisation 3DS")]
     [InlineData("echanges", "Multijoueurs › Échange")]
@@ -53,6 +55,7 @@ public class BreadcrumbsTests
     {
         // Les rubriques du menu n'ont pas de page à elles : seule la liste des living dex est un lien.
         Assert.Equal([null, "livingdex", null], Breadcrumbs.For("livingdex/4").Select(c => c.Href));
+        Assert.Equal([null, "rubans", null], Breadcrumbs.For("rubans/4").Select(c => c.Href));
         Assert.Equal([null, null], Breadcrumbs.For("inventaire/transfert").Select(c => c.Href));
     }
 }

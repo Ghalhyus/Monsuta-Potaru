@@ -188,8 +188,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 `Account/Pages/Manage/Preferences.razor`, `Services/SortPreferences.cs` (`SiteSorts`, `SortPreferences`,
 `PreferencesService`) ; détails : `docs/claude/comptes.md`.
 
-- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et celui de la vue générale des living dex,
-  gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
+- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et ceux des vues générales des living dex et
+  des rubans, gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
   seuls les tris différents de l'origine y sont écrits).
 - **Priorité** : l'adresse (`?tri=`, `?ordre=`), sinon le compte. Un tri choisi sur la page s'écrit dans l'adresse, sauf
   s'il est celui du compte ; sinon en entier (`?tri=arrivee` quand le compte trie par nom). L'inventaire ne retient plus
@@ -464,6 +464,33 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
 - Images : `outils/images.py livingdex` (sprites PokéAPI, jaquettes Bulbagarden Archives) ; sans elles, l'image de la
   collection (`LivingDexGames.Fallback`).
 
+### Rubans
+
+`/rubans`, `Pages/RibbonList.razor` et `Pages/RibbonPage.razor`, table `RibbonTrackers` (`Data/RibbonTracker.cs`,
+migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `Services/Ribbons.cs`. Détails :
+`docs/claude/rubans.md`.
+
+- **Suivi** d'un Pokémon de la collection (stockage interne ou sauvegarde stockée ; pas les œufs, pas un Pokémon sans
+  empreinte), **retrouvé par son empreinte** (`BankPokemon.Fingerprint`) : les lignes d'une sauvegarde stockée sont
+  recréées à chaque mise à jour. Un suivi par Pokémon et par compte (index unique compte + empreinte). L'identifiant
+  envoyé par le navigateur est revérifié (Pokémon du compte).
+- Chaque lecture reprend l'état du Pokémon dans le compte (le plus récent s'il y en a plusieurs) ; **parti** du compte, le
+  suivi garde son dernier état connu (octets et affichage) et se remet à jour s'il revient. Arrêter le suivi ne touche pas
+  au Pokémon.
+- **Rubans comptés** (42, `Ribbons.All`, la même liste pour tous) : ceux que n'importe quel Pokémon peut obtenir en jouant,
+  Colosseum / XD compris (National, Terre) ; pas les distributions, les anciens tournois, les Marques ni Exceptionnel. Les rubans de
+  concours et de combat de 3e et 4e génération deviennent **Souvenir Concours** (sur 40) et **Souvenir Combat** (sur 8),
+  un ruban chacun, obtenu dès le premier, doré au complet ; un Pokémon encore en 3e ou 4e génération est compté pareil
+  (`Ribbons.MemoryCounts`). Un ruban que le Pokémon ne peut plus obtenir compte quand même (voulu).
+- **Complétion sur 88** (`Ribbons.Total`) : les 40 rubans simples, et ceux des souvenirs un par un (40 + 8), d'après leur
+  compteur (`RibbonState.Earned` / `Worth`). Un souvenir entamé est à la fois dans « Manquants » et « Possédés ».
+- **Détail d'un souvenir** (fenêtre au clic, `Ribbons.ContestParts` / `BattleParts`) : chacun de ses rubans, obtenu ou
+  manquant jusqu'à la 5e génération ; à partir de la 6e, le jeu ne garde que le compteur : « Inconnu », sauf à 0 ou au
+  complet.
+- Vue générale : recherche par surnom ou espèce (sans accents), `?tri=ajout|nom|completion`, `?ordre=desc` (sans tri
+  dans l'adresse, celui du compte, voir « Tris par défaut »). Page : `?filtre=manquants|possedes`.
+- Images : `outils/images.py rubans` (PKHeX), listes `RIBBONS` et `RIBBON_PARTS` à garder en accord avec `Ribbons` (testé).
+
 ### Statistiques
 
 Détails : `docs/claude/statistiques.md`.
@@ -530,8 +557,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
-| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des living dex |
-| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection et des living dex (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex et des rubans |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, description, actions, icône (bandeau dans le thème Ardoise) |
@@ -575,6 +602,11 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
 | `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
+| `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection |
+| `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
+| `MonsutaPotaru/Services/Ribbons.cs` | Les 42 rubans affichés (nom, famille, façon de les obtenir, image), la complétion sur 88 (rubans des souvenirs un par un), et leur lecture dans chaque format de PKHeX |
+| `MonsutaPotaru/Services/RibbonService.cs` | Suivi des rubans : ajout, Pokémon retrouvé par son empreinte et mis à jour, Pokémon proposés, tri et recherche de la vue générale |
+| `MonsutaPotaru/Data/RibbonTracker.cs` | Table des suivis de rubans (empreinte du Pokémon et son dernier état connu ; un par Pokémon et par compte) |
 | `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`), sinon celui du compte (« Tris par défaut ») ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |
 | `MonsutaPotaru/Components/Pages/Sync3ds.razor` | « Synchronisation 3DS » : consoles reliées (code de liaison, attente de la console, retrait) |
@@ -611,12 +643,12 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
 | `deploy/images-serveur.cmd` (`images-serveur.ps1`) | Remplit ou met à jour les images du serveur (`~/monsuta-potaru-images`) et redémarre le site |
-| `outils/images.py` | Rassemble ces images (PokéAPI ; pour les objets, puis pokesprite et PKHeX par numéro d'objet) ; à relancer pour en ajouter |
+| `outils/images.py` | Rassemble ces images (PokéAPI ; pour les objets, puis pokesprite et PKHeX par numéro d'objet ; rubans : PKHeX) ; à relancer pour en ajouter |
 | `MonsutaPotaru/Data/BankPokemon.cs` | Table des Pokémon (octets bruts + métadonnées ; `StoredSaveId` si lecture seule) |
 | `MonsutaPotaru/Data/StoredSave.cs` | Table des sauvegardes stockées |
 | `MonsutaPotaru/Data/SyncDevice.cs` | Tables des consoles 3DS reliées (empreinte du jeton), des emplacements des sauvegardes sur chaque console et des codes de liaison |
@@ -761,7 +793,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | Projet | Utilisé pour | Licence |
 |---|---|---|
 | [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (Guangcong Luo et contributeurs), paquet [`@pkmn/sim`](https://github.com/pkmn/ps) | Simulateur des combats (`showdown/combat.js`) : règles, capacités, talents, objets de chaque génération | MIT |
-| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français, légalité ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) | GPL-3.0 |
+| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français, légalité ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) ; images des rubans (`PKHeX.Drawing.Misc/Resources/img/ribbons`, `wwwroot/images/rubans`, par `outils/images.py rubans`) | GPL-3.0 ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [PokéAPI sprites](https://github.com/PokeAPI/sprites) | Images des Pokémon (normales et chromatiques, formes, femelles, Méga-Évolutions, Gigamax), de la plupart des objets et des CT (`wwwroot/images`) ; sprites de Rouge / Bleu, Jaune, Or, Argent, Cristal, Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille, Diamant / Perle, Platine, HeartGold / SoulSilver et Noire / Blanche des living dex, formes comprises (`versions/generation-i` à `generation-v`, `wwwroot/images/livingdex`) ; sprites de dos et chromatiques de Rubis / Saphir, Émeraude et Rouge Feu / Vert Feuille des combats (`back/`, `shiny/`) | CC0 1.0 pour le dépôt ; images © The Pokémon Company |
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
@@ -780,6 +812,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [Caddy](https://caddyserver.com), [Docker](https://www.docker.com) | Mise en ligne (HTTPS, conteneurs) | Apache-2.0 |
 | [GitHub Actions](https://github.com/features/actions) : [actions/checkout](https://github.com/actions/checkout), [actions/setup-dotnet](https://github.com/actions/setup-dotnet) | Tests et déploiement (`.github/workflows/ci.yml`, `cd.yml`) | MIT |
 | [Bulbapedia](https://bulbapedia.bulbagarden.net) | Référence consultée pour vérifier l'ordre des Noigrumes d'Or/Argent/Cristal | — |
+| [Pokébip](https://www.pokebip.com/page/general/tous-les-rubans), « Tous les rubans » | Liste des rubans, leurs noms français et leurs familles (Panthéon, Concours, Installations de combat, Commémoratifs, Cadeaux), base de ceux que compte le suivi des rubans (`Services/Ribbons.cs` ; façons de les obtenir réécrites) | Consultée, rien de recopié tel quel ; contenu © Pokébip |
 | [Bulbagarden Archives](https://archives.bulbagarden.net) | Jaquettes officielles de Pokémon Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier, Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate et Violet (versions anglaises réduites, « Red/Blue/Yellow/Gold/Silver/Crystal/Ruby/Sapphire/Emerald/FireRed/LeafGreen/Diamond/Pearl/Platinum/HeartGold/SoulSilver/Black/White/Black 2/White 2/X/Y/Omega Ruby/Alpha Sapphire/Sun/Moon/Ultra Sun/Ultra Moon/Lets Go Pikachu/Lets Go Eevee/Sword/Shield/Brilliant Diamond/Shining Pearl/Legends Arceus/Scarlet/Violet EN boxart », Émeraude, Diamant, Perle, HeartGold et SoulSilver en JPEG), images des living dex (`wwwroot/images/livingdex/jaquettes`, par `outils/images.py livingdex`) | Images © Nintendo / Creatures Inc. / GAME FREAK Inc. ; usage de fan, non commercial |
 
 Pokémon et tous les noms et images associés sont des marques et créations de Nintendo, Creatures Inc., GAME FREAK Inc. et

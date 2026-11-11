@@ -9,19 +9,19 @@
 
 <PageTitle>Préférences</PageTitle>
 
-@* Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et de la vue générale des living dex : appliqués
+@* Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des vues générales des living dex et des rubans : appliqués
    quand l'adresse ne précise pas de tri, chez soi comme chez les autres joueurs. Rendu statique : un formulaire envoyé au
    serveur, des listes HTML simples (name="tri-…" / "ordre-…"), relues avec les règles de l'adresse (SiteSorts). *@
 <Block Title="Tris par défaut">
     <StatusMessage Message="@message" />
     <p>
         Choisis comment chaque liste est triée quand tu l'ouvres.<br/>
-        Tu peux toujours changer le tri sur la page : il vaut pourta visite.<br/> 
+        Tu peux toujours changer le tri sur la page : il vaut pour ta visite.<br/> 
         Ton choix est gardé dans ton compte et s'applique aussi aux pages des autres joueurs que tu consultes.
     </p>
 
     @* Une partie titrée par page triée (un Block dans le Block : un panneau à en-tête dans Ardoise, un sous-titre
-       ailleurs) ; l'inventaire à gauche, la collection et les living dex à droite sur un écran large. *@
+       ailleurs) ; l'inventaire à gauche, la collection, les living dex et les rubans à droite sur un écran large. *@
     <form method="post" @formname="sorts" @onsubmit="OnSubmitAsync">
         <AntiforgeryToken />
         <div class="row g-3">
@@ -41,9 +41,13 @@
                     @SortRow(CollectionKey, "Pokémon", CollectionOptions, CollectionDisplay(saved.Collection))
                     <p class="form-text">Arrivée décroissante : les plus récents d'abord. Les œufs restent toujours à la fin.</p>
                 </Block>
-                <Block Title="Living dex" Class="mb-0">
+                <Block Title="Living dex">
                     @SortRow(LivingDexKey, "Vue générale", LivingDexOptions, SiteSorts.LivingDexQuery(saved.LivingDex))
                     <p class="form-text">Le living dex global reste toujours en tête.</p>
+                </Block>
+                <Block Title="Rubans" Class="mb-0">
+                    @SortRow(RibbonKey, "Pokémon suivis", RibbonOptions, SiteSorts.RibbonQuery(saved.Ribbons))
+                    <p class="form-text">Ajout croissant : le premier Pokémon suivi d'abord.</p>
                 </Block>
             </div>
         </div>
@@ -55,11 +59,12 @@
 </Block>
 
 @code {
-    private const string CollectionKey = "collection", LivingDexKey = "livingdex";
+    private const string CollectionKey = "collection", LivingDexKey = "livingdex", RibbonKey = "rubans";
 
     private static readonly IReadOnlyList<(string Slug, string Label)> ItemOptions = [.. SiteSorts.ItemChoices.Select(c => (c.Slug, c.Label))];
     private static readonly IReadOnlyList<(string Slug, string Label)> CollectionOptions = [.. SiteSorts.CollectionChoices.Select(c => (c.Slug, c.Label))];
     private static readonly IReadOnlyList<(string Slug, string Label)> LivingDexOptions = [.. SiteSorts.LivingDexChoices.Select(c => (c.Slug, c.Label))];
+    private static readonly IReadOnlyList<(string Slug, string Label)> RibbonOptions = [.. SiteSorts.RibbonChoices.Select(c => (c.Slug, c.Label))];
 
     private string? message;
     private ApplicationUser? user;
@@ -119,6 +124,7 @@
             Inventory = SiteSorts.InventoryTabs.ToDictionary(t => t.Key, t => SiteSorts.ItemFromQuery(Posted(t.Value)) ?? default),
             Collection = SiteSorts.CollectionFromQuery(Posted(CollectionKey)) ?? default,
             LivingDex = SiteSorts.LivingDexFromQuery(Posted(LivingDexKey)) ?? default,
+            Ribbons = SiteSorts.RibbonFromQuery(Posted(RibbonKey)) ?? default,
         };
         var result = await PreferenceStore.SetSortsAsync(user.Id, sorts);
         if (!result.Ok)

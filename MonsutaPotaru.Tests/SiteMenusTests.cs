@@ -21,7 +21,7 @@ public sealed class SiteMenusTests : PageTestContext
     [
         ["Ma collection", "Parc", "Dépôt / Retrait", "Échange interne"],
         ["Banque d'objets", "Transfert d'inventaire"],
-        ["Living dex"],
+        ["Living dex", "Rubans"],
         ["Rechercher un joueur", "Amis", "Échange", "Combat"],
         ["Mes sauvegardes", "Synchronisation 3DS"],
     ];
@@ -30,7 +30,7 @@ public sealed class SiteMenusTests : PageTestContext
     [
         ["collection", "parc", "transfert", "echange-interne"],
         ["inventaire", "inventaire/transfert"],
-        ["livingdex"],
+        ["livingdex", "rubans"],
         ["joueurs", "amis", "echanges", "combats"],
         ["sauvegardes", "sauvegardes/3ds"],
     ];
@@ -101,6 +101,8 @@ public sealed class SiteMenusTests : PageTestContext
     [InlineData("inventaire/transfert?gauche=1&droite=2", 1)]
     [InlineData("livingdex", 2)]
     [InlineData("livingdex/3", 2)]
+    [InlineData("rubans", 2)]
+    [InlineData("rubans/4?filtre=manquants", 2)]
     [InlineData("joueurs/ondine/inventaire", 3)] // l'inventaire d'un autre joueur relève de Multijoueurs
     [InlineData("echanges", 3)]
     [InlineData("combats", 3)]

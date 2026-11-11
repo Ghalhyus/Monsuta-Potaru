@@ -40,8 +40,8 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     /// <summary>Rubrique « Inventaire » ouverte : sur « Banque d'objets » ou « Transfert d'inventaire ».</summary>
     protected bool inventoryOpen => IsOn("inventaire");
 
-    /// <summary>Rubrique « Défis » ouverte : sur la liste des living dex ou l'un d'eux.</summary>
-    protected bool challengesOpen => IsOn("livingdex");
+    /// <summary>Rubrique « Défis » ouverte : sur les living dex ou les rubans (la liste ou l'un d'eux).</summary>
+    protected bool challengesOpen => IsOn("livingdex", "rubans");
 
     /// <summary>Rubrique « Sauvegardes » ouverte : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
     protected bool savesOpen => IsOn("sauvegardes");

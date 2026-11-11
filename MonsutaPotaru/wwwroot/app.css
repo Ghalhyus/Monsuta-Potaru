@@ -306,6 +306,45 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .livingdex-slot.missing img { filter: brightness(0); }
 .livingdex-section { grid-column: 1 / -1; margin: .75rem 0 0; font-size: 1.1rem; }
 .livingdex-section:first-child { margin-top: 0; }
+
+/* Rubans : cartes des Pokémon suivis (celles des living dex), choix du Pokémon à suivre, et rubans d'un suivi par famille
+   (images de PKHeX agrandies sans flou ; un ruban manquant en gris pâle). */
+.ribbon-sprite { image-rendering: pixelated; }
+.ribbon-sprite-button { padding: 0; border: 0; background: none; line-height: 0; flex: none; }
+.ribbon-candidates {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .5rem; max-height: 26rem;
+    overflow-y: auto; padding: .2rem;
+}
+.ribbon-candidate {
+    display: flex; gap: .5rem; align-items: center; padding: .35rem .5rem; border: 2px solid var(--bs-border-color);
+    border-radius: .5rem; background: var(--bs-body-bg); color: inherit; text-align: left; font-size: .875rem;
+}
+.ribbon-candidate:hover { border-color: var(--bs-primary); }
+.ribbon-candidate.selected { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25); }
+.ribbon-candidate img { width: 3rem; height: 3rem; object-fit: contain; flex: none; image-rendering: pixelated; }
+.ribbon-candidate-body { min-width: 0; }
+.ribbon-section { margin: 1rem 0 .5rem; font-size: 1.1rem; }
+.ribbon-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .5rem; }
+.ribbon-item {
+    display: flex; gap: .75rem; align-items: flex-start; padding: .5rem .65rem; border: 1px solid var(--bs-border-color);
+    border-radius: .5rem; background: var(--bs-body-bg);
+}
+.ribbon-item img { width: 3rem; height: 3rem; object-fit: contain; flex: none; image-rendering: pixelated; }
+.ribbon-item.missing { background: var(--bs-tertiary-bg); }
+.ribbon-item.missing img { filter: grayscale(1); opacity: .35; }
+/* Souvenir : la case est un bouton qui ouvre le détail de ses rubans. */
+.ribbon-item-button { width: 100%; text-align: left; color: inherit; cursor: pointer; }
+.ribbon-item-button:hover { border-color: var(--bs-primary); box-shadow: 0 0 0 .15rem rgba(13, 110, 253, .25); }
+/* Fenêtre du détail : au plus 4 cases par ligne (demande de l'utilisateur), donc au plus la largeur de 4 cases de 21rem ;
+   moins sur un petit écran (marge de 2rem), où les cases passent à 3, 2 puis 1 par ligne. Sa hauteur suit l'écran et elle
+   défile au-delà. Deux classes : .collection-dialog (28rem), plus bas dans ce fichier, l'emporterait sinon. */
+.collection-dialog.ribbon-dialog { width: min(calc(100vw - 4rem), 88rem); max-height: calc(100vh - 4rem); }
+@media (max-width: 576px) { .collection-dialog.ribbon-dialog { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); } }
+/* Cases d'au moins 17rem, et jamais plus de 4 par ligne : une case fait au moins le quart de la ligne. */
+.ribbon-parts {
+    display: grid; gap: .5rem;
+    grid-template-columns: repeat(auto-fill, minmax(max(17rem, calc((100% - 1.5rem) / 4)), 1fr));
+}
 .collection-dialog {
     position: fixed;
     z-index: 1050;
@@ -776,6 +815,11 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 /* Rubrique « Défis » */
 .bi-trophy-nav-menu {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-trophy-fill' viewBox='0 0 16 16'%3E%3Cpath d='M2.5.5A.5.5 0 0 1 3 0h10a.5.5 0 0 1 .5.5c0 .538-.012 1.05-.034 1.536a3 3 0 1 1-1.133 5.89c-.79 1.865-1.878 2.777-2.833 3.011v2.173l1.425.356c.194.048.377.135.537.255L13.3 15.1a.5.5 0 0 1-.3.9H3a.5.5 0 0 1-.3-.9l1.838-1.379c.16-.12.343-.207.537-.255L6.5 13.11v-2.173c-.955-.234-2.043-1.146-2.833-3.012a3 3 0 1 1-1.132-5.89A33 33 0 0 1 2.5.5m.099 2.54a2 2 0 0 0 .72 3.935c-.333-1.05-.588-2.346-.72-3.935m10.083 3.935a2 2 0 0 0 .72-3.935c-.133 1.59-.388 2.885-.72 3.935'/%3E%3C/svg%3E");
+}
+
+/* « Défis » → « Rubans » : bi-award-fill de Bootstrap Icons. */
+.bi-award-nav-menu {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-award-fill' viewBox='0 0 16 16'%3E%3Cpath d='m8 0 1.669.864 1.858.282.842 1.68 1.337 1.32L13.4 6l.306 1.854-1.337 1.32-.842 1.68-1.858.282L8 12l-1.669-.864-1.858-.282-.842-1.68-1.337-1.32L2.6 6l-.306-1.854 1.337-1.32.842-1.68L6.331.864z'/%3E%3Cpath d='M4 11.794V16l4-1 4 1v-4.206l-2.018.306L8 13.126 6.018 12.1z'/%3E%3C/svg%3E");
 }
 
 .bi-list-nested-nav-menu {

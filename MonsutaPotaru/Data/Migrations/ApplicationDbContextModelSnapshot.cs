@@ -551,6 +551,64 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("ParkMembers");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.RibbonTracker", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Context")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Form")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte?>("Gender")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HeldItem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsShiny")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Nickname")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<ushort>("Species")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SpeciesName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "Fingerprint")
+                        .IsUnique();
+
+                    b.ToTable("RibbonTrackers");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.SaveModification", b =>
                 {
                     b.Property<string>("IdentityKey")
@@ -1004,6 +1062,17 @@ namespace MonsutaPotaru.Migrations
                     b.Navigation("BankPokemon");
 
                     b.Navigation("Park");
+                });
+
+            modelBuilder.Entity("MonsutaPotaru.Data.RibbonTracker", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("MonsutaPotaru.Data.StoredSave", b =>

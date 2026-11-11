@@ -33,6 +33,7 @@ public static class Breadcrumbs
             "inventaire" when parts.Length > 1 && Lower(parts[1]) == "transfert" => [new(Inventory, null), new("Transfert d'inventaire", null)],
             "inventaire" => [new(Inventory, null), new("Banque d'objets", null)],
             "livingdex" => [new(Challenges, null), .. LivingDex(parts.Skip(1).ToArray(), "livingdex")],
+            "rubans" => parts.Length == 1 ? [new(Challenges, null), new("Rubans", null)] : [new(Challenges, null), new("Rubans", "rubans"), new("Détail", null)],
             "joueurs" => Player(parts),
             "amis" => [new(Multiplayer, null), new("Amis", null)],
             "echanges" => [new(Multiplayer, null), new("Échange", null)],

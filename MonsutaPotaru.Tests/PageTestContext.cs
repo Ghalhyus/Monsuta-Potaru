@@ -35,6 +35,7 @@ public abstract class PageTestContext : BunitContext
         Services.AddScoped<InventoryService>();
         Services.AddScoped<ParkService>();
         Services.AddScoped<LivingDexService>();
+        Services.AddScoped<RibbonService>();
         Services.AddScoped<StatisticsService>();
         Services.AddScoped<WalletState>();
         Services.AddScoped<SaveSession>();
