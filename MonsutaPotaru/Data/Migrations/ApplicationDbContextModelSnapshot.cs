@@ -409,6 +409,36 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("BattleRecords");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Game")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StoredSaveId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoredSaveId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerId", "Game")
+                        .IsUnique();
+
+                    b.ToTable("Completions");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.FriendRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -961,6 +991,25 @@ namespace MonsutaPotaru.Migrations
                         .WithMany()
                         .HasForeignKey("StoredSaveId")
                         .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Owner");
+
+                    b.Navigation("StoredSave");
+                });
+
+            modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MonsutaPotaru.Data.StoredSave", "StoredSave")
+                        .WithMany()
+                        .HasForeignKey("StoredSaveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Owner");
 

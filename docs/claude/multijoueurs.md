@@ -3,7 +3,7 @@
 README : « Multijoueurs », « Échanges ».
 
 ## Pages vues par un visiteur
-- Collection, Parc, Inventaire et Living dex (liste et page d'un living dex) ont une seconde route `/joueurs/{Pseudo}/...` :
+- Collection, Parc, Inventaire, Living dex et Complétion (liste et page de chacun) ont une seconde route `/joueurs/{Pseudo}/...` :
   `Visitor` (paramètre `Pseudo`), compte trouvé par `PlayerService.FindAsync(pseudo, page)` à la place du sien.
 - Blazor garde le même composant d'une adresse à l'autre (`/joueurs/sacha/collection` → `/collection`) : `MainLayout`
   met `@key` = pseudo de l'adresse (`Routes.PageOwnerOf`) pour recréer la page quand le joueur change. Les pages peuvent

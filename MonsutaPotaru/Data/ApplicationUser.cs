@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 
 namespace MonsutaPotaru.Data;
 
@@ -51,7 +51,9 @@ public enum PublicPages
     LivingDex = 8,
     /// <summary>Page « Statistiques » (argent, living dex, échanges, combats) ; cochée pour tous à son arrivée.</summary>
     Statistics = 16,
-    All = Collection | Park | Inventory | LivingDex | Statistics,
+    /// <summary>Pages « Complétion (100 %) » (la liste et chaque complétion) ; cochée pour tous à son arrivée.</summary>
+    Completion = 32,
+    All = Collection | Park | Inventory | LivingDex | Statistics | Completion,
 }
 
 /// <summary>Qui peut voir les pages d'un joueur (« Mon compte » → « Visibilité »).</summary>

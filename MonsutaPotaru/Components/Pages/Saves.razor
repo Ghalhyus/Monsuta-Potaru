@@ -7,6 +7,7 @@
 @inject StoredSaveService StoredSaves
 @inject BankService BankStore
 @inject LivingDexService LivingDexes
+@inject CompletionService Completions
 @inject IJSRuntime JS
 
 <PageTitle>Mes sauvegardes</PageTitle>
@@ -108,6 +109,10 @@ else
                         {
                             <strong>Son living dex @dexName sera supprimé aussi.</strong>
                         }
+                        @if (completionBySave.TryGetValue(s.Id, out var completionName))
+                        {
+                            <strong>Sa complétion de @completionName sera supprimée aussi.</strong>
+                        }
                         <div class="d-flex flex-wrap gap-2 mt-2">
                             <button class="btn btn-sm btn-danger" @onclick="() => DeleteSave(s)" disabled="@busy">Télécharger et supprimer</button>
                             @* Modifiée sur le serveur et pas encore téléchargée : ces changements seraient perdus (même règle que « Mettre à jour »). *@
@@ -128,6 +133,10 @@ else
                         {
                             <strong>Son living dex @dexName sera supprimé aussi.</strong>
                         }
+                        @if (completionBySave.TryGetValue(s.Id, out var completionName))
+                        {
+                            <strong>Sa complétion de @completionName sera supprimée aussi.</strong>
+                        }
                         <div class="d-flex flex-wrap gap-2 mt-2">
                             <button class="btn btn-sm btn-danger" @onclick="() => DeleteWithoutDownload(s)" disabled="@busy">Oui, supprimer sans télécharger</button>
                             <button class="btn btn-sm btn-outline-secondary" @onclick="() => confirmDeleteId = null">Annuler</button>
@@ -145,6 +154,7 @@ else
     private string userId = "";
     private List<StoredSaveInfo> saves = [];
     private Dictionary<int, string> livingDexBySave = []; // nom du jeu de son living dex, supprimé avec elle
+    private Dictionary<int, string> completionBySave = []; // nom du jeu de sa complétion, supprimée avec elle
     private CollectionUsage usage = new(0, CollectionCapacity.DefaultLimit);
     private bool busy;
     private int fileInputVersion; // recrée les champs fichier : renvoyer le même fichier redéclenche l'envoi
@@ -247,6 +257,7 @@ else
         saves = await StoredSaves.ListAsync(userId);
         usage = await BankStore.GetUsageAsync(userId);
         livingDexBySave = await LivingDexes.NamesBySaveAsync(userId);
+        completionBySave = await Completions.NamesBySaveAsync(userId);
     }
 
     private async Task RunBusy(Func<Task> action)

@@ -37,6 +37,7 @@ public sealed class PlayerService(IDbContextFactory<ApplicationDbContext> dbFact
         new(PublicPages.Park, "Parc", "parc"),
         new(PublicPages.Inventory, "Inventaire", "inventaire"),
         new(PublicPages.LivingDex, "Living dex", "livingdex"),
+        new(PublicPages.Completion, "Complétion", "completion"),
         new(PublicPages.Statistics, "Statistiques", "statistiques"),
     ];
 

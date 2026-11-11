@@ -357,6 +357,26 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .livingdex-section { grid-column: 1 / -1; margin: .75rem 0 0; font-size: 1.1rem; }
 .livingdex-section:first-child { margin-top: 0; }
 
+/* Complétion : sections (boutons avec leur barre), étapes groupées par lieu (coche, texte, précision ; ratée en rouge). */
+.completion-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .5rem; }
+.completion-section {
+    display: flex; flex-direction: column; gap: .25rem; padding: .5rem .75rem; border: 2px solid var(--bs-border-color);
+    border-radius: .5rem; background: var(--bs-body-bg); color: inherit; text-align: left;
+}
+.completion-section:hover { border-color: var(--bs-primary); }
+.completion-section.selected { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25); }
+.completion-zone { margin: 1rem 0 .25rem; font-size: 1.05rem; }
+.completion-steps { list-style: none; padding: 0; margin: 0; }
+.completion-step { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; border-bottom: 1px solid var(--bs-border-color-translucent); }
+.completion-step .completion-mark { flex: none; width: 1.25rem; text-align: center; font-weight: 700; }
+.completion-step.done .completion-mark { color: var(--bs-success); }
+.completion-step.missing .completion-mark { color: var(--bs-secondary-color); }
+.completion-step.missed { color: var(--bs-danger); }
+.completion-step img { width: 2.5rem; height: 2.5rem; image-rendering: pixelated; flex: none; }
+.completion-step.missing img { filter: brightness(0); opacity: .6; }
+.completion-card-sections { display: flex; flex-wrap: wrap; gap: .1rem .6rem; }
+.completion-dex { grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); }
+
 /* Rubans : cartes des Pokémon suivis (celles des living dex), choix du Pokémon à suivre, et rubans d'un suivi par famille
    (images de PKHeX agrandies sans flou ; un ruban manquant en gris pâle). */
 .ribbon-sprite { image-rendering: pixelated; }
@@ -870,6 +890,11 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 /* « Défis » → « Rubans » : bi-award-fill de Bootstrap Icons. */
 .bi-award-nav-menu {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-award-fill' viewBox='0 0 16 16'%3E%3Cpath d='m8 0 1.669.864 1.858.282.842 1.68 1.337 1.32L13.4 6l.306 1.854-1.337 1.32-.842 1.68-1.858.282L8 12l-1.669-.864-1.858-.282-.842-1.68-1.337-1.32L2.6 6l-.306-1.854 1.337-1.32.842-1.68L6.331.864z'/%3E%3Cpath d='M4 11.794V16l4-1 4 1v-4.206l-2.018.306L8 13.126 6.018 12.1z'/%3E%3C/svg%3E");
+}
+
+/* « Défis » → « Complétion (100 %) » : bi-check2-circle de Bootstrap Icons. */
+.bi-check2-circle-nav-menu {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-check2-circle' viewBox='0 0 16 16'%3E%3Cpath d='M2.5 8a5.5 5.5 0 0 1 8.25-4.764.5.5 0 0 0 .5-.866A6.5 6.5 0 1 0 14.5 8a.5.5 0 0 0-1 0 5.5 5.5 0 1 1-11 0'/%3E%3Cpath d='M15.354 3.354a.5.5 0 0 0-.708-.708L8 9.293 5.354 6.646a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0z'/%3E%3C/svg%3E");
 }
 
 .bi-list-nested-nav-menu {

@@ -183,11 +183,36 @@ public sealed class MigrationsTests : IDisposable
         using (var db = NewContext())
         {
             await db.Database.MigrateAsync();
-            Assert.Equal([PublicPages.Park | PublicPages.Statistics, PublicPages.All],
+            Assert.Equal([PublicPages.Park | PublicPages.Statistics | PublicPages.Completion, PublicPages.All],
                 await db.Users.OrderBy(u => u.Id).Select(u => u.PublicPages).ToListAsync());
 
             await db.GetService<IMigrator>().MigrateAsync(before); // et retour : la case disparaît
             Assert.Equal([2, 15], await db.Database.SqlQueryRaw<int>("SELECT PublicPages AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+        }
+    }
+
+    [Fact]
+    public async Task CompletionChallenge_ChecksTheNewPage_ForEveryAccount()
+    {
+        const string before = "20261111103253_RibbonTrackers"; // juste avant CompletionChallenge
+        using (var db = NewContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync("20261026185115_ProfileVisibility");
+            await AddUserAsync(db, "sacha", "Sacha");
+            await AddUserAsync(db, "ondine", "Ondine");
+            await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET PublicPages = 2 WHERE Id = 'ondine';"); // le parc seul
+            await db.GetService<IMigrator>().MigrateAsync(before);
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            Assert.Equal([PublicPages.Park | PublicPages.Statistics | PublicPages.Completion, PublicPages.All],
+                await db.Users.OrderBy(u => u.Id).Select(u => u.PublicPages).ToListAsync());
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : la case et la table disparaissent
+            Assert.Equal([18, 31], await db.Database.SqlQueryRaw<int>("SELECT PublicPages AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+            Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sqlite_master WHERE name = 'Completions'").SingleAsync());
         }
     }
 

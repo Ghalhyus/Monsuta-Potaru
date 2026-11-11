@@ -1,0 +1,263 @@
+@page "/completion/{Id:int}"
+@page "/joueurs/{Pseudo}/completion/{Id:int}"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Data
+@using MonsutaPotaru.Services
+@inject CompletionService Completions
+@inject NavigationManager Navigation
+@inject PlayerService Players
+
+<PageTitle>@(Visitor && playerChecked && player is null ? "Joueur introuvable" : view is null ? "Complétion" : $"Complétion de {view.Game.Name}")</PageTitle>
+
+@* Une complétion : la progression globale (moyenne des sections), un bouton par section avec sa barre, puis les étapes de
+   la section choisie, groupées par lieu dans l'ordre de l'aventure (le Pokédex en images, comme un living dex). *@
+
+@* Complétion d'un autre joueur (Multijoueurs) : consultation seule, sans suppression ni nom de fichier. *@
+@if (Visitor && player is null)
+{
+    @if (playerChecked)
+    {
+        <PlayerHidden />
+    }
+}
+else if (notFound)
+{
+    <p class="text-muted">Cette complétion n'existe plus. <a href="@ListLink">Retour aux complétions</a></p>
+}
+else if (view is not null)
+{
+    @if (player is not null)
+    {
+        <PlayerHeader Player="player" Current="PublicPages.Completion" />
+    }
+    <div class="livingdex-header mb-3">
+        <LivingDexCover Game="view.Game" Class="livingdex-cover" Alt="@($"Jaquette de {view.Game.Name}")" />
+        <div class="flex-grow-1">
+            <a class="small" href="@ListLink">← Complétion</a>
+            <h1 class="mb-0 @(Visitor ? "h3" : "")">@view.Game.Name</h1>
+            <div class="small text-muted mb-2">Sauvegarde : @(Visitor ? view.PublicSaveLabel : view.SaveLabel)</div>
+            <div class="d-flex align-items-center gap-2">
+                <strong>Total</strong>
+                <LivingDexProgress Owned="view.Progress.Tenths" Total="1000" Class="flex-grow-1"
+                                   ValueText="@($"{view.Progress.Percent}, moyenne des sections")" />
+            </div>
+            <div class="small text-muted mt-1">Chaque section compte pour un cinquième du total.</div>
+            @if (!Visitor)
+            {
+                @* Sous le titre, comme toutes les actions du site (jamais poussée à droite). *@
+                <button type="button" class="btn btn-sm btn-outline-danger mt-2" @onclick="() => confirmDelete = true">Supprimer cette complétion</button>
+            }
+        </div>
+    </div>
+    @if (confirmDelete && !Visitor)
+    {
+        <div class="alert alert-danger small">
+            La complétion sera supprimée ; la sauvegarde reste.
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-danger" @onclick="Delete">Supprimer</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => confirmDelete = false">Annuler</button>
+            </div>
+        </div>
+    }
+
+    @if (view.Steps.Count == 0)
+    {
+        <p class="text-danger">La sauvegarde de cette complétion ne se lit plus : envoie-en une nouvelle version dans « Mes sauvegardes ».</p>
+    }
+
+    <div class="completion-sections mb-3" role="group" aria-label="Sections">
+        @foreach (var s in view.Progress.Sections)
+        {
+            var value = s.Section;
+            <button type="button" class="completion-section @(section == value ? "selected" : "")" aria-pressed="@(section == value ? "true" : "false")"
+                    @onclick="() => SetSection(value)">
+                <span class="d-flex justify-content-between gap-2">
+                    <strong>@s.Name</strong>
+                    <span class="small text-muted">@s.Done / @s.Total</span>
+                </span>
+                <LivingDexProgress Owned="s.Done" Total="s.Total" />
+                @if (s.Missed > 0)
+                {
+                    <span class="small text-danger">@(s.Missed == 1 ? "1 raté" : $"{s.Missed} ratés")</span>
+                }
+            </button>
+        }
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        @* Filtre gardé dans l'adresse (?filtre=manquants, faits), comme la section (?section=dresseurs). *@
+        <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Étapes affichées">
+            @foreach (var (f, label, count) in Filters)
+            {
+                var value = f;
+                <button type="button" class="btn @(filter == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetFilter(value)">
+                    @label (@count)
+                </button>
+            }
+        </div>
+    </div>
+
+    var shown = SectionSteps.Where(Shown).ToList();
+    @if (shown.Count == 0)
+    {
+        <p class="@(filter == Filter.Missing ? "text-success" : "text-muted")">
+            @(filter == Filter.Missing ? $"Section {CompletionSections.Name(section)} terminée : rien ne manque !" : "Rien de fait dans cette section pour l'instant.")
+        </p>
+    }
+    else if (section == CompletionSection.Pokedex)
+    {
+        <div class="livingdex-grid completion-dex">
+            @foreach (var step in shown)
+            {
+                var title = $"{step.Label} — {(step.Done ? "capturé" : "pas encore capturé")}";
+                <div class="livingdex-slot @(step.Done ? "" : "missing")" title="@title" aria-label="@title">
+                    <img src="@Sprite(step.Species)" alt="" loading="lazy" data-remplacement="@Fallback(step.Species)" />
+                    <span>#@step.Species.ToString("000")</span>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        @foreach (var zone in shown.GroupBy(s => s.Zone))
+        {
+            <h2 class="completion-zone">@zone.Key <span class="small text-muted fw-normal">@zone.Count(s => s.Done) / @zone.Count()</span></h2>
+            <ul class="completion-steps">
+                @foreach (var step in zone)
+                {
+                    <li class="completion-step @StateClass(step)">
+                        <span class="completion-mark" aria-hidden="true">@Mark(step)</span>
+                        @if (step.Species != 0)
+                        {
+                            <img src="@Sprite(step.Species)" alt="" loading="lazy" data-remplacement="@Fallback(step.Species)" />
+                        }
+                        <span>
+                            <span class="visually-hidden">@StateText(step) : </span>@step.Label
+                            @if (step.Detail is not null)
+                            {
+                                <span class="small text-muted">@($" · {step.Detail}")</span>
+                            }
+                            @if (step.State == CompletionState.Missed)
+                            {
+                                <span class="badge text-bg-danger ms-1" title="Plus faisable dans cette partie : la section ne pourra plus atteindre 100 %">raté</span>
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/completion/{id}) : sa complétion, en lecture seule.</summary>
+    [Parameter] public string? Pseudo { get; set; }
+
+    [SupplyParameterFromQuery(Name = "section")] private string? SectionFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "filtre")] private string? FilterFromQuery { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private bool Visitor => Pseudo is not null;
+    private PlayerProfile? player; // joueur consulté, si ses complétions sont publiques
+    private bool playerChecked;
+    private string userId = "";
+    private CompletionView? view;
+    private bool notFound;
+    private CompletionSection section;
+    private Filter filter;
+    private bool confirmDelete;
+
+    /// <summary>Étapes affichées : toutes, celles qui manquent (ratées comprises) ou celles qui sont faites.</summary>
+    private enum Filter { All, Missing, Done }
+
+    /// <summary>Filtres dans l'adresse ; « Tous » n'y figure pas.</summary>
+    private static readonly Dictionary<Filter, string> FilterSlugs = new() { [Filter.Missing] = "manquants", [Filter.Done] = "faits" };
+
+    /// <summary>Liste des complétions : les miennes, ou celles du joueur consulté.</summary>
+    private string ListLink => player is null ? "completion" : PlayerService.Link(player.Pseudo, "completion");
+
+    private IEnumerable<CompletionStep> SectionSteps => view!.Steps.Where(s => s.Section == section);
+
+    /// <summary>Boutons du filtre, avec le nombre d'étapes de chacun dans la section.</summary>
+    private IEnumerable<(Filter Filter, string Label, int Count)> Filters
+    {
+        get
+        {
+            var steps = SectionSteps.ToList();
+            var done = steps.Count(s => s.Done);
+            return [(Filter.All, "Toutes", steps.Count), (Filter.Missing, "Manquantes", steps.Count - done), (Filter.Done, "Faites", done)];
+        }
+    }
+
+    private bool Shown(CompletionStep s) => filter switch
+    {
+        Filter.Missing => !s.Done,
+        Filter.Done => s.Done,
+        _ => true,
+    };
+
+    private static string StateClass(CompletionStep s) => s.State switch
+    {
+        CompletionState.Done => "done",
+        CompletionState.Missed => "missed",
+        _ => "missing",
+    };
+
+    private static string Mark(CompletionStep s) => s.State switch
+    {
+        CompletionState.Done => "✓",
+        CompletionState.Missed => "✗",
+        _ => "○",
+    };
+
+    private static string StateText(CompletionStep s) => s.State switch
+    {
+        CompletionState.Done => "fait",
+        CompletionState.Missed => "raté",
+        _ => "à faire",
+    };
+
+    /// <summary>Sprite du jeu (Rouge / Bleu : couleurs du Super Game Boy ; Jaune : Game Boy Color), comme son living dex.</summary>
+    private string Sprite(ushort species) => LivingDexGames.Sprite(view!.Game, new LivingDexSlot(species, 0));
+
+    /// <summary>Image de la collection, si celle du jeu manque.</summary>
+    private string Fallback(ushort species) => LivingDexGames.Fallback(view!.Game, new LivingDexSlot(species, 0));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visitor)
+        {
+            player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Completion);
+            playerChecked = true;
+            if (player is null)
+                return;
+            userId = player.Id;
+        }
+        else
+            userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        view = await Completions.GetAsync(userId, Id);
+        notFound = view is null;
+        section = CompletionSections.FromSlug(SectionFromQuery);
+        filter = FilterSlugs.FirstOrDefault(f => f.Value == FilterFromQuery) is { Value: not null } found ? found.Key : Filter.All;
+    }
+
+    /// <summary>Section choisie, gardée dans l'adresse (« Histoire », la première, n'y est pas écrite).</summary>
+    private void SetSection(CompletionSection value) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("section", value == CompletionSection.Story ? null : CompletionSections.Slug(value)), replace: true);
+
+    private void SetFilter(Filter value) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", FilterSlugs.GetValueOrDefault(value)), replace: true);
+
+    private async Task Delete()
+    {
+        if (Visitor)
+            return;
+        await Completions.DeleteAsync(userId, Id);
+        Navigation.NavigateTo("completion");
+    }
+}

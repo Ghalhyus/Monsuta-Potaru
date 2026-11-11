@@ -34,6 +34,7 @@ public static class Breadcrumbs
             "inventaire" => [new(Inventory, null), new("Banque d'objets", null)],
             "livingdex" => [new(Challenges, null), .. LivingDex(parts.Skip(1).ToArray(), "livingdex")],
             "rubans" => parts.Length == 1 ? [new(Challenges, null), new("Rubans", null)] : [new(Challenges, null), new("Rubans", "rubans"), new("Détail", null)],
+            "completion" => [new(Challenges, null), .. Completion(parts.Skip(1).ToArray(), "completion")],
             "joueurs" => Player(parts),
             "amis" => [new(Multiplayer, null), new("Amis", null)],
             "echanges" => [new(Multiplayer, null), new("Échange", null)],
@@ -52,6 +53,12 @@ public static class Breadcrumbs
     /// <summary>« Living dex », ou « Living dex › Détail » pour l'une d'elles ; <paramref name="href"/> : la liste.</summary>
     private static List<Crumb> LivingDex(string[] rest, string href) =>
         rest.Length == 0 ? [new("Living dex", null)] : [new("Living dex", href), new("Détail", null)];
+
+    /// <summary>« Complétion (100 %) », ou « Complétion (100 %) › Détail » pour l'une d'elles ; <paramref name="href"/> : la liste.</summary>
+    private static List<Crumb> Completion(string[] rest, string href) =>
+        rest.Length == 0 ? [new(CompletionTitle, null)] : [new(CompletionTitle, href), new("Détail", null)];
+
+    private const string CompletionTitle = "Complétion (100 %)";
 
     /// <summary>Recherche d'un joueur, sa page, puis l'une de ses pages publiques (collection, inventaire, parc, living dex).</summary>
     private static List<Crumb> Player(string[] parts)
@@ -77,6 +84,7 @@ public static class Breadcrumbs
             "inventaire" => [new Crumb("Inventaire", null)],
             "parc" => [new Crumb("Parc", null)],
             "livingdex" => LivingDex(parts.Skip(3).ToArray(), playerHref + "/livingdex"),
+            "completion" => Completion(parts.Skip(3).ToArray(), playerHref + "/completion"),
             "statistiques" => [new Crumb("Statistiques", null)],
             _ => [],
         });

@@ -122,7 +122,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 
 - **Rechercher un joueur** (`/joueurs`, `Pages/PlayerSearch.razor`) : 2 caractères du pseudo au moins, casse et accents
   ignorés, parmi les profils trouvables. Profil : `/joueurs/{pseudo}` (`Pages/PlayerProfilePage.razor`,
-  `Shared/PlayerHeader.razor`). Collection, Parc, Inventaire, Living dex et Statistiques ont une seconde adresse
+  `Shared/PlayerHeader.razor`). Collection, Parc, Inventaire, Living dex, Complétion et Statistiques ont une seconde adresse
   (`/joueurs/{pseudo}/collection`...) en **lecture seule** : aucun bouton qui modifie, copie ou télécharge (et les actions
   refusent un visiteur), ni journal, ni noms de fichiers, ni ID de dresseur (`PokemonCard.HideTrainerId`).
 - **Visibilité** (colonnes `Audience` et `PublicPages`) : Tout le monde (défaut), Amis seulement (trouvable, pages pour
@@ -498,6 +498,32 @@ migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `
   dans l'adresse, celui du compte, voir « Tris par défaut »). Page : `?filtre=manquants|possedes`.
 - Images : `outils/images.py rubans` (PKHeX), listes `RIBBONS` et `RIBBON_PARTS` à garder en accord avec `Ribbons` (testé).
 
+### Complétion (100 %)
+
+`/completion`, `Pages/CompletionList.razor` et `Pages/CompletionPage.razor`, table `Completions` (`Data/Completion.cs`,
+migration `CompletionChallenge`), `Services/Completion/` : service (`CompletionService.cs`), lecture d'une partie
+(`Gen1Completion.cs`), tables générées (`Gen1CompletionData.cs`, par `outils/completion_gen1.py`). Détails :
+`docs/claude/completion.md`.
+
+- Pour l'instant **Rouge, Bleu et Jaune**, versions internationales (une sauvegarde japonaise a d'autres adresses : pas
+  proposée). **Une complétion par jeu et par compte** (index unique compte + jeu), une sauvegarde pour une seule (index
+  unique) ; la même sauvegarde peut avoir aussi son living dex ; supprimer la sauvegarde supprime sa complétion (cascade).
+  Rouge / Bleu : la sauvegarde est proposée pour les deux jeux.
+- **Lue dans la sauvegarde liée** à chaque affichage (drapeaux d'événements, objets ramassés, objets cachés, échanges,
+  badges, Pokédex « capturé » du jeu, Panthéon, amitié de Pikachu) : à jour à chaque mise à jour de la sauvegarde. Rien
+  à cocher à la main.
+- **Cinq sections** au même poids : Histoire (badges, étapes clés, Panthéon ; Jaune : amitié de Pikachu au maximum),
+  Pokédex (les 151, Mew compris), Dresseurs (chacun, rival compris ; pas le Conseil 4, remis à zéro après le Panthéon),
+  Objets (au sol, cachés, jetons cachés, cadeaux, CT des champions, cannes), Rencontres uniques (légendaires, Ronflex,
+  Voltorbe et Électrode de la Centrale, Pokémon offerts, échanges du jeu). **Pourcentage global = moyenne des
+  sections** (fractions exactes, arrondi vers le bas : 100 % seulement quand tout est fait).
+- **Choix exclusifs** (fossile Dôme ou Nautile, Kicklee ou Tygnon) : une seule étape, faite dès que l'un est choisi.
+  **Étapes ratées** (plus faisables dans la partie : les Rockets de la Sylphe SARL après Giovanni, le premier combat
+  contre le rival sur la Route 22 après le badge de Pierre) : comptées dans le total, marquées « raté » (choix de
+  l'utilisateur : le 100 % reste strict).
+- Page : `?section=pokedex|dresseurs|objets|rencontres` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
+  groupées par lieu dans l'ordre de l'aventure ; Pokédex en sprites du jeu, comme le living dex.
+
 ### Statistiques
 
 Détails : `docs/claude/statistiques.md`.
@@ -609,6 +635,13 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/LivingDexPage.razor` | Page d'un living dex : grille des sprites du jeu (silhouettes des manquants), progression, fiche au clic |
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
 | `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
+| `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), création (jeu, puis sauvegarde) |
+| `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
+| `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
+| `MonsutaPotaru/Services/Completion/Gen1Completion.cs` | Sections, étapes et progression (moyenne des sections) ; lecture des conditions des tables dans une sauvegarde de Rouge / Bleu / Jaune, textes des étapes (équipes, objets, CT) |
+| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs` | Tables générées des étapes de Rouge / Bleu et de Jaune (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
+| `MonsutaPotaru/Data/Completion.cs` | Table des complétions (une par jeu et par compte, supprimée avec sa sauvegarde) |
+| `outils/completion_gen1.py`, `outils/completion_gen1_extract.py` | Génèrent `Gen1CompletionData.cs` d'après les désassemblages pokered et pokeyellow (lieux en français, ordre de l'aventure, étapes choisies à la main dans le script) |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
 | `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection |
 | `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
@@ -651,7 +684,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs`, `HelpTipTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, infobulles d'aide, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `CompletionPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs`, `HelpTipTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, infobulles d'aide, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Complétion, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
@@ -819,6 +852,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [SonarScanner for .NET](https://github.com/SonarSource/sonar-scanner-msbuild) (SonarSource), [SonarCloud](https://sonarcloud.io) | Revue de la qualité du code dans la CI (`.github/workflows/ci.yml`), service en ligne gratuit pour les projets publics | LGPL-3.0 (scanner) |
 | [Caddy](https://caddyserver.com), [Docker](https://www.docker.com) | Mise en ligne (HTTPS, conteneurs) | Apache-2.0 |
 | [GitHub Actions](https://github.com/features/actions) : [actions/checkout](https://github.com/actions/checkout), [actions/setup-dotnet](https://github.com/actions/setup-dotnet) | Tests et déploiement (`.github/workflows/ci.yml`, `cd.yml`) | MIT |
+| [pokered](https://github.com/pret/pokered) et [pokeyellow](https://github.com/pret/pokeyellow) (pret) | Désassemblages de Rouge / Bleu et de Jaune : numéros des drapeaux d'événements, objets du décor, objets cachés, équipes des dresseurs, échanges et adresses de la sauvegarde, lus par `outils/completion_gen1.py` pour les tables de la complétion (`Services/Completion/Gen1CompletionData.cs`) ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [Bulbapedia](https://bulbapedia.bulbagarden.net) | Référence consultée pour vérifier l'ordre des Noigrumes d'Or/Argent/Cristal | — |
 | [Pokébip](https://www.pokebip.com/page/general/tous-les-rubans), « Tous les rubans » | Liste des rubans, leurs noms français et leurs familles (Panthéon, Concours, Installations de combat, Commémoratifs, Cadeaux), base de ceux que compte le suivi des rubans (`Services/Ribbons.cs` ; façons de les obtenir réécrites) | Consultée, rien de recopié tel quel ; contenu © Pokébip |
 | [Bulbagarden Archives](https://archives.bulbagarden.net) | Jaquettes officielles de Pokémon Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier, Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate et Violet (versions anglaises réduites, « Red/Blue/Yellow/Gold/Silver/Crystal/Ruby/Sapphire/Emerald/FireRed/LeafGreen/Diamond/Pearl/Platinum/HeartGold/SoulSilver/Black/White/Black 2/White 2/X/Y/Omega Ruby/Alpha Sapphire/Sun/Moon/Ultra Sun/Ultra Moon/Lets Go Pikachu/Lets Go Eevee/Sword/Shield/Brilliant Diamond/Shining Pearl/Legends Arceus/Scarlet/Violet EN boxart », Émeraude, Diamant, Perle, HeartGold et SoulSilver en JPEG), images des living dex (`wwwroot/images/livingdex/jaquettes`, par `outils/images.py livingdex`) | Images © Nintendo / Creatures Inc. / GAME FREAK Inc. ; usage de fan, non commercial |

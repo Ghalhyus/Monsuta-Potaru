@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace MonsutaPotaru.Data;
@@ -17,6 +17,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SyncPairingCode> SyncPairingCodes => Set<SyncPairingCode>();
     public DbSet<SyncSaveLocation> SyncSaveLocations => Set<SyncSaveLocation>();
     public DbSet<LivingDex> LivingDexes => Set<LivingDex>();
+    public DbSet<Completion> Completions => Set<Completion>();
     public DbSet<RibbonTracker> RibbonTrackers => Set<RibbonTracker>();
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
@@ -137,6 +138,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasOne(d => d.Owner).WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             // La sauvegarde est supprimée : son living dex aussi (la confirmation de suppression le signale).
             e.HasOne(d => d.StoredSave).WithMany().HasForeignKey(d => d.StoredSaveId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Completion>(e =>
+        {
+            e.HasIndex(c => new { c.OwnerId, c.Game }).IsUnique(); // une complétion par jeu et par compte
+            e.HasIndex(c => c.StoredSaveId).IsUnique(); // une sauvegarde ne sert qu'à une complétion
+            e.HasOne(c => c.Owner).WithMany().HasForeignKey(c => c.OwnerId).OnDelete(DeleteBehavior.Cascade);
+            // La sauvegarde est supprimée : sa complétion aussi (la confirmation de suppression le signale).
+            e.HasOne(c => c.StoredSave).WithMany().HasForeignKey(c => c.StoredSaveId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<RibbonTracker>(e =>

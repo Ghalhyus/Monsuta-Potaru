@@ -142,9 +142,9 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         browser.DefaultRequestHeaders.Add("Cookie", "menu=replie");
         string[] pages =
         [
-            "/", "/transfert", "/collection", "/inventaire", "/inventaire/transfert", "/parc", "/livingdex", "/livingdex/9999", "/rubans", "/rubans/9999", "/sauvegardes",
+            "/", "/transfert", "/collection", "/inventaire", "/inventaire/transfert", "/parc", "/livingdex", "/livingdex/9999", "/rubans", "/rubans/9999", "/completion", "/completion/9999", "/sauvegardes",
             "/sauvegardes/3ds", "/amis", "/joueurs", "/joueurs/Sacha", "/joueurs/Sacha/collection", "/joueurs/Sacha/parc",
-            "/joueurs/Sacha/inventaire", "/joueurs/Sacha/livingdex", "/joueurs/Inconnu", "/echanges", "/combats",
+            "/joueurs/Sacha/inventaire", "/joueurs/Sacha/livingdex", "/joueurs/Sacha/completion", "/joueurs/Inconnu", "/echanges", "/combats",
             "/statistiques", "/administration", "/Account/Manage", "/Account/Manage/Email", "/Account/Manage/ChangePassword",
             "/Account/Manage/Themes", "/Account/Manage/Preferences", "/Account/Manage/Visibility", "/Account/Manage/PersonalData",
             "/Account/Manage/DeletePersonalData", "/Account/Pseudo",
