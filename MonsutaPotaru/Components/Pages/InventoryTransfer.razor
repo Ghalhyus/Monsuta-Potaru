@@ -21,10 +21,14 @@
 
 <div class="transfer-page" @ref="root">
     <PageHeader Title="Transfert d'inventaire" Icon="bi-bag-nav-menu" BackHref="inventaire" BackLabel="Banque d'objets">
-        <Description>
-            Fais passer des objets d'une de tes sauvegardes stockées à une autre : choisis-les, glisse les objets d'une colonne
-            à l'autre (ou utilise les flèches), puis valide.
-        </Description>
+        <Help>
+            <p>Fais passer des objets d'une de tes sauvegardes stockées à une autre :</p>
+            <ol>
+                <li>choisis les deux sauvegardes ;</li>
+                <li>glisse les objets d'une colonne à l'autre (ou utilise les flèches) ;</li>
+                <li>valide.</li>
+            </ol>
+        </Help>
     </PageHeader>
 
     @if (message is not null)

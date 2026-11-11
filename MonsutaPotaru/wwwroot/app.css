@@ -38,6 +38,56 @@ h1:focus {
 .block { margin-bottom: 1.5rem; }
 .block-header { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; margin-bottom: .5rem; }
 .block-title { margin-bottom: 0; }
+
+/* Infobulle d'aide (Shared/HelpTip.razor) : l'icône « ? » à côté du titre ; la bulle sous la ligne du titre
+   (help-tip-anchor), alignée à gauche, jamais plus large que cette ligne. Refermée par wwwroot/js/app.js. */
+.page-header-heading, .block-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+.block-heading { align-self: stretch; }
+.help-tip-anchor { position: relative; }
+.help-tip { display: inline-block; position: static; }
+.help-tip-button {
+    display: inline-grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    color: var(--bs-secondary-color);
+    font-size: .85rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+.help-tip-button::-webkit-details-marker { display: none; }
+.help-tip-button::marker { content: ""; }
+.help-tip-button:hover, .help-tip[open] > .help-tip-button { color: var(--bs-primary); }
+.help-tip-button:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+.help-tip-bubble {
+    position: absolute;
+    top: calc(100% + .4rem);
+    left: 0;
+    z-index: 30;
+    width: max-content;
+    max-width: min(30rem, 100%);
+    padding: .85rem 1rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+    box-shadow: 0 .5rem 1.25rem rgba(16, 24, 40, .15);
+    font-weight: normal;
+    line-height: 1.55;
+    text-align: left;
+}
+/* Texte aéré : de courts paragraphes et des listes, pas un bloc */
+.help-tip-bubble p { margin-bottom: .6rem; }
+.help-tip-bubble ul, .help-tip-bubble ol { margin-bottom: .6rem; padding-left: 1.25rem; }
+.help-tip-bubble li + li { margin-top: .25rem; }
+.help-tip-bubble > :last-child { margin-bottom: 0; }
+/* Consigne du choix de l'équipe d'un combat (Battles.razor), suivie de son « ? » */
+.battle-team-hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
 .block-count { font-size: .7em; vertical-align: middle; }
 .block-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .block-body > :last-child { margin-bottom: 0; }

@@ -12,11 +12,16 @@
    Liaison par un code à usage unique ; tant qu'il est affiché, la liste est relue régulièrement pour voir arriver la console. *@
 
 <PageHeader Title="Synchronisation 3DS" Icon="bi-controller-nav-menu">
-    <Description>
-        Le homebrew PokeBank Sync envoie les sauvegardes Pokémon de ta 3DS dans <a href="sauvegardes">« Mes sauvegardes »</a> :
-        une nouvelle partie y est ajoutée, une partie déjà stockée est mise à jour, avec les mêmes règles que « Mettre à jour »
-        (rien n'est forcé : une version plus ancienne ou modifiée sur le serveur est refusée, et la 3DS te dit pourquoi).
-    </Description>
+    <Help>
+        <p>
+            Le homebrew PokeBank Sync envoie les sauvegardes Pokémon de ta 3DS dans <a href="sauvegardes">« Mes sauvegardes »</a> :
+        </p>
+        <ul>
+            <li>une nouvelle partie y est ajoutée ;</li>
+            <li>une partie déjà stockée est mise à jour, avec les mêmes règles que « Mettre à jour ».</li>
+        </ul>
+        <p>Rien n'est forcé : une version plus ancienne ou modifiée sur le serveur est refusée, et la 3DS te dit pourquoi.</p>
+    </Help>
     <Actions>
         @if (pairing is null)
         {

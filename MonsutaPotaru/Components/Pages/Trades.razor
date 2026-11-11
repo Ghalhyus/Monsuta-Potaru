@@ -186,61 +186,68 @@ else
 
     @* ---------- Nouvel échange : l'ami, puis la paire de sauvegardes ---------- *@
     <Block Title="Nouvel échange">
-        <p class="small text-muted">
-            L'échange se fait en direct, avec un ami connecté, entre deux sauvegardes stockées qui peuvent échanger sur console (même
-            génération qui échangent entre eux, ou Rouge / Bleu / Jaune avec Or / Argent / Cristal par le Time Capsule). Il porte sur la
-            version stockée de ta sauvegarde : si tu as joué depuis, mets-la d'abord à jour dans <a href="sauvegardes">Mes sauvegardes</a>.
-            Après l'échange, chacun télécharge sa sauvegarde et la remet dans son jeu.
-        </p>
-        @if (friends is null)
-        {
-            <p class="text-muted">Chargement…</p>
-        }
-        else if (friends.Count == 0)
-        {
-            <p class="text-muted">Il te faut un ami pour échanger : ajoute-en dans <a href="amis">Amis</a>.</p>
-        }
-        else
-        {
-            <select class="form-select mb-3 trade-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
-                <option value="">Choisis un ami…</option>
-                @foreach (var f in friends)
-                {
-                    <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
-                }
-            </select>
-            @if (pairs is not null)
+        <Help>
+            <p>
+                L'échange se fait en direct, avec un ami connecté, entre deux sauvegardes stockées qui peuvent échanger sur console
+                (deux jeux qui échangent entre eux, ou Rouge / Bleu / Jaune avec Or / Argent / Cristal par le Time Capsule).
+            </p>
+            <p>
+                Il porte sur la version stockée de ta sauvegarde : si tu as joué depuis, mets-la d'abord à jour dans
+                <a href="sauvegardes">Mes sauvegardes</a>.
+            </p>
+            <p>Après l'échange, chacun télécharge sa sauvegarde et la remet dans son jeu.</p>
+        </Help>
+        <ChildContent>
+            @if (friends is null)
             {
-                @if (pairs.Count == 0)
+                <p class="text-muted">Chargement…</p>
+            }
+            else if (friends.Count == 0)
+            {
+                <p class="text-muted">Il te faut un ami pour échanger : ajoute-en dans <a href="amis">Amis</a>.</p>
+            }
+            else
+            {
+                <select class="form-select mb-3 trade-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
+                    <option value="">Choisis un ami…</option>
+                    @foreach (var f in friends)
+                    {
+                        <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                    }
+                </select>
+                @if (pairs is not null)
                 {
-                    <p class="text-muted">Vous n'avez aucune paire de sauvegardes stockées qui puissent échanger.</p>
-                }
-                else
-                {
-                    <div class="list-group">
-                        @foreach (var pair in pairs)
-                        {
-                            var p = pair;
-                            <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
-                                <span>
-                                    Ta sauvegarde : <strong>@p.Mine.Label</strong>
-                                    <span class="d-block small text-muted">
-                                        Version stockée du @p.Mine.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-                                        @if (p.Mine.MustDownloadBeforeUpdate)
-                                        {
-                                            <span class="text-warning-emphasis"> · modifiée par le site (@p.Mine.ServerChanges), pas encore téléchargée</span>
-                                        }
+                    @if (pairs.Count == 0)
+                    {
+                        <p class="text-muted">Vous n'avez aucune paire de sauvegardes stockées qui puissent échanger.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var pair in pairs)
+                            {
+                                var p = pair;
+                                <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+                                    <span>
+                                        Ta sauvegarde : <strong>@p.Mine.Label</strong>
+                                        <span class="d-block small text-muted">
+                                            Version stockée du @p.Mine.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                            @if (p.Mine.MustDownloadBeforeUpdate)
+                                            {
+                                                <span class="text-warning-emphasis"> · modifiée par le site (@p.Mine.ServerChanges), pas encore téléchargée</span>
+                                            }
+                                        </span>
                                     </span>
-                                </span>
-                                <span class="mx-2">↔</span>
-                                <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
-                                <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer l'échange</button>
-                            </div>
-                        }
-                    </div>
+                                    <span class="mx-2">↔</span>
+                                    <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
+                                    <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer l'échange</button>
+                                </div>
+                            }
+                        </div>
+                    }
                 }
             }
-        }
+        </ChildContent>
     </Block>
 }
 

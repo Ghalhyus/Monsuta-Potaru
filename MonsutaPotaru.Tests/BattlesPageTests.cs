@@ -33,6 +33,10 @@ public sealed class BattlesPageTests : PageTestContext
     private static async Task ChooseTeam(IRenderedComponent<Battles> cut)
     {
         cut.WaitForText("Valider l'équipe");
+        // La consigne reste affichée, le détail des règles est dans l'infobulle.
+        var hint = cut.Find(".battle-team-hint");
+        Assert.Contains("le premier entre en combat", hint.QuerySelector(":scope > span")!.TextContent);
+        Assert.Contains("sans objet du sac", hint.QuerySelector("details.help-tip .help-tip-bubble")!.TextContent);
         var size = cut.FindAll(".battle-team-slot").Count;
         for (var i = 0; i < size; i++)
             await cut.FindAll(".trade-candidate")[i].ClickAsync(new());

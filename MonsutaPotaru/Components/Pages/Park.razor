@@ -38,11 +38,16 @@ else
     <PlayerHeader Player="player" Current="PublicPages.Park" />
 }
 <PageHeader Title="Parc" Count="@($"{members.Count} / {Capacity}")" Small="Visitor" Icon="@(Visitor ? null : "bi-tree-nav-menu")">
-    <Description>
-        @(Visitor ? $"Les Pokémon de {player!.Pseudo} vivent ici" : "Tes Pokémon vivent ici") : ils se promènent, se reposent,
-        rendent visite à leur famille et dorment quand ils sont fatigués (plus tôt le soir). Clique sur l'un d'eux pour voir sa fiche,
-        fais glisser la carte pour explorer les alentours.
-    </Description>
+    <Help>
+        <p>
+            @(Visitor ? $"Les Pokémon de {player!.Pseudo} vivent ici" : "Tes Pokémon vivent ici") : ils se promènent, se reposent,
+            rendent visite à leur famille et dorment quand ils sont fatigués (plus tôt le soir).
+        </p>
+        <ul>
+            <li>Clique sur l'un d'eux pour voir sa fiche.</li>
+            <li>Fais glisser la carte pour explorer les alentours.</li>
+        </ul>
+    </Help>
     <Actions>
         @if (parks.Count > 1)
         {

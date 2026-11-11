@@ -61,10 +61,12 @@
                     else
                     {
                         var size = BattleService.TeamSize(candidates.Count);
-                        <p class="small text-muted mb-2">
-                            Choisis @size Pokémon de ta sauvegarde, dans l'ordre : le premier entre en combat. Combat simple, niveaux réels,
-                            sans objet du sac. Ta sauvegarde n'est pas modifiée.
-                        </p>
+                        <div class="battle-team-hint help-tip-anchor small text-muted mb-2">
+                            <span>Choisis @size Pokémon de ta sauvegarde, dans l'ordre : le premier entre en combat.</span>
+                            <HelpTip Label="Aide : choix de l'équipe">
+                                Combat simple, niveaux réels, sans objet du sac. Ta sauvegarde n'est pas modifiée.
+                            </HelpTip>
+                        </div>
                         <div class="battle-team mb-3">
                             @for (var i = 0; i < size; i++)
                             {
@@ -292,52 +294,59 @@ else
 
     @* ---------- Nouveau combat : l'ami, puis la paire de sauvegardes ---------- *@
     <Block Title="Nouveau combat">
-        <p class="small text-muted">
-            Le combat se fait en direct, avec un ami connecté, entre deux sauvegardes stockées de la même génération (la 3e pour
-            l'instant : Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille). Combat simple, équipes de 6, niveaux réels, comme un combat
-            de câble. Chaque joueur a @((int)BattleTiming.Decision.TotalSeconds) secondes pour choisir son action : passé ce délai, il perd.
-            Les sauvegardes ne sont pas modifiées.
-        </p>
-        @if (friends is null)
-        {
-            <p class="text-muted">Chargement…</p>
-        }
-        else if (friends.Count == 0)
-        {
-            <p class="text-muted">Il te faut un ami pour combattre : ajoute-en dans <a href="amis">Amis</a>.</p>
-        }
-        else
-        {
-            <select class="form-select mb-3 battle-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
-                <option value="">Choisis un ami…</option>
-                @foreach (var f in friends)
-                {
-                    <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
-                }
-            </select>
-            @if (pairs is not null)
+        <Help>
+            <p>
+                Le combat se fait en direct, avec un ami connecté, entre deux sauvegardes stockées de la même génération (la 3e pour
+                l'instant : Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille).
+            </p>
+            <ul>
+                <li>Combat simple, équipes de 6, niveaux réels, comme un combat de câble.</li>
+                <li>Chaque joueur a @((int)BattleTiming.Decision.TotalSeconds) secondes pour choisir son action : passé ce délai, il perd.</li>
+                <li>Les sauvegardes ne sont pas modifiées.</li>
+            </ul>
+        </Help>
+        <ChildContent>
+            @if (friends is null)
             {
-                @if (pairs.Count == 0)
+                <p class="text-muted">Chargement…</p>
+            }
+            else if (friends.Count == 0)
+            {
+                <p class="text-muted">Il te faut un ami pour combattre : ajoute-en dans <a href="amis">Amis</a>.</p>
+            }
+            else
+            {
+                <select class="form-select mb-3 battle-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
+                    <option value="">Choisis un ami…</option>
+                    @foreach (var f in friends)
+                    {
+                        <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                    }
+                </select>
+                @if (pairs is not null)
                 {
-                    <p class="text-muted">Vous n'avez aucune sauvegarde stockée de la même génération parmi celles qui ont déjà leurs combats.</p>
-                }
-                else
-                {
-                    <div class="list-group">
-                        @foreach (var pair in pairs)
-                        {
-                            var p = pair;
-                            <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
-                                <span>Ta sauvegarde : <strong>@p.Mine.Label</strong></span>
-                                <span class="mx-2">⚔</span>
-                                <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
-                                <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer le combat</button>
-                            </div>
-                        }
-                    </div>
+                    @if (pairs.Count == 0)
+                    {
+                        <p class="text-muted">Vous n'avez aucune sauvegarde stockée de la même génération parmi celles qui ont déjà leurs combats.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var pair in pairs)
+                            {
+                                var p = pair;
+                                <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+                                    <span>Ta sauvegarde : <strong>@p.Mine.Label</strong></span>
+                                    <span class="mx-2">⚔</span>
+                                    <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
+                                    <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer le combat</button>
+                                </div>
+                            }
+                        </div>
+                    }
                 }
             }
-        }
+        </ChildContent>
     </Block>
 }
 

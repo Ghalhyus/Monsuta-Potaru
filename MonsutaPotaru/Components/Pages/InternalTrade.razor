@@ -16,10 +16,10 @@
    sauvegardes (au compte, différentes, compatibles) et les Pokémon (empreinte). Pas compté dans les statistiques. *@
 
 <PageHeader Title="Échange interne" Icon="bi-arrow-left-right-nav-menu">
-    <Description>
-        Échange un Pokémon entre deux de tes sauvegardes stockées, comme avec un câble entre deux consoles. Les Pokémon qui
-        évoluent par échange évoluent en arrivant.
-    </Description>
+    <Help>
+        <p>Échange un Pokémon entre deux de tes sauvegardes stockées, comme avec un câble entre deux consoles.</p>
+        <p>Les Pokémon qui évoluent par échange évoluent en arrivant.</p>
+    </Help>
 </PageHeader>
 
 @if (message is not null)
@@ -56,42 +56,50 @@ else
             var firstSave = SaveOf(firstId);
             var secondSave = SaveOf(secondId);
             <Block Title="1. Choisis les deux sauvegardes">
-                <p class="small text-muted">
-                    Deux sauvegardes peuvent échanger si leurs jeux le peuvent sur console : Noire et Noire 2, Platine et HeartGold,
-                    Rubis et Rouge Feu, deux parties du même jeu…, ou Rouge / Bleu / Jaune avec Or / Argent / Cristal par le
-                    Time Capsule. L'échange porte sur la version stockée : si tu as joué depuis, mets-la d'abord à jour dans
-                    <a href="sauvegardes">Mes sauvegardes</a>.
-                </p>
-                <div class="internal-trade-choose">
-                    <label class="form-label small mb-1" for="internal-trade-first">Première sauvegarde</label>
-                    <select id="internal-trade-first" class="form-select internal-trade-first" value="@(firstId?.ToString() ?? "")" @onchange="FirstChosen">
-                        <option value="">Choisis une sauvegarde…</option>
-                        @foreach (var s in saves)
-                        {
-                            <option value="@s.Save.Id" disabled="@(s.Partners.Count == 0)">
-                                @s.Save.LabelAndFile@(s.Partners.Count == 0 ? " (aucune sauvegarde compatible)" : "")
-                            </option>
-                        }
-                    </select>
-                    @SaveWarning(firstSave?.Save)
-
-                    <label class="form-label small mb-1 mt-3" for="internal-trade-second">Seconde sauvegarde</label>
-                    <select id="internal-trade-second" class="form-select internal-trade-second" value="@(secondId?.ToString() ?? "")"
-                            disabled="@(firstSave is null)" @onchange="SecondChosen">
-                        <option value="">@(firstSave is null ? "Choisis d'abord la première…" : "Choisis une sauvegarde…")</option>
-                        @if (firstSave is not null)
-                        {
-                            @foreach (var s in saves.Where(s => firstSave.Partners.Contains(s.Save.Id)))
+                <Help>
+                    <p>Deux sauvegardes peuvent échanger si leurs jeux le peuvent sur console :</p>
+                    <ul>
+                        <li>Noire et Noire 2, Platine et HeartGold, Rubis et Rouge Feu… ;</li>
+                        <li>deux parties du même jeu ;</li>
+                        <li>Rouge / Bleu / Jaune avec Or / Argent / Cristal, par le Time Capsule.</li>
+                    </ul>
+                    <p>
+                        L'échange porte sur la version stockée : si tu as joué depuis, mets-la d'abord à jour dans
+                        <a href="sauvegardes">Mes sauvegardes</a>.
+                    </p>
+                </Help>
+                <ChildContent>
+                    <div class="internal-trade-choose">
+                        <label class="form-label small mb-1" for="internal-trade-first">Première sauvegarde</label>
+                        <select id="internal-trade-first" class="form-select internal-trade-first" value="@(firstId?.ToString() ?? "")" @onchange="FirstChosen">
+                            <option value="">Choisis une sauvegarde…</option>
+                            @foreach (var s in saves)
                             {
-                                <option value="@s.Save.Id">@s.Save.LabelAndFile</option>
+                                <option value="@s.Save.Id" disabled="@(s.Partners.Count == 0)">
+                                    @s.Save.LabelAndFile@(s.Partners.Count == 0 ? " (aucune sauvegarde compatible)" : "")
+                                </option>
                             }
-                        }
-                    </select>
-                    @SaveWarning(secondSave?.Save)
-                </div>
-                <div class="d-flex flex-wrap gap-2 mt-3">
-                    <button type="button" class="btn btn-primary" disabled="@(!PairReady)" @onclick="StartPair">Valider</button>
-                </div>
+                        </select>
+                        @SaveWarning(firstSave?.Save)
+
+                        <label class="form-label small mb-1 mt-3" for="internal-trade-second">Seconde sauvegarde</label>
+                        <select id="internal-trade-second" class="form-select internal-trade-second" value="@(secondId?.ToString() ?? "")"
+                                disabled="@(firstSave is null)" @onchange="SecondChosen">
+                            <option value="">@(firstSave is null ? "Choisis d'abord la première…" : "Choisis une sauvegarde…")</option>
+                            @if (firstSave is not null)
+                            {
+                                @foreach (var s in saves.Where(s => firstSave.Partners.Contains(s.Save.Id)))
+                                {
+                                    <option value="@s.Save.Id">@s.Save.LabelAndFile</option>
+                                }
+                            }
+                        </select>
+                        @SaveWarning(secondSave?.Save)
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button type="button" class="btn btn-primary" disabled="@(!PairReady)" @onclick="StartPair">Valider</button>
+                    </div>
+                </ChildContent>
             </Block>
             break;
 

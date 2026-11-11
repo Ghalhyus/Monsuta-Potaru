@@ -13,14 +13,24 @@
 @* Suivi des rubans : une carte par Pokémon suivi (rubans obtenus sur le total), et l'ajout de n'importe quel Pokémon de la
    collection (stockage interne ou sauvegarde stockée). Recherche par nom et tri (ajout, nom, complétion) au-dessus. *@
 <PageHeader Title="Rubans" Icon="bi-award-nav-menu">
-    <Description>
-        Suis les rubans de tes Pokémon : choisis-en un dans ta collection (stockage interne ou sauvegarde stockée), et sa page
-        montre les rubans qu'il a et ceux qui lui manquent. Il se met à jour avec ta collection, même s'il change de
-        sauvegarde ; s'il la quitte, son suivi garde ses derniers rubans connus. Sont comptés les @Ribbons.Total rubans que
-        n'importe quel Pokémon peut obtenir en jouant, ceux de Pokémon Colosseum et XD compris (pas ceux des distributions,
-        les Marques ni Exceptionnel). Les rubans de concours et de combat de 3e et 4e génération sont réunis comme dans les jeux
-        récents, en Souvenir Concours et Souvenir Combat, mais chacun compte.
-    </Description>
+    <Help>
+        <p>
+            Suis les rubans de tes Pokémon : choisis-en un dans ta collection (stockage interne ou sauvegarde stockée), et sa page
+            montre les rubans qu'il a et ceux qui lui manquent.
+        </p>
+        <p>
+            Il se met à jour avec ta collection, même s'il change de sauvegarde ; s'il la quitte, son suivi garde ses derniers
+            rubans connus.
+        </p>
+        <p>
+            Sont comptés les @Ribbons.Total rubans que n'importe quel Pokémon peut obtenir en jouant, ceux de Pokémon Colosseum et
+            XD compris (pas ceux des distributions, les Marques ni Exceptionnel).
+        </p>
+        <p>
+            Les rubans de concours et de combat de 3e et 4e génération sont réunis comme dans les jeux récents, en Souvenir
+            Concours et Souvenir Combat, mais chacun compte.
+        </p>
+    </Help>
 </PageHeader>
 
 @if (message is not null)

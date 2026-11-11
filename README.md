@@ -220,8 +220,12 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   d'Ariane ; les adresses n'ont pas changé (`/transfert`, `/inventaire`, `/livingdex`, `/echanges`, `/combats`).
 - Compteurs du menu (demandes reçues) : `Components/Layout/SiteMenuBase.cs`, communs aux deux menus. Le porte-monnaie
   est dans la barre du haut, dans tous les thèmes (`Components/Layout/WalletLink.razor`).
-- **Une nouvelle page** : un `Shared/PageHeader.razor` en tête (titre h1, nombre, description, actions, icône), des
+- **Une nouvelle page** : un `Shared/PageHeader.razor` en tête (titre h1, nombre, aide, actions, icône), des
   `Shared/Block.razor` pour ses parties (titre h2 ; `Flush` : liste collée aux bords).
+- **L'aide d'une page ou d'un bloc** va dans une infobulle (paramètre `Help` : icône « ? » à côté du titre, la bulle
+  s'ouvre d'un clic et se referme d'un clic à côté ou avec Échap), pas en texte sous le titre, en courts paragraphes
+  (`<p>`) et listes (`<ul>`, `<ol>` pour des étapes) plutôt qu'en un bloc ; une consigne courte
+  peut rester affichée, avec son détail dans un `Shared/HelpTip.razor` à côté.
 
 ### Sécurité
 
@@ -561,8 +565,9 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
-| `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, description, actions, icône (bandeau dans le thème Ardoise) |
-| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec ses actions (panneau blanc dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec son aide en infobulle et ses actions (panneau blanc dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/HelpTip.razor` | Infobulle d'aide : icône « ? », bulle ouverte d'un clic (élément `details`, refermé par `wwwroot/js/app.js`) |
 | `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable (le compte en bas, `ArdoiseLayoutTests`), barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
 | `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes (`SiteMenusTests`) |
 | `MonsutaPotaru/Components/Layout/WalletLink.razor` | Porte-monnaie de la barre du haut (tous les thèmes), tenu à jour en direct |
@@ -643,7 +648,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
-| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs`, `HelpTipTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, infobulles d'aide, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
 | `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |

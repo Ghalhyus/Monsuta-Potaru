@@ -62,6 +62,22 @@ document.addEventListener("keydown", e => {
     for (const account of document.querySelectorAll(".ardoise-account[open]")) account.open = false;
 });
 
+// Infobulles d'aide (Shared/HelpTip.razor, des éléments details) : une seule ouverte à la fois ; un clic à côté la
+// referme (un clic dans la bulle, sur un lien par exemple, la laisse ouverte), Échap aussi, et rend le focus à son « ? ».
+document.addEventListener("click", e => {
+    if (!(e.target instanceof Element)) return;
+    for (const tip of document.querySelectorAll("details.help-tip[open]")) {
+        if (!tip.contains(e.target)) tip.open = false;
+    }
+});
+document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    for (const tip of document.querySelectorAll("details.help-tip[open]")) {
+        tip.open = false;
+        if (tip.contains(document.activeElement)) tip.querySelector("summary")?.focus();
+    }
+});
+
 // Téléchargement d'un fichier envoyé par le serveur (sauvegarde modifiée, .pk5...).
 window.downloadFileFromStream = async (fileName, streamRef) => {
     const blob = new Blob([await streamRef.arrayBuffer()]);
