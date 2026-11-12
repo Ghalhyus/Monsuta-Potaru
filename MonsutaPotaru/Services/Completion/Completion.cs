@@ -19,7 +19,10 @@ public enum CompletionState { Missing, Done, Missed }
 /// amitié de Pikachu au maximum (1re génération) ; en 4e génération (<see cref="Gen4CompletionData"/>, par
 /// outils/completion_gen4.py) « B:n » badge n (HeartGold / SoulSilver : 0 à 7 Johto, 8 à 15 Kanto), « N » Pokédex National,
 /// « W:n:v » variable de script n (0x4000 retiré) arrivée à v au moins, « Z:n » forme n de Zarbi au Pokédex (A à Z, puis
-/// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin).
+/// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin) ; en 5e génération
+/// (<see cref="Gen5CompletionData"/>, par outils/completion_gen5.py) « K:n » objet n dans le sac, « SB:champ:v » Métro de
+/// Combat (mode Super ouvert, meilleure série), « PW:n » tournoi n du PWT remporté, « MD:n » médaille n obtenue, « PR:n »
+/// parure n du Music-Hall possédée.
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
@@ -136,7 +139,7 @@ public static class CompletionSections
 /// Jeux qui ont une complétion : Rouge, Bleu et Jaune (<see cref="Gen1Completion"/>), Or, Argent et Cristal
 /// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses) ;
 /// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), Diamant, Perle, Platine, HeartGold et
-/// SoulSilver (<see cref="Gen4Completion"/>), toutes les langues.
+/// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -145,6 +148,7 @@ public static class CompletionGames
         LivingDexGame.Red, LivingDexGame.Blue, LivingDexGame.Yellow, LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal,
         LivingDexGame.Ruby, LivingDexGame.Sapphire, LivingDexGame.Emerald, LivingDexGame.FireRed, LivingDexGame.LeafGreen,
         LivingDexGame.Diamond, LivingDexGame.Pearl, LivingDexGame.Platinum, LivingDexGame.HeartGold, LivingDexGame.SoulSilver,
+        LivingDexGame.Black, LivingDexGame.White, LivingDexGame.Black2, LivingDexGame.White2,
     ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
@@ -152,7 +156,7 @@ public static class CompletionGames
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 or SAV4 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
+        SAV3 or SAV4 or SAV5 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
 
@@ -166,6 +170,7 @@ public static class CompletionGames
             SAV1 sav1 => Gen1Completion.Steps(sav1, game),
             SAV2 sav2 => Gen2Completion.Steps(sav2, game),
             SAV4 sav4 => Gen4Completion.Steps(sav4, game),
+            SAV5 sav5 => Gen5Completion.Steps(sav5, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
@@ -246,10 +251,15 @@ internal sealed class CompletionFlags(SaveFile sav)
             "S" => sav.Data[int.Parse(parts[1])] >= int.Parse(parts[2]),
             "F" => ((SAV1)sav).HallOfFameCount > 0,
             "P" => ((SAV1)sav).PikaFriendship == byte.MaxValue,
-            "N" => ((SAV4)sav).NationalDex,
+            "N" => sav is SAV5 sav5 ? sav5.Zukan.IsNationalDexUnlocked : ((SAV4)sav).NationalDex,
             "W" => ((SAV4)sav).GetWork(int.Parse(parts[1])) >= int.Parse(parts[2]),
             "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
             "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
+            "K" => HasItem(int.Parse(parts[1])),
+            "SB" => Subway(parts[1]) >= int.Parse(parts[2]),
+            "PW" => ((SAV5B2W2)sav).PWT.GetPWTRecord(int.Parse(parts[1])) > 0,
+            "MD" => ((SAV5B2W2)sav).Medals[int.Parse(parts[1])].IsObtained,
+            "PR" => ((SAV5)sav).Musical.GetHasProp(int.Parse(parts[1])),
             _ => throw new InvalidOperationException($"Condition inconnue : {atom}"),
         };
     }
@@ -263,6 +273,7 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV1 sav1 => sav1.Badges,
         SAV4HGSS hgss => hgss.Badges | hgss.Badges16 << 8,
         SAV4 sav4 => sav4.Badges,
+        SAV5 sav5 => sav5.Misc.Badges,
         _ => throw new InvalidOperationException("Pas de badges lisibles dans cette sauvegarde."),
     };
 
@@ -272,8 +283,31 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV2 sav2 => sav2.GetEventFlag(flag),
         SAV3 sav3 => sav3.GetEventFlag(flag),
         SAV4 sav4 => sav4.GetEventFlag(flag),
+        SAV5 sav5 => sav5.EventWork.GetEventFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
+
+    /// <summary>Objet dans une poche du sac (CS, objets rares : ils ne se jettent pas).</summary>
+    private bool HasItem(int item) => sav.Inventory.Pouches.Any(p => p.Items.Any(i => i.Index == item && i.Count > 0));
+
+    /// <summary>
+    /// Métro de Combat (5e génération) : « SuperSingle », « SuperDouble », « SuperMulti » (1 : mode Super ouvert, les Chefs
+    /// battus au 21e combat) ; « SuperSingleRecord »… (meilleure série en mode Super : 49 et plus, les Chefs battus).
+    /// </summary>
+    private int Subway(string field)
+    {
+        var subway = ((SAV5)sav).BattleSubway;
+        return field switch
+        {
+            "SuperSingle" => subway.SuperSingle ? 1 : 0,
+            "SuperDouble" => subway.SuperDouble ? 1 : 0,
+            "SuperMulti" => subway.SuperMulti ? 1 : 0,
+            "SuperSingleRecord" => subway.SuperSingleRecord,
+            "SuperDoubleRecord" => subway.SuperDoubleRecord,
+            "SuperMultiNPCRecord" => subway.SuperMultiNPCRecord,
+            _ => throw new InvalidOperationException($"Champ du Métro inconnu : {field}"),
+        };
+    }
 
     /// <summary>Le Pokédex des Zarbi : les formes capturées, dans l'ordre (forme + 1 ; 0 pour une place vide).</summary>
     private bool Unown(int offset, int form) => sav.Data.Slice(offset, 26).Contains((byte)(form + 1));

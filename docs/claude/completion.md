@@ -165,7 +165,69 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   - conditions nouvelles : `B:n`, `N` (Pokédex National), `W:var:v` (variable, 0x4000 retiré), `Z:n` (Zarbi), `M:espèce:forme`.
 - Vérifié sur `perle.sav` (3 badges) et `soulsilver.sav` (2 badges) ; Platine seulement en mémoire.
 
-## Ordre des lieux (3e et 4e génération, 2026-11-12)
+## Noire / Blanche / Noire 2 / Blanche 2 (2026-11-12)
+- Choix de l'utilisateur : les 6 sections ; **Pokédex national de 649** ; **chaque médaille** de Noire 2 / Blanche 2 (254 :
+  la 255e de PKHeX, « Hint Medal », n'en est pas une) ; quêtes : Chefs du Métro de Combat, chaque tournoi du PWT
+  (`PWTRecordID` de PKHeX : 17 types, Port Yoneuve, Champions…, Location, Mix et leurs versions Expert), Gratte-Ciel /
+  Arbre Creux et Pokéwood **par leurs médailles** (« Tower Master », « … Movie Master ») ; distribution réelle : Victini
+  (Pass Liberté) ; **les 100 parures du Music-Hall** dans les quatre jeux (2026-11-12, toutes, même celles qui ne
+  s'obtenaient que par le Global Link ou une distribution). Check-lists (CSV sur son Drive : `suivi_completion_pokemon_noir_blanc.csv`, `_noir2_blanc2.csv`, d'après
+  Pokébip) : histoire, rencontres, ordre des lieux (`completion_gen5_ordre.json`, lignes « Histoire »).
+- `Gen5CompletionData.cs` : `python outils/completion_gen5.py <dossier> <ROM de Noire> <ROM de Blanche 2> MonsutaPotaru/Services/Completion/Gen5CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script). Quatre tables (Black, White, Black2, White2) : objets, dresseurs et
+  rencontres diffèrent selon la version.
+- Sources :
+  - **Noire 2 / Blanche 2** : désassemblage en cours [pokebw2](https://github.com/fuddlesworth/pokebw2) (pas pret) :
+    `res/field/zones` (lieu : `place` → rang dans `generated/places.txt` = liste des lieux de PKHeX
+    `text_bw2_00000_fr.txt`), `res/field/events` (`order.json` : zone n), scripts `.s` lisibles, `res/trainers/data` ;
+    drapeaux presque tous **sans nom** (`EVENT_FLAG_0x03db`) ;
+  - **Noire / Blanche** : aucun désassemblage ; la **ROM de l'utilisateur** (Pokémon Version Noire française, code IRBF,
+    dans son dossier de jeux DS : lui demander le chemin), lue par `completion_gen5_rom.py` : en-têtes des zones
+    `a/0/1/2` (48 octets : [3] scripts, [5] textes, [13] & 0x3FF lieu), événements `a/1/2/5` (indice = zone ; décors de
+    20 octets, personnages de 36 : type, drapeau d'apparition, script), scripts `a/0/5/7` (commandes de pokebw2 :
+    `include/asm/field_script.inc`, mêmes numéros pour les commandes de base), dresseurs `a/0/9/2` / `a/0/9/3`, textes
+    `a/0/0/2` (89 : lieux, 191 : classes) et `a/0/0/3` (chiffrés : clé de 16 bits tournée de 3 bits, en partant du
+    dernier caractère). La ROM contient aussi la Forêt Blanche (inaccessible dans Noire) ;
+  - **Blanche 2** : ROM française de l'utilisateur (code IRDF, même dossier, sous-dossier `FR`), seulement pour les
+    noms : médailles (textes système, fichier 83 ; la 255e, « Médaille Aide », n'en est pas une) et parures (fichier
+    93, lignes 3 à 102 = parures 0 à 99, les mêmes que dans Noire : fichier 79) ;
+  - **les deux** : listes de drapeaux de [FlagsEditorEX](https://github.com/fattard/FlagsEditorEXPlugin) (noms internes
+    du jeu : `SYS_FLAG_BIGFOUR_GHOSTWIN`, `FE_LEGEND1_GET`…, et contenu des objets au sol / cachés en anglais, rapproché
+    des constantes `ITEM_` de pokebw2).
+- Numéros : dresseur = script 3000 + numéro (5000 + : second d'un duo), drapeau 0x58C (Noire / Blanche) ou 0x5F0 + numéro ;
+  objet au sol = personnage au script 7000 + n, son drapeau d'apparition ; objet caché = décor au script 8000 + n,
+  drapeau 0x384 / 0xB04 + n ; cadeau = `WorkSet 0x8000, objet` puis `RTCallGlobal` 2800 à 2811, et le `FlagSet` suivant ;
+  jour (`TMFLG`) : 0xAA0 à 0xB03 (exclus), 1 à 0x5F : propres à la carte.
+- Histoire : **badges**, drapeaux système nommés (`SYS_FLAG_FIRST_POKE_GET`, `ZUKAN_GET`, `BIGFOUR_*WIN`, `GAME_CLEAR`,
+  `CHAMPION_WIN`), Pokédex National (`Zukan.IsNationalDexUnlocked`), et **objets rares dans le sac** (`K:n` : CS,
+  Bicyclette, Boîte Médailles… ne se jettent pas). Les combats scénarisés (champions, rival, N) ne lèvent **ni le drapeau
+  du dresseur ni un drapeau juste après** (vérifié sur `noir.sav`) : pas d'étape « battre le rival ».
+- Pièges :
+  - **dresseurs d'une seule version** : le script de la carte teste la version (`GameGetVersion`, puis
+    `VMStackPushConst 23` = Noire 2, `VMJumpIf`) et cache ceux de l'autre (`FlagSet`) : `version_flags` les retire de la
+    table de cette version (sans cette règle, 5 faux « ratés » à la Route Victoire de Noire 2) ; Ville Noire, Forêt
+    Blanche, Gratte-Ciel, Arbre Creux : `EXCLUSIVE_PLACES` ; objets propres à une version : « (B2) », « (W) » dans
+    FlagsEditorEX, sur le nom ou sur le lieu (« White Forest (W) ») ;
+  - un objet que les cartes ne montrent pas (Forêt Blanche, Couronne Relique posée par un script) : lieu de
+    FlagsEditorEX traduit par la liste des lieux de PKHeX (anglais → français) ;
+  - cadeaux exclus : lettres de la Route 13 (`ITEM_GRAM_*`, rendues), Vokit (selon le héros) ; choix selon le starter ou
+    exclusif (Graine Miracle / Eau Mystique / Charbon, fossiles) : une étape « A ou B » ;
+  - échange de Maillard (Noire / Blanche) et de la Route 4 (Noire 2 / Blanche 2) : Chlorobule reçu dans les versions
+    Noire, Doudouvet dans les Blanche ;
+  - Trompignon et Gaulet déguisés : `FV_FLDMONS_n`, zone du personnage qui a ce drapeau (FlagsEditorEX n'en nomme qu'une
+    partie en Noire 2 / Blanche 2) ;
+  - médailles et parures : certaines demandaient le Wi-Fi, le Global Link ou une distribution (non triées, choix de
+    l'utilisateur : toutes comptent) ; parures : bit n du bloc Musical (`Musical5.GetHasProp`), ordre vérifié sur
+    `noir.sav` (20, les premières de la Boîte Parure) et `noire-2.sav` (16) ;
+  - Gratte-Ciel Noir / Arbre Creux Blanc : les drapeaux `FE_INF_AREA*_ARRIVAL` sont des scènes d'arrivée, pas une
+    progression fiable : comptés par les médailles ; Pokémon de N : aucune trace trouvée (seulement `SYS_FLAG_NPOKE_OPEN`).
+- Conditions nouvelles : `K:n`, `SB:champ:v` (Métro de Combat : `SuperSingle`… ouvert = Chefs battus au 21e combat ;
+  `SuperSingleRecord`… ≥ 49 = Chefs du mode Super battus), `PW:n`, `MD:n`, `PR:n` (parure) ; badges `Misc.Badges`, drapeaux
+  `EventWork.GetEventFlag` ; CT par `PersonalInfo5BW.MachineMoves` de PKHeX.
+- Vérifié sur `noir.sav` (partie finie : 52,2 % avec les parures, aucun raté) et `noire-2.sav` (2 badges : 21,0 %) ; Blanche et Blanche 2
+  seulement en mémoire.
+
+## Ordre des lieux (3e à 5e génération, 2026-11-12)
 - Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la
   liste d'ordre **en mot entier** (« Route 1 » ne prend plus la place de « Route 10 », « Route 3 » celle de « Route 30 ») ;
   s'il manque, son voisin désigné (`ANCHORS` de chaque générateur, suivi en chaîne) ; sinon, pour une route ou un chenal,
