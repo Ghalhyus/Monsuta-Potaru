@@ -21,7 +21,7 @@ public sealed record CompletionResult(bool Ok, string Message, int? Id = null);
 /// <summary>
 /// Complétions d'un compte (« Défis » → « Complétion (100 %) ») : une partie stockée suivie vers le 100 %, lue à chaque
 /// affichage dans la sauvegarde liée (elle suit donc chaque mise à jour, site ou 3DS). Une par jeu et par compte ; une
-/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). Pour l'instant : de la 1re à la 3e génération
+/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). Pour l'instant : de la 1re à la 4e génération
 /// (<see cref="CompletionGames"/>).
 /// </summary>
 public sealed class CompletionService(
@@ -69,9 +69,8 @@ public sealed class CompletionService(
     }
 
     /// <summary>
-    /// Sauvegardes stockées qui peuvent recevoir une complétion : de la 1re à la 3e génération (sans les versions japonaises
-    /// et coréennes des deux premières), pas encore
-    /// liées à une complétion, avec un jeu libre.
+    /// Sauvegardes stockées qui peuvent recevoir une complétion : de la 1re à la 4e génération (sans les versions japonaises
+    /// et coréennes des deux premières), pas encore liées à une complétion, avec un jeu libre.
     /// </summary>
     public async Task<List<CompletionCandidate>> ListCandidatesAsync(string ownerId)
     {
@@ -79,7 +78,7 @@ public sealed class CompletionService(
         var taken = await db.Completions.Where(c => c.OwnerId == ownerId).Select(c => c.Game).ToListAsync();
         var linked = db.Completions.Select(c => c.StoredSaveId);
         var saves = await db.StoredSaves.AsNoTracking()
-            .Where(s => s.OwnerId == ownerId && s.Generation <= 3 && !linked.Contains(s.Id))
+            .Where(s => s.OwnerId == ownerId && s.Generation <= 4 && !linked.Contains(s.Id))
             .OrderBy(s => s.UploadedAt)
             .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data })
             .ToListAsync();

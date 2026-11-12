@@ -37,7 +37,7 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   - Scope Sylphe et Clé Ascenseur : objets cachés au départ (`OFF`), ramassés = cachés **et** l'événement qui les fait
     apparaître ;
   - carte inutilisée (`UNUSED_MAP_6F`) : son objet caché ne compte pas.
-- **Ratés** connus : les 30 Rockets de la Sylphe SARL (disparus après Giovanni au 11e étage, `SilphCo11F.asm`), le premier
+- **Ratés** connus (1re génération) : les 30 Rockets de la Sylphe SARL (disparus après Giovanni au 11e étage, `SilphCo11F.asm`), le premier
   combat contre le rival sur la Route 22 (plus proposé après le badge de Pierre, `PewterGym.asm`). Un nouveau raté : son
   `Missed` dans le générateur.
 - Textes : équipe des dresseurs (« Rattata, Abo (niv. 11) » ; pas de noms de classes : ni PKHeX ni un site lisible ne les
@@ -92,7 +92,8 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - `Gen3CompletionData.cs` : `python outils/completion_gen3.py <dossier> MonsutaPotaru/Services/Completion/Gen3CompletionData.cs`
   (clones de pokeruby, pokeemerald, pokefirered). Trois tables : Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille.
   À côté du script : `completion_gen3_lieux.json` (noms PKHeX des sections de carte) et `completion_gen3_ordre.json`
-  (lieux des check-lists de l'utilisateur, dans leur ordre : celui des zones).
+  (lieux des étapes d'histoire des check-lists de l'utilisateur, dans leur ordre : celui des zones ; voir « Ordre des
+  lieux »).
 - Projets en C : `completion_gen3_extract.py` évalue les `#define` et les `enum` des en-têtes (`c_constants`), lit
   chaque `data/maps/*/map.json` (objets `ITEM_BALL` → `finditem` du script ; `hidden_item` ; dresseurs par
   `trainerbattle_* TRAINER_X`, drapeau = `TRAINER_FLAGS_START` + numéro) et les cadeaux (`giveitem` / `giveitem_msg` /
@@ -117,6 +118,67 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   sont sur les rubans des Pokémon, pas dans la sauvegarde.
 - Vérifié sur `rouge-feu.sav` (début de partie, 2,5 %) et `vert-feuille.sav` (12,6 %) ; Rubis, Saphir et Émeraude
   seulement en mémoire.
+
+## Diamant / Perle / Platine / HeartGold / SoulSilver (2026-11-12)
+- Choix de l'utilisateur : les 6 sections ; **Pokédex national de 493** ; **distributions réelles seulement** (Carte
+  Membre et Lettre en Platine, GS Ball et Arceus d'HG / SS ; pas la Flûte Azur ; Darkrai et Shaymin pas en Diamant /
+  Perle, jamais distribués pour eux) ; quêtes annexes **seulement ce qui laisse une trace** (concours Master, 28 Zarbi,
+  formes de Motisma, Giratina, Shaymin, puzzles et salles des Ruines d'Alpha, Photos des Meneurs ; pas les rubans de
+  Claudie, tuteurs à tessons, loterie, Pokéwalker). Check-lists (CSV sur son Drive, d'après Pokébip) : histoire,
+  rencontres, ordre des lieux (`completion_gen4_ordre.json`, lieux des étapes « Histoire » : voir « Ordre des lieux »).
+- `Gen4CompletionData.cs` : `python outils/completion_gen4.py <dossier> MonsutaPotaru/Services/Completion/Gen4CompletionData.cs`
+  (clones de pokediamond, pokeplatinum, pokeheartgold). Trois tables : Diamant / Perle (PKHeX ne les distingue pas),
+  Platine, HG / SS. Lieux : numéro de section → `completion_gen4_lieux.json` (PKHeX), noms abrégés du jeu corrigés
+  (`PLACE_FIXES`).
+- **Platine** (`extract_pt`) : constantes dans `generated/*.txt` (énumérations), cartes `res/field/maps/*/` (`events.json` :
+  objets `VisibleItems_*` → `visible_items.s`, dresseurs `trainer.id`, objets cachés `hidden_item` →
+  `include/data/field/hidden_items.h` ; `scripts.s` : combats, cadeaux « SetVar VAR_0x8004, ITEM_X » puis `SetFlag`) ;
+  équipes `res/trainers/data/*.json` ; lieu : `header.json` → rang dans `location_names.json`.
+- **HG / SS** (`extract_hgss`) : `#define` de `include/constants/`, cartes `files/fielddata/eventdata/zone_event/*.json`
+  (`std_trainer(TRAINER_X)`, `std_itemball_*` = script 7000 + n → `scr_seq_0141_n`, `std_hiddenitem_*` →
+  `FLAG_HIDDENITEM_*` et `src/data/fieldmap/hidden_items.h`), scripts `scr_seq_*.s`, équipes `trainers.json`, lieu par
+  `src/data/map_headers.h`. Départ : `scr_seq_0149.s`.
+- **Diamant / Perle** (`extract_dp`) : non désassemblé, **fichiers binaires** : `arm9/src/map_header.c` (pour chaque carte :
+  fichier de scripts, d'événements, section) ; événements `zone_event_release/narc_XXXX.bin` (u32 nombre puis décors de
+  20 octets, objets de 32 octets, structures de `pokeplatinum/include/struct_defs/events.h`) ; numéros de script :
+  3000 + n dresseur n+1 (5000 en duo), 7000 + n objet au sol (n-ième script de `scr_seq_release/narc_0370.bin`,
+  « SetVar 0x8008/0x8009 »), 8000 + n objet caché (drapeau 730 + n, table `UNK_020F2DB4` de `arm9/asm/unk_02038C78.s` ;
+  `sub_02039694` le montre) ; scripts compilés : décalages u32 jusqu'à 0xFD13, commandes u16 (SetFlag 0x1E, CheckFlag
+  0x20, SetVar 0x28, combat 0xE5, SetTrainerFlag 0x23 : mêmes numéros qu'en Platine, liste dans
+  `arm9/asm/unk_02038C78.s`, commentaires de `arm9/src/scrcmd.c`). Cadeaux : « SetVar 0x8004, objet » puis le premier
+  SetFlag dans les 60 octets. **Drapeaux de l'histoire** : ceux de Platine de même nom (même numéro pour 201 des 215
+  drapeaux que PKHeX nomme dans les deux jeux), vérifiés : un script de Diamant / Perle doit le lever ou le tester, sinon
+  le générateur s'arrête ; écarts dans `DP_FLAGS` (Dialga / Palkia 351, Mars aux Éoliennes 452, trouvé par le premier
+  SetFlag après le combat). Aire de Combat : pas de drapeau connu, étape absente en Diamant / Perle.
+- Pièges :
+  - **combats lancés par un script** (champions, Team Galaxie, rival, Conseil 4) : le jeu ne lève pas le drapeau du
+    dresseur (vérifié sur `perle.sav`) ; pas dans « Dresseurs » sauf si un script le lève (`SetTrainerFlag`, les
+    champions le font pour leurs dresseurs d'arène) ; l'histoire passe par les drapeaux et variables qui suivent ;
+  - **raté** : drapeau qui cache le dresseur levé, sauf s'il l'est au départ ou si un script l'efface quelque part
+    (`cleared` : dresseurs qui ne viennent qu'à certaines heures, comme les policiers de la Route 212 ; sans cette
+    règle, 9 faux ratés dans `perle.sav`) ;
+  - **badges** : un masque de bits (`Badges` = 7 → 3 badges) ; HG / SS : Kanto dans `Badges16`, 8 bits malgré son nom ;
+  - drapeaux 1 à 64 : propres à la carte (exclus) ; objets cachés au départ (Aile Lune, Clé Stockage) et cadeaux suivis
+    d'un drapeau `FLAG_HIDE_*` levé au départ (CS01 d'HG / SS) : exclus ;
+  - PKHeX : une sauvegarde vierge (`new SAV4Pt()`) a des zéros au Pokédex des Zarbi (Zarbi A « vu ») et
+    `SAV4.SetCaught` n'y fait rien : dans les tests, `Dex.ClearUnownForms()` et `Dex.SetCaught` ;
+  - conditions nouvelles : `B:n`, `N` (Pokédex National), `W:var:v` (variable, 0x4000 retiré), `Z:n` (Zarbi), `M:espèce:forme`.
+- Vérifié sur `perle.sav` (3 badges) et `soulsilver.sav` (2 badges) ; Platine seulement en mémoire.
+
+## Ordre des lieux (3e et 4e génération, 2026-11-12)
+- Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la
+  liste d'ordre **en mot entier** (« Route 1 » ne prend plus la place de « Route 10 », « Route 3 » celle de « Route 30 ») ;
+  s'il manque, son voisin désigné (`ANCHORS` de chaque générateur, suivi en chaîne) ; sinon, pour une route ou un chenal,
+  le numéro le plus proche. Le nom du lieu départage deux lieux au même rang : chaque lieu reste d'**un seul bloc**
+  (avant : en Rubis / Saphir, les dresseurs de 49 lieux éclatés en 83 blocs). Un lieu sans rang arrête le générateur.
+  Vérifié par les tests des tables (`CompletionGen3Tests`, `CompletionGen4Tests`).
+- 4e génération : `completion_gen4_ordre.json` ne reprend que les lieux des étapes **Histoire** des check-lists ; les
+  lignes du Pokédex ou des CT citent des lieux de capture et rangeaient des routes en fin de liste (Route 201, Route 29).
+  Les routes de Kanto d'HG / SS ont une ville voisine (sinon rangées par numéro près de la Route 30).
+- 3e génération : `completion_gen3_ordre.json` ne reprend que les lignes « Histoire » et « Arène / Ligue » des CSV de
+  l'utilisateur (`Suivi_Pokemon_Rubis_Saphir.csv`, `_Emeraude.csv`, `_RougeFeu_VertFeuille.csv`, sur son Drive, dans
+  l'ordre des lignes). Routes de Kanto et lieux annexes : voisin dans `ANCHORS` (la Route 1 avec Jadielle, les Routes 14
+  et 15 avec Parmanie, l'Île 7 avec l'Île 6…). La table régénérée a les mêmes lignes qu'avant, seul l'ordre change.
 
 ## Ajouter une génération
 - Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle) ; `CompletionGames.For` et `Steps` choisissent

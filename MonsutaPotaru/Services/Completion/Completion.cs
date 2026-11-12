@@ -16,14 +16,17 @@ public enum CompletionState { Missing, Done, Missed }
 /// Pokémon battu), « R:octet:bit » bit d'un octet de la sauvegarde, « B:n » badge n (1re génération), « D:n » Pokémon n
 /// capturé, « U:octet:n » Zarbi de forme n capturé (liste du Pokédex des Zarbi, 2e génération), « S:octet:n » scène d'une
 /// carte arrivée à n au moins (combat contre le rival passé, 2e génération), « F » Panthéon, « P »
-/// amitié de Pikachu au maximum (1re génération).
+/// amitié de Pikachu au maximum (1re génération) ; en 4e génération (<see cref="Gen4CompletionData"/>, par
+/// outils/completion_gen4.py) « B:n » badge n (HeartGold / SoulSilver : 0 à 7 Johto, 8 à 15 Kanto), « N » Pokédex National,
+/// « W:n:v » variable de script n (0x4000 retiré) arrivée à v au moins, « Z:n » forme n de Zarbi au Pokédex (A à Z, puis
+/// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin).
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
 /// <param name="Missed">Condition qui rend l'étape impossible si elle n'est pas faite (Rockets de la Sylphe SARL).</param>
 /// <param name="Team">Équipe d'un dresseur : « numéro national:niveau », séparés par des virgules.</param>
 /// <param name="Item">Objet, numéro du jeu.</param>
-/// <param name="Tm">CT (1 à 50) ou CS (51 et suivantes), 2e génération : son nom vient de sa capacité.</param>
+/// <param name="Tm">CT (1 à 50, 1 à 92 en 4e génération) ou CS (les suivantes) : son nom vient de sa capacité.</param>
 /// <param name="Count">Quantité d'objets trouvés (rien pour un seul).</param>
 /// <param name="Coins">Jetons trouvés ou offerts.</param>
 /// <param name="Species">Pokémon rencontré, reçu ou à capturer.</param>
@@ -132,7 +135,8 @@ public static class CompletionSections
 /// <summary>
 /// Jeux qui ont une complétion : Rouge, Bleu et Jaune (<see cref="Gen1Completion"/>), Or, Argent et Cristal
 /// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses) ;
-/// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), toutes les langues.
+/// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), Diamant, Perle, Platine, HeartGold et
+/// SoulSilver (<see cref="Gen4Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -140,14 +144,15 @@ public static class CompletionGames
     [
         LivingDexGame.Red, LivingDexGame.Blue, LivingDexGame.Yellow, LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal,
         LivingDexGame.Ruby, LivingDexGame.Sapphire, LivingDexGame.Emerald, LivingDexGame.FireRed, LivingDexGame.LeafGreen,
+        LivingDexGame.Diamond, LivingDexGame.Pearl, LivingDexGame.Platinum, LivingDexGame.HeartGold, LivingDexGame.SoulSilver,
     ];
 
-    /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent : PKHeX ne les distingue pas).</summary>
+    /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav switch
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
+        SAV3 or SAV4 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
 
@@ -160,6 +165,7 @@ public static class CompletionGames
         {
             SAV1 sav1 => Gen1Completion.Steps(sav1, game),
             SAV2 sav2 => Gen2Completion.Steps(sav2, game),
+            SAV4 sav4 => Gen4Completion.Steps(sav4, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
@@ -205,9 +211,12 @@ public static class CompletionLabels
         return string.Join(", ", members.Select(m => $"{French.specieslist[m.Species]} niv. {m.Level}"));
     }
 
-    /// <summary>« CT08 Plaquage », « CS01 Coupe » : <paramref name="number"/> de 1 à 50 pour une CT, puis les CS.</summary>
-    public static string Machine(int number, IReadOnlyList<ushort> moves) =>
-        number <= 50 ? $"CT{number:00} {French.movelist[moves[number - 1]]}" : $"CS{number - 50:00} {French.movelist[moves[number - 1]]}";
+    /// <summary>
+    /// « CT08 Plaquage », « CS01 Coupe » : <paramref name="number"/> de 1 à <paramref name="tms"/> pour une CT (50 jusqu'à
+    /// la 3e génération, 92 en 4e), puis les CS.
+    /// </summary>
+    public static string Machine(int number, IReadOnlyList<ushort> moves, int tms = 50) =>
+        number <= tms ? $"CT{number:00} {French.movelist[moves[number - 1]]}" : $"CS{number - tms:00} {French.movelist[moves[number - 1]]}";
 }
 
 /// <summary>Lecture des conditions des tables dans une sauvegarde de 1re ou de 2e génération.</summary>
@@ -231,21 +240,38 @@ internal sealed class CompletionFlags(SaveFile sav)
             "E" => Event(int.Parse(parts[1])),
             "T" => hidden[int.Parse(parts[1])],
             "R" => (sav.Data[int.Parse(parts[1])] >> int.Parse(parts[2]) & 1) != 0,
-            "B" => (((SAV1)sav).Badges >> int.Parse(parts[1]) & 1) != 0,
+            "B" => (Badges() >> int.Parse(parts[1]) & 1) != 0,
             "D" => sav.GetCaught(ushort.Parse(parts[1])),
             "U" => Unown(int.Parse(parts[1]), int.Parse(parts[2])),
             "S" => sav.Data[int.Parse(parts[1])] >= int.Parse(parts[2]),
             "F" => ((SAV1)sav).HallOfFameCount > 0,
             "P" => ((SAV1)sav).PikaFriendship == byte.MaxValue,
+            "N" => ((SAV4)sav).NationalDex,
+            "W" => ((SAV4)sav).GetWork(int.Parse(parts[1])) >= int.Parse(parts[2]),
+            "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
+            "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
             _ => throw new InvalidOperationException($"Condition inconnue : {atom}"),
         };
     }
+
+    /// <summary>
+    /// Badges, un bit chacun : 1re génération ; 4e (HeartGold / SoulSilver : Johto dans <c>Badges</c>, Kanto dans
+    /// <c>Badges16</c>, 8 bits malgré son nom : mis bout à bout, 0 à 7 Johto, 8 à 15 Kanto).
+    /// </summary>
+    private int Badges() => sav switch
+    {
+        SAV1 sav1 => sav1.Badges,
+        SAV4HGSS hgss => hgss.Badges | hgss.Badges16 << 8,
+        SAV4 sav4 => sav4.Badges,
+        _ => throw new InvalidOperationException("Pas de badges lisibles dans cette sauvegarde."),
+    };
 
     private bool Event(int flag) => sav switch
     {
         SAV1 sav1 => sav1.GetEventFlag(flag),
         SAV2 sav2 => sav2.GetEventFlag(flag),
         SAV3 sav3 => sav3.GetEventFlag(flag),
+        SAV4 sav4 => sav4.GetEventFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
 

@@ -52,6 +52,14 @@ public sealed class CompletionGen3Tests : IDisposable
         // Chaque dresseur a son équipe (pas « Dresseur ») ; seul le rival, sous plusieurs identifiants, n'en montre pas
         Assert.All(rows.Where(r => r.Section == CompletionSection.Trainers),
             r => Assert.True(r.Team is not null || r.Label == "Rival", $"{r.Zone} : {r.Done}"));
+        // Dresseurs et objets : chaque lieu en un seul bloc (« Route 1 » ne se range pas avec « Route 10 », deux lieux au
+        // même rang de la check-list ne s'entremêlent pas)
+        foreach (var section in new[] { CompletionSection.Trainers, CompletionSection.Items })
+        {
+            var zones = rows.Where(r => r.Section == section).Select(r => r.Zone).ToList();
+            var blocks = zones.Where((z, i) => i == 0 || zones[i - 1] != z).ToList();
+            Assert.Equal(blocks.Count, blocks.Distinct().Count());
+        }
         // Numéros nationaux (pas ceux du jeu) : aucun au-delà de 386
         Assert.All(rows.Where(r => r.Species != 0), r => Assert.InRange(r.Species, 1, 386));
         Assert.All(rows.Where(r => r.Team is not null).SelectMany(r => r.Team!.Split(',')), m => Assert.InRange(int.Parse(m.Split(':')[0]), 1, 386));

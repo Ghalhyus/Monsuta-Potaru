@@ -10,7 +10,7 @@ son nom, **PokeBank Sync**, et les clés de connexion leur nom technique « Poke
 
 - **Stack** : ASP.NET Core 10 + Blazor Server (tout en C#, pas de JavaScript à écrire), SQLite, ASP.NET Identity.
 - **Jeux testés** (vraies sauvegardes, `RealSavesTests` : voir plus bas) : Rouge, Bleu, Argent, Rouge Feu, Vert Feuille,
-  SoulSilver, Noire, Noire 2, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
+  Perle, SoulSilver, Noire, Noire 2, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
   sauvegarde de la 9e génération (Écarlate / Violet), ni de Let's Go, Diamant Étincelant ou Légendes Arceus : PKHeX sait
   les lire, à valider au cas par cas.
 
@@ -73,9 +73,11 @@ Pour simuler « j'ai rejoué un peu » et passer la règle anti-copie de « Mes 
 dépôt d'un Pokémon puis retour au même emplacement, stockage (tous ses Pokémon dans la collection), retrait d'argent,
 retrait de tous les objets du sac et du PC puis dépôt de retour (objets rares, CS et Cristaux Z intacts). Il suffit d'y ajouter un
 fichier pour qu'il soit testé ; sans le dossier, ces tests ne vérifient rien. Actuellement : Rouge, Bleu, Argent (partie
-randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu, `SaveVersion` reconnaît Vert Feuille d'après ses Pokémon), SoulSilver, Noire (`noir.sav`), Noire 2, Rubis Oméga, Ultra-Soleil, Épée. SoulSilver : les blocs annexes
-jamais écrits par le jeu (Tour de Combat, vidéos...) restent à zéro, sans somme de contrôle valide, et PKHeX marque à
-l'écriture toutes les boîtes comme modifiées : le fichier change une fois, puis plus. En 1re et 2e génération, le fichier réécrit n'est pas identique octet pour octet (le contenu l'est) :
+randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu, `SaveVersion` reconnaît Vert Feuille d'après ses Pokémon), Perle (`perle.sav`, partie à 3 badges ; PKHeX la lit comme
+« Diamant / Perle »), SoulSilver, Noire (`noir.sav`), Noire 2, Rubis Oméga, Ultra-Soleil, Épée. 4e génération : les blocs
+annexes jamais écrits par le jeu (Tour de Combat, vidéos, Panthéon de Perle...) restent à zéro, sans somme de contrôle
+valide ; PKHeX leur en donne une à l'écriture (et marque toutes les boîtes de SoulSilver comme modifiées) : le fichier
+change une fois, puis plus. En 1re et 2e génération, le fichier réécrit n'est pas identique octet pour octet (le contenu l'est) :
 le jeu ne prépare ses boîtes qu'au premier changement de boîte et PKHeX les écrit vides en règle ; et une boîte y est une
 liste sans trou, tassée à l'écriture comme le fait le jeu (un Pokémon déposé dans la banque laisse sa place au suivant).
 
@@ -502,37 +504,41 @@ migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `
 
 `/completion`, `Pages/CompletionList.razor` et `Pages/CompletionPage.razor`, table `Completions` (`Data/Completion.cs`,
 migration `CompletionChallenge`), `Services/Completion/` : service (`CompletionService.cs`), sections, conditions et
-textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs`, `Gen2Completion.cs`, `Gen3Completion.cs`),
-tables générées (`Gen1CompletionData.cs` par `outils/completion_gen1.py`, `Gen2CompletionData.cs` par
-`outils/completion_gen2.py`, `Gen3CompletionData.cs` par `outils/completion_gen3.py`).
-Détails : `docs/claude/completion.md`.
+textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs` à `Gen4Completion.cs`), tables générées
+(`Gen1CompletionData.cs` par `outils/completion_gen1.py`, et ainsi de suite jusqu'à `Gen4CompletionData.cs` par
+`outils/completion_gen4.py`). Détails : `docs/claude/completion.md`.
 
-- Pour l'instant **de la 1re à la 3e génération** : Rouge, Bleu, Jaune, Or, Argent, Cristal (versions internationales :
-  une sauvegarde japonaise ou coréenne a d'autres adresses, pas proposée), Rubis, Saphir, Émeraude, Rouge Feu et Vert
-  Feuille (toutes les langues : les drapeaux sont lus par PKHeX). **Une complétion par jeu et par compte** (index unique compte + jeu), une
+- Pour l'instant **de la 1re à la 4e génération** : Rouge, Bleu, Jaune, Or, Argent, Cristal (versions internationales :
+  une sauvegarde japonaise ou coréenne a d'autres adresses, pas proposée), Rubis, Saphir, Émeraude, Rouge Feu, Vert
+  Feuille, Diamant, Perle, Platine, HeartGold et SoulSilver (toutes les langues : les drapeaux sont lus par PKHeX).
+  **Une complétion par jeu et par compte** (index unique compte + jeu), une
   sauvegarde pour une seule (index unique) ; la même sauvegarde peut avoir aussi son living dex ; supprimer la sauvegarde
-  supprime sa complétion (cascade). Rouge / Bleu, Or / Argent, Rubis / Saphir et Rouge Feu / Vert Feuille : la
-  sauvegarde est proposée pour les deux jeux.
+  supprime sa complétion (cascade). Rouge / Bleu, Or / Argent, Rubis / Saphir, Rouge Feu / Vert Feuille et Diamant /
+  Perle : la sauvegarde est proposée pour les deux jeux.
 - **Lue dans la sauvegarde liée** à chaque affichage (drapeaux d'événements, objets ramassés, objets cachés, échanges,
   badges, Pokédex « capturé » du jeu, Panthéon, amitié de Pikachu) : à jour à chaque mise à jour de la sauvegarde. Rien
   à cocher à la main.
 - **Sections** au même poids (pourcentage global = moyenne des sections, fractions exactes, arrondi vers le bas : 100 %
   seulement quand tout est fait) : Histoire (badges, étapes clés, Ligue ; Jaune : amitié de Pikachu au maximum ; 2e
-  génération : les 16 badges, Red), Pokédex (les 151, les 251, ou le national de 386 en 3e génération, Mew, Celebi,
-  Jirachi et Deoxys compris), Dresseurs (chacun, rival
-  compris ; 1re génération : pas le Conseil 4, remis à zéro après le Panthéon), Objets (au sol, cachés, jetons cachés,
+  génération : les 16 badges, Red), Pokédex (les 151, les 251, ou le national de 386 en 3e génération et de 493 en 4e,
+  Mew, Celebi, Jirachi, Deoxys et Arceus compris), Dresseurs (chacun, rival
+  compris ; 1re génération : pas le Conseil 4, remis à zéro après le Panthéon ; 4e génération : seulement les dresseurs
+  qui gardent une trace, pas les combats lancés par un script comme ceux du rival), Objets (au sol, cachés, jetons cachés,
   cadeaux, CT, cannes), Rencontres uniques (légendaires, Ronflex, Pokémon offerts, échanges du jeu…). En 2e génération,
   une sixième : **Quêtes annexes** (4 puzzles et 26 Zarbi des Ruines d'Alpha, Fratrie des sept jours, Noigrumes de
   Fargas, Ranch Meumeu, pont Pépite, poupée de Copieuse… ; en 3e génération : tableaux des concours de rang Master,
-  symboles de la Zone de Combat, Maîtres des capacités à usage unique, baies du Maître des Baies). Les étapes des
+  symboles de la Zone de Combat, Maîtres des capacités à usage unique, baies du Maître des Baies ; en 4e génération :
+  concours de rang Master, 28 Zarbi, formes de Motisma, Giratina et Shaymin en Platine, puzzles et salles des Ruines
+  d'Alpha en HeartGold / SoulSilver). Les étapes des
   distributions comptent (choix de l'utilisateur) : GS Ball de Cristal et son Celebi, Ticket Éon, Mystique, Aurora et
-  Vieille Carte en 3e génération. Rien à cocher à la main : une étape sans trace dans la sauvegarde (achats au Casino, Concours de
+  Vieille Carte en 3e génération ; en 4e, seulement celles qui ont été distribuées (Carte Membre et Lettre en Platine,
+  GS Ball et Arceus en HeartGold / SoulSilver ; pas la Flûte Azur). Rien à cocher à la main : une étape sans trace dans la sauvegarde (achats au Casino, Concours de
   Capture, rangs des concours en dessous de Master…) n'est pas comptée, ni un objet qui revient (objets cachés
   renouvelables de Rouge Feu / Vert Feuille, cadeaux quotidiens).
 - **Choix exclusifs** (fossile Dôme ou Nautile, Kicklee ou Tygnon) : une seule étape, faite dès que l'un est choisi.
   **Étapes ratées** (plus faisables dans la partie : les Rockets de la Sylphe SARL après Giovanni, le premier combat
   contre le rival sur la Route 22 après le badge de Pierre ; en 2e génération, les Rockets du Puits Ramoloss, du
-  repaire d'Acajou et de la Tour Radio, les passagers du premier voyage de L'Aquaria ; en 3e génération, chaque
+  repaire d'Acajou et de la Tour Radio, les passagers du premier voyage de L'Aquaria ; en 3e et 4e génération, chaque
   dresseur visible au départ puis parti sans avoir été battu) : comptées dans le total,
   marquées « raté » (choix de l'utilisateur : le 100 % reste strict).
 - Page : `?section=pokedex|dresseurs|objets|rencontres|quetes` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
@@ -652,13 +658,14 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), création (jeu, puis sauvegarde) |
 | `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
 | `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
-| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde de 1re ou de 2e génération, textes des étapes (équipes, objets, CT) |
-| `MonsutaPotaru/Services/Completion/Gen1Completion.cs`, `Gen2Completion.cs`, `Gen3Completion.cs` | Étapes de chaque génération (table du jeu, Pokédex, noms des objets) |
-| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs`, `Gen2CompletionData.cs`, `Gen3CompletionData.cs` | Tables générées des étapes de chaque jeu (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
+| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde (1re à 4e génération), textes des étapes (équipes, objets, CT) |
+| `MonsutaPotaru/Services/Completion/Gen1Completion.cs` à `Gen4Completion.cs` | Étapes de chaque génération (table du jeu, Pokédex, noms des objets) |
+| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs` à `Gen4CompletionData.cs` | Tables générées des étapes de chaque jeu (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
 | `MonsutaPotaru/Data/Completion.cs` | Table des complétions (une par jeu et par compte, supprimée avec sa sauvegarde) |
 | `outils/completion_gen1.py`, `outils/completion_gen1_extract.py` | Génèrent `Gen1CompletionData.cs` d'après les désassemblages pokered et pokeyellow (lieux en français, ordre de l'aventure, étapes choisies à la main dans le script) |
 | `outils/completion_gen2.py`, `outils/completion_gen2_extract.py` | Génèrent `Gen2CompletionData.cs` d'après pokegold et pokecrystal (même principe ; histoire, rencontres et quêtes d'après les check-lists de l'utilisateur) |
 | `outils/completion_gen3.py`, `outils/completion_gen3_extract.py`, `completion_gen3_lieux.json`, `completion_gen3_ordre.json` | Génèrent `Gen3CompletionData.cs` d'après pokeruby, pokeemerald et pokefirered (constantes C, cartes JSON, scripts) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
+| `outils/completion_gen4.py`, `outils/completion_gen4_extract.py`, `completion_gen4_lieux.json`, `completion_gen4_ordre.json` | Génèrent `Gen4CompletionData.cs` d'après pokeplatinum et pokeheartgold (constantes, cartes JSON, scripts) et pokediamond (fichiers binaires du jeu : événements des cartes, scripts compilés) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
 | `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection |
 | `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
@@ -851,7 +858,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | Projet | Utilisé pour | Licence |
 |---|---|---|
 | [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (Guangcong Luo et contributeurs), paquet [`@pkmn/sim`](https://github.com/pkmn/ps) | Simulateur des combats (`showdown/combat.js`) : règles, capacités, talents, objets de chaque génération | MIT |
-| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français (dont les noms des lieux de 3e génération repris dans `outils/completion_gen3_lieux.json`), légalité ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) ; images des rubans (`PKHeX.Drawing.Misc/Resources/img/ribbons`, `wwwroot/images/rubans`, par `outils/images.py rubans`) | GPL-3.0 ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français (dont les noms des lieux de 3e et 4e génération repris dans `outils/completion_gen3_lieux.json` et `completion_gen4_lieux.json`), légalité ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) ; images des rubans (`PKHeX.Drawing.Misc/Resources/img/ribbons`, `wwwroot/images/rubans`, par `outils/images.py rubans`) | GPL-3.0 ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [PokéAPI sprites](https://github.com/PokeAPI/sprites) | Images des Pokémon (normales et chromatiques, formes, femelles, Méga-Évolutions, Gigamax), de la plupart des objets et des CT (`wwwroot/images`) ; sprites de Rouge / Bleu, Jaune, Or, Argent, Cristal, Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille, Diamant / Perle, Platine, HeartGold / SoulSilver et Noire / Blanche des living dex, formes comprises (`versions/generation-i` à `generation-v`, `wwwroot/images/livingdex`) ; sprites de dos et chromatiques de Rubis / Saphir, Émeraude et Rouge Feu / Vert Feuille des combats (`back/`, `shiny/`) | CC0 1.0 pour le dépôt ; images © The Pokémon Company |
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
@@ -872,7 +879,8 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [pokered](https://github.com/pret/pokered) et [pokeyellow](https://github.com/pret/pokeyellow) (pret) | Désassemblages de Rouge / Bleu et de Jaune : numéros des drapeaux d'événements, objets du décor, objets cachés, équipes des dresseurs, échanges et adresses de la sauvegarde, lus par `outils/completion_gen1.py` pour les tables de la complétion (`Services/Completion/Gen1CompletionData.cs`) ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [pokegold](https://github.com/pret/pokegold) et [pokecrystal](https://github.com/pret/pokecrystal) (pret) | Désassemblages d'Or / Argent et de Cristal : drapeaux d'événements, objets, objets cachés, cadeaux, équipes des dresseurs, échanges et octets de la WRAM (scènes, Zarbi), lus par `outils/completion_gen2.py` pour `Services/Completion/Gen2CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [pokeruby](https://github.com/pret/pokeruby), [pokeemerald](https://github.com/pret/pokeemerald) et [pokefirered](https://github.com/pret/pokefirered) (pret) | Désassemblages de Rubis / Saphir, d'Émeraude et de Rouge Feu / Vert Feuille : drapeaux, objets au sol et cachés, cadeaux, dresseurs et leurs équipes, sections des cartes, lus par `outils/completion_gen3.py` pour `Services/Completion/Gen3CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
-| Check-lists de complétion d'Or / Argent, de Cristal, de Rubis / Saphir, d'Émeraude et de Rouge Feu / Vert Feuille (fichiers de l'utilisateur, d'après [Pokébip](https://www.pokebip.com), Eternia et Bulbapedia) | Choix des étapes de l'histoire, des rencontres uniques et des quêtes annexes de la 2e et de la 3e génération, ordre des lieux de la 3e (`outils/completion_gen2.py`, `completion_gen3.py`, `completion_gen3_ordre.json`) | Consultées, textes réécrits |
+| [pokediamond](https://github.com/pret/pokediamond), [pokeplatinum](https://github.com/pret/pokeplatinum) et [pokeheartgold](https://github.com/pret/pokeheartgold) (pret) | Désassemblages de Diamant / Perle (fichiers binaires du jeu qu'il contient : événements des cartes, scripts compilés, table des objets cachés), de Platine et d'HeartGold / SoulSilver : drapeaux, objets au sol et cachés, cadeaux, dresseurs et leurs équipes, lieux des cartes, capacités des CT, lus par `outils/completion_gen4.py` pour `Services/Completion/Gen4CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| Check-lists de complétion d'Or / Argent, de Cristal, de Rubis / Saphir, d'Émeraude, de Rouge Feu / Vert Feuille, de Diamant / Perle, de Platine et d'HeartGold / SoulSilver (fichiers de l'utilisateur, d'après [Pokébip](https://www.pokebip.com), Eternia et Bulbapedia) | Choix des étapes de l'histoire, des rencontres uniques et des quêtes annexes de la 2e à la 4e génération, ordre des lieux de la 3e et de la 4e (`outils/completion_gen2.py` à `completion_gen4.py`, `completion_gen3_ordre.json`, `completion_gen4_ordre.json`) | Consultées, textes réécrits |
 | [Bulbapedia](https://bulbapedia.bulbagarden.net) | Référence consultée pour vérifier l'ordre des Noigrumes d'Or/Argent/Cristal | — |
 | [Pokébip](https://www.pokebip.com/page/general/tous-les-rubans), « Tous les rubans » | Liste des rubans, leurs noms français et leurs familles (Panthéon, Concours, Installations de combat, Commémoratifs, Cadeaux), base de ceux que compte le suivi des rubans (`Services/Ribbons.cs` ; façons de les obtenir réécrites) | Consultée, rien de recopié tel quel ; contenu © Pokébip |
 | [Bulbagarden Archives](https://archives.bulbagarden.net) | Jaquettes officielles de Pokémon Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier, Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate et Violet (versions anglaises réduites, « Red/Blue/Yellow/Gold/Silver/Crystal/Ruby/Sapphire/Emerald/FireRed/LeafGreen/Diamond/Pearl/Platinum/HeartGold/SoulSilver/Black/White/Black 2/White 2/X/Y/Omega Ruby/Alpha Sapphire/Sun/Moon/Ultra Sun/Ultra Moon/Lets Go Pikachu/Lets Go Eevee/Sword/Shield/Brilliant Diamond/Shining Pearl/Legends Arceus/Scarlet/Violet EN boxart », Émeraude, Diamant, Perle, HeartGold et SoulSilver en JPEG), images des living dex (`wwwroot/images/livingdex/jaquettes`, par `outils/images.py livingdex`) | Images © Nintendo / Creatures Inc. / GAME FREAK Inc. ; usage de fan, non commercial |

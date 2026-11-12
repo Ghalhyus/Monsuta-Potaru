@@ -65,6 +65,60 @@ def detail(map_name):
     return None
 
 
+def adventure_rank(zone, checklist, numbered=True):
+    """
+    Ordre de l'aventure : première apparition du lieu dans la check-list de l'utilisateur, en mot entier (« Route 1 » ne
+    prend pas la place de « Route 10 »). Avec <numbered>, une route ou un chenal absent se range juste après le numéro le
+    plus proche de la check-list ; None si rien ne convient.
+    """
+    pattern = re.compile(r'(?<!\w)' + re.escape(zone) + r'(?!\w)')
+    for i, lieu in enumerate(checklist):
+        if pattern.search(lieu):
+            return i
+    number = re.search(r'(?:Route|Chenal) (\d+)', zone) if numbered else None
+    if number:
+        n = int(number.group(1))
+        near = [(abs(int(m.group(1)) - n), i) for i, lieu in enumerate(checklist)
+                for m in [re.search(r'(?:Route|Chenal) (\d+)', lieu)] if m]
+        if near:
+            return min(near)[1] + 0.5
+    return None
+
+
+def anchored_rank(zone, checklist, anchors):
+    """Rang du lieu ; s'il manque à la check-list, celui de son voisin désigné (et du voisin de celui-ci…) ; sinon, pour
+    une route ou un chenal, celui du numéro le plus proche."""
+    for _ in range(5):
+        rank = adventure_rank(zone, checklist, numbered=False)
+        if rank is not None or zone not in anchors:
+            return rank if rank is not None else adventure_rank(zone, checklist)
+        zone = anchors[zone]
+    return None
+
+
+# Lieux absents des check-lists : rangés avec un lieu voisin (même île, même ville)
+# (en chaîne si le voisin manque aussi). completion_gen3_ordre.json ne reprend que les étapes « Histoire » et « Arène /
+# Ligue » des check-lists : les autres lignes (Pokédex, CT) citent des lieux de capture, qui rangeaient des routes en fin
+# de liste. Une route ou un chenal sans voisin se range près de son numéro.
+ANCHORS = {
+    # Hoenn
+    'Ferry': 'Nénucrique', 'Rosyères': 'Route 113', 'Chemin Ardent': 'Route 112', 'Sentier Sinuroc': 'Mont Chimnée',
+    'Vergazon': 'Tunnel Mérazon', 'Parc Safari': 'Route 121', 'Grotte Tréfonds': 'Chenal 125',
+    'Pacifiville': 'Chenal 131', 'Grotte Atelier': 'Zone de Combat', 'Roc Nombri': 'Zone de Combat',
+    'Zone de Combat': 'Plateau Indigo',
+    # Kanto et Îles Sevii (Rouge Feu / Vert Feuille)
+    'Route 1': 'Jadielle', 'Forêt de Jade': 'Jadielle', 'Route 4': 'Mont Sélénite', 'Route 6': 'Carmin sur Mer',
+    'Route 11': 'Carmin sur Mer', 'Route 7': 'Céladopole', 'Route 16': 'Céladopole', 'Route 17': 'Céladopole',
+    'Lavanville': 'Tour Pokémon', 'Route 8': 'Tour Pokémon', 'Route 9': 'Route 10', 'Centrale': 'Route 10',
+    'Route 14': 'Parmanie', 'Route 15': 'Parmanie', 'Route 18': 'Parmanie', 'Chenal 19': 'Parmanie', 'Chenal 20': 'Parmanie', 'Chenal 21': "Cramois'Île",
+    'Route 23': 'Route Victoire', 'Caverne Azurée': 'Plateau Indigo',
+    'Plage Trésor': 'Île 1', 'Pont du Lien': 'Île 1', 'Route Tison': 'Île 1', 'Cap Falaise': 'Île 2',
+    'Chemin Île 3': 'Île 3', 'Grotte Perdue': 'Île 5', "Pré de l'Île 5": 'Île 5', 'Agualcanal': 'Île 6',
+    'Chemin Vert': 'Île 6', 'Forbuissons': 'Île 6', 'Île du Lointain': 'Île 6', 'Canyon Sesor': 'Île 7',
+    'Entrée Canyon': 'Île 7', 'Tour Dresseurs (extérieur)': 'Île 7', 'Ruines Tanoby': 'Île 7', 'Île 7': 'Île 6',
+}
+
+
 def cs(s):
     return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"' if s is not None else 'null'
 
@@ -90,16 +144,17 @@ def build(d, game, places, checklist):
             raise SystemExit(f'Section inconnue pour {map_name} : {sec}')
         return clean(places[idx], game)
 
-    # Ordre de l'aventure : première apparition de la zone dans la check-list de l'utilisateur
-    def order(zone):
-        for i, lieu in enumerate(checklist):
-            if lieu.startswith(zone) or zone in lieu:
-                return i
-        return 10_000
+    def order(zone, strict):
+        """Rang du lieu ; dresseurs et objets (strict) : chaque lieu doit en avoir un (l'histoire, les rencontres et les
+        quêtes gardent l'ordre choisi ici)."""
+        rank = anchored_rank(zone, checklist, ANCHORS)
+        if rank is None and strict:
+            raise SystemExit(f'Lieu absent de la check-list de {game} : {zone} (lui donner un voisin dans ANCHORS)')
+        return 10_000 if rank is None else rank
 
     def add(section, zone, det, done, label=None, missed=None, team=None, item=0, tm=0, species=0, give=0, count=0, sort=0):
         rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, missed=missed, team=team, item=item,
-                         tm=tm, species=species, give=give, count=count, sort=(order(zone), sort)))
+                         tm=tm, species=species, give=give, count=count, sort=(order(zone, section in ('Trainers', 'Items')), zone, sort)))
 
     S, D, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     cur = CURATED[game]
@@ -165,7 +220,8 @@ def build(d, game, places, checklist):
 
     section_order = {s: n for n, s in enumerate((S, D, I, U, Q))}
     # Histoire, rencontres et quêtes : dans l'ordre choisi ici ; dresseurs et objets : par lieu, dans l'ordre de l'aventure
-    rows.sort(key=lambda r: (section_order[r['section']],) + ((r['sort'][1],) if r['section'] in (S, U, Q) else r['sort']))
+    # (le nom du lieu départage deux lieux au même rang : chacun reste d'un seul bloc)
+    rows.sort(key=lambda r: (section_order[r['section']],) + ((r['sort'][2],) if r['section'] in (S, U, Q) else r['sort']))
     return rows
 
 

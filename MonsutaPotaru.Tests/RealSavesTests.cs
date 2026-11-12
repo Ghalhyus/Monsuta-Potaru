@@ -77,9 +77,10 @@ public sealed class RealSavesTests : IDisposable
         // 1re et 2e génération : le jeu ne prépare ses boîtes qu'au premier changement de boîte (zone à FF jusque-là) et
         // garde la boîte en cours à part ; PKHeX écrit des boîtes vides en règle et resynchronise la boîte en cours.
         // Le fichier change donc, pas son contenu.
-        // HeartGold / SoulSilver : PKHeX marque toutes les boîtes comme modifiées (le jeu n'enregistre que celles-là), et
-        // donne leur somme de contrôle aux blocs annexes vides ; le fichier change la première fois, puis plus.
-        if (sav is SAV4HGSS)
+        // 4e génération : PKHeX donne leur somme de contrôle aux blocs annexes que le jeu n'a jamais écrits (Panthéon de
+        // perle.sav) et, en HeartGold / SoulSilver, marque toutes les boîtes comme modifiées (le jeu n'enregistre que
+        // celles-là) ; le fichier change la première fois, puis plus.
+        if (sav is SAV4)
             Assert.True(Open(written.ToArray(), file).Write().Span.SequenceEqual(written), $"{file} : réécrit différemment par PKHeX");
         else if (sav.Generation >= 3)
             Assert.True(written.AsSpan().SequenceEqual(data), $"{file} : réécrit différemment par PKHeX");
