@@ -50,8 +50,11 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   (une étape sans trace dans la sauvegarde est laissée de côté : Casino, Concours de Capture, Show du Bon Numéro, Nina,
   Tour de Combat, Maître des capacités, Écaillerouge contre Multi Exp) ; **tout** (chaque dresseur, chaque objet), comme en
   1re génération ; **26 étapes** pour les Zarbi. Ses check-lists (Or / Argent, Cristal ; CSV sur son Drive, d'après
-  Pokébip) ont servi pour l'histoire, les rencontres et les quêtes ; exclus d'office : GS Ball et Celebi de Cristal,
-  Œuf Bizarre (impossibles sur cartouche française) ; Celebi reste dans le Pokédex (251), comme Mew.
+  Pokébip) ont servi pour l'histoire, les rencontres et les quêtes ; exclu d'office : l'Œuf Bizarre (impossible sur
+  cartouche française). **GS Ball et Celebi de Cristal comptés** (2026-11-12, choix de l'utilisateur, comme les
+  distributions de la 3e génération) : la GS Ball du Centre Pokémon de Doublonville (`EVENT_GOT_GS_BALL_FROM_GOLDENROD_POKEMON_CENTER`,
+  celle que Fargas rend est le même objet) dans les objets ; Celebi dans les rencontres par le Pokédex (`D:251` : le script
+  de l'autel ne garde aucun drapeau). PKHeX nomme l'objet « GS Ball* » : astérisque retiré (`Gen2Completion.ItemName`).
 - `Gen2CompletionData.cs` : `python outils/completion_gen2.py <dossier> MonsutaPotaru/Services/Completion/Gen2CompletionData.cs`,
   avec les clones de pokegold et pokecrystal. Deux tables : Or / Argent (même source, PKHeX ne les distingue pas) et
   Cristal (autres drapeaux, autres objets).
@@ -81,6 +84,39 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   caché et Tour Radio libérée). Les passagers des voyages suivants de L'Aquaria, les dresseurs de l'Arène d'Azuria et du
   Lac Colère apparaissent plus tard : jamais ratés.
 - Vérifié sur `argent.sav` (8 badges de Johto, Ligue battue : 34,7 %) ; Or et Cristal seulement en mémoire.
+
+## Rubis / Saphir / Émeraude / Rouge Feu / Vert Feuille (2026-11-12)
+- Choix de l'utilisateur : les 6 sections de la 2e génération, **concours et installations de combat dans les quêtes
+  annexes** ; **Pokédex national de 386** ; **distributions comptées** (Ticket Éon, Mystique, Aurora, Vieille Carte ; la GS Ball
+  de Cristal aussi, depuis) ; **Maîtres des capacités** à usage unique comptés.
+- `Gen3CompletionData.cs` : `python outils/completion_gen3.py <dossier> MonsutaPotaru/Services/Completion/Gen3CompletionData.cs`
+  (clones de pokeruby, pokeemerald, pokefirered). Trois tables : Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille.
+  À côté du script : `completion_gen3_lieux.json` (noms PKHeX des sections de carte) et `completion_gen3_ordre.json`
+  (lieux des check-lists de l'utilisateur, dans leur ordre : celui des zones).
+- Projets en C : `completion_gen3_extract.py` évalue les `#define` et les `enum` des en-têtes (`c_constants`), lit
+  chaque `data/maps/*/map.json` (objets `ITEM_BALL` → `finditem` du script ; `hidden_item` ; dresseurs par
+  `trainerbattle_* TRAINER_X`, drapeau = `TRAINER_FLAGS_START` + numéro) et les cadeaux (`giveitem` / `giveitem_msg` /
+  `additem` suivis d'un `setflag`). Drapeaux lus par PKHeX (`SAV3.GetEventFlag` : 2 304, 2 400 en Émeraude).
+- Pièges :
+  - **numéros d'espèces internes** (Arcko : 277) : convertis par le nom (`SPECIES_X` → `NATIONAL_DEX_X`) ;
+  - Rouge Feu / Vert Feuille : **objets cachés renouvelables** (`src/renewable_hidden_items.c`) levés d'office puis tirés
+    au hasard : exclus ; Émeraude : **cadeaux quotidiens** (drapeaux `DAILY`) exclus ;
+  - Rubis / Saphir n'a pas de drapeau « vaincu » pour les légendaires : leur drapeau `FLAG_HIDE_…` (levé après le combat,
+    pas au départ : vérifié) ;
+  - les noms PKHeX des sections ont des précisions de jeu (« (RSE) », « Tour de Combat (RS) / Zone de Combat (E) ») :
+    retirées (`clean`) ; les sections de Rubis / Saphir se lisent dans la liste d'Émeraude (même numérotation) ;
+  - champions, Conseil 4 et Maîtres (classes `LEADER`, `ELITE_FOUR`, `CHAMPION`) : dans l'histoire, pas dans les
+    dresseurs ; le rival sous plusieurs identifiants (Pokémon de départ, Flora / Brice) : une étape ;
+  - `trainer_parties.h` de Rouge Feu / Vert Feuille a des équipes vides sur une ligne (`{DUMMY_TRAINER_MON};`) : lire
+    chaque équipe jusqu'au premier `};` sans traverser de `;`, sinon l'équipe vide prend la suivante et le vrai dresseur
+    s'affiche « Dresseur » (`CompletionGen3Tests` vérifie que chaque dresseur a son équipe) ;
+  - un seul chien légendaire erre dans Rouge Feu / Vert Feuille (selon le starter) : une étape, par le Pokédex ;
+  - un caractère invisible (retour arrière) s'est glissé dans une expression régulière écrite par un heredoc : écrire
+    ces scripts avec l'outil d'écriture de fichiers ; les heredocs avec des apostrophes cassent aussi la commande.
+- Concours : seuls les **tableaux du musée** (rang Master, 5 catégories) laissent une trace ; les rangs Normal à Hyper
+  sont sur les rubans des Pokémon, pas dans la sauvegarde.
+- Vérifié sur `rouge-feu.sav` (début de partie, 2,5 %) et `vert-feuille.sav` (12,6 %) ; Rubis, Saphir et Émeraude
+  seulement en mémoire.
 
 ## Ajouter une génération
 - Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle) ; `CompletionGames.For` et `Steps` choisissent

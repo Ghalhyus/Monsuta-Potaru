@@ -29,8 +29,11 @@ public sealed class BattlesPageTests : PageTestContext
         return (sacha, ondine);
     }
 
-    /// <summary>Choisit les premiers Pokémon proposés (en retirant puis remettant le premier), puis valide l'équipe.</summary>
-    private static async Task ChooseTeam(IRenderedComponent<Battles> cut)
+    /// <summary>
+    /// Choisit les premiers Pokémon proposés, avec <paramref name="lead"/> en tête (le premier est retiré puis remis au
+    /// bout), puis valide l'équipe. Une tête faible évite un K.O. au premier tour (remplacement forcé, pas de menu).
+    /// </summary>
+    private static async Task ChooseTeam(IRenderedComponent<Battles> cut, int lead = 1)
     {
         cut.WaitForText("Valider l'équipe");
         // La consigne reste affichée, le détail des règles est dans l'infobulle.
@@ -38,7 +41,8 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.Contains("le premier entre en combat", hint.QuerySelector(":scope > span")!.TextContent);
         Assert.Contains("sans objet du sac", hint.QuerySelector("details.help-tip .help-tip-bubble")!.TextContent);
         var size = cut.FindAll(".battle-team-slot").Count;
-        for (var i = 0; i < size; i++)
+        var order = new[] { 0, lead }.Concat(Enumerable.Range(1, cut.FindAll(".trade-candidate").Count).Where(i => i != lead)).Take(size);
+        foreach (var i in order)
             await cut.FindAll(".trade-candidate")[i].ClickAsync(new());
         await cut.Find(".battle-team-slot .btn-close").ClickAsync(new());
         await cut.FindAll(".trade-candidate")[0].ClickAsync(new());
@@ -50,7 +54,7 @@ public sealed class BattlesPageTests : PageTestContext
     {
         var (sacha, ondine) = await Requested();
         await ondine.Click("Accepter");
-        await ChooseTeam(sacha);
+        await ChooseTeam(sacha, lead: 4); // Chenipan niveau 4 (vert-feuille.sav), face au Férosinge niveau 13 d'Ondine
         sacha.WaitForText("Ton équipe est prête");
         await ChooseTeam(ondine);
 

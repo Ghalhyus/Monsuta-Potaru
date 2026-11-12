@@ -22,6 +22,6 @@ public static class Gen2Completion
     public static string Label(CompletionRow row) =>
         row.Tm != 0 && row.Label is null ? CompletionLabels.Machine(row.Tm, Gen2CompletionData.TmMoves) : CompletionLabels.Of(row, ItemName);
 
-    /// <summary>Nom français d'un objet d'Or / Argent / Cristal.</summary>
-    public static string ItemName(int item) => Items[item];
+    /// <summary>Nom français d'un objet d'Or / Argent / Cristal (PKHeX écrit « GS Ball* » : astérisque retiré).</summary>
+    public static string ItemName(int item) => Items[item].TrimEnd('*');
 }

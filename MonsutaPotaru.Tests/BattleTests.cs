@@ -52,14 +52,14 @@ public sealed class BattleTests
     public void Team_FromALeafGreenSave()
     {
         var sav = Save("vert-feuille.sav");
-        var spearow = BattleTeam.ToSet(sav.GetPartySlotAtIndex(0), sav);
-        Assert.Equal(("Piafou", 21, 12), (spearow.Name, spearow.Species, spearow.Level)); // surnom, Piafabec
-        Assert.Equal([64, 45, 43], spearow.Moves); // Picpic, Rugissement, Groz'Yeux
-        Assert.Equal([0, 0, 0], spearow.PpUps);
-        Assert.Equal(51, spearow.Ability); // Regard Vif
-        Assert.Equal("Roucool", BattleTeam.ToSet(sav.GetPartySlotAtIndex(2), sav).Name); // pas surnommé : pas « ROUCOOL »
+        var ivysaur = BattleTeam.ToSet(sav.GetPartySlotAtIndex(0), sav);
+        Assert.Equal(("Bulbidou", 2, 30), (ivysaur.Name, ivysaur.Species, ivysaur.Level)); // surnom, Herbizarre
+        Assert.Equal([33, 79, 73, 75], ivysaur.Moves); // Charge, Poudre Dodo, Vampigraine, Tranch'Herbe
+        Assert.Equal([0, 0, 0, 0], ivysaur.PpUps);
+        Assert.Equal(65, ivysaur.Ability); // Engrais
+        Assert.Equal("Coconfort", BattleTeam.ToSet(sav.GetPartySlotAtIndex(3), sav).Name); // pas surnommé : pas « COCONFORT »
 
-        Assert.Equal(9, BattleTeam.Candidates(sav).Count()); // équipe et boîtes, sans œufs
+        Assert.Equal(27, BattleTeam.Candidates(sav).Count()); // équipe et boîtes, sans œufs
         Assert.Equal("gen3customgame", BattleTeam.Format(3));
         Assert.Null(BattleTeam.Format(4));
         Assert.Equal(["Speed", "Attack", "Defense", ""],
@@ -218,17 +218,17 @@ public sealed class BattleTests
         await using var run = new Run(new BattleSetup("gen3customgame", [1, 2, 3, 4], p1, p2));
         run.Pump();
         var lead = p2.Team[0].Name;
-        Assert.Equal(["Go ! Piafou !", $"Ondine envoie {lead} !"], run.Steps1.Select(s => s.Text).OfType<string>().Take(2));
-        Assert.Contains("Sacha envoie Piafou !", run.Steps2.Select(s => s.Text));
+        Assert.Equal(["Go ! Bulbidou !", $"Ondine envoie {lead} !"], run.Steps1.Select(s => s.Text).OfType<string>().Take(2));
+        Assert.Contains("Sacha envoie Bulbidou !", run.Steps2.Select(s => s.Text));
 
-        // Picpic (capacité 1) : les PP réels (35, sans PP Plus), et le message des deux côtés.
-        var peck = run.P1.Request!.Active![0].Moves[0];
-        Assert.Equal(("Peck", 35), (peck.Move, peck.MaxPp));
+        // Charge (capacité 1) : les PP réels (35, sans PP Plus), et le message des deux côtés.
+        var tackle = run.P1.Request!.Active![0].Moves[0];
+        Assert.Equal(("Tackle", 35), (tackle.Move, tackle.MaxPp));
         run.Send("p1 move 1");
         run.Send("p2 move 1");
         run.Pump();
-        Assert.Contains("Piafou utilise Picpic !", run.Steps1.Select(s => s.Text));
-        Assert.Contains("Piafou ennemi utilise Picpic !", run.Steps2.Select(s => s.Text));
+        Assert.Contains("Bulbidou utilise Charge !", run.Steps1.Select(s => s.Text));
+        Assert.Contains("Bulbidou ennemi utilise Charge !", run.Steps2.Select(s => s.Text));
         Assert.Equal(34, run.P1.Request!.Active![0].Moves[0].Pp);
 
         // Abandon (ou temps écoulé) : forcé par le site.

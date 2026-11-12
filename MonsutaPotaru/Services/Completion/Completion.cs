@@ -131,18 +131,23 @@ public static class CompletionSections
 
 /// <summary>
 /// Jeux qui ont une complétion : Rouge, Bleu et Jaune (<see cref="Gen1Completion"/>), Or, Argent et Cristal
-/// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses).
+/// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses) ;
+/// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
     public static readonly IReadOnlyList<LivingDexGame> All =
-        [LivingDexGame.Red, LivingDexGame.Blue, LivingDexGame.Yellow, LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal];
+    [
+        LivingDexGame.Red, LivingDexGame.Blue, LivingDexGame.Yellow, LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal,
+        LivingDexGame.Ruby, LivingDexGame.Sapphire, LivingDexGame.Emerald, LivingDexGame.FireRed, LivingDexGame.LeafGreen,
+    ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent : PKHeX ne les distingue pas).</summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav switch
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
+        SAV3 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
 
@@ -151,7 +156,12 @@ public static class CompletionGames
     {
         if (!For(sav).Contains(game))
             return null;
-        return sav is SAV1 sav1 ? Gen1Completion.Steps(sav1, game) : Gen2Completion.Steps((SAV2)sav, game);
+        return sav switch
+        {
+            SAV1 sav1 => Gen1Completion.Steps(sav1, game),
+            SAV2 sav2 => Gen2Completion.Steps(sav2, game),
+            _ => Gen3Completion.Steps((SAV3)sav, game),
+        };
     }
 
     /// <summary>Étapes de la table, avec celles du Pokédex (toutes les espèces du jeu) juste après l'histoire.</summary>
@@ -235,6 +245,7 @@ internal sealed class CompletionFlags(SaveFile sav)
     {
         SAV1 sav1 => sav1.GetEventFlag(flag),
         SAV2 sav2 => sav2.GetEventFlag(flag),
+        SAV3 sav3 => sav3.GetEventFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
 

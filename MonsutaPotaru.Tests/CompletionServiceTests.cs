@@ -143,7 +143,8 @@ public sealed class CompletionServiceTests : IDisposable
         Assert.Equal([LivingDexGame.Crystal], CompletionGames.For(new SAV2(LanguageID.French, GameVersion.C)));
         Assert.Empty(CompletionGames.For(new SAV2(LanguageID.Japanese, GameVersion.C)));
         Assert.Empty(CompletionGames.For(new SAV2(LanguageID.Korean, GameVersion.GS)));
-        Assert.Empty(CompletionGames.For(new SAV3E()));
+        Assert.Equal([LivingDexGame.Emerald], CompletionGames.For(new SAV3E()));
+        Assert.Empty(CompletionGames.For(new SAV4DP()));
         Assert.Null(CompletionGames.Steps(new SAV1(LanguageID.French, GameVersion.RB), LivingDexGame.Yellow));
     }
 
@@ -241,7 +242,7 @@ public sealed class CompletionServiceTests : IDisposable
         var blue = await Store("sacha", "bleu.sav");
         var silver = await Store("sacha", "argent.sav");
 
-        Assert.Equal("Ce jeu n'a pas encore de complétion.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Ruby)).Message);
+        Assert.Equal("Ce jeu n'a pas encore de complétion.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Diamond)).Message);
         Assert.Equal("Cette sauvegarde n'est pas une partie de Pokémon Cristal.", (await _completions.CreateAsync("sacha", silver, LivingDexGame.Crystal)).Message);
         Assert.Equal("Cette sauvegarde n'existe plus.", (await _completions.CreateAsync("ondine", red, LivingDexGame.Red)).Message);
         Assert.Equal("Cette sauvegarde n'est pas une partie de Pokémon Jaune.", (await _completions.CreateAsync("sacha", red, LivingDexGame.Yellow)).Message);

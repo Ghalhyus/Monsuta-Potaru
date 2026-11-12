@@ -68,8 +68,8 @@ public sealed class BattleHubTests : IDisposable
         _hub.Finished += finished.Add;
         var session = Fighting();
         Assert.Equal(2, session.OtherIllegal("sacha")); // montré à Sacha : l'équipe d'Ondine en a 2
-        Assert.Contains("Go ! Piafou !", session.Steps("sacha", 0).Select(s => s.Text));
-        Assert.Contains("Sacha envoie Piafou !", session.Steps("ondine", 0).Select(s => s.Text));
+        Assert.Contains("Go ! Bulbidou !", session.Steps("sacha", 0).Select(s => s.Text));
+        Assert.Contains("Sacha envoie Bulbidou !", session.Steps("ondine", 0).Select(s => s.Text));
 
         // Choix vérifiés avant d'aller au simulateur.
         Assert.Equal("Cette capacité n'existe pas.", BattleHub.Choose(session, "sacha", BattleChoice.Move(9)));
@@ -81,7 +81,7 @@ public sealed class BattleHubTests : IDisposable
         Assert.Equal("Ce n'est pas le moment de choisir.", BattleHub.Choose(session, "sacha", BattleChoice.Move(1))); // déjà choisi
         Assert.Null(BattleHub.Choose(session, "ondine", BattleChoice.Move(1)));
         WaitUntil(() => session.Snapshot("sacha").Scene is not null && ReadyToChoose(session, "sacha") && ReadyToChoose(session, "ondine"), "tour 2");
-        Assert.Contains("Piafou utilise Picpic !", session.Steps("sacha", 0).Select(s => s.Text));
+        Assert.Contains("Bulbidou utilise Charge !", session.Steps("sacha", 0).Select(s => s.Text));
         var deadline = session.Snapshot("sacha").Deadline!.Value;
         Assert.True(deadline > _time.GetUtcNow().UtcDateTime + BattleTiming.Decision); // + la durée des étapes du tour
 
@@ -172,8 +172,8 @@ public sealed class BattleHubTests : IDisposable
         Assert.Empty(await service.SavePairsAsync("sacha", "pierre")); // pas son ami
 
         var candidates = await service.CandidatesAsync("sacha", leafGreen);
-        Assert.Equal(9, candidates.Count);
-        Assert.Equal(("Piafou", "Équipe 1"), (candidates[0].Name, candidates[0].Location));
+        Assert.Equal(27, candidates.Count);
+        Assert.Equal(("Bulbidou", "Équipe 1"), (candidates[0].Name, candidates[0].Location));
         Assert.Empty(await service.CandidatesAsync("ondine", leafGreen)); // pas la sienne
         Assert.Equal(6, BattleService.TeamSize(candidates.Count));
         Assert.Equal(4, BattleService.TeamSize(4));

@@ -271,7 +271,10 @@ def build(d, game):
     # ---------- Objets ----------
     tm_names = {f'TM_{m}': i + 1 for i, m in enumerate(m for k, m in d['tms'] if k == 'tm')}
     tm_names.update({f'HM_{m}': 51 + i for i, m in enumerate(m for k, m in d['tms'] if k == 'hm')})
-    skip_gifts = {'GS_BALL', 'MYSTERY_EGG'}  # GS Ball : Console virtuelle seulement ; Œuf Mystère : rendu au Prof. Orme
+    skip_gifts = {'MYSTERY_EGG'}  # Œuf Mystère : rendu au Prof. Orme
+    # GS Ball (Cristal, distribution comptée : choix de l'utilisateur) : celle du Centre Pokémon de Doublonville ;
+    # Fargas la rend après l'avoir examinée (même objet, pas une deuxième étape).
+    gs_ball = 'EVENT_GOT_GS_BALL_FROM_GOLDENROD_POKEMON_CENTER'
     fix_flags = {'RAINBOW_WING': 'EVENT_GOT_RAINBOW_WING', 'PP_UP': None}  # premier drapeau trouvé faux ; Kenji : pas de drapeau
     rows_i = []
     done_flags = set()
@@ -297,8 +300,10 @@ def build(d, game):
     for x in d['hidden']:
         item_row(1, x, 'caché')
     for x in d['gifts']:
+        if x['item'] == 'GS_BALL' and x['flag'] != gs_ball:
+            continue
         if x['item'] not in skip_gifts:
-            item_row(2, x, 'cadeau')
+            item_row(2, x, 'distribution' if x['item'] == 'GS_BALL' else 'cadeau')
     for z, k, f, r in sorted(rows_i, key=lambda x: (x[0], x[1], x[2])):
         add(I, r['zone'], r['detail'], r['done'], item=r['item'], tm=r['tm'], count=r['count'] if r['count'] > 1 else 0)
 
@@ -330,6 +335,8 @@ def build(d, game):
     enc('Mont Creuset', 'sous-sol 1, cadeau', E('EVENT_GOT_TYROGUE_FROM_KIYO'), sp('TYROGUE'))
     if crystal:
         enc('Antre du Dragon', 'sanctuaire, cadeau', E('EVENT_GOT_DRATINI'), sp('DRATINI'))
+        # Celebi de la GS Ball : aucun drapeau durable (le script les remet à zéro) : compté par le Pokédex.
+        enc('Bois aux Chênes', 'autel, GS Ball', 'D:251', sp('CELEBI'))
     for t in d['trades']:
         zone, detail = place(t['map'])
         enc(zone, ', '.join(p for p in (detail, 'échange') if p), R(wram('wTradeFlags'), t['index']), sp(t['get']),

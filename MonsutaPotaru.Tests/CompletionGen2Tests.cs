@@ -38,8 +38,8 @@ public sealed class CompletionGen2Tests : IDisposable
             Assert.DoesNotContain(rows, r => r.Section == CompletionSection.Pokedex);
             Assert.Equal(crystal ? 35 : 34, rows.Count(r => r.Section == CompletionSection.Story));
             Assert.Equal(crystal ? 333 : 321, rows.Count(r => r.Section == CompletionSection.Trainers));
-            Assert.Equal(crystal ? 349 : 300, rows.Count(r => r.Section == CompletionSection.Items));
-            Assert.Equal(crystal ? 25 : 23, rows.Count(r => r.Section == CompletionSection.Encounters));
+            Assert.Equal(crystal ? 350 : 300, rows.Count(r => r.Section == CompletionSection.Items));
+            Assert.Equal(crystal ? 26 : 23, rows.Count(r => r.Section == CompletionSection.Encounters));
             Assert.Equal(50, rows.Count(r => r.Section == CompletionSection.Quests));
             // 16 badges, les 26 Zarbi (une forme chacun), les 7 Noigrumes de Fargas, la Fratrie des sept jours
             Assert.Equal(16, rows.Count(r => r.Label?.StartsWith("Badge ", StringComparison.Ordinal) == true));
@@ -61,8 +61,11 @@ public sealed class CompletionGen2Tests : IDisposable
                     default: Assert.Fail($"Condition inattendue en 2e génération : {atom}"); break;
                 }
             }
-            // Ni GS Ball ni Œuf Mystère dans les objets (Console virtuelle ; rendu au Prof. Orme)
-            Assert.DoesNotContain(rows, r => r.Section == CompletionSection.Items && Gen2Completion.Label(r) is "GS Ball" or "Œuf Mystère");
+            // GS Ball (distribution, comptée : choix de l'utilisateur) et son Celebi : Cristal seulement, une fois chacun ;
+            // l'Œuf Mystère, rendu au Prof. Orme, jamais
+            Assert.Equal(crystal ? 1 : 0, rows.Count(r => r.Section == CompletionSection.Items && Gen2Completion.Label(r) == "GS Ball"));
+            Assert.Equal(crystal ? 1 : 0, rows.Count(r => r.Section == CompletionSection.Encounters && r.Species == 251));
+            Assert.DoesNotContain(rows, r => r.Section == CompletionSection.Items && Gen2Completion.Label(r) == "Œuf Mystère");
         }
     }
 
@@ -81,7 +84,7 @@ public sealed class CompletionGen2Tests : IDisposable
     {
         var sav = new SAV2(LanguageID.French, GameVersion.C);
         var empty = Gen2Completion.Steps(sav, LivingDexGame.Crystal);
-        Assert.Equal(35 + 251 + 333 + 349 + 25 + 50, empty.Count);
+        Assert.Equal(35 + 251 + 333 + 350 + 26 + 50, empty.Count);
         var progress = CompletionProgress.Of(empty);
         Assert.Equal((6, 0, "un sixième"), (progress.Sections.Count, progress.Tenths, progress.Share));
         Assert.Equal("#251 Celebi", empty[35 + 250].Label);
