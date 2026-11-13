@@ -292,10 +292,105 @@ Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au
    `1AKULRv48UUOCjAOyXuyghTTbk1PotVQA` pour X / Y et `1vVW-VMqtcIwATZSc5-4djXeGKw5jzNBn` pour Rubis Oméga / Saphir
    Alpha).
 
-Ensuite : **7e génération** (Soleil, Lune, Ultra-Soleil, Ultra-Lune ; `ultra-soleil.sav` est déjà dans les sauvegardes
-de test).
+## Soleil / Lune / Ultra-Soleil / Ultra-Lune / Let's Go (2026-11-13)
+- Choix de l'utilisateur : les trois paires de jeux ; **pas encore de dresseurs** (comme en 6e, il faut les ROM) ;
+  **cristaux Z dans « Objets »**, à leur lieu, par possession (ceux des épreuves comptent déjà dans l'histoire, pas en
+  double) ; quêtes : **Arbre de Combat**, **Zygarde** (Boîte, Cœurs, chaque Cellule), **Scanner des Îles** (déconseillé :
+  seule trace, le Pokédex ; voulu quand même), **Experts et Coachs de Let's Go** (Coachs : aucune trace trouvée, laissés
+  de côté) ; Pokédex national (802, 807 ; Let's Go : les 151, Meltan, Melmetal) ; distributions réelles comptées
+  (Magearna, Marshadow, Zeraora, Pikachu Casquette, cristaux Z distribués, Mew de la Poké Ball Plus, Meltan / Melmetal de
+  Pokémon GO). Check-lists : `Completion_Pokemon_Soleil_Lune.csv`, `_UltraSoleil_UltraLune.csv`,
+  `_LetsGo_Pikachu_Evoli.csv` (fournies par l'utilisateur dans le chat, à déposer sur son Drive ; d'après Pokébip).
+- `Gen7CompletionData.cs` : `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script). Six tables (Sun, Moon, UltraSun, UltraMoon, LetsGoPikachu,
+  LetsGoEevee). `completion_gen7_ordre.json` : **tous** les lieux dans l'ordre de l'aventure, écrits à la main (un lieu
+  absent arrête le script) ; les quêtes sont groupées par activité (« Arbre de Combat », « Zygarde », « Scanner des Îles »,
+  « Experts Pokémon », « Après la Ligue »), le lieu dans la précision.
+- Sources : listes de **FlagsEditorEX** (`flags_gen7sm_en.txt`, `flags_gen7usum_en.txt`, `flags_gen7blgpe_en.txt`) ;
+  lieux et noms de PKHeX ; lieux des cellules Zygarde dans l'éditeur de PKHeX (`PKHeX.WinForms/.../SAV_ZygardeCell.cs`,
+  anglais, seul le lieu principal est traduit, plus jour / nuit).
+- Numéros : Soleil / Lune et Ultra : `SAV7.EventWork.GetEventFlag(n)`, n = numéro de FlagsEditorEX (4 000 drapeaux en
+  Soleil / Lune, 4 960 en Ultra : numéros différents entre les deux paires). Let's Go : `EventWork7b.GetFlag(n)`, n brut
+  de FlagsEditorEX (`FSYS_GAME_CLEAR` = 0x80, début des drapeaux système).
+- Histoire : les **épreuves par leur cristal Z** dans le sac (`K:n`, poche des cristaux, 807 à 835 et 927 à 932 ; le
+  numéro « tenu », 776 et suivants, n'est jamais dans le sac) : `FE_SIREN_COMPLETE_01` à `08` existent mais leur ordre
+  (Feu / Plante ?) n'est pas sûr. Grandes épreuves : cristal **ou** tampon du Passe Dresseur (`PS:n`, `Misc7.Stamps`,
+  `Stamp7` de PKHeX : 1 Mele-Mele à 4 Poni) ; Poké Montures (`SYS_FLAG_*_RIDE_OPEN`), Bracelet Z, flûtes, Canne, Ligue
+  (`SYS_FLAG_GAME_CLEAR`), Necrozma (Ultra : `SYS_FLAG_CAPTURE_NECROZMA`). Let's Go : badges `FSYS_GYM_CLEAR_*`,
+  Techniques Secrètes `FSYS_HIDEN_OPEN_*`, Scope Sylphe et Poké Flûte (sac), `FSYS_GAME_CLEAR`.
+- Objets : au sol (« … item ball disappeared ») et cachés de FlagsEditorEX, cadeaux décrits de Let's Go (pas les tenues) ;
+  exclus : `[unused?]`, « (recurring) », cadeaux quotidiens, nectars ; CT restantes par possession (lieux de la
+  check-list) ; Méga-Gemmes de Let's Go par possession (poche Combat).
+- Conditions nouvelles : `PS:n`, `BT:mode:super:n` (`BattleTree7.GetTreeStreak`, meilleure série : 0 Solo, 1 Duo,
+  2 Multi), `ZC:n` (cellule ramassée : `GetZygardeCell(n) == 2` ; 1 = seulement visible), `TF:n` (titres de Let's Go,
+  `EventWork7b.GetTitleFlag` : 1 à 153 les Experts dans l'ordre du Pokédex de Let's Go, 154 Grand Maître, 155 Maître de
+  Combat ; d'après le commentaire de PKHeX, pas vérifié sur une sauvegarde).
+- Pièges :
+  - des descriptions de FlagsEditorEX sont fausses : `FV_SUB423_LUNASOL` « Solgaleo/Lunala Captured » est levé dans
+    `ultra-soleil.sav` en début de partie (pas utilisé) ; « Found Found Max Elixir » ; noms anglais à corriger
+    (`ITEM_FIXES` : « Health Wing », « Leach Life »…) ;
+  - PKHeX ajoute des précisions aux noms en double (« Normazélite [Z] », « Passe Bateau (GP/GE) ») : retirées
+    (`Gen7Completion.Clean`) ; ses noms de capacités ont l'apostrophe typographique (« CT01 Coup d’Boule ») ;
+  - Ultra : les cellules Zygarde se ramassent **avant** la Boîte (20 dans `ultra-soleil.sav`, sans la Boîte) ;
+  - Let's Go : échanges contre une forme d'Alola, drapeaux `FE_FIELD_TRADE_FIRST_01` à `08` sans description, **ordre
+    supposé** (celui du voyage) ; Cœurs de Zygarde d'Ultra : lieux inconnus (« Zygarde » sans précision).
+- Vérifié sur `ultra-soleil.sav` (début d'Akala : 13,1 %, aucun raté, 80 objets tous à Mele-Mele et au début d'Akala) dans
+  le navigateur ; Soleil, Lune, Ultra-Lune et Let's Go seulement en mémoire.
 
-## Ordre des lieux (3e à 6e génération, 2026-11-12)
+### Reprendre sur un autre PC (7e génération)
+- **Régénérer la table** : rien du `<dossier>` n'est dans le dépôt. Le recréer (un dossier temporaire) avec :
+  - `flags_gen7sm_en.txt`, `flags_gen7usum_en.txt`, `flags_gen7blgpe_en.txt` :
+    `https://raw.githubusercontent.com/fattard/FlagsEditorEXPlugin/main/flagslist/<fichier>` (sous Windows, `curl` a
+    besoin de `--ssl-no-revoke`) ;
+  - de PKHeX (`git clone --depth 1 --filter=blob:none --sparse https://github.com/kwsch/PKHeX.git`, puis
+    `git sparse-checkout set PKHeX.Core/Resources/text "PKHeX.WinForms/Subforms/Save Editors/Gen7"`) :
+    `text/locations/gen7/text_sm_00000_en.txt`, `_fr.txt`, `text_gg_00000_en.txt`, `_fr.txt`,
+    `text/items/text_Items_en.txt`, `_fr.txt`, `text/other/en/text_Species_en.txt`, `text/other/fr/text_Species_fr.txt`,
+    `PKHeX.WinForms/Subforms/Save Editors/Gen7/SAV_ZygardeCell.cs` ;
+  - les trois check-lists de l'utilisateur, **renommées** : `Completion_Pokemon_Soleil_Lune.csv` →
+    `suivi_completion_pokemon_soleil_lune.csv`, `Completion_Pokemon_UltraSoleil_UltraLune.csv` →
+    `suivi_completion_pokemon_ultra_soleil_ultra_lune.csv`, `Completion_Pokemon_LetsGo_Pikachu_Evoli.csv` →
+    `suivi_completion_pokemon_lets_go.csv` (dans ses Téléchargements le 2026-11-13, à mettre sur son Drive ; lui
+    demander l'ID ou le fichier).
+  - Puis `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs` : la table
+    régénérée doit être identique à celle du dépôt (`git diff` vide) ; sortie attendue : Sun / Moon `Story 28, Items 408,
+    Encounters 27, Quests 134`, Ultra `30, 482, 62, 140`, Let's Go `17, 331, 30, 158` (comptes repris par
+    `CompletionGen7Tests`).
+- **Explorer une sauvegarde** : un petit projet console dans un dossier temporaire, avec le paquet `PKHeX.Core` de la
+  même version que `MonsutaPotaru.csproj` (26.10.18) ; `SaveUtil.GetSaveFile(octets)`, puis lister
+  `EventWork.GetEventFlag(n)` levés (SAV7) ou `EventWork.GetFlag(n)` (SAV7b) avec les noms de FlagsEditorEX (colonne 7),
+  `EventWork.GetWork(n)`, le sac (`Inventory.Pouches`), `Misc.Stamps`, `GetZygardeCell(n)`, `BattleTree.GetTreeStreak`.
+- **Tester** : `dotnet test … --filter "FullyQualifiedName~Completion"` (66 tests au 2026-11-13) ; suite complète : 821
+  réussis, 47 échecs tous dus à `showdown/node_modules` absent (`npm ci --prefix showdown` les fait passer).
+
+### Reste à faire (7e génération, au 2026-11-13)
+1. **Dresseurs** avec les ROM (comme la 6e). Demander à l'utilisateur la **RomFS décryptée** (Azahar / Citra pour Soleil /
+   Lune ou Ultra, extraction de sa cartouche pour Let's Go), de préférence française, et son chemin. Pistes :
+   - données des dresseurs (équipes, classes, noms : GARC de trdata / trpoke sur 3DS, d'après pk3DS ; fichiers de la
+     RomFS de Let's Go, format à trouver) et textes des classes et des noms ;
+   - **drapeau = base + numéro du dresseur ?** En Ultra, `TR_FLAG_001` = 0x0BDD : vérifier sur les 52 `TR_FLAG_n` levés
+     de `ultra-soleil.sav` (les dresseurs de Mele-Mele et du début d'Akala) ; en Soleil / Lune les drapeaux ont des noms
+     `FE_SUB…_TR…` et 252 ont un lieu ; en Let's Go, 613 drapeaux de dresseurs à partir de 0x8B6 ;
+   - **lieu** : FlagsEditorEX quand il le donne, sinon les données des zones de la ROM (personnages de chaque zone et leur
+     script) ; c'est la partie difficile (scripts compilés) ;
+   - **Coachs de Let's Go** : une classe de dresseur à part ; si leur drapeau suit leur numéro, les trouver par la ROM ;
+   - ensuite : section Dresseurs dans `CompletionGen7Tests` (comptes des tables), retirer « pas encore de dresseurs en 6e
+     et 7e génération » de `CompletionList.razor` et du README, docstring du générateur, cette fiche.
+2. **Sauvegardes** de Soleil / Lune et de Let's Go à demander (à ranger dans `MonsutaPotaru.Tests/Sauvegardes/` :
+   `soleil.sav`, `lune.sav`, `lets-go-pikachu.sav`… ; `RealSavesTests`, ligne « Jeux testés » du README, chapitre « Jeux
+   pris en charge » du guide ; un test `Real…` comme `RealUltraSun_ProgressReadInItsFlags`). Y vérifier : titres des
+   Experts (`TF:n`, ordre supposé d'après PKHeX), ordre des échanges de Let's Go (`FE_FIELD_TRADE_FIRST_01` à `08`),
+   Coachs, objets rares de Let's Go gardés après usage (Scope Sylphe, Poké Flûte), lieux des Cœurs de Zygarde d'Ultra.
+   **Méthode la plus sûre** pour un drapeau sans nom : deux sauvegardes juste avant et juste après l'action (battre un
+   Coach, finir une épreuve), et comparer les drapeaux et variables qui changent.
+   Aussi : l'ordre de `FE_SIREN_COMPLETE_01` à `08` (les épreuves restent comptées par leur cristal Z en attendant).
+3. **Guide du joueur** (chapitre « Complétion ») pas mis à jour : le connecteur Google Docs ne répondait pas (trois
+   essais, 2026-11-13). À y dire (avec le point 3 de la 6e génération) : Soleil à Ultra-Lune et Let's Go, Pokédex de 802,
+   807 ou 153, épreuves comptées par leur cristal Z, CT et cristaux Z dès qu'ils sont dans le sac, Arbre de Combat,
+   Zygarde (chaque Cellule), Scanner des Îles, Experts de Let's Go ; pas encore de dresseurs ni de Coachs.
+4. Check-lists à déposer sur le Drive par l'utilisateur (puis noter leurs ID ici).
+
+## Ordre des lieux (3e à 6e génération, 2026-11-12 ; 7e : liste complète écrite à la main, voir plus haut)
 - Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la
   liste d'ordre **en mot entier** (« Route 1 » ne prend plus la place de « Route 10 », « Route 3 » celle de « Route 30 ») ;
   s'il manque, son voisin désigné (`ANCHORS` de chaque générateur, suivi en chaîne) ; sinon, pour une route ou un chenal,
@@ -313,7 +408,8 @@ de test).
   et 15 avec Parmanie, l'Île 7 avec l'Île 6…). La table régénérée a les mêmes lignes qu'avant, seul l'ordre change.
 
 ## Ajouter une génération
-- Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle ; sans désassemblage : `Gen6Completion`) ; `CompletionGames.For` et `Steps` choisissent
+- Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle ; sans désassemblage : `Gen6Completion`, `Gen7Completion`
+  pour un Pokédex qui n'est pas « 1 à n », comme celui de Let's Go) ; `CompletionGames.For` et `Steps` choisissent
   selon la sauvegarde. Garder les sections au même poids ; `CompletionProgress.Of` ne montre que celles du jeu.
 - PKHeX a des noms de drapeaux à partir de la 2e génération (`Resources/text/script/gen2/flags_*`), mais incomplets
   (152 pour Or / Argent) : les désassemblages restent la source.

@@ -24,7 +24,11 @@ public enum CompletionState { Missing, Done, Missed }
 /// Combat (mode Super ouvert, meilleure série), « PW:n » tournoi n du PWT remporté, « MD:n » médaille n obtenue, « PR:n »
 /// parure n du Music-Hall possédée ; en 6e génération (<see cref="Gen6CompletionData"/>, par outils/completion_gen6.py)
 /// « H:n » objet n dans le sac ou tenu par un Pokémon (Méga-Gemmes), « ST:n » épreuve n du Super Training réussie (un
-/// meilleur temps enregistré) ; « W:n:v » variable de script n arrivée à v au moins (sans retrait de 0x4000).
+/// meilleur temps enregistré) ; « W:n:v » variable de script n arrivée à v au moins (sans retrait de 0x4000) ; en 7e
+/// génération (<see cref="Gen7CompletionData"/>, par outils/completion_gen7.py) « PS:n » tampon n du Passe Dresseur
+/// (<see cref="Stamp7"/>), « BT:mode:super:n » meilleure série de l'Arbre de Combat (mode 0 Solo, 1 Duo, 2 Multi ; super
+/// 1 pour le mode Super) arrivée à n au moins, « ZC:n » cellule Zygarde n ramassée, « TF:n » titre n de Let's Go débloqué
+/// (1 à 153 : les Experts, 154 Grand Maître, 155 Maître de Combat).
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
@@ -142,7 +146,8 @@ public static class CompletionSections
 /// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses) ;
 /// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), Diamant, Perle, Platine, HeartGold et
 /// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), X, Y, Rubis Oméga
-/// et Saphir Alpha (<see cref="Gen6Completion"/>), toutes les langues.
+/// et Saphir Alpha (<see cref="Gen6Completion"/>), Soleil, Lune, Ultra-Soleil, Ultra-Lune et Let's Go
+/// (<see cref="Gen7Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -153,6 +158,8 @@ public static class CompletionGames
         LivingDexGame.Diamond, LivingDexGame.Pearl, LivingDexGame.Platinum, LivingDexGame.HeartGold, LivingDexGame.SoulSilver,
         LivingDexGame.Black, LivingDexGame.White, LivingDexGame.Black2, LivingDexGame.White2,
         LivingDexGame.X, LivingDexGame.Y, LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire,
+        LivingDexGame.Sun, LivingDexGame.Moon, LivingDexGame.UltraSun, LivingDexGame.UltraMoon,
+        LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee,
     ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
@@ -160,7 +167,8 @@ public static class CompletionGames
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
+        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO or SAV7SM or SAV7USUM or SAV7b =>
+            [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
 
@@ -176,16 +184,21 @@ public static class CompletionGames
             SAV4 sav4 => Gen4Completion.Steps(sav4, game),
             SAV5 sav5 => Gen5Completion.Steps(sav5, game),
             SAV6 sav6 => Gen6Completion.Steps(sav6, game),
+            SAV7 or SAV7b => Gen7Completion.Steps(sav, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
 
     /// <summary>Étapes de la table, avec celles du Pokédex (toutes les espèces du jeu) juste après l'histoire.</summary>
     internal static List<CompletionStep> Steps(IReadOnlyList<CompletionRow> rows, CompletionFlags flags, int pokedex,
+        Func<CompletionRow, string> label) => Steps(rows, flags, Enumerable.Range(1, pokedex), label);
+
+    /// <summary>Étapes de la table, avec celles du Pokédex (les espèces données, Let's Go : Kanto, Meltan et Melmetal).</summary>
+    internal static List<CompletionStep> Steps(IReadOnlyList<CompletionRow> rows, CompletionFlags flags, IEnumerable<int> pokedex,
         Func<CompletionRow, string> label)
     {
         var steps = rows.Select(r => new CompletionStep(r.Section, r.Zone, r.Detail, label(r), flags.State(r), r.Species, r.Form)).ToList();
-        var dex = Enumerable.Range(1, pokedex).Select(n => new CompletionStep(CompletionSection.Pokedex, "Pokédex", null,
+        var dex = pokedex.Select(n => new CompletionStep(CompletionSection.Pokedex, "Pokédex", null,
             $"#{n:000} {CompletionLabels.French.specieslist[n]}", flags.Test($"D:{n}") ? CompletionState.Done : CompletionState.Missing,
             (ushort)n));
         return [.. steps.Where(s => s.Section == CompletionSection.Story), .. dex, .. steps.Where(s => s.Section != CompletionSection.Story)];
@@ -229,9 +242,12 @@ public static class CompletionLabels
         number <= tms ? $"CT{number:00} {French.movelist[moves[number - 1]]}" : $"CS{number - tms:00} {French.movelist[moves[number - 1]]}";
 }
 
-/// <summary>Lecture des conditions des tables dans une sauvegarde de 1re ou de 2e génération.</summary>
+/// <summary>Lecture des conditions des tables dans une sauvegarde (de la 1re à la 7e génération).</summary>
 internal sealed class CompletionFlags(SaveFile sav)
 {
+    /// <summary>Cellule Zygarde ramassée (0 : absente, 1 : visible sur la carte ; éditeur des cellules de PKHeX).</summary>
+    private const ushort ZygardeCellReceived = 2;
+
     private readonly bool[] hidden = sav is SAV1 sav1 ? sav1.EventSpawnFlags : [];
 
     public CompletionState State(CompletionRow row) =>
@@ -267,6 +283,10 @@ internal sealed class CompletionFlags(SaveFile sav)
             "PW" => ((SAV5B2W2)sav).PWT.GetPWTRecord(int.Parse(parts[1])) > 0,
             "MD" => ((SAV5B2W2)sav).Medals[int.Parse(parts[1])].IsObtained,
             "PR" => ((SAV5)sav).Musical.GetHasProp(int.Parse(parts[1])),
+            "PS" => (((SAV7)sav).Misc.Stamps >> int.Parse(parts[1]) & 1) != 0,
+            "BT" => ((SAV7)sav).BattleTree.GetTreeStreak(int.Parse(parts[1]), parts[2] == "1", max: true) >= int.Parse(parts[3]),
+            "ZC" => ((SAV7)sav).EventWork.GetZygardeCell(int.Parse(parts[1])) == ZygardeCellReceived,
+            "TF" => ((SAV7b)sav).EventWork.GetTitleFlag(int.Parse(parts[1])),
             _ => throw new InvalidOperationException($"Condition inconnue : {atom}"),
         };
     }
@@ -293,10 +313,12 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV4 sav4 => sav4.GetEventFlag(flag),
         SAV5 sav5 => sav5.EventWork.GetEventFlag(flag),
         SAV6 sav6 => sav6.EventWork.GetEventFlag(flag),
+        SAV7 sav7 => sav7.EventWork.GetEventFlag(flag),
+        SAV7b lgpe => lgpe.EventWork.GetFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
 
-    /// <summary>Variable de script : 4e génération (0x4000 retiré), 6e génération (numéro de FlagsEditorEX).</summary>
+    /// <summary>Variable de script : 4e génération (0x4000 retiré), 6e génération (numéro de FlagsEditorEX ; pas utilisées en 7e).</summary>
     private int Work(int index) => sav switch
     {
         SAV4 sav4 => sav4.GetWork(index),
