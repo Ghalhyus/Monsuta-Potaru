@@ -229,8 +229,9 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 
 ## X / Y / Rubis Oméga / Saphir Alpha (2026-11-13)
 - Choix de l'utilisateur : Pokédex **national de 721** ; **Méga-Gemmes dans « Objets »**, à leur lieu, distributions
-  réelles comptées (Braségalite de X / Y, Diancite ; Diancie, Hoopa, Volcanion dans « Rencontres », et en Rubis Oméga /
-  Saphir Alpha les distributions de sa check-list) ; pas la Latiasite ni la Latiosite de X / Y (échange seulement) ;
+  réelles comptées (Braségalite de X / Y, Diancite) ; **pas les Pokémon reçus par cadeau mystère** (2026-11-13 :
+  Diancie, Hoopa, Volcanion, et en Rubis Oméga / Saphir Alpha les 14 de sa check-list, retirés des « Rencontres » ;
+  toujours dans le Pokédex) ; pas la Latiasite ni la Latiosite de X / Y (échange seulement) ;
   quêtes : **Maison de Combat** (Châtelaine au 20e combat, puis au 50e en Super : `FE_BTLHOUSE_CLEAR_*`,
   `FE_BTLHOUSE_MONUMENT_*`), **Super Training** (les 30 épreuves de la cartouche, noms `trainingstage` de PKHeX ; réussie =
   `SuperTrainBlock.GetTime1(n) > 0`), **Concours Live** (Rubis Oméga / Saphir Alpha : variable `WK_SCENE_CONTEST`, 7 à 21) ;
@@ -238,19 +239,42 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   sur une sauvegarde de X / Y qui les a faites) ; **ratés** : petite liste à la main (aucun pour l'instant).
   Check-lists : `suivi_completion_pokemon_x_y.csv`, `suivi_completion_pokemon_rubis_omega_saphir_alpha.csv` (Drive de
   l'utilisateur, d'après Pokébip).
-- `Gen6CompletionData.cs` : `python outils/completion_gen6.py <dossier> MonsutaPotaru/Services/Completion/Gen6CompletionData.cs`
-  (contenu de `<dossier>` : docstring du script). Quatre tables (X, Y, OmegaRuby, AlphaSapphire).
+- `Gen6CompletionData.cs` : `python outils/completion_gen6.py <dossier> <ROM de X ou Y> <ROM de Rubis Oméga ou Saphir Alpha> MonsutaPotaru/Services/Completion/Gen6CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script). Quatre tables (X, Y, OmegaRuby, AlphaSapphire). ROM de l'utilisateur
+  (2026-11-13) : `C:\Users\ghalh\Documents\FanGame\Jeux\3DS\Pokemon X.3ds` et
+  `…\Pokemon Omega Ruby (Europe) (En,Ja,Fr,De,Es,It,Ko) (Rev 2).3ds`, déjà **déchiffrées** (Y, Soleil, Lune, Ultra-Soleil
+  aussi, même dossier ; Rubis Oméga aussi installé dans Citra).
 - **Pas de désassemblage pour la 3DS**, scripts compilés illisibles : tout vient des listes de **FlagsEditorEX**
   (`flags_gen6xy_en.txt`, `flags_gen6oras_en.txt` : drapeaux et variables, objets au sol `FV_FLD_ITEM_n`, cachés
   `FLAG_HIDEITEM_n`, cadeaux décrits en X / Y « Received … from … ») et des check-lists. Lieux anglais → PKHeX
   (`text_xy_00000_en/fr.txt`, une liste pour les quatre jeux) ; apostrophe typographique de PKHeX remplacée.
-- **Pas encore de dresseurs** : il faut les ROM (RomFS décryptée de X ou Y et de Rubis Oméga ou Saphir Alpha, promises par
-  l'utilisateur) pour les équipes, noms et lieux ; drapeaux des dresseurs dans FlagsEditorEX (`TRID_*`), lieu manquant
-  pour 362 / 616 (X / Y) et 575 / 949 (Rubis Oméga / Saphir Alpha).
+- **Dresseurs** (2026-11-13) : lus dans les ROM par `outils/completion_gen6_rom.py` (formats dans sa docstring : RomFS,
+  GARC, LZ11, conteneur « ZO » des zones, scripts Pawn / AMX compressés, textes chiffrés). Drapeau = 0x6CC + numéro du
+  dresseur (`TRID_NULL` de FlagsEditorEX, le même dans les quatre jeux). Comptés :
+  - les **personnages des cartes** dont le script est 3000 + numéro (5000 + : second d'un duo) : le jeu lève le drapeau
+    (287 dans rubis-omega.sav) ;
+  - ceux dont un **script de zone lève le drapeau** : une fonction locale fait `add.c 0x6CC` puis appelle la native
+    `0x13413496` (lever un drapeau ; `0x133daa6a` le teste, `0xaccbbbd7` l'efface : déduit des usages et de la
+    sauvegarde) : arènes de Rubis Oméga (lancées par script), familles de la Route 111, et en X / Y les dresseurs d'arène
+    (levés d'office par le champion, comme en 1re génération ; quatre Kinésistes de l'Arène de Flusselles n'existent
+    qu'ainsi) ;
+  - ceux que FlagsEditorEX situe et que la ROM ne montre pas : Dresseurs Aériens, dresseurs d'Illumis, Pat & Joe ;
+  - **pas les combats lancés par script sans cet appel** (natives de combat `0x179b019f`, `0x0b144ec1`, qui ne lèvent
+    rien elles-mêmes : les familles de la Route 111 sont combattues par `0x0b144ec1` puis levées une à une) : rival,
+    champions de X / Y, Lysandre, Team Flare, Amaryllis, sbires de Poivressel ; pas les classes Champion(ne)(s),
+    Conseil 4, Maître (Histoire), ni les revanches (« Rematch » dans FlagsEditorEX).
+  Lieu : en-tête de la zone (lieu de PKHeX) ; arène reconnue à sa musique (17) → « Arène de … » de la liste d'ordre, rangée
+  avec son badge. X et Y : mêmes données (comparées) ; Saphir Alpha : la ROM de Rubis Oméga, sbires Aqua et Magma échangés
+  (`OTHER_TEAM` ; 29 de chaque, aucun Aqua battu dans rubis-omega.sav). Combats multiples (7 arguments) : le premier est
+  le partenaire. Équipe affichée, pas le nom (comme les autres générations), bien que la ROM donne classes et noms
+  français.
+- Arène de Lem (X / Y) : ses dresseurs (quiz) n'ont pas de drapeau levé : aucun dresseur à la Tour Prismatique.
 - Histoire : badges (`SAV6.Badges`), objets rares du sac (`K:n`), drapeaux nommés (`SYS_FLAG_GAME_CLEAR`,
   `SYS_FLAG_CAPTURE_*` en Rubis Oméga / Saphir Alpha), **variables de scène** nommées de FlagsEditorEX (`W:n:v`,
-  `EventWork6.GetWork`, numéro direct). X / Y : la plupart des drapeaux de la seconde moitié n'ont pas de nom : pas
-  d'étape « Conseil 4 », seulement le Panthéon ; Rubis Oméga / Saphir Alpha : `SYS_FLAG_ZENKOKU_SET` n'est pas levé dans
+  `EventWork6.GetWork`, numéro direct). X / Y : **Conseil 4** par les drapeaux `FE_PLR0302_BIGFOUR2_01` à
+  `FE_PLR0602_BIGFOUR3_01` (0x177 à 0x17A, levés par le script de chaque salle : 251 Brasier / Malva → 0x177, 252
+  Barrage / Narcisse → 0x178, 253 Alliage / Thyméo → 0x179, 254 Guivre / Dracéna → 0x17A), « ou Panthéon » (sans doute
+  effacés pour les revanches) ; la plupart des autres drapeaux de la seconde moitié n'ont pas de nom ; Rubis Oméga / Saphir Alpha : `SYS_FLAG_ZENKOKU_SET` n'est pas levé dans
   `rubis-omega.sav` (Panthéon et Delta faits) : pas d'étape « Pokédex National ».
 - Objets : **chaque CT et CS** (boutiques, Maison de Combat, cadeaux sans drapeau) par **possession** (`K:n`, elles ne se
   jettent pas), sauf celles qu'un drapeau d'objet au sol compte déjà ; Méga-Gemmes par possession **au sac ou tenue**
@@ -267,39 +291,45 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - Vérifié sur `rubis-omega.sav` (partie finie, Delta : 41,0 %, aucun raté) dans le navigateur ; X, Y et Saphir Alpha
   seulement en mémoire (pas de sauvegarde, promise par l'utilisateur).
 
+- **Ratés** des dresseurs : aucun (choix de l'utilisateur, 2026-11-13). Les personnages cachés au départ ne se savent pas
+  (scripts compilés) : des sbires cachés après l'histoire donneraient de faux ratés en début de partie. Dans
+  rubis-omega.sav, 2 sbires Magma de la planque non battus et cachés (drapeau d'apparition 537) restent « à faire ».
+- Vérifié sur `rubis-omega.sav` : 291 dresseurs sur 375, toutes les arènes ; et sur `y.sav` (2026-11-13, début de
+  partie : 1 badge, 11 h) : 50 dresseurs sur 261, l'Arène de Neuvartault complète (levée par le jeu), **aucun** drapeau
+  pour Violette, le rival, Sannah, Tierno ni la Team Flare (la règle des combats lancés par script tient), Conseil 4 pas
+  encore. Rien d'autre de levé hors de la table, sauf le Château de Combat.
+- **Château de Combat** (X / Y, choix de l'utilisateur, 2026-11-13 : dans les **quêtes annexes**) : ses nobles lèvent
+  leur drapeau de dresseur (20 dans `y.sav`) sans être sur une carte ni dans un script de zone. Une étape par noble
+  (classes `NOBLES` du générateur, sans lieu dans la ROM) : 75, les doublons de même titre et même nom (champions en
+  Marquis, deux équipes chacun) en « l'un ou l'autre », faute de savoir si les deux viennent. Restaurants d'Illumis et
+  Maison de Combat : aucun drapeau de dresseur vu.
+- Guide du joueur (chapitre « Complétion ») à jour pour la 6e et la 7e génération (2026-11-13).
+- **Méga-Gemmes de Rubis Oméga / Saphir Alpha** : Dracaufite Y et Mewtwoïte Y gardées (choix de l'utilisateur,
+  2026-11-13), bien que sa check-list les note absentes de la liste des Méga-Gemmes et que Mewtwo soit introuvable dans
+  ces jeux (`ORAS_MEGA` du générateur).
+
 ### Reste à faire (6e génération, au 2026-11-13)
-Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au même poids) ; les reprendre dans l'ordre.
-1. **Dresseurs**, avec les ROM de l'utilisateur (RomFS décryptée de X ou Y et de Rubis Oméga ou Saphir Alpha, dump
-   d'Azahar / Citra ; lui demander le chemin). À lire dans les GARC (pistes, d'après pk3DS, à vérifier) : dresseurs X / Y
-   `a/0/3/8` (trdata) et `a/0/4/0` (trpoke), Rubis Oméga / Saphir Alpha `a/0/3/6` et `a/0/3/8` ; textes `a/0/7/2` (X / Y),
-   `a/0/7/1` (Rubis Oméga / Saphir Alpha) pour les noms et classes. Vérifier que drapeau du dresseur = base + numéro du
-   dresseur (les `TRID_*` de FlagsEditorEX dans l'ordre ?) ; lieu : FlagsEditorEX quand il le donne, sinon les zones de la
-   ROM. Une version par table si les dresseurs diffèrent. Puis : section Dresseurs dans les tests
-   (`CompletionGen6Tests`, comptes des tables), retirer « pas encore de dresseurs en 6e génération » de
-   `CompletionList.razor` et du README, docstring du générateur, cette fiche.
-2. **Sauvegarde de X ou Y** promise par l'utilisateur : la ranger dans `MonsutaPotaru.Tests/Sauvegardes/` (`x.sav` ou
-   `y.sav`), l'ajouter à `RealSavesTests`, à la ligne « Jeux testés » du README et au chapitre « Jeux pris en charge » du
-   guide ; un test `RealX…` comme `RealOmegaRuby_ProgressReadInItsFlags` ; vérifier dans le navigateur. Y chercher les
-   **enquêtes de Beladonis** (variables `WK_SCENE_*` sans nom qui changent quand on les fait) et les drapeaux sans nom
-   de la seconde moitié de l'histoire (Conseil 4, rival).
-3. **Guide du joueur** (Google Doc, chapitre « Complétion ») pas mis à jour : le connecteur Google Docs renvoyait une
-   erreur. À y dire : jeux de la 6e génération, Pokédex de 721, CT / CS et Méga-Gemmes comptées dès qu'elles sont dans
-   le sac (ou tenues), Maison de Combat, Super Training, Concours Live ; pas encore de dresseurs.
-4. **Méga-Gemmes de Rubis Oméga / Saphir Alpha** reprises telles quelles de la check-list : Dracaufite Y et Mewtwoïte Y
-   douteuses dans ces jeux, à confirmer avec l'utilisateur (`ORAS_MEGA` du générateur).
-5. Fichiers du `<dossier>` du générateur : pas dans le dépôt, à retélécharger sur un autre PC (sources et noms exacts :
+1. **Partie de X / Y plus avancée** (`y.sav` s'arrête au premier badge) : y chercher les **enquêtes de Beladonis**
+   (variables `WK_SCENE_*` sans nom qui changent quand on les fait), vérifier le Conseil 4 (0x177 à 0x17A) et les
+   Marquis du Château (l'un ou les deux de chaque doublon).
+2. **Saphir Alpha** : dresseurs déduits de Rubis Oméga (pas de ROM ni de sauvegarde) ; à vérifier si l'une arrive.
+3. Fichiers du `<dossier>` du générateur : pas dans le dépôt, à retélécharger sur un autre PC (sources et noms exacts :
    docstring de `outils/completion_gen6.py` ; check-lists sur le Drive de l'utilisateur, ID
    `1AKULRv48UUOCjAOyXuyghTTbk1PotVQA` pour X / Y et `1vVW-VMqtcIwATZSc5-4djXeGKw5jzNBn` pour Rubis Oméga / Saphir
    Alpha).
 
 ## Soleil / Lune / Ultra-Soleil / Ultra-Lune / Let's Go (2026-11-13)
-- Choix de l'utilisateur : les trois paires de jeux ; **pas encore de dresseurs** (comme en 6e, il faut les ROM) ;
+- Choix de l'utilisateur : les trois paires de jeux ; **pas encore de dresseurs** (il faut les ROM ; voir « Reste à
+  faire ») ;
   **cristaux Z dans « Objets »**, à leur lieu, par possession (ceux des épreuves comptent déjà dans l'histoire, pas en
   double) ; quêtes : **Arbre de Combat**, **Zygarde** (Boîte, Cœurs, chaque Cellule), **Scanner des Îles** (déconseillé :
   seule trace, le Pokédex ; voulu quand même), **Experts et Coachs de Let's Go** (Coachs : aucune trace trouvée, laissés
   de côté) ; Pokédex national (802, 807 ; Let's Go : les 151, Meltan, Melmetal) ; distributions réelles comptées
-  (Magearna, Marshadow, Zeraora, Pikachu Casquette, cristaux Z distribués, Mew de la Poké Ball Plus, Meltan / Melmetal de
-  Pokémon GO). Check-lists : `Completion_Pokemon_Soleil_Lune.csv`, `_UltraSoleil_UltraLune.csv`,
+  (cristaux Z distribués, Meltan / Melmetal de Pokémon GO) ; **pas les Pokémon reçus par cadeau mystère** (2026-11-13 :
+  Magearna et le Pikachu Casquette Partenaire par code QR, Marshadow, Zeraora ; `MYSTERY_GIFT` du générateur), **ni Mew
+  de la Poké Ball Plus** (Let's Go, même jour) ; tous toujours dans le Pokédex. Ces retraits ont été faits dans
+  `Gen7CompletionData.cs` à la main (14 lignes) faute des check-lists pour relancer le générateur, modifié pour donner le
+  même résultat. Check-lists : `Completion_Pokemon_Soleil_Lune.csv`, `_UltraSoleil_UltraLune.csv`,
   `_LetsGo_Pikachu_Evoli.csv` (fournies par l'utilisateur dans le chat, à déposer sur son Drive ; d'après Pokébip).
 - `Gen7CompletionData.cs` : `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs`
   (contenu de `<dossier>` : docstring du script). Six tables (Sun, Moon, UltraSun, UltraMoon, LetsGoPikachu,
@@ -354,7 +384,7 @@ Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au
     demander l'ID ou le fichier).
   - Puis `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs` : la table
     régénérée doit être identique à celle du dépôt (`git diff` vide) ; sortie attendue : Sun / Moon `Story 28, Items 408,
-    Encounters 27, Quests 134`, Ultra `30, 482, 62, 140`, Let's Go `17, 331, 30, 158` (comptes repris par
+    Encounters 25, Quests 134`, Ultra `30, 482, 58, 140`, Let's Go `17, 331, 29, 158` (comptes repris par
     `CompletionGen7Tests`).
 - **Explorer une sauvegarde** : un petit projet console dans un dossier temporaire, avec le paquet `PKHeX.Core` de la
   même version que `MonsutaPotaru.csproj` (26.10.18) ; `SaveUtil.GetSaveFile(octets)`, puis lister
@@ -364,8 +394,11 @@ Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au
   réussis, 47 échecs tous dus à `showdown/node_modules` absent (`npm ci --prefix showdown` les fait passer).
 
 ### Reste à faire (7e génération, au 2026-11-13)
-1. **Dresseurs** avec les ROM (comme la 6e). Demander à l'utilisateur la **RomFS décryptée** (Azahar / Citra pour Soleil /
-   Lune ou Ultra, extraction de sa cartouche pour Let's Go), de préférence française, et son chemin. Pistes :
+1. **Dresseurs** avec les ROM, comme la 6e (`outils/completion_gen6_rom.py` : RomFS, GARC, zones, scripts AMX, textes ;
+   la méthode y est décrite). Soleil, Lune et Ultra-Soleil **déchiffrés** sont déjà dans
+   `C:\Users\ghalh\Documents\FanGame\Jeux\3DS\` (vérifié le 2026-11-13 : en-têtes NCCH sans chiffrement) ; Let's Go :
+   à demander (extraction de sa cartouche). Les numéros des archives et les hachages des natives changent sûrement : les
+   retrouver comme en 6e (textes : chercher une classe connue ; natives : corréler avec des numéros connus). Pistes :
    - données des dresseurs (équipes, classes, noms : GARC de trdata / trpoke sur 3DS, d'après pk3DS ; fichiers de la
      RomFS de Let's Go, format à trouver) et textes des classes et des noms ;
    - **drapeau = base + numéro du dresseur ?** En Ultra, `TR_FLAG_001` = 0x0BDD : vérifier sur les 52 `TR_FLAG_n` levés
@@ -374,8 +407,8 @@ Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au
    - **lieu** : FlagsEditorEX quand il le donne, sinon les données des zones de la ROM (personnages de chaque zone et leur
      script) ; c'est la partie difficile (scripts compilés) ;
    - **Coachs de Let's Go** : une classe de dresseur à part ; si leur drapeau suit leur numéro, les trouver par la ROM ;
-   - ensuite : section Dresseurs dans `CompletionGen7Tests` (comptes des tables), retirer « pas encore de dresseurs en 6e
-     et 7e génération » de `CompletionList.razor` et du README, docstring du générateur, cette fiche.
+   - ensuite : section Dresseurs dans `CompletionGen7Tests` (comptes des tables), retirer « pas encore de dresseurs en 7e
+     génération » de `CompletionList.razor` et du README, docstring du générateur, cette fiche.
 2. **Sauvegardes** de Soleil / Lune et de Let's Go à demander (à ranger dans `MonsutaPotaru.Tests/Sauvegardes/` :
    `soleil.sav`, `lune.sav`, `lets-go-pikachu.sav`… ; `RealSavesTests`, ligne « Jeux testés » du README, chapitre « Jeux
    pris en charge » du guide ; un test `Real…` comme `RealUltraSun_ProgressReadInItsFlags`). Y vérifier : titres des
@@ -384,11 +417,7 @@ Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au
    **Méthode la plus sûre** pour un drapeau sans nom : deux sauvegardes juste avant et juste après l'action (battre un
    Coach, finir une épreuve), et comparer les drapeaux et variables qui changent.
    Aussi : l'ordre de `FE_SIREN_COMPLETE_01` à `08` (les épreuves restent comptées par leur cristal Z en attendant).
-3. **Guide du joueur** (chapitre « Complétion ») pas mis à jour : le connecteur Google Docs ne répondait pas (trois
-   essais, 2026-11-13). À y dire (avec le point 3 de la 6e génération) : Soleil à Ultra-Lune et Let's Go, Pokédex de 802,
-   807 ou 153, épreuves comptées par leur cristal Z, CT et cristaux Z dès qu'ils sont dans le sac, Arbre de Combat,
-   Zygarde (chaque Cellule), Scanner des Îles, Experts de Let's Go ; pas encore de dresseurs ni de Coachs.
-4. Check-lists à déposer sur le Drive par l'utilisateur (puis noter leurs ID ici).
+3. Check-lists à déposer sur le Drive par l'utilisateur (puis noter leurs ID ici).
 
 ## Ordre des lieux (3e à 6e génération, 2026-11-12 ; 7e : liste complète écrite à la main, voir plus haut)
 - Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la

@@ -33,12 +33,12 @@ public sealed class CompletionGen7Tests : IDisposable
     private static CompletionRow[] Table(string game) => (CompletionRow[])typeof(Gen7CompletionData).GetField(game)!.GetValue(null)!;
 
     [Theory]
-    [InlineData("Sun", 28, 408, 27, 134, 100, 4000)]
-    [InlineData("Moon", 28, 408, 27, 134, 100, 4000)]
-    [InlineData("UltraSun", 30, 482, 62, 140, 100, 4960)]
-    [InlineData("UltraMoon", 30, 482, 62, 140, 100, 4960)]
-    [InlineData("LetsGoPikachu", 17, 331, 30, 158, 60, 4096)]
-    [InlineData("LetsGoEevee", 17, 331, 30, 158, 60, 4096)]
+    [InlineData("Sun", 28, 408, 25, 134, 100, 4000)]
+    [InlineData("Moon", 28, 408, 25, 134, 100, 4000)]
+    [InlineData("UltraSun", 30, 482, 58, 140, 100, 4960)]
+    [InlineData("UltraMoon", 30, 482, 58, 140, 100, 4960)]
+    [InlineData("LetsGoPikachu", 17, 331, 29, 158, 60, 4096)]
+    [InlineData("LetsGoEevee", 17, 331, 29, 158, 60, 4096)]
     public void Tables_FiveSections_AndConditionsInsideTheSave(string game, int story, int items, int encounters, int quests,
         int machines, int flags)
     {
@@ -84,6 +84,12 @@ public sealed class CompletionGen7Tests : IDisposable
         Assert.Equal("CT100 Confidence", Gen7Completion.AlolaLabel(new(CompletionSection.Items, "Route 1", null, "K:1", Tm: 100)));
         Assert.Equal("CT01 Coup d’Boule", Gen7Completion.LetsGoLabel(new(CompletionSection.Items, "Argenta", null, "K:1", Tm: 1)));
         Assert.Equal("Normazélite", Gen7Completion.ItemName(807)); // PKHeX : « Normazélite [Z] »
+        // Pokémon reçus par cadeau mystère (Magearna, Marshadow, Zeraora, Pikachu Casquette Partenaire) : pas dans les
+        // rencontres, ni Mew de Let's Go (Poké Ball Plus) ; Meltan (Pokémon GO) reste
+        Assert.DoesNotContain(Gen7CompletionData.UltraSun, r => r.Section == CompletionSection.Encounters && r.Species is 801 or 802 or 807);
+        Assert.DoesNotContain(Gen7CompletionData.UltraMoon, r => r.Label == "Pikachu Casquette Partenaire");
+        Assert.DoesNotContain(Gen7CompletionData.LetsGoPikachu, r => r.Section == CompletionSection.Encounters && r.Species == 151);
+        Assert.Contains(Gen7CompletionData.LetsGoEevee, r => r.Section == CompletionSection.Encounters && r.Species == 808);
         Assert.Equal("Lougarozélite", Gen7Completion.ItemName(931));
         Assert.Equal("Florizarrite", Gen7Completion.LetsGoItemName(659));
         // Échanges de Let's Go : la forme d'Alola

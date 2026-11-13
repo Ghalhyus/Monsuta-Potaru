@@ -401,6 +401,13 @@ GG_MEGA = [
 ]
 
 
+# Pokémon reçus par cadeau mystère (Magearna par code QR, Marshadow, Zeraora ; le Pikachu Casquette Partenaire d'Ultra,
+# par code QR, n'est pas dans usum_encounters) : pas dans les rencontres (choix de l'utilisateur, 2026-11-13), toujours
+# dans le Pokédex. Let's Go : pas non plus Mew de la Poké Ball Plus (même choix) ; Meltan et Melmetal (Pokémon GO)
+# restent.
+MYSTERY_GIFT = {801, 802, 807}
+
+
 # Rencontres choisies à la main : (lieu, précision, numéro national, condition, texte)
 def sm_encounters(c, version):
     sun = version == 'SN'
@@ -427,7 +434,6 @@ def usum_encounters(c, version):
         ('Village Flottant', 'cadeau', 142, c.f('FE_SUB017_END'), None),
         ('Route 15', 'Foyer Æther, cadeau', 137, c.f('FE_SUB078_END'), None),
         ("Ho'ohale", 'Surf Club, records des 4 plages', 25, c.f('FE_SUB313_END'), 'Pikachu Surfeur'),
-        ('Plaine des Pikachu', 'code QR', 25, c.f('SYS_FLAG_SATOPIKA_CLEAR'), 'Pikachu Casquette Partenaire'),
         ('Ekaeka', 'Centre Commercial', 760, c.f('FE_SUB342_END'), None),
         ('Route 14', 'îlot', 592, c.f('FE_SUB402_END'), None),
         ('Château Rocket', 'faux objet', 101, c.f('FV_F0801D0207_MARUMAIN'), None),
@@ -466,7 +472,6 @@ def gg_encounters(c, version):
         ('Centrale abandonnée', None, 145, c.f('FE_SUB_48_CLEAR'), None),
         ('Route Victoire', None, 146, c.f('FE_SUB_47_CLEAR'), None),
         ('Caverne Azurée', None, 150, c.f('FE_SUB_50_CLEAR'), None),
-        ('Kanto', 'Poké Ball Plus', 151, 'D:151', None),
         ('Kanto', 'Pokémon GO (GO Park)', 808, 'D:808', None),
         ('Kanto', 'Pokémon GO (GO Park)', 809, 'D:809', None),
     ]
@@ -817,7 +822,7 @@ if __name__ == '__main__':
             c = Ctx(root, key, version)
             if key == 'sm':
                 gifts = {789: c.f('FE_SUB140_END'), 772: c.f('FE_SUB202_END'), 801: c.f('SYS_FLAG_MAGIANA_CLEAR')}
-                enc = checklist_encounters(c, rows, version, {791, 792}, gifts) + sm_encounters(c, version)
+                enc = checklist_encounters(c, rows, version, {791, 792} | MYSTERY_GIFT, gifts) + sm_encounters(c, version)
                 cur = dict(story=sm_story(c, version), encounters=enc, z=SM_Z, machines=machines,
                            quests=battle_tree() + zygarde(c, cells['sm']) + island_scan(c, rows, version))
                 dex = 'les 802'
@@ -825,7 +830,7 @@ if __name__ == '__main__':
                 gifts = capture_flags(c)
                 gifts.update({789: c.f('FE_SUB140_END'), 772: c.f('FE_VICKE_NULL_GET'),
                               801: c.f('SYS_FLAG_MAGIANA_CLEAR'), 803: c.f('FE_CAPTURE_UBVENOM')})
-                enc = checklist_encounters(c, rows, version, {791, 792, 800}, gifts) + usum_encounters(c, version)
+                enc = checklist_encounters(c, rows, version, {791, 792, 800} | MYSTERY_GIFT, gifts) + usum_encounters(c, version)
                 cur = dict(story=usum_story(c, version), encounters=enc, z=USUM_Z, machines=machines,
                            quests=battle_tree() + zygarde(c, cells['usum']) + island_scan(c, rows, version))
                 dex = 'les 807'

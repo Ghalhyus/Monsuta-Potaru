@@ -5,9 +5,9 @@ namespace MonsutaPotaru.Services;
 
 /// <summary>
 /// Complétion de X, Y, Rubis Oméga et Saphir Alpha : les tables de <see cref="Gen6CompletionData"/>, reprises des listes
-/// de drapeaux de FlagsEditorEX et des check-lists de l'utilisateur (pas de désassemblage pour la 3DS), lues dans la
-/// sauvegarde par PKHeX (toutes les langues). Pokédex national (721). Maison de Combat, Super Training et (Rubis Oméga /
-/// Saphir Alpha) concours dans les quêtes annexes. Pas encore de dresseurs : il faut les ROM des jeux.
+/// de drapeaux de FlagsEditorEX, des check-lists de l'utilisateur et des ROM (dresseurs : équipes, lieux ; pas de
+/// désassemblage pour la 3DS), lues dans la sauvegarde par PKHeX (toutes les langues). Pokédex national (721). Maison de
+/// Combat, Super Training et (Rubis Oméga / Saphir Alpha) concours dans les quêtes annexes.
 /// </summary>
 public static class Gen6Completion
 {

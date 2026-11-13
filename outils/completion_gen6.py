@@ -1,7 +1,12 @@
 """
 Génère MonsutaPotaru/Services/Completion/Gen6CompletionData.cs : X, Y, Rubis Oméga et Saphir Alpha.
 
-    python outils/completion_gen6.py <dossier> MonsutaPotaru/Services/Completion/Gen6CompletionData.cs
+    python outils/completion_gen6.py <dossier> <ROM de X ou Y> <ROM de Rubis Oméga ou Saphir Alpha> MonsutaPotaru/Services/Completion/Gen6CompletionData.cs
+
+<ROM de …> : un .3ds déchiffré (ceux de l'utilisateur, dans son dossier de jeux 3DS : lui demander le chemin), ou le
+dossier de sa RomFS extraite par Azahar / Citra ; n'importe quelle langue d'Europe (les textes français y sont). X et Y
+ont les mêmes dresseurs (vérifié) ; Saphir Alpha : les dresseurs de Rubis Oméga, sbires Aqua et Magma échangés
+(vérifié sur rubis-omega.sav : aucun sbire Aqua battu dans une partie finie). Lecture : completion_gen6_rom.py.
 
 <dossier> contient :
 - flags_gen6xy_en.txt et flags_gen6oras_en.txt : listes de FlagsEditorEX
@@ -17,7 +22,8 @@ Génère MonsutaPotaru/Services/Completion/Gen6CompletionData.cs : X, Y, Rubis O
 
 Pas de désassemblage pour la 3DS, et les scripts compilés du jeu ne se lisent pas de façon fiable : histoire, rencontres et
 quêtes sont choisies ici d'après les check-lists, avec les drapeaux et variables nommés de FlagsEditorEX, les badges et les
-objets rares du sac. Pas encore de dresseurs (il faut les ROM : équipes, noms, lieux).
+objets rares du sac. Dresseurs : lus dans les ROM (équipes, lieux, drapeaux), plus ceux que FlagsEditorEX situe sans
+que la ROM le montre (Dresseurs Aériens, dresseurs d'Illumis, Pat & Joe).
 """
 import csv
 import json
@@ -27,6 +33,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from completion_gen3 import anchored_rank  # noqa: E402
+from completion_gen6_rom import TRAINER_FLAGS, read_trainers  # noqa: E402
 
 LOCAL_FLAGS = 0x60  # en dessous : propres à la carte
 MAX_ITEM = 775  # dernier objet de Rubis Oméga / Saphir Alpha (Flûte Éon)
@@ -254,6 +261,12 @@ def xy_story(c, version):
         ('Repaire Team Flare', None, f'Capturer {legend}', 'D:716' if version == 'X' else 'D:717'),
         badge(7, 'Iceberg', 'Urup', 'Auffrac-les-Congères'),
         ('Route 19', None, 'Recevoir la CS05 Cascade', c.k('HM05')),
+        # Conseil 4 : drapeau levé par le script de chaque salle (lu dans la ROM : salle 251 → 0x177…), sans doute remis à
+        # zéro pour les revanches : la Ligue déjà gagnée compte aussi
+        ('Ligue Pokémon', 'Chambre du Brasier', 'Battre Malva (Conseil 4)', c.a('FE_PLR0302_BIGFOUR2_01', 'SYS_FLAG_GAME_CLEAR')),
+        ('Ligue Pokémon', 'Chambre du Barrage', 'Battre Narcisse (Conseil 4)', c.a('FE_PLR0402_BIGFOUR4_01', 'SYS_FLAG_GAME_CLEAR')),
+        ('Ligue Pokémon', "Chambre de l'Alliage", 'Battre Thyméo (Conseil 4)', c.a('FE_PLR0502_BIGFOUR1_01', 'SYS_FLAG_GAME_CLEAR')),
+        ('Ligue Pokémon', 'Chambre de la Guivre', 'Battre Dracéna (Conseil 4)', c.a('FE_PLR0602_BIGFOUR3_01', 'SYS_FLAG_GAME_CLEAR')),
         ('Ligue Pokémon', None, 'Battre la Maîtresse Dianthéa et entrer au Panthéon', c.f('SYS_FLAG_GAME_CLEAR')),
         ('Gare du TMV (Illumis)', None, 'Recevoir le Pokédex National et le Passe TMV', c.k('TMV Pass')),
         ('Labo Platane', None, 'Recevoir le PokéRadar', c.k('Poké Radar')),
@@ -329,10 +342,8 @@ def xy_encounters(c, version):
         ('Roche-sur-Gliffe', 'fossile', 564, 'D:564|D:566', 'Carapagos ou Arkéapti'),
         ('Hôtels de Kalos', 'échange (Montagnard)', 129, c.w('WK_SCENE_HOTEL_GUEST_01', 5), 'Magicarpe (contre Léviator)'),
         ('Hôtels de Kalos', 'échange (Soubrette)', 133, c.w('WK_SCENE_HOTEL_GUEST_04', 5), 'Évoli'),
-        # Distributions réelles
-        ('Kalos', 'distribution', 719, 'D:719', None),
-        ('Kalos', 'distribution', 720, 'D:720', None),
-        ('Kalos', 'distribution', 721, 'D:721', None),
+        # Pas les Pokémon reçus par cadeau mystère (Diancie, Hoopa, Volcanion) : retirés (choix de l'utilisateur,
+        # 2026-11-13) ; ils restent dans le Pokédex (échange, Banque)
     ]
 
 
@@ -395,10 +406,9 @@ def oras_encounters(c, version):
         ('Bourg-en-Vol', 'starter de Sinnoh', 387, c.w('WK_SCENE_T103', 9), 'Tortipouss, Ouisticram ou Tiplouf'),
         ('Algatia', 'cadeau', 374, 'D:374', None),
         ('Désert', 'fossile', 345, 'D:345|D:347', 'Lilia ou Anorith'),
-        # Distributions réelles (check-list de l'utilisateur)
+        # Pas les Pokémon reçus par cadeau mystère (Mew, Celebi, Jirachi… de la check-list) : retirés (choix de
+        # l'utilisateur, 2026-11-13) ; ils restent dans le Pokédex
     ]
-    for species in (151, 251, 385, 490, 491, 492, 493, 494, 647, 648, 649, 719, 720, 721):
-        u.append(('Hoenn', 'distribution', species, f'D:{species}', None))
     return u
 
 
@@ -413,6 +423,24 @@ def maison(c, where):
         q.append((where, None, f'Combat {mode} : battre la Châtelaine (20e victoire)', c.f(f'FE_BTLHOUSE_CLEAR_{key}')))
         q.append((where, None, f'Combat Super {mode} : battre la Châtelaine (50e victoire)', c.f(f'FE_BTLHOUSE_MONUMENT_{key}')))
     return q
+
+
+# Château de Combat (X / Y) : ses nobles lèvent leur drapeau de dresseur (vérifié sur y.sav : 20 battus, levés), mais
+# ne sont sur aucune carte ni dans aucun script de zone (le Château les choisit selon le jour et le titre du joueur)
+NOBLES = {'Baron', 'Baronne', 'Vicomte', 'Vicomtesse', 'Comte', 'Comtesse', 'Marquis', 'Marquise', 'Duc', 'Duchesse',
+          'Grande-Duchesse'}
+
+
+def chateau(rom):
+    """Chaque noble du Château de Combat une fois ; même titre et même nom (Marquise Violette, deux équipes) : l'un ou
+    l'autre, faute de savoir si les deux viennent."""
+    trainers, _ = rom
+    groups = {}
+    for n, t in sorted(trainers.items()):
+        if t['cls'] in NOBLES and t['team'] and not t['places']:
+            groups.setdefault(f"{t['cls']} {t['name']}", []).append(n)
+    return [('Château de Combat', None, label, '|'.join(f'E:{TRAINER_FLAGS + n}' for n in ns))
+            for label, ns in groups.items()]
 
 
 def super_training(stages):
@@ -531,6 +559,51 @@ def clean_place(text):
     return place, extra
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Dresseurs (ROM)
+
+# Dans l'histoire (badges, Panthéon), pas dans les dresseurs ; leurs combats sont lancés par un script
+LEADERS = {'Champion', 'Championne', 'Champions', 'Conseil 4', 'Maître'}
+# Rubis Oméga : on combat la Team Magma, Saphir Alpha la Team Aqua (la ROM a les deux, l'autre équipe reste cachée)
+OTHER_TEAM = {'OR': 'Team Aqua', 'AS': 'Team Magma'}
+
+
+def trainer_rows(c, version, rom, places_fr, checklist):
+    """Dresseurs de la version : (lieu, précision, condition, équipe, numéro), un par drapeau."""
+    trainers, gyms = rom
+    rematch = {flag - TRAINER_FLAGS for flag, (kind, _, _, desc, _) in c.flags.items()
+               if kind == 'TRAINER BATTLE' and 'Rematch' in desc}
+
+    def wanted(n):
+        t = trainers[n]
+        return (t['team'] and t['cls'] not in LEADERS and n not in rematch
+                and not (OTHER_TEAM.get(version) and OTHER_TEAM[version] in t['cls']))
+
+    def zone_of(zone, place):
+        name = places_fr[place].replace('’', "'")  # PKHeX : apostrophe typographique
+        if zone not in gyms:
+            return name, None
+        for gym in (f'Arène de {name}', f"Arène d'{name}"):
+            if gym in checklist:  # rangé avec son badge (Arène de Clémenti-Ville : 5e badge)
+                return gym, None
+        return name, 'Arène'
+
+    out = []
+    for n, t in sorted(trainers.items()):
+        if not t['places'] or not wanted(n):
+            continue
+        zone, place, _ = min(t['places'], key=lambda p: (p[2] != 'carte', p[0]))  # le personnage, sinon le script
+        out.append(zone_of(zone, place) + (n,))
+    # Dresseurs que FlagsEditorEX situe sans que la ROM les montre (Dresseurs Aériens, dresseurs d'Illumis…)
+    found = {n for *_, n in out}
+    for flag, (kind, loc, sub, desc, name) in sorted(c.flags.items()):
+        n = flag - TRAINER_FLAGS
+        if kind == 'TRAINER BATTLE' and loc and n in trainers and n not in found and wanted(n):
+            out.append((c.place(loc), subplace(sub), n))
+    return [(zone, det, f'E:{TRAINER_FLAGS + n}', ','.join(f'{s}:{lv}' for s, lv in trainers[n]['team']), n)
+            for zone, det, n in out]
+
+
 def build(c, version, checklist, cur):
     rows = []
 
@@ -540,13 +613,16 @@ def build(c, version, checklist, cur):
             MISSING_PLACES.add(f'{zone} ({version})')
         return 10_000 if rank is None else rank
 
-    def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, sort=0):
+    def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, sort=0, team=None):
         rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                         species=species, count=count, sort=(order(zone, section == 'Items'), zone, sort)))
+                         species=species, count=count, team=team,
+                         sort=(order(zone, section in ('Trainers', 'Items')), zone, sort)))
 
-    S, I, U, Q = 'Story', 'Items', 'Encounters', 'Quests'
+    S, D, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     for i, (zone, det, label, cond) in enumerate(cur['story']):
         add(S, zone, det, cond, label, sort=i)
+    for zone, det, cond, team, n in cur['trainers']:
+        add(D, zone, det, cond, team=team, sort=n)
 
     # ---------- Objets : au sol, cachés, cadeaux décrits ----------
     seen_items = set()  # CT / CS et Méga-Gemmes déjà comptées par un drapeau
@@ -603,8 +679,8 @@ def build(c, version, checklist, cur):
     for i, (zone, det, label, cond) in enumerate(cur['quests']):
         add(Q, zone, det, cond, label, sort=i)
 
-    section_order = {s: n for n, s in enumerate((S, I, U, Q))}
-    rows.sort(key=lambda r: (section_order[r['section']],) + ((r['sort'][2],) if r['section'] != I else r['sort']))
+    section_order = {s: n for n, s in enumerate((S, D, I, U, Q))}
+    rows.sort(key=lambda r: (section_order[r['section']],) + (r['sort'] if r['section'] in (D, I) else (r['sort'][2],)))
     return rows
 
 
@@ -617,8 +693,8 @@ def cs(s):
 
 def emit(games, out):
     lines = ['// <auto-generated>',
-             "// Généré par outils/completion_gen6.py d'après les listes de drapeaux de FlagsEditorEX et les check-lists de",
-             "// l'utilisateur : ne pas modifier à la main, changer le script et le relancer.",
+             "// Généré par outils/completion_gen6.py d'après les listes de drapeaux de FlagsEditorEX, les check-lists de",
+             "// l'utilisateur et les ROM (dresseurs) : ne pas modifier à la main, changer le script et le relancer.",
              '// </auto-generated>',
              '',
              'namespace MonsutaPotaru.Services;',
@@ -633,6 +709,8 @@ def emit(games, out):
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
+            if r['team']:
+                n.append(f'Team: {cs(r["team"])}')
             for key, field in (('item', 'Item'), ('tm', 'Tm'), ('count', 'Count'), ('species', 'Species')):
                 if r[key]:
                     n.append(f'{field}: {r[key]}')
@@ -650,7 +728,8 @@ def lines_of(path):
 
 if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
-    root, out = sys.argv[1:3]
+    root, rom_xy, rom_oras, out = sys.argv[1:5]
+    roms = {'xy': read_trainers(rom_xy, 'xy'), 'oras': read_trainers(rom_oras, 'oras')}
     here = os.path.dirname(os.path.abspath(__file__))
     order = json.load(open(os.path.join(here, 'completion_gen6_ordre.json'), encoding='utf-8'))
     items_en = lines_of(os.path.join(root, 'text_Items_en.txt'))
@@ -667,13 +746,16 @@ if __name__ == '__main__':
         machines = checklist_machines(os.path.join(root, csv_file))
         for name, version, doc in versions:
             c = Ctx(flags, works, items_en, items_fr, places_en, places_fr, version)
+            trainers = trainer_rows(c, version, roms[key], places_fr, order[key])
             if key == 'xy':
                 cur = dict(story=xy_story(c, version), encounters=xy_encounters(c, version), mega=XY_MEGA,
-                           quests=maison(c, 'Maison de Combat') + super_training(stages), machines=machines)
+                           quests=maison(c, 'Maison de Combat') + chateau(roms['xy']) + super_training(stages),
+                           machines=machines,
+                           trainers=trainers)
             else:
                 cur = dict(story=oras_story(c, version), encounters=oras_encounters(c, version), mega=ORAS_MEGA,
                            quests=maison(c, 'Maison de Combat') + super_training(stages) + contests(c),
-                           machines=machines)
+                           machines=machines, trainers=trainers)
             games.append((name, doc, build(c, version, order[key], cur)))
     if UNKNOWN:
         raise SystemExit('À traduire (ITEM_FIXES, PLACE_EN, SUBPLACES) : ' + ', '.join(sorted(UNKNOWN)))
