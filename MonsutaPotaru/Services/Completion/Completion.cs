@@ -22,7 +22,9 @@ public enum CompletionState { Missing, Done, Missed }
 /// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin) ; en 5e génération
 /// (<see cref="Gen5CompletionData"/>, par outils/completion_gen5.py) « K:n » objet n dans le sac, « SB:champ:v » Métro de
 /// Combat (mode Super ouvert, meilleure série), « PW:n » tournoi n du PWT remporté, « MD:n » médaille n obtenue, « PR:n »
-/// parure n du Music-Hall possédée.
+/// parure n du Music-Hall possédée ; en 6e génération (<see cref="Gen6CompletionData"/>, par outils/completion_gen6.py)
+/// « H:n » objet n dans le sac ou tenu par un Pokémon (Méga-Gemmes), « ST:n » épreuve n du Super Training réussie (un
+/// meilleur temps enregistré) ; « W:n:v » variable de script n arrivée à v au moins (sans retrait de 0x4000).
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
@@ -139,7 +141,8 @@ public static class CompletionSections
 /// Jeux qui ont une complétion : Rouge, Bleu et Jaune (<see cref="Gen1Completion"/>), Or, Argent et Cristal
 /// (<see cref="Gen2Completion"/>), versions internationales (une sauvegarde japonaise ou coréenne a d'autres adresses) ;
 /// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), Diamant, Perle, Platine, HeartGold et
-/// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), toutes les langues.
+/// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), X, Y, Rubis Oméga
+/// et Saphir Alpha (<see cref="Gen6Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -149,6 +152,7 @@ public static class CompletionGames
         LivingDexGame.Ruby, LivingDexGame.Sapphire, LivingDexGame.Emerald, LivingDexGame.FireRed, LivingDexGame.LeafGreen,
         LivingDexGame.Diamond, LivingDexGame.Pearl, LivingDexGame.Platinum, LivingDexGame.HeartGold, LivingDexGame.SoulSilver,
         LivingDexGame.Black, LivingDexGame.White, LivingDexGame.Black2, LivingDexGame.White2,
+        LivingDexGame.X, LivingDexGame.Y, LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire,
     ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
@@ -156,7 +160,7 @@ public static class CompletionGames
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 or SAV4 or SAV5 => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
+        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO => [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
 
@@ -171,6 +175,7 @@ public static class CompletionGames
             SAV2 sav2 => Gen2Completion.Steps(sav2, game),
             SAV4 sav4 => Gen4Completion.Steps(sav4, game),
             SAV5 sav5 => Gen5Completion.Steps(sav5, game),
+            SAV6 sav6 => Gen6Completion.Steps(sav6, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
@@ -252,10 +257,12 @@ internal sealed class CompletionFlags(SaveFile sav)
             "F" => ((SAV1)sav).HallOfFameCount > 0,
             "P" => ((SAV1)sav).PikaFriendship == byte.MaxValue,
             "N" => sav is SAV5 sav5 ? sav5.Zukan.IsNationalDexUnlocked : ((SAV4)sav).NationalDex,
-            "W" => ((SAV4)sav).GetWork(int.Parse(parts[1])) >= int.Parse(parts[2]),
+            "W" => Work(int.Parse(parts[1])) >= int.Parse(parts[2]),
             "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
             "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
             "K" => HasItem(int.Parse(parts[1])),
+            "H" => HasItem(int.Parse(parts[1])) || IsHeld(int.Parse(parts[1])),
+            "ST" => SuperTraining().GetTime1(int.Parse(parts[1])) > 0,
             "SB" => Subway(parts[1]) >= int.Parse(parts[2]),
             "PW" => ((SAV5B2W2)sav).PWT.GetPWTRecord(int.Parse(parts[1])) > 0,
             "MD" => ((SAV5B2W2)sav).Medals[int.Parse(parts[1])].IsObtained,
@@ -274,6 +281,7 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV4HGSS hgss => hgss.Badges | hgss.Badges16 << 8,
         SAV4 sav4 => sav4.Badges,
         SAV5 sav5 => sav5.Misc.Badges,
+        SAV6 sav6 => sav6.Badges,
         _ => throw new InvalidOperationException("Pas de badges lisibles dans cette sauvegarde."),
     };
 
@@ -284,8 +292,28 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV3 sav3 => sav3.GetEventFlag(flag),
         SAV4 sav4 => sav4.GetEventFlag(flag),
         SAV5 sav5 => sav5.EventWork.GetEventFlag(flag),
+        SAV6 sav6 => sav6.EventWork.GetEventFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
+
+    /// <summary>Variable de script : 4e génération (0x4000 retiré), 6e génération (numéro de FlagsEditorEX).</summary>
+    private int Work(int index) => sav switch
+    {
+        SAV4 sav4 => sav4.GetWork(index),
+        SAV6 sav6 => sav6.EventWork.GetWork(index),
+        _ => throw new InvalidOperationException("Pas de variables de script lisibles dans cette sauvegarde."),
+    };
+
+    /// <summary>Super Training (6e génération) : un meilleur temps enregistré pour une épreuve, c'est qu'elle est réussie.</summary>
+    private SuperTrainBlock SuperTraining() => sav switch
+    {
+        SAV6XY xy => xy.SuperTrain,
+        SAV6AO ao => ao.SuperTrain,
+        _ => throw new InvalidOperationException("Pas de Super Training dans cette sauvegarde."),
+    };
+
+    /// <summary>Objet tenu par un Pokémon de l'équipe ou des boîtes (Méga-Gemmes : elles se donnent à tenir).</summary>
+    private bool IsHeld(int item) => sav.PartyData.Concat(sav.BoxData).Any(pk => pk.Species != 0 && pk.HeldItem == item);
 
     /// <summary>Objet dans une poche du sac (CS, objets rares : ils ne se jettent pas).</summary>
     private bool HasItem(int item) => sav.Inventory.Pouches.Any(p => p.Items.Any(i => i.Index == item && i.Count > 0));

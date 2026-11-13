@@ -227,7 +227,75 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - Vérifié sur `noir.sav` (partie finie : 52,2 % avec les parures, aucun raté) et `noire-2.sav` (2 badges : 21,0 %) ; Blanche et Blanche 2
   seulement en mémoire.
 
-## Ordre des lieux (3e à 5e génération, 2026-11-12)
+## X / Y / Rubis Oméga / Saphir Alpha (2026-11-13)
+- Choix de l'utilisateur : Pokédex **national de 721** ; **Méga-Gemmes dans « Objets »**, à leur lieu, distributions
+  réelles comptées (Braségalite de X / Y, Diancite ; Diancie, Hoopa, Volcanion dans « Rencontres », et en Rubis Oméga /
+  Saphir Alpha les distributions de sa check-list) ; pas la Latiasite ni la Latiosite de X / Y (échange seulement) ;
+  quêtes : **Maison de Combat** (Châtelaine au 20e combat, puis au 50e en Super : `FE_BTLHOUSE_CLEAR_*`,
+  `FE_BTLHOUSE_MONUMENT_*`), **Super Training** (les 30 épreuves de la cartouche, noms `trainingstage` de PKHeX ; réussie =
+  `SuperTrainBlock.GetTime1(n) > 0`), **Concours Live** (Rubis Oméga / Saphir Alpha : variable `WK_SCENE_CONTEST`, 7 à 21) ;
+  enquêtes de Beladonis (X / Y) voulues mais **aucune trace trouvée** (variables sans nom dans FlagsEditorEX : à chercher
+  sur une sauvegarde de X / Y qui les a faites) ; **ratés** : petite liste à la main (aucun pour l'instant).
+  Check-lists : `suivi_completion_pokemon_x_y.csv`, `suivi_completion_pokemon_rubis_omega_saphir_alpha.csv` (Drive de
+  l'utilisateur, d'après Pokébip).
+- `Gen6CompletionData.cs` : `python outils/completion_gen6.py <dossier> MonsutaPotaru/Services/Completion/Gen6CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script). Quatre tables (X, Y, OmegaRuby, AlphaSapphire).
+- **Pas de désassemblage pour la 3DS**, scripts compilés illisibles : tout vient des listes de **FlagsEditorEX**
+  (`flags_gen6xy_en.txt`, `flags_gen6oras_en.txt` : drapeaux et variables, objets au sol `FV_FLD_ITEM_n`, cachés
+  `FLAG_HIDEITEM_n`, cadeaux décrits en X / Y « Received … from … ») et des check-lists. Lieux anglais → PKHeX
+  (`text_xy_00000_en/fr.txt`, une liste pour les quatre jeux) ; apostrophe typographique de PKHeX remplacée.
+- **Pas encore de dresseurs** : il faut les ROM (RomFS décryptée de X ou Y et de Rubis Oméga ou Saphir Alpha, promises par
+  l'utilisateur) pour les équipes, noms et lieux ; drapeaux des dresseurs dans FlagsEditorEX (`TRID_*`), lieu manquant
+  pour 362 / 616 (X / Y) et 575 / 949 (Rubis Oméga / Saphir Alpha).
+- Histoire : badges (`SAV6.Badges`), objets rares du sac (`K:n`), drapeaux nommés (`SYS_FLAG_GAME_CLEAR`,
+  `SYS_FLAG_CAPTURE_*` en Rubis Oméga / Saphir Alpha), **variables de scène** nommées de FlagsEditorEX (`W:n:v`,
+  `EventWork6.GetWork`, numéro direct). X / Y : la plupart des drapeaux de la seconde moitié n'ont pas de nom : pas
+  d'étape « Conseil 4 », seulement le Panthéon ; Rubis Oméga / Saphir Alpha : `SYS_FLAG_ZENKOKU_SET` n'est pas levé dans
+  `rubis-omega.sav` (Panthéon et Delta faits) : pas d'étape « Pokédex National ».
+- Objets : **chaque CT et CS** (boutiques, Maison de Combat, cadeaux sans drapeau) par **possession** (`K:n`, elles ne se
+  jettent pas), sauf celles qu'un drapeau d'objet au sol compte déjà ; Méga-Gemmes par possession **au sac ou tenue**
+  (`H:n` : la plupart n'ont pas de drapeau nommé ; les 12 `FE_FLD_MEGASTONE_GET_n` de X / Y ne disent pas laquelle).
+  Exclus : objets cachés « (recurring) », cadeaux quotidiens « [Daily] », diplômes, échanges d'objets.
+- Pièges :
+  - un nom d'objet repris d'une génération précédente (Clé Hangar, Passe Bateau, Météorite) a plusieurs numéros : le
+    générateur prend le dernier jusqu'à 775 (sinon « Clé du Hangar (DPPt) ») ;
+  - planques : Magma seulement en Rubis Oméga, Aqua seulement en Saphir Alpha (`HIDEOUTS`) ;
+  - Lati@s : `SYS_FLAG_CAPTURE_RATHIOSU` levé par le cadeau de l'Île du Sud (vérifié sur `rubis-omega.sav`) ;
+  - Rayquaza : `SYS_FLAG_CAPTURE_REKKUUZA` pas levé dans `rubis-omega.sav` alors que Deoxys l'est : `|D:384` ;
+  - Badge de Norman : lieu « Arène de Clémenti-Ville » (Clémenti-Ville est déjà un lieu du début : la page regroupe par lieu) ;
+  - X / Y : la Bicyclette a deux numéros (450, 713) ; l'oiseau légendaire errant dépend du starter : une étape à trois.
+- Vérifié sur `rubis-omega.sav` (partie finie, Delta : 41,0 %, aucun raté) dans le navigateur ; X, Y et Saphir Alpha
+  seulement en mémoire (pas de sauvegarde, promise par l'utilisateur).
+
+### Reste à faire (6e génération, au 2026-11-13)
+Le code commité marche sans ces points (pas de section Dresseurs, 5 sections au même poids) ; les reprendre dans l'ordre.
+1. **Dresseurs**, avec les ROM de l'utilisateur (RomFS décryptée de X ou Y et de Rubis Oméga ou Saphir Alpha, dump
+   d'Azahar / Citra ; lui demander le chemin). À lire dans les GARC (pistes, d'après pk3DS, à vérifier) : dresseurs X / Y
+   `a/0/3/8` (trdata) et `a/0/4/0` (trpoke), Rubis Oméga / Saphir Alpha `a/0/3/6` et `a/0/3/8` ; textes `a/0/7/2` (X / Y),
+   `a/0/7/1` (Rubis Oméga / Saphir Alpha) pour les noms et classes. Vérifier que drapeau du dresseur = base + numéro du
+   dresseur (les `TRID_*` de FlagsEditorEX dans l'ordre ?) ; lieu : FlagsEditorEX quand il le donne, sinon les zones de la
+   ROM. Une version par table si les dresseurs diffèrent. Puis : section Dresseurs dans les tests
+   (`CompletionGen6Tests`, comptes des tables), retirer « pas encore de dresseurs en 6e génération » de
+   `CompletionList.razor` et du README, docstring du générateur, cette fiche.
+2. **Sauvegarde de X ou Y** promise par l'utilisateur : la ranger dans `MonsutaPotaru.Tests/Sauvegardes/` (`x.sav` ou
+   `y.sav`), l'ajouter à `RealSavesTests`, à la ligne « Jeux testés » du README et au chapitre « Jeux pris en charge » du
+   guide ; un test `RealX…` comme `RealOmegaRuby_ProgressReadInItsFlags` ; vérifier dans le navigateur. Y chercher les
+   **enquêtes de Beladonis** (variables `WK_SCENE_*` sans nom qui changent quand on les fait) et les drapeaux sans nom
+   de la seconde moitié de l'histoire (Conseil 4, rival).
+3. **Guide du joueur** (Google Doc, chapitre « Complétion ») pas mis à jour : le connecteur Google Docs renvoyait une
+   erreur. À y dire : jeux de la 6e génération, Pokédex de 721, CT / CS et Méga-Gemmes comptées dès qu'elles sont dans
+   le sac (ou tenues), Maison de Combat, Super Training, Concours Live ; pas encore de dresseurs.
+4. **Méga-Gemmes de Rubis Oméga / Saphir Alpha** reprises telles quelles de la check-list : Dracaufite Y et Mewtwoïte Y
+   douteuses dans ces jeux, à confirmer avec l'utilisateur (`ORAS_MEGA` du générateur).
+5. Fichiers du `<dossier>` du générateur : pas dans le dépôt, à retélécharger sur un autre PC (sources et noms exacts :
+   docstring de `outils/completion_gen6.py` ; check-lists sur le Drive de l'utilisateur, ID
+   `1AKULRv48UUOCjAOyXuyghTTbk1PotVQA` pour X / Y et `1vVW-VMqtcIwATZSc5-4djXeGKw5jzNBn` pour Rubis Oméga / Saphir
+   Alpha).
+
+Ensuite : **7e génération** (Soleil, Lune, Ultra-Soleil, Ultra-Lune ; `ultra-soleil.sav` est déjà dans les sauvegardes
+de test).
+
+## Ordre des lieux (3e à 6e génération, 2026-11-12)
 - Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la
   liste d'ordre **en mot entier** (« Route 1 » ne prend plus la place de « Route 10 », « Route 3 » celle de « Route 30 ») ;
   s'il manque, son voisin désigné (`ANCHORS` de chaque générateur, suivi en chaîne) ; sinon, pour une route ou un chenal,
@@ -237,13 +305,15 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - 4e génération : `completion_gen4_ordre.json` ne reprend que les lieux des étapes **Histoire** des check-lists ; les
   lignes du Pokédex ou des CT citent des lieux de capture et rangeaient des routes en fin de liste (Route 201, Route 29).
   Les routes de Kanto d'HG / SS ont une ville voisine (sinon rangées par numéro près de la Route 30).
+- 6e génération : `completion_gen6_ordre.json` (lignes « Histoire » des deux CSV, sans Bourg Croquis : sa
+  seule étape vient après la Ligue et rangeait la ville de départ à la fin ; rangé avec Quarellis dans `ANCHORS`) ; les mirages de Rubis Oméga / Saphir Alpha avec « Hoenn » (après l'Épisode Delta).
 - 3e génération : `completion_gen3_ordre.json` ne reprend que les lignes « Histoire » et « Arène / Ligue » des CSV de
   l'utilisateur (`Suivi_Pokemon_Rubis_Saphir.csv`, `_Emeraude.csv`, `_RougeFeu_VertFeuille.csv`, sur son Drive, dans
   l'ordre des lignes). Routes de Kanto et lieux annexes : voisin dans `ANCHORS` (la Route 1 avec Jadielle, les Routes 14
   et 15 avec Parmanie, l'Île 7 avec l'Île 6…). La table régénérée a les mêmes lignes qu'avant, seul l'ordre change.
 
 ## Ajouter une génération
-- Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle) ; `CompletionGames.For` et `Steps` choisissent
+- Une nouvelle table et sa lecture (`Gen2Completion` sert de modèle ; sans désassemblage : `Gen6Completion`) ; `CompletionGames.For` et `Steps` choisissent
   selon la sauvegarde. Garder les sections au même poids ; `CompletionProgress.Of` ne montre que celles du jeu.
 - PKHeX a des noms de drapeaux à partir de la 2e génération (`Resources/text/script/gen2/flags_*`), mais incomplets
   (152 pour Or / Argent) : les désassemblages restent la source.
