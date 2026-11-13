@@ -31,7 +31,7 @@ public sealed class BattlesPageTests : PageTestContext
 
     /// <summary>
     /// Choisit les premiers Pokémon proposés, avec <paramref name="lead"/> en tête (le premier est retiré puis remis au
-    /// bout), puis valide l'équipe. Une tête faible évite un K.O. au premier tour (remplacement forcé, pas de menu).
+    /// bout), puis valide l'équipe.
     /// </summary>
     private static async Task ChooseTeam(IRenderedComponent<Battles> cut, int lead = 1)
     {
@@ -54,11 +54,12 @@ public sealed class BattlesPageTests : PageTestContext
     {
         var (sacha, ondine) = await Requested();
         await ondine.Click("Accepter");
-        await ChooseTeam(sacha, lead: 4); // Chenipan niveau 4 (vert-feuille.sav), face au Férosinge niveau 13 d'Ondine
+        await ChooseTeam(sacha, lead: 4); // Chenipan niveau 4 (vert-feuille.sav, Sécrétion), face au Férosinge niveau 13 d'Ondine (Groz'Yeux)
         sacha.WaitForText("Ton équipe est prête");
         await ChooseTeam(ondine);
 
-        // Premier tour : les menus de Sacha, puis une attaque de chaque côté
+        // Premier tour : les menus de Sacha, puis une attaque sans dégâts de chaque côté. Un K.O. forcerait un
+        // remplacement (pas de menu, donc pas de FUITE) : le Balayage de Férosinge met K.O. Chenipan sur un coup critique.
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("ATTAQUE")), Long);
         await sacha.Click("ATTAQUE");
         Assert.NotEmpty(sacha.FindAll(".battle-move"));
@@ -67,11 +68,11 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.NotEmpty(sacha.FindAll(".battle-member"));
         await sacha.Click("RETOUR");
         await sacha.Click("ATTAQUE");
-        await sacha.Find(".battle-move:not([disabled])").ClickAsync(new());
+        await sacha.Click("Sécrétion");
         sacha.WaitForText("En attente de ondine");
         ondine.WaitForAssertion(() => Assert.True(ondine.HasButton("ATTAQUE")), Long);
         await ondine.Click("ATTAQUE");
-        await ondine.Find(".battle-move:not([disabled])").ClickAsync(new());
+        await ondine.Click("Groz");
 
         // Abandon de Sacha (confirmé), fin du combat des deux côtés
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("FUITE")), Long);

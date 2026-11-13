@@ -42,6 +42,9 @@ README : « Combats ».
 
 ## Tests
 - Les tests de combat lancent le vrai simulateur (`BattleTests.Showdown()` : échec clair s'il n'est pas installé ; il faut Node 22+).
+- Le simulateur tire au hasard (coups critiques, précision) : un test qui attend un menu choisit des attaques sans
+  dégâts (`BattlesPageTests` : Sécrétion contre Groz'Yeux). Un K.O. force un remplacement, sans menu ni FUITE (échec en
+  CI le 2026-11-13 : Balayage critique de Férosinge sur Chenipan niveau 4).
 
 ## Essai à deux dans le navigateur
 - Sacha sur `127.0.0.1:5299`, Ondine sur `localhost:5299` ; chacune a une sauvegarde de 3e génération dans la base de
