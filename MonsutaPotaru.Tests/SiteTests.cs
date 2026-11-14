@@ -207,6 +207,8 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal("cote", sideBySide.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
         var (_, sortsAgain) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
         Assert.Equal("cote", Parser.ParseDocument(sortsAgain).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        var (_, hybrid) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "hybride" });
+        Assert.Equal("hybride", Parser.ParseDocument(hybrid).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
         var (_, tampered) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "pirate" });
         Assert.Equal("empile", Parser.ParseDocument(tampered).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
 

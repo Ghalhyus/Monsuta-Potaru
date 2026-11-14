@@ -152,12 +152,13 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   dernière requête de Showdown ; 60 secondes par choix (`BattleHub.Tick`), sinon défaite ; abandon (bouton
   « ABANDONNER », confirmé), départ de la page ou onglet fermé : défaite ; simulateur arrêté par erreur : combat annulé.
 - **Affichage** sur deux écrans, façon 4e génération, dessinés en CSS (`app.css`, « Combats » ; aucune image reprise
-  d'un jeu) : terrain en haut ; en bas, Pokéballs des deux équipes, menu principal (ATTAQUE, SAC toujours grisé : pas de
-  sac en combat de câble, ABANDONNER, POKéMON), capacités, équipe. Sprites du jeu de chaque joueur
+  d'un jeu) : terrain en haut ; en bas, Pokéballs des deux équipes, menu principal (ATTAQUE, ABANDONNER, POKéMON ; pas
+  de bouton SAC : pas de sac en combat de câble), capacités, équipe. Sprites du jeu de chaque joueur
   (`Services/Battle/BattleSprites.cs`), rythme dans `BattleTiming`, traduction française du protocole
   (`Services/Battle/BattleView.cs`, `BattleNames` ; test `BattleTests.RandomBattles_EndAndAreFullyTranslated`).
-- **Disposition des écrans** : empilés (d'origine) ou côte à côte, au choix du joueur, par les boutons de la page ou
-  dans « Préférences » ; retenue dans le compte (`SortPreferences.Battle`, `PreferencesService.SetBattleLayoutAsync`).
+- **Disposition des écrans** : empilés (d'origine), côte à côte ou **hybride** (le terrain en grand, l'écran du bas
+  réduit à un panneau à sa droite : Pokéballs, puis menu, capacités ou équipe en colonne), au choix du joueur, par les
+  boutons de la page ou dans « Préférences » ; retenue dans le compte (`SortPreferences.Battle`, `PreferencesService.SetBattleLayoutAsync`).
   Sur un écran étroit, toujours empilés.
 - **Résultats** : table `BattleRecords` (`Services/Battle/BattleRecorder.cs`, événement `BattleHub.Finished`), sans clé
   étrangère.
@@ -203,7 +204,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   ses tris dans le navigateur ; un tri changé dans un onglet est gardé pendant la visite.
 - Chez un autre joueur, ce sont les tris **du visiteur** ; ceux du propriétaire ne sont jamais lus.
 - Formulaire et adresse lus par les mêmes fonctions (`SiteSorts.*FromQuery`) : une valeur inconnue donne le tri d'origine.
-- La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"cote"`, voir
+- La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"cote"` ou `"hybride"`, voir
   « Combats »), dans son propre formulaire : enregistrer ou rétablir les tris ne la change pas, et inversement.
 
 ### Thèmes
@@ -639,7 +640,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement) |
-| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés ou côte à côte) |
+| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride) |
 | `MonsutaPotaru/Services/Battle/BattleHub.cs` | Combats en direct (singleton, en mémoire) : demande, équipes, simulateur, choix vérifiés, minuteur, abandon, fin |
 | `MonsutaPotaru/Services/Battle/BattleService.cs` | Combats : sauvegardes compatibles entre amis, Pokémon proposés pour l'équipe, équipe vérifiée, statistiques |
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |

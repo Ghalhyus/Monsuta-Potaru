@@ -98,7 +98,7 @@ README : « Comptes », « Administration », « Thèmes ».
 
 ## Préférences : disposition des écrans d'un combat (2026-11-14)
 - Même page, même colonne JSON (`"combat":"cote"`, `SortPreferences.Battle`, `BattleLayout`), mais **son propre bloc et
-  son propre formulaire** (`@formname="battle"`, liste `combat` : `empile` / `cote`) : le formulaire des tris recopie la
+  son propre formulaire** (`@formname="battle"`, liste `combat` : `empile` / `cote` / `hybride`) : le formulaire des tris recopie la
   valeur enregistrée, « Revenir aux tris d'origine » ne la change pas.
 - Écriture par `PreferencesService.SetBattleLayoutAsync` (relit les tris, ne change que la disposition), aussi appelée
   par les boutons de la page « Combat ». Interface du combat : `docs/claude/combats.md`.

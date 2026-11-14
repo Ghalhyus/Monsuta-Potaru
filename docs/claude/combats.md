@@ -38,17 +38,27 @@ README : « Combats ».
   Trello 108) : disposition, formes et couleurs reprises, **aucun graphisme découpé d'un jeu**, police du site (son choix).
 - Les deux écrans ont la même largeur (`--ecran`) en 4:3 ; leur contenu se mesure en `em` (1em = 1/32 de la largeur) et
   en % : ne jamais y mettre de `rem` ni de `px` (les proportions casseraient à une autre taille).
-- Disposition : `BattleLayout` (empilés d'origine, côte à côte), boutons `.battle-layout` et « Préférences » ; retenue
-  dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de large,
-  toujours empilés sur toute la largeur et boutons cachés.
+- Disposition : `BattleLayout` (empilés d'origine, côte à côte, hybride), boutons `.battle-layout` et « Préférences » ;
+  retenue dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de
+  large, toujours empilés sur toute la largeur et boutons cachés, quel que soit le mode choisi.
+- **Mode hybride** (`.battle.hybride`, maquette de l'utilisateur du 2026-11-14) : même page, mêmes éléments, seul le CSS
+  change (bloc `@container` « Mode hybride ») : le terrain en grand, `.battle-bottom` réduit à un panneau à droite (44 %
+  de la largeur du terrain, même hauteur) où tout passe en colonne (`position: relative`, `inset: auto` sur les boutons
+  placés en absolu ailleurs). Ce que la page change pour lui : ABANDONNER rendu après POKéMON (ordre de la colonne).
+  La ligne des sauvegardes et les boutons de disposition restent **au-dessus** du combat, comme dans les autres modes
+  (l'utilisateur a refusé de les passer dessous pour gagner de la hauteur, le 2026-11-14). Dans le panneau : barre des Pokéballs toujours affichée, sur deux lignes ; équipe sur
+  une ligne par Pokémon, sans niveau ni boîte de message. Un bouton ajouté au menu doit aussi tenir dans cette colonne.
+- `.battle-btn` pose `gap` (donc `row-gap`) : dans une grille serrée (`.battle-member` du mode hybride), le remettre à
+  zéro, sinon la dernière ligne déborde et se fait rogner.
 - Zone large : la taille fait tenir les écrans dans la hauteur de la fenêtre, `--dessus` étant la hauteur de ce que la
   page affiche au-dessus (mesurée dans Ardoise ; `--alertes` compte les alertes, posé par la page). Un élément ajouté
-  au-dessus des écrans : corriger `--dessus`, sinon la page défile. À 2293×850 px CSS (écran de l'utilisateur) : environ
-  305×230 px CSS par écran empilé, 610×460 côte à côte.
+  au-dessus des écrans : corriger `--dessus`, sinon la page défile. À 2293×850 px CSS (écran de
+  l'utilisateur) : environ 305×230 px CSS par écran empilé, 610×460 côte à côte, terrain de 610×460 en hybride (même hauteur que côte à côte).
 - Boutons du jeu : `.battle-btn` (deux tons `--haut` / `--bas`, coins rouges au survol et au focus clavier). Les
-  capacités prennent la couleur du type par `--type`. SAC est toujours désactivé et gris (pas de sac en combat de câble).
-- Le menu de l'équipe prend tout l'écran du bas (`ShowsTeam`) : pas de barre de Pokéballs, le minuteur passe dans la
-  boîte de message. Un Pokémon K.O. n'a plus ses PV maximum dans la requête de Showdown (« 0 fnt ») : pas de « 0/159 ».
+  capacités prennent la couleur du type par `--type`. Plus de bouton SAC depuis le 2026-11-14 (inutile pour l'instant,
+  choix de l'utilisateur) : ABANDONNER à gauche et POKéMON à droite se partagent le bas de l'écran tactile.
+- Le menu de l'équipe prend tout l'écran du bas (`ShowsTeam`, classe `.equipe`) : la barre de Pokéballs, toujours
+  rendue, est cachée par le CSS (sauf en mode hybride) et le minuteur passe dans la boîte de message. Un Pokémon K.O. n'a plus ses PV maximum dans la requête de Showdown (« 0 fnt ») : pas de « 0/159 ».
 
 ## Sprites (`BattleSprites`)
 - Ceux du jeu **de celui qui regarde** (sa sauvegarde, connue quand son équipe est acceptée : `BattleTeamResult.Sprites`),

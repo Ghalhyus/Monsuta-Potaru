@@ -17,8 +17,8 @@
 @* Multijoueurs → Combats : avec un ami, entre deux sauvegardes stockées de même génération (la 3e pour l'instant).
    Demande (valable BattleHub.RequestLifetime), choix des équipes, puis combat en direct dans le simulateur de Showdown
    (BattleHub), affiché sur deux écrans comme dans un jeu de 4e génération : celui du haut (terrain, PV, messages), celui
-   du bas (Pokéballs des équipes, menu principal, capacités, équipe), empilés ou côte à côte au choix du joueur (retenu
-   dans son compte, PreferencesService). Chaque choix a BattleTiming.Decision ; quitter la page pendant le combat demande
+   du bas (Pokéballs des équipes, menu principal, capacités, équipe), empilés, côte à côte ou « hybride » (terrain en
+   grand, menu dans un panneau à droite) au choix du joueur (retenu dans son compte, PreferencesService). Chaque choix a BattleTiming.Decision ; quitter la page pendant le combat demande
    confirmation, puis abandonne. *@
 <NavigationLock ConfirmExternalNavigation="InBattle" OnBeforeInternalNavigation="BeforeLeaving" />
 
@@ -139,7 +139,7 @@
                             </div>
                         </div>
                         @* --alertes : nombre d'alertes affichées au-dessus, pour que les écrans tiennent quand même dans la fenêtre *@
-                        <div class="battle @(layout == BattleLayout.SideBySide ? "cote" : "")"
+                        <div class="battle @(layout switch { BattleLayout.SideBySide => "cote", BattleLayout.Hybrid => "hybride", _ => "" })"
                              style="--alertes: @((s.OtherIllegal(userId) > 0 ? 1 : 0) + (s.Stage == BattleStage.Cancelled ? 1 : 0))">
                             @{
                                 var scene = shownScene ?? snapshot?.Scene;
@@ -201,19 +201,17 @@
                             </div>
 
                             @* ---------- Écran du bas : le menu tactile ---------- *@
-                            <div class="battle-bottom">
-                                @if (!ShowsTeam)
-                                {
-                                    @* Pokéballs des deux équipes (les miennes à gauche), minuteur entre les deux *@
-                                    <div class="battle-bar">
-                                        @BallRow(true, scene?.MyLeft ?? 0, scene?.MyTeam ?? 0)
-                                        @if (CanAct && SecondsLeft is { } seconds)
-                                        {
-                                            <div class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</div>
-                                        }
-                                        @BallRow(false, scene?.FoeLeft ?? 0, scene?.FoeTeam ?? 0)
-                                    </div>
-                                }
+                            <div class="battle-bottom @(ShowsTeam ? "equipe" : "")">
+                                @* Pokéballs des deux équipes (les miennes à gauche), minuteur entre les deux. Quand le menu
+                                   de l'équipe prend tout l'écran (.equipe), la barre n'est montrée qu'en mode hybride. *@
+                                <div class="battle-bar">
+                                    @BallRow(true, scene?.MyLeft ?? 0, scene?.MyTeam ?? 0)
+                                    @if (CanAct && SecondsLeft is { } seconds)
+                                    {
+                                        <div class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</div>
+                                    }
+                                    @BallRow(false, scene?.FoeLeft ?? 0, scene?.FoeTeam ?? 0)
+                                </div>
                                 @if (s.Stage == BattleStage.Done || s.Stage == BattleStage.Cancelled)
                                 {
                                     <div class="battle-end">
@@ -257,7 +255,7 @@
                                                         }
                                                         else
                                                         {
-                                                            <span>N.@level</span>
+                                                            <span class="battle-member-level">N.@level</span>
                                                             @if (Status(memberStatus) is { } status)
                                                             {
                                                                 <span class="battle-status @memberStatus">@status</span>
@@ -271,9 +269,9 @@
                                             <div class="battle-team-text">
                                                 <div>
                                                     <span>Choisis un Pokémon.</span>
-                                                    @if (SecondsLeft is { } seconds)
+                                                    @if (SecondsLeft is { } remaining)
                                                     {
-                                                        <span class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</span>
+                                                        <span class="battle-timer @(remaining <= 10 ? "urgent" : "")">@remaining s</span>
                                                     }
                                                 </div>
                                             </div>
@@ -313,7 +311,9 @@
                                     }
                                     else
                                     {
-                                        @* Menu principal : pas de sac en combat de câble (bouton gris), « Abandonner » fait perdre *@
+                                        @* Menu principal : pas de bouton SAC (pas de sac en combat de câble) ; « Abandonner » fait
+                                           perdre. Mode hybride : les trois boutons en colonne, ABANDONNER en dernier. *@
+                                        RenderFragment run = @<button type="button" class="battle-btn battle-run" @onclick="Forfeit"><span>ABANDONNER</span></button>;
                                         <div class="battle-menu">
                                             <button type="button" class="battle-btn battle-fight" @onclick="() => menu = Menu.Moves">
                                                 @if (scene?.Me is { } lead)
@@ -322,9 +322,15 @@
                                                 }
                                                 <span>ATTAQUE</span>
                                             </button>
-                                            <button type="button" class="battle-btn battle-bag" disabled title="Pas de sac en combat de câble"><span>SAC</span></button>
-                                            <button type="button" class="battle-btn battle-run" @onclick="Forfeit"><span>ABANDONNER</span></button>
+                                            @if (layout != BattleLayout.Hybrid)
+                                            {
+                                                @run
+                                            }
                                             <button type="button" class="battle-btn battle-pokemon" @onclick="() => menu = Menu.Team"><span>POKéMON</span></button>
+                                            @if (layout == BattleLayout.Hybrid)
+                                            {
+                                                @run
+                                            }
                                         </div>
                                     }
                                 }

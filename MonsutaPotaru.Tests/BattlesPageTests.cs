@@ -63,8 +63,10 @@ public sealed class BattlesPageTests : PageTestContext
         // Premier tour : les menus de Sacha, puis une attaque sans dégâts de chaque côté. Un K.O. forcerait un
         // remplacement (pas de menu, donc pas d'ABANDONNER) : le Balayage de Férosinge met K.O. Chenipan sur un coup critique.
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("ATTAQUE")), Long);
-        // Menu principal : pas de sac en combat de câble ; une Pokéball par Pokémon de chaque équipe, six places par rangée
-        Assert.True(sacha.Button("SAC").HasAttribute("disabled"));
+        // Menu principal : pas de bouton SAC (pas de sac en combat de câble), ABANDONNER avant POKéMON (à sa gauche) ;
+        // une Pokéball par Pokémon de chaque équipe, six places par rangée
+        Assert.False(sacha.HasButton("SAC"));
+        Assert.Equal(new[] { "ATTAQUE", "ABANDONNER", "POKéMON" }, sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
         Assert.NotNull(sacha.Find(".battle-fight img")); // l'icône du Pokémon au combat
         var size = sacha.FindAll(".battle-balls.mine .battle-ball.ok").Count;
         Assert.InRange(size, 1, 6);
@@ -90,9 +92,9 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.True(lead.HasAttribute("disabled"));
         Assert.Contains("N.4", lead.QuerySelector(".battle-member-foot")!.TextContent);
         Assert.Contains("Choisis un Pokémon.", sacha.Find(".battle-team-text").TextContent);
-        Assert.Empty(sacha.FindAll(".battle-bar"));
+        Assert.NotEmpty(sacha.FindAll(".battle-bottom.equipe")); // la feuille de style y cache la barre, sauf en mode hybride
         await sacha.Find(".battle-back.retour").ClickAsync(new());
-        Assert.NotEmpty(sacha.FindAll(".battle-bar"));
+        Assert.Empty(sacha.FindAll(".battle-bottom.equipe"));
 
         // Disposition : empilés d'origine pour Sacha, côte à côte pour Ondine (ses préférences) ; le bouton l'applique
         // tout de suite et la retient dans le compte
@@ -105,8 +107,19 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.Equal("true", sacha.Button("Côte à côte").GetAttribute("aria-pressed"));
         Assert.Equal(BattleLayout.SideBySide, (await preferences.SortsAsync("sacha")).Battle);
         await sacha.Click("Côte à côte"); // déjà choisie : rien
-        await sacha.Click("Empilés");
+
+        // Mode hybride : le menu passe dans un panneau à droite du terrain (ATTAQUE, POKéMON, ABANDONNER en colonne) ; la
+        // ligne des sauvegardes et les boutons de disposition restent au-dessus du combat
+        await sacha.Click("Hybride");
+        Assert.NotEmpty(sacha.FindAll(".battle.hybride"));
         Assert.Empty(sacha.FindAll(".battle.cote"));
+        Assert.Equal(BattleLayout.Hybrid, (await preferences.SortsAsync("sacha")).Battle);
+        Assert.Equal(new[] { "ATTAQUE", "POKéMON", "ABANDONNER" }, sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
+        Assert.Contains("Ta sauvegarde", sacha.Find(".block-body > p").TextContent);
+        Assert.Equal("Hybride", sacha.Find(".battle-zone > .battle-layout:first-child button.active").TextContent);
+
+        await sacha.Click("Empilés");
+        Assert.Empty(sacha.FindAll(".battle.cote, .battle.hybride"));
         Assert.Equal(BattleLayout.Stacked, (await preferences.SortsAsync("sacha")).Battle);
 
         await sacha.Click("ATTAQUE");

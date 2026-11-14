@@ -24,9 +24,10 @@ public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bo
 
 /// <summary>
 /// Disposition des deux écrans d'un combat (« Multijoueurs » → « Combat ») : l'un au-dessus de l'autre comme sur la console
-/// (d'origine), ou côte à côte. Sur un écran trop étroit, la page les empile toujours.
+/// (d'origine), côte à côte, ou « hybride » (le terrain en grand, le menu dans un panneau à sa droite). Sur un écran trop
+/// étroit, la page les empile toujours.
 /// </summary>
-public enum BattleLayout { Stacked, SideBySide }
+public enum BattleLayout { Stacked, SideBySide, Hybrid }
 
 /// <summary>Valeurs « tri » et « ordre » d'une adresse (« ?tri=nom&amp;ordre=desc ») ; null : absente.</summary>
 public readonly record struct SortQuery(string? Tri, string? Ordre)
@@ -97,6 +98,7 @@ public static class SiteSorts
     [
         (BattleLayout.Stacked, "empile", "Empilés"),
         (BattleLayout.SideBySide, "cote", "Côte à côte"),
+        (BattleLayout.Hybrid, "hybride", "Hybride"),
     ];
 
     public static string Slug(ItemSortBy by) => ItemChoices.First(c => c.By == by).Slug;

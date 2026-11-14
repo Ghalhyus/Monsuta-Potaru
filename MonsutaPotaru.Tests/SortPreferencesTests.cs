@@ -69,6 +69,10 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Equal(BattleLayout.Stacked, SiteSorts.BattleLayoutFrom(null));
         Assert.Equal(BattleLayout.SideBySide, SiteSorts.BattleLayoutFrom("cote"));
         Assert.Equal("empile", SiteSorts.Slug(BattleLayout.Stacked));
+        var hybrid = new SortPreferences { Battle = BattleLayout.Hybrid };
+        Assert.Equal("""{"combat":"hybride"}""", hybrid.ToJson());
+        Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson(hybrid.ToJson()).Battle);
+        Assert.Equal(new[] { "Empilés", "Côte à côte", "Hybride" }, SiteSorts.BattleLayoutChoices.Select(c => c.Label));
     }
 
     [Fact]
