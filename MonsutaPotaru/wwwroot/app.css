@@ -911,6 +911,86 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .battle-team-text .battle-timer { font-size: .8em; font-weight: 700; }
 .battle-back.retour { top: 81%; bottom: 1.5%; left: 86.5%; right: 1.5%; padding: 0; border-radius: .6em; --coupe: 52%; font-size: 1.9em; line-height: 1; }
 
+/* ---------- Fiche d'un Pokémon de l'équipe (carte Trello 111) : écran de sélection, résumé, capacités, détail d'une
+   capacité. Fond mauve, bandeau vert du Pokémon en haut, bande rayée des boutons en bas ; le résumé est sur fond bleu. */
+.battle-sheet { position: absolute; inset: 0; background: #b0a0f0; color: #fff; --cerne: .07em .07em 0 #40444c, -.06em 0 0 #40444c, .06em 0 0 #40444c, 0 -.06em 0 #40444c; }
+.battle-sheet.resume { background: #38b8e0; }
+.battle-sheet .battle-gender { text-shadow: var(--cerne); }
+.battle-sheet .battle-gender.M { color: #88d0ff; }
+.battle-sheet .battle-gender.F { color: #ff90d0; }
+.battle-sheet-head {
+    position: absolute; inset: 0 0 auto; height: 16%; display: flex; align-items: center; gap: .4em; padding: 0 .6em 0 .3em;
+    border-bottom: .14em solid #2c7c48; background: linear-gradient(#58b878 0 10%, #389858 10%); text-shadow: var(--cerne);
+}
+.battle-sheet-head img { width: 2.9em; height: 2.9em; object-fit: contain; image-rendering: pixelated; }
+.battle-sheet-name { font-size: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-sheet-types { display: flex; gap: .25em; margin-left: .5em; font-size: 1.15em; text-shadow: none; }
+.battle-sheet-head .battle-timer { margin-left: auto; text-shadow: none; }
+/* Bas : bande rayée, boutons bleus en onglets (flèches, autre écran de la fiche, retour) */
+.battle-sheet-foot {
+    position: absolute; inset: 77% 0 0; border-top: .14em solid #c8bcf8; background: repeating-linear-gradient(#8468d0 0 .3em, #9078d8 .3em .6em);
+}
+.battle-sheet-btn { top: 12%; bottom: -1.2em; padding-bottom: 1.2em; border-radius: .7em; --haut: #2c94dc; --bas: #1c68b4; --coupe: 46%; font-size: 1.15em; }
+.battle-sheet-btn:disabled { opacity: .5; }
+.battle-sheet-btn:is(.fleche, .retour) > span { color: #a8e0ff; font-size: 1.5em; line-height: 1; }
+.battle-sheet-btn.fleche { left: 1%; width: 14%; }
+.battle-sheet-btn.fleche + .fleche { left: 16.5%; }
+.battle-sheet-btn.autre { left: 38.5%; width: 39.5%; }
+.battle-sheet-btn.retour { left: 85.5%; right: 1%; }
+.battle-sheet.selection .battle-sheet-btn:nth-child(1) { left: 1%; width: 39.5%; }
+.battle-sheet.selection .battle-sheet-btn:nth-child(2) { left: 41.5%; width: 39.5%; }
+/* Écran de sélection : le grand panneau vert envoie le Pokémon au combat */
+.battle-shift {
+    top: 3%; left: 3.5%; right: 3.5%; height: 70%; flex-direction: column; gap: .5em; border-radius: .5em; --haut: #40a45c; --bas: #389450;
+    font-size: 1.3em;
+}
+.battle-shift:disabled { --haut: #7c9484; --bas: #708878; }
+.battle-shift-name { display: flex; align-items: baseline; gap: .4em; }
+.battle-shift img { width: 3.6em; height: 3.6em; object-fit: contain; image-rendering: pixelated; }
+.battle-sheet.selection > .battle-timer { position: absolute; top: 6%; right: 6.5%; }
+/* Résumé : niveau, talent et objet à gauche, PV et statistiques à droite (étiquette sombre, valeur sur fond clair) */
+.battle-sheet-body { position: absolute; inset: 17.5% 1.5% 24%; display: grid; grid-template-columns: 59% 1fr; column-gap: 3.5%; }
+.battle-sheet-left, .battle-sheet-stats { display: flex; flex-direction: column; gap: .3em; min-width: 0; }
+.battle-sheet-label, .battle-sheet-item, .battle-stat > :first-child { background: #207890; text-shadow: var(--cerne); }
+.battle-sheet-label {
+    display: flex; align-items: center; gap: 1.6em; width: fit-content; min-width: 46%; height: 1.65em; padding: 0 .5em; border-radius: .2em; font-size: 1.15em;
+    white-space: nowrap;
+}
+.battle-sheet-label + .battle-sheet-text { margin-top: -.3em; }
+.battle-sheet-text {
+    padding: .25em .5em; overflow: hidden; border: .14em solid #207890; border-radius: .2em; background: #e0f8f8; color: #606468; font-size: 1.05em;
+    font-weight: 600; line-height: 1.25;
+}
+.battle-sheet-left .battle-sheet-text { min-height: 3.3em; }
+.battle-sheet-item { display: flex; align-items: center; gap: .5em; width: 88%; height: 1.9em; margin-top: auto; overflow: hidden; border-radius: .2em; font-size: 1.05em; white-space: nowrap; }
+.battle-sheet-item-icon { align-self: stretch; display: grid; place-items: center; width: 2.3em; background: #d8f4f8; }
+.battle-sheet-item-icon img { width: 1.7em; height: 1.7em; object-fit: contain; image-rendering: pixelated; }
+.battle-stat { display: flex; height: 1.9em; overflow: hidden; border-radius: .2em; }
+.battle-stat > :first-child { flex: 1; display: flex; align-items: center; padding: 0 .4em; font-size: 1.05em; white-space: nowrap; }
+.battle-stat > :last-child {
+    display: flex; align-items: center; justify-content: flex-end; width: 38%; padding: 0 .4em; background: #d8f4f8; color: #606468; font-size: 1.15em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.battle-sheet-stats > .battle-stat:first-child > :last-child { width: 66%; }
+.battle-sheet-stats .battle-hp { margin: 0; }
+.battle-sheet-stats .battle-hp-meter { width: 82%; }
+/* Capacités : 2 × 2 panneaux, chacun ouvre son détail */
+.battle-sheet-moves { position: absolute; inset: 19.5% 1% 25%; display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: .45em .5em; }
+.battle-sheet-move {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25em; min-width: 0; padding: 0 .6em;
+    border: .16em solid #383c40; border-radius: .55em; background: linear-gradient(#b8ac3c 0 50%, #a09430 50%);
+    box-shadow: inset 0 0 0 .1em rgba(255, 255, 255, .7); color: #fff; text-shadow: var(--cerne); letter-spacing: 0;
+}
+.battle-sheet-move.vide { background: #9088a0; box-shadow: inset 0 0 0 .1em rgba(255, 255, 255, .55); }
+.battle-sheet-move-name { max-width: 100%; overflow: hidden; font-size: 1.35em; text-overflow: ellipsis; white-space: nowrap; }
+.battle-sheet-move-foot { display: flex; align-items: center; justify-content: center; gap: .9em; }
+.battle-sheet-move-foot .battle-move-type { font-size: 1em; text-shadow: .06em .06em 0 rgba(0, 0, 0, .45); }
+/* Détail d'une capacité : son panneau, catégorie, puissance et précision à côté, la description dessous */
+.battle-sheet-detail { position: absolute; inset: 19.5% 1.5% 25%; display: grid; grid-template: 6.3em 1fr / 47% 1fr; gap: .45em 3%; }
+.battle-sheet-facts { display: flex; flex-direction: column; gap: .3em; }
+.battle-sheet-facts .battle-stat > :last-child { width: 46%; }
+.battle-sheet-detail .battle-sheet-text { grid-column: 1 / 3; }
+
 /* Attente de l'autre joueur, fin du combat (boutons du site). */
 .battle-waiting, .battle-end { position: absolute; inset: 13% 0 0; display: grid; place-content: center; padding: 0 2em; text-align: center; }
 .battle-waiting { color: #58684c; font-size: 1.4em; }
@@ -967,19 +1047,62 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
     .battle.hybride .battle-member-foot { grid-column: 3; font-size: .9em; }
     .battle.hybride .battle-member-level, .battle.hybride .battle-team-text { display: none; }
     .battle.hybride .battle-bottom .battle-back.retour { height: 1.35em; font-size: 1.6em; }
+    /* Fiche d'un Pokémon : tout en colonne (le minuteur est déjà dans la barre des Pokéballs). Résumé : PV, puis les
+       statistiques et le niveau sur deux colonnes, puis le talent et l'objet. */
+    .battle.hybride .battle-sheet { position: static; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .battle.hybride .battle-sheet .battle-timer { display: none; }
+    .battle.hybride .battle-sheet-head { position: static; height: auto; flex-wrap: wrap; gap: .1em .3em; padding: .2em .4em; }
+    .battle.hybride .battle-sheet-head img { width: 2em; height: 2em; }
+    .battle.hybride .battle-sheet-name { font-size: 1.1em; }
+    .battle.hybride .battle-sheet-types { margin-left: auto; font-size: 1em; }
+    .battle.hybride .battle-sheet-foot { position: static; flex: none; display: flex; gap: .3em; padding: .35em .4em; }
+    .battle.hybride .battle-bottom .battle-sheet-btn { flex: 0 0 2em; height: 1.9em; padding: 0; border-radius: .5em; --coupe: 52%; font-size: 1em; }
+    .battle.hybride .battle-bottom .battle-sheet-btn.autre { flex: 1; font-size: .9em; height: 2.1em; }
+    .battle.hybride .battle-bottom .battle-sheet-btn.retour { margin-left: auto; }
+    .battle.hybride .battle-sheet-btn:is(.fleche, .retour) > span { font-size: 1.2em; }
+    .battle.hybride .battle-sheet.selection { gap: .5em; padding-top: .5em; }
+    .battle.hybride .battle-bottom .battle-shift { flex: 1; min-height: 0; margin: 0 .6em; font-size: 1.1em; }
+    .battle.hybride .battle-sheet.selection .battle-sheet-foot { flex-direction: column; }
+    .battle.hybride .battle-bottom .battle-sheet.selection .battle-sheet-btn { flex: none; margin: 0; }
+    .battle.hybride .battle-sheet-body {
+        position: static; flex: 1; min-height: 0; grid-template-columns: 1fr 1fr; align-content: start; gap: .25em .3em; padding: .3em .4em; overflow: hidden;
+    }
+    .battle.hybride :is(.battle-sheet-left, .battle-sheet-stats) { display: contents; }
+    .battle.hybride .battle-sheet-body :is(.battle-stat, .battle-sheet-label, .battle-sheet-item) { width: auto; min-width: 0; height: 1.5em; margin: 0; font-size: 1em; }
+    .battle.hybride .battle-stat > :first-child { font-size: .82em; padding: 0 .3em; }
+    .battle.hybride .battle-stat > :last-child { width: auto; min-width: 2.4em; padding: 0 .3em; font-size: .95em; }
+    .battle.hybride .battle-sheet-stats > .battle-stat:first-child, .battle.hybride .battle-sheet-stats > .battle-hp { grid-column: 1 / 3; order: 1; }
+    .battle.hybride .battle-sheet-stats .battle-hp-meter { width: 100%; }
+    .battle.hybride .battle-sheet-stats > .battle-stat { order: 2; }
+    .battle.hybride .battle-sheet-label.niveau { order: 3; justify-content: space-between; gap: .3em; font-size: .9em; height: 1.67em; }
+    .battle.hybride .battle-sheet-left > :is(.battle-sheet-label:not(.niveau), .battle-sheet-text, .battle-sheet-item) { grid-column: 1 / 3; order: 4; }
+    .battle.hybride .battle-sheet-label + .battle-sheet-text { margin-top: -.25em; }
+    .battle.hybride .battle-sheet-text { min-height: 0; padding: .15em .4em; font-size: .9em; line-height: 1.2; }
+    .battle.hybride .battle-sheet-item { font-size: .95em; }
+    .battle.hybride .battle-sheet-moves { position: static; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .35em; padding: .4em .6em; }
+    .battle.hybride .battle-bottom .battle-sheet-move { flex: 1; min-height: 0; gap: .1em; }
+    .battle.hybride .battle-sheet-move-name { font-size: 1.15em; }
+    .battle.hybride .battle-sheet-move-foot { gap: .5em; }
+    .battle.hybride .battle-sheet-move-foot .battle-move-pp { font-size: 1em; }
+    .battle.hybride .battle-sheet-detail { position: static; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .3em; padding: .4em .6em; }
+    .battle.hybride .battle-bottom .battle-sheet-detail .battle-sheet-move { flex: 0 0 3.4em; }
+    .battle.hybride .battle-sheet-facts { gap: .25em; }
+    .battle.hybride .battle-sheet-facts .battle-stat { height: 1.5em; }
+    .battle.hybride .battle-sheet-facts .battle-stat > :last-child { width: 50%; }
+    .battle.hybride .battle-sheet-detail .battle-sheet-text { flex: 1; }
     /* Attente et fin du combat */
     .battle.hybride :is(.battle-waiting, .battle-end) { position: static; flex: 1; padding: 0 1em; }
     .battle.hybride .battle-result { font-size: 2em; }
     .battle.hybride .battle-after { flex-direction: column; }
 }
 
-/* Couleurs des types (cadre et étiquette des capacités). */
-.battle-move.type-normal { --type: #a8a878; } .battle-move.type-fire { --type: #e8782c; } .battle-move.type-water { --type: #5f88e8; }
-.battle-move.type-electric { --type: #d8b428; } .battle-move.type-grass { --type: #64b448; } .battle-move.type-ice { --type: #78c8c8; }
-.battle-move.type-fighting { --type: #b83028; } .battle-move.type-poison { --type: #9840a0; } .battle-move.type-ground { --type: #c8a858; }
-.battle-move.type-flying { --type: #9888e0; } .battle-move.type-psychic { --type: #e85888; } .battle-move.type-bug { --type: #98a820; }
-.battle-move.type-rock { --type: #a89038; } .battle-move.type-ghost { --type: #685090; } .battle-move.type-dragon { --type: #6838e8; }
-.battle-move.type-dark { --type: #685040; } .battle-move.type-steel { --type: #a0a0c0; }
+/* Couleurs des types (cadre et étiquette des capacités, types du Pokémon sur sa fiche). */
+.battle .type-normal { --type: #a8a878; } .battle .type-fire { --type: #e8782c; } .battle .type-water { --type: #5f88e8; }
+.battle .type-electric { --type: #d8b428; } .battle .type-grass { --type: #64b448; } .battle .type-ice { --type: #78c8c8; }
+.battle .type-fighting { --type: #b83028; } .battle .type-poison { --type: #9840a0; } .battle .type-ground { --type: #c8a858; }
+.battle .type-flying { --type: #9888e0; } .battle .type-psychic { --type: #e85888; } .battle .type-bug { --type: #98a820; }
+.battle .type-rock { --type: #a89038; } .battle .type-ghost { --type: #685090; } .battle .type-dragon { --type: #6838e8; }
+.battle .type-dark { --type: #685040; } .battle .type-steel { --type: #a0a0c0; }
 
 /* ---------- Porte-monnaie de la barre du haut (Classique, Pokédex ; Ardoise : .ardoise-wallet) ---------- */
 

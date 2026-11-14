@@ -111,6 +111,21 @@ public sealed partial class PokemonInfo
 
     public static bool IsLegal(PKM pk) => new LegalityAnalysis(pk, StorageSlotType.Box).Valid;
 
+    /// <summary>
+    /// Nom de l'objet tenu (« — » : aucun), le même que dans l'inventaire : par son numéro de 4e génération et suivantes
+    /// (<see cref="SaveBag.HeldItem"/>), pas par le numéro du jeu du Pokémon (2e et 3e génération). Un objet d'Or, Argent ou
+    /// Cristal sans équivalent ensuite garde le nom qu'il a dans son jeu.
+    /// </summary>
+    private string HeldItemName(PKM pk)
+    {
+        if (pk.HeldItem == 0)
+            return "—";
+        if (SaveBag.HeldItem(pk) is > 0 and var item)
+            return Get(_items, item);
+        var own = _strings.GetItemStrings(pk.Context, pk.Version);
+        return (uint)pk.HeldItem < (uint)own.Length && !string.IsNullOrWhiteSpace(own[pk.HeldItem]) ? own[pk.HeldItem] : "?";
+    }
+
     public PokemonView Describe(PKM pk, bool? isLegal = null)
     {
         var speciesName = SpeciesName.GetSpeciesName(pk.Species, French);
@@ -125,7 +140,7 @@ public sealed partial class PokemonInfo
             pk.Gender switch { 0 => "♂", 1 => "♀", _ => "" },
             Get(_strings.natures, PokemonTraits.Nature(pk)), // 1re et 2e génération : celle de leur transfert
             Get(_strings.abilitylist, pk.Ability),
-            pk.HeldItem == 0 ? "—" : Get(_items, pk.HeldItem),
+            HeldItemName(pk),
             new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 }.Where(m => m != 0).Select(m => Get(_strings.movelist, m)).ToList(),
             pk.OriginalTrainerName,
             pk.DisplayTID.ToString("00000"),

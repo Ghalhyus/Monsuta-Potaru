@@ -41,8 +41,9 @@ public static class BattleNames
         var index = new Dictionary<string, int>(aliases ?? []);
         for (var i = 1; i < names.Length; i++)
         {
-            if (!string.IsNullOrWhiteSpace(names[i]))
-                index.TryAdd(Key(names[i]), i);
+            // Un nom sans lettre ni chiffre (« ??? », numéro inutilisé) n'a pas de nom comparable : un nom vide le trouverait.
+            if (Key(names[i]) is { Length: > 0 } key)
+                index.TryAdd(key, i);
         }
         return index;
     }
@@ -63,30 +64,52 @@ public static class BattleNames
         return (0, "", name);
     }
 
+    /// <summary>Identifiant de Puissance Cachée chez Showdown, suivi de son type (« hiddenpowerdark »).</summary>
+    private const string HiddenPowerKey = "hiddenpower";
+
+    /// <summary>
+    /// Capacité écrite par Showdown, par son nom (« Hidden Power Dark 70 », « Return 102 ») ou son identifiant
+    /// (« hiddenpowerdark70 », « return102 ») : son numéro (0 si inconnue), le type anglais de Puissance Cachée (« dark »)
+    /// et la puissance écrite au bout du nom (Puissance Cachée, Retour, Frustration ; 0 sinon).
+    /// </summary>
+    public static (int Number, string? Type, int Power) ParseMove(string name)
+    {
+        var key = Key(name);
+        if (Moves.TryGetValue(key, out var exact))
+            return (exact, null, 0);
+        var end = key.Length;
+        while (end > 0 && char.IsAsciiDigit(key[end - 1]))
+            end--;
+        var power = end < key.Length && int.TryParse(key[end..], out var written) ? written : 0;
+        var plain = key[..end];
+        if (plain.StartsWith(HiddenPowerKey, StringComparison.Ordinal))
+            return (HiddenPower, plain.Length > HiddenPowerKey.Length ? plain[HiddenPowerKey.Length..] : null, power);
+        return Moves.TryGetValue(plain, out var number) ? (number, null, power) : (0, null, 0);
+    }
+
     /// <summary>Numéro d'une capacité (« Hidden Power Dark 70 », nom affiché par Showdown, compris), 0 si inconnue.</summary>
-    public static int MoveNumber(string name) =>
-        name.StartsWith("Hidden Power", StringComparison.OrdinalIgnoreCase) ? HiddenPower : Moves.GetValueOrDefault(Key(name));
+    public static int MoveNumber(string name) => ParseMove(name).Number;
 
     public static string Move(string name) => Get(French.movelist, MoveNumber(name), name);
 
-    public static string Item(string name) => Get(French.itemlist, Items.GetValueOrDefault(Key(name)), name);
+    /// <summary>Numéro national d'un objet (0 si inconnu).</summary>
+    public static int ItemNumber(string name) => Items.GetValueOrDefault(Key(name));
 
-    public static string Ability(string name) => Get(French.abilitylist, Abilities.GetValueOrDefault(Key(name)), name);
+    public static string Item(string name) => Get(French.itemlist, ItemNumber(name), name);
+
+    /// <summary>Numéro national d'un talent (0 si inconnu).</summary>
+    public static int AbilityNumber(string name) => Abilities.GetValueOrDefault(Key(name));
+
+    public static string Ability(string name) => Get(French.abilitylist, AbilityNumber(name), name);
 
     public static string Type(string name) => Types.TryGetValue(Key(name), out var type) ? French.types[type] : name;
-
-    /// <summary>Début du nom anglais de Puissance Cachée (« Hidden Power Fire »).</summary>
-    private const string HiddenPowerPrefix = "Hidden Power ";
 
     /// <summary>Type d'une capacité en 3e génération (Puissance Cachée : Normal ; son vrai type est dans le nom de Showdown).</summary>
     public static string MoveType(string name)
     {
-        if (name.StartsWith(HiddenPowerPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var type = name[HiddenPowerPrefix.Length..].Split(' ')[0];
-            return Type(type);
-        }
-        var move = MoveNumber(name);
+        var (move, hidden, _) = ParseMove(name);
+        if (hidden is not null)
+            return Type(hidden);
         return move == 0 ? "" : French.types[MoveInfo.GetType((ushort)move, EntityContext.Gen3)];
     }
 
@@ -96,9 +119,9 @@ public static class BattleNames
     /// </summary>
     public static string MoveTypeKey(string name)
     {
-        if (name.StartsWith(HiddenPowerPrefix, StringComparison.OrdinalIgnoreCase))
-            return Key(name[HiddenPowerPrefix.Length..].Split(' ')[0]);
-        var move = MoveNumber(name);
+        var (move, hidden, _) = ParseMove(name);
+        if (hidden is not null)
+            return hidden;
         return move == 0 ? "" : Key(English.types[MoveInfo.GetType((ushort)move, EntityContext.Gen3)]);
     }
 

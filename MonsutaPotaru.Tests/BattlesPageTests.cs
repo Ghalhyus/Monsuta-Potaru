@@ -84,15 +84,67 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.Empty(sacha.FindAll(".battle-fight"));
         await sacha.Click("ANNULER");
 
-        // Équipe : un panneau par Pokémon (niveau, PV), celui qui est au combat ne se choisit pas ; la barre des
-        // Pokéballs laisse la place aux panneaux, le retour ramène au menu principal
+        // Équipe : un panneau par Pokémon (niveau, PV), qui ouvre sa fiche (celui qui est au combat compris) ; la barre
+        // des Pokéballs laisse la place aux panneaux, le retour ramène au menu principal
         await sacha.Click("POKéMON");
         Assert.Equal(size, sacha.FindAll(".battle-member").Count);
         var lead = sacha.Find(".battle-member.active");
-        Assert.True(lead.HasAttribute("disabled"));
+        Assert.False(lead.HasAttribute("disabled"));
         Assert.Contains("N.4", lead.QuerySelector(".battle-member-foot")!.TextContent);
         Assert.Contains("Choisis un Pokémon.", sacha.Find(".battle-team-text").TextContent);
         Assert.NotEmpty(sacha.FindAll(".battle-bottom.equipe")); // la feuille de style y cache la barre, sauf en mode hybride
+
+        // Fiche du Pokémon au combat (Chenipan) : écran de sélection, panneau grisé (il y est déjà), minuteur affiché
+        await lead.ClickAsync(new());
+        var shift = sacha.Find(".battle-sheet.selection .battle-shift");
+        Assert.True(shift.HasAttribute("disabled"));
+        Assert.Contains("AU COMBAT", shift.TextContent);
+        Assert.Matches(@"^\d+ s$", sacha.Find(".battle-sheet.selection > .battle-timer").TextContent);
+        Assert.Equal(new[] { "RÉSUMÉ", "CAPACITÉS", "↵" }, sacha.FindAll(".battle-sheet-foot button").Select(b => b.TextContent.Trim()));
+        Assert.NotEmpty(sacha.FindAll(".battle-bottom.equipe"));
+
+        // Résumé : types, niveau, talent et sa description, objet, PV et les cinq statistiques
+        await sacha.Click("RÉSUMÉ");
+        Assert.Equal("Chenipan", sacha.Find(".battle-sheet.resume .battle-sheet-name").TextContent);
+        Assert.Equal(new[] { "Insecte" }, sacha.FindAll(".battle-sheet-types .type-bug").Select(t => t.TextContent));
+        Assert.Equal("N.4", sacha.Find(".battle-sheet-label.niveau").TextContent);
+        Assert.Contains("Écran Poudre", sacha.Find(".battle-sheet-left").TextContent);
+        Assert.False(string.IsNullOrWhiteSpace(sacha.Find(".battle-sheet-left .battle-sheet-text").TextContent));
+        Assert.Contains("Aucun objet tenu", sacha.Find(".battle-sheet-item").TextContent);
+        Assert.Empty(sacha.FindAll(".battle-sheet-item img"));
+        Assert.Equal(new[] { "PV", "ATTAQUE", "DÉFENSE", "ATQ. SPÉ.", "DÉF. SPÉ.", "VITESSE" },
+            sacha.FindAll(".battle-sheet-stats .battle-stat > :first-child").Select(s => s.TextContent));
+        Assert.All(sacha.FindAll(".battle-sheet-stats .battle-stat > :last-child"), value => Assert.Matches(@"^\d+(/\d+)?$", value.TextContent));
+
+        // Flèches : Pokémon suivant puis précédent de l'équipe, sans quitter le résumé
+        await sacha.Find("button[aria-label='Pokémon suivant']").ClickAsync(new());
+        Assert.NotEqual("Chenipan", sacha.Find(".battle-sheet.resume .battle-sheet-name").TextContent);
+        await sacha.Find("button[aria-label='Pokémon précédent']").ClickAsync(new());
+        Assert.Equal("Chenipan", sacha.Find(".battle-sheet-name").TextContent);
+
+        // Capacités : quatre emplacements (Charge et Sécrétion, deux vides), PP de chacune ; un clic ouvre le détail
+        await sacha.Click("CAPACITÉS");
+        Assert.Equal(4, sacha.FindAll(".battle-sheet.capacites .battle-sheet-move").Count);
+        Assert.Equal(new[] { "Charge", "Sécrétion" }, sacha.FindAll("button.battle-sheet-move .battle-sheet-move-name").Select(m => m.TextContent));
+        Assert.Contains("PP 35/35", sacha.Find("button.battle-sheet-move").TextContent);
+        await sacha.Find("button.battle-sheet-move").ClickAsync(new());
+        Assert.Equal(new[] { "Physique", "35", "95" }, sacha.FindAll(".battle-sheet.detail .battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
+        Assert.False(string.IsNullOrWhiteSpace(sacha.Find(".battle-sheet-detail .battle-sheet-text").TextContent));
+        await sacha.Find("button[aria-label='Capacité suivante']").ClickAsync(new());
+        Assert.Equal("Sécrétion", sacha.Find(".battle-sheet-detail .battle-sheet-move-name").TextContent);
+        Assert.Equal(new[] { "Statut", "—", "95" }, sacha.FindAll(".battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
+        await sacha.Find("button[aria-label='Capacité précédente']").ClickAsync(new());
+        Assert.Equal("Charge", sacha.Find(".battle-sheet-detail .battle-sheet-move-name").TextContent);
+
+        // Retours : détail → capacités → (résumé) → écran de sélection → équipe → menu principal
+        await sacha.Find(".battle-sheet-btn.retour").ClickAsync(new());
+        Assert.NotEmpty(sacha.FindAll(".battle-sheet.capacites"));
+        await sacha.Click("RÉSUMÉ");
+        Assert.NotEmpty(sacha.FindAll(".battle-sheet.resume"));
+        await sacha.Find(".battle-sheet-btn.retour").ClickAsync(new());
+        Assert.NotEmpty(sacha.FindAll(".battle-sheet.selection"));
+        await sacha.Find(".battle-sheet-btn.retour").ClickAsync(new());
+        Assert.NotEmpty(sacha.FindAll(".battle-team-menu"));
         await sacha.Find(".battle-back.retour").ClickAsync(new());
         Assert.Empty(sacha.FindAll(".battle-bottom.equipe"));
 
@@ -122,12 +174,18 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.Empty(sacha.FindAll(".battle.cote, .battle.hybride"));
         Assert.Equal(BattleLayout.Stacked, (await preferences.SortsAsync("sacha")).Battle);
 
-        await sacha.Click("ATTAQUE");
-        await sacha.Click("Sécrétion");
+        // Sacha change de Pokémon par la fiche du deuxième de son équipe (panneau CHANGER) ; Ondine attaque sans dégâts
+        await sacha.Click("POKéMON");
+        await sacha.FindAll(".battle-member")[1].ClickAsync(new());
+        var next = sacha.Find(".battle-shift .battle-shift-name > span").TextContent;
+        Assert.Contains("CHANGER", sacha.Find(".battle-shift").TextContent);
+        Assert.False(sacha.Find(".battle-shift").HasAttribute("disabled"));
+        await sacha.Find(".battle-shift").ClickAsync(new());
         sacha.WaitForText("En attente de ondine");
         ondine.WaitForAssertion(() => Assert.True(ondine.HasButton("ATTAQUE")), Long);
         await ondine.Click("ATTAQUE");
         await ondine.Click("Groz");
+        sacha.WaitForAssertion(() => Assert.Equal(next, sacha.Find(".battle-info.mine .battle-info-name > span").TextContent), Long);
 
         // Abandon de Sacha (confirmé), fin du combat des deux côtés
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("ABANDONNER")), Long);

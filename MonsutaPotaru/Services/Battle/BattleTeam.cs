@@ -79,7 +79,7 @@ public static class BattleTeam
                 (ushort)Species.Unown => BattleNames.UnownForme(pk.Form), // forme d'aspect : seulement pour l'image
                 _ => "",
             },
-            HeldItem(pk, sav),
+            SaveBag.HeldItem(pk), // numérotation nationale (la 3e génération a la sienne)
             pk.Ability,
             kept.Select(i => (int)moves[i]).ToList(),
             kept.Select(i => ppUps[i]).ToList(),
@@ -90,14 +90,6 @@ public static class BattleTeam
             pk.CurrentFriendship,
             new BattleStats(pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPA, pk.IV_SPD, pk.IV_SPE),
             new BattleStats(pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPA, pk.EV_SPD, pk.EV_SPE));
-    }
-
-    /// <summary>Objet tenu en numérotation nationale (la 3e génération a la sienne).</summary>
-    private static int HeldItem(PKM pk, SaveFile sav)
-    {
-        if (pk.HeldItem == 0 || sav.Generation != 3)
-            return pk.HeldItem;
-        return ItemConverter.GetItemFuture3((ushort)pk.HeldItem);
     }
 
     /// <summary>Pokémon de la sauvegarde qui peuvent combattre : équipe puis boîtes, sans les œufs ni les cases vides.</summary>

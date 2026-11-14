@@ -60,6 +60,30 @@ README : « Combats ».
 - Le menu de l'équipe prend tout l'écran du bas (`ShowsTeam`, classe `.equipe`) : la barre de Pokéballs, toujours
   rendue, est cachée par le CSS (sauf en mode hybride) et le minuteur passe dans la boîte de message. Un Pokémon K.O. n'a plus ses PV maximum dans la requête de Showdown (« 0 fnt ») : pas de « 0/159 ».
 
+## Fiche d'un Pokémon de l'équipe (carte Trello 111)
+- Quatre écrans de l'écran du bas (`Menu.Member`, `Summary`, `MemberMoves`, `MoveDetail`), ouverts depuis le menu
+  POKéMON : sélection (`pokemon_selectionne.png`), résumé (`resume.png`), capacités (`move.png`) ; le détail d'une
+  capacité n'a pas de maquette (proposé le 2026-11-14, à valider par l'utilisateur). Pas de ligne d'expérience sur le
+  résumé (choix de l'utilisateur : les combats n'en donnent pas). Consultable pendant son propre choix seulement.
+- `BattleSheet.Of(membre de la requête)` : rien n'est relu dans la sauvegarde. La requête de Showdown ne donne ni les PP
+  d'un Pokémon resté dans sa Ball, ni les PV maximum d'un K.O. (« 0 fnt »), ni les types : `combat.js` les ajoute
+  (`Pokemon.prototype.getSwitchRequestData` : `pp`, `maxhp`, `types`) et écrit la puissance de Puissance Cachée au bout
+  de son identifiant (« hiddenpowerdark70 »). Statistiques : `stats` de la requête (hors modificateurs de combat).
+- Identifiants de capacités de la requête : « return102 », « frustration1 », « hiddenpowerdark70 » ;
+  `BattleNames.ParseMove` en tire le numéro, le type de Puissance Cachée et la puissance écrite. Catégorie de Puissance
+  Cachée : d'après son type (règle de la 3e génération, `BattleSheet.PhysicalTypes`).
+- `BattleDexData.cs` est généré par `outils/combats_textes.py` (réseau et `showdown/node_modules` nécessaires) : puissance,
+  précision et catégorie du simulateur pour la génération donnée ; descriptions françaises de PokéAPI, du plus ancien jeu
+  qui en a une : Rubis/Saphir pour 70 des 76 talents (style court, « Augmente attaques PLANTE. »), Noir/Blanc pour les
+  six autres et pour toutes les capacités (PokéAPI n'a pas de texte français de capacité avant). Une nouvelle génération
+  de combats : relancer le script avec son numéro (une seule table aujourd'hui).
+- `BattleNames.Index` saute les noms sans lettre (« ??? ») : sinon un objet vide (« ») trouvait le premier numéro
+  inutilisé (114) et la fiche demandait `images/objets/114.png`.
+- CSS : `.battle-sheet*`, `.battle-stat`, `.battle-shift` (bloc « Fiche d'un Pokémon de l'équipe ») ; en mode hybride le
+  résumé passe sur une grille à deux colonnes (`display: contents` sur ses deux blocs, ordre par `order`) et le minuteur
+  des fiches est caché (il est déjà dans la barre des Pokéballs). Couleurs des types : `.battle .type-<type>` pose
+  `--type` (capacités du menu, capacités et types de la fiche).
+
 ## Sprites (`BattleSprites`)
 - Ceux du jeu **de celui qui regarde** (sa sauvegarde, connue quand son équipe est acceptée : `BattleTeamResult.Sprites`),
   dans les dossiers des living dex de 3e génération (`dos/`, `chromatique/`, `outils/images.py combats`).
@@ -78,6 +102,9 @@ README : « Combats ».
   test (Vert Feuille, Rouge Feu).
 - Clics par `javascript_tool` (un script ne dépasse pas 45 s : découper les attentes). « ABANDONNER » : remplacer
   `window.confirm` avant de cliquer. Le minuteur se vérifie sans rien choisir pendant ~70 s.
+- Le volet du navigateur est petit (environ 608×346 px CSS) : pour voir l'écran du bas en entier, réduire `--ecran`
+  (370px) puis `scrollIntoView({block: 'end'})` ; pour le mode hybride, émuler une fenêtre de 900×512, replier le menu
+  du site et forcer `--ecran` à 500px (la zone doit dépasser 40rem). Changer de disposition ou d'écran ne recharge rien.
 - Recharger la page pendant un combat le fait perdre (le circuit fermé quitte le combat) : une retouche de CSS se
   regarde au combat suivant. Pour voir les détails, agrandir les écrans le temps d'une capture
   (`.battle` : `style.setProperty('--ecran', '520px')`) ; chaque joueur n'a que 60 secondes par choix.

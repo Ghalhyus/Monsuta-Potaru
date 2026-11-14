@@ -16,6 +16,13 @@ README : « Inventaire ». Code : `SaveBag`, `InventoryService`.
 - 3e génération : `ItemConverter.GetItemOld3` / `GetItemFuture3` ; 2e : `GetItemFuture2` (128 : sans équivalent) /
   `GetItemOld2` ; Rouge/Bleu : table `SaveBag.Gen1Items` (PKHeX n'a rien).
 - Depuis PKHeX 26, la 2e génération sort directement dans la numérotation des jeux suivants (Noigrumes Bleue/Jaune : 486/487).
+- **Objet tenu** : `PKM.HeldItem` est le numéro du jeu du Pokémon (139 : Baie Oran en 3e génération, Lettre Invit
+  ensuite ; 173 : la « Baie » d'Argent). Pour le nommer ou l'afficher, passer par `SaveBag.HeldItem(pk)` (numéro de 4e
+  génération et suivantes, 0 sans équivalent) : `PokemonInfo.Describe` (fiche d'un Pokémon, choix de l'équipe d'un
+  combat) et `BattleTeam.ToSet`. Bug corrigé le 2026-11-14 : la fiche affichait « Lettre Invit » pour une Baie Oran.
+  Restent au numéro du jeu, exprès : `BankPokemon.HeldItem` et `RibbonTracker.HeldItem` (ils ne servent qu'à l'image
+  d'une Méga-Évolution ou d'une Primo-Résurgence, objets de la 6e génération et suivantes, numéros au-delà de ceux des
+  vieux jeux), l'évolution par échange (`TradeService.Everstone`, `evo.Argument` : numéros du jeu).
 
 ## CT
 - Un même numéro n'apprend pas la même capacité selon le jeu : stockage par capacité (`SaveBag.MachineKey`).

@@ -51,7 +51,20 @@ public sealed record BattleActiveRequest(
     [property: JsonPropertyName("trapped")] bool Trapped,
     [property: JsonPropertyName("maybeTrapped")] bool MaybeTrapped);
 
-/// <summary>Pokémon de l'équipe d'un joueur, dans sa requête (« condition » : « 51/110 par », « 0 fnt »).</summary>
+/// <summary>Statistiques d'un Pokémon de l'équipe dans la requête (hors modificateurs de combat ; les PV sont dans « condition »).</summary>
+public sealed record BattleMemberStats(
+    [property: JsonPropertyName("atk")] int Atk,
+    [property: JsonPropertyName("def")] int Def,
+    [property: JsonPropertyName("spa")] int SpA,
+    [property: JsonPropertyName("spd")] int SpD,
+    [property: JsonPropertyName("spe")] int Spe);
+
+/// <summary>
+/// Pokémon de l'équipe d'un joueur, dans sa requête (« condition » : « 51/110 par », « 0 fnt » ; « moves » : identifiants
+/// de Showdown, « return102 », « hiddenpowerdark70 »). <paramref name="Pp"/> (restants et maximum de chaque capacité, dans
+/// l'ordre de <paramref name="Moves"/>), <paramref name="MaxHp"/> et <paramref name="Types"/> sont ajoutés par le pont
+/// (<c>showdown/combat.js</c>) pour la fiche du Pokémon (<see cref="BattleSheet"/>).
+/// </summary>
 public sealed record BattleTeamMember(
     [property: JsonPropertyName("ident")] string Ident,
     [property: JsonPropertyName("details")] string Details,
@@ -59,7 +72,11 @@ public sealed record BattleTeamMember(
     [property: JsonPropertyName("active")] bool Active,
     [property: JsonPropertyName("item")] string Item,
     [property: JsonPropertyName("baseAbility")] string Ability,
-    [property: JsonPropertyName("moves")] IReadOnlyList<string> Moves);
+    [property: JsonPropertyName("moves")] IReadOnlyList<string> Moves,
+    [property: JsonPropertyName("stats")] BattleMemberStats? Stats = null,
+    [property: JsonPropertyName("pp")] IReadOnlyList<IReadOnlyList<int>>? Pp = null,
+    [property: JsonPropertyName("maxhp")] int MaxHp = 0,
+    [property: JsonPropertyName("types")] IReadOnlyList<string>? Types = null);
 
 public sealed record BattleSideRequest(
     [property: JsonPropertyName("name")] string Name,

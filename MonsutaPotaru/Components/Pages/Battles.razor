@@ -229,23 +229,141 @@
                                 }
                                 else if (CanAct && snapshot!.Request is { } request)
                                 {
-                                    @if (ShowsTeam)
+                                    @if (ShowsTeam && Shown != Menu.Team)
                                     {
-                                        @* Menu POKéMON : six panneaux sur deux colonnes décalées, le message et le retour en bas *@
+                                        @* Fiche d'un Pokémon de l'équipe (carte Trello 111) : écran de sélection (CHANGER, RÉSUMÉ,
+                                           CAPACITÉS), résumé, capacités, détail d'une capacité. Tout vient de la requête. *@
+                                        var count = request.Side.Pokemon.Count;
+                                        var index = Math.Clamp(opened, 0, count - 1);
+                                        var sheet = BattleSheet.Of(request.Side.Pokemon[index]);
+                                        @switch (Shown)
+                                        {
+                                            case Menu.Summary:
+                                                <div class="battle-sheet resume">
+                                                    @SheetHead(sheet)
+                                                    <div class="battle-sheet-body">
+                                                        <div class="battle-sheet-left">
+                                                            <div class="battle-sheet-label niveau"><span>N.</span><span>@sheet.Level</span></div>
+                                                            <div class="battle-sheet-label">@sheet.Ability</div>
+                                                            <div class="battle-sheet-text">@sheet.AbilityText</div>
+                                                            <div class="battle-sheet-item">
+                                                                <span class="battle-sheet-item-icon">
+                                                                    @if (sheet.ItemUrl is { } itemUrl)
+                                                                    {
+                                                                        <img src="@itemUrl" alt="" data-cacher-si-absente />
+                                                                    }
+                                                                </span>
+                                                                <span>@(sheet.Item ?? "Aucun objet tenu")</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="battle-sheet-stats">
+                                                            <div class="battle-stat"><span>PV</span><span>@sheet.Hp/@sheet.MaxHp</span></div>
+                                                            <div class="battle-hp">
+                                                                @if (sheet.Fainted)
+                                                                {
+                                                                    <span class="battle-status fnt">K.O.</span>
+                                                                }
+                                                                else if (Status(sheet.Status) is { } status)
+                                                                {
+                                                                    <span class="battle-status @sheet.Status">@status</span>
+                                                                }
+                                                                @HpMeter(sheet.Percent)
+                                                            </div>
+                                                            @if (sheet.Stats is { } stats)
+                                                            {
+                                                                <div class="battle-stat"><span>ATTAQUE</span><span>@stats.Atk</span></div>
+                                                                <div class="battle-stat"><span>DÉFENSE</span><span>@stats.Def</span></div>
+                                                                <div class="battle-stat"><span>ATQ. SPÉ.</span><span>@stats.SpA</span></div>
+                                                                <div class="battle-stat"><span>DÉF. SPÉ.</span><span>@stats.SpD</span></div>
+                                                                <div class="battle-stat"><span>VITESSE</span><span>@stats.Spe</span></div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    @SheetFoot("CAPACITÉS", Menu.MemberMoves, Menu.Member, "Pokémon", count, i => opened = (index + i + count) % count)
+                                                </div>
+                                                break;
+
+                                            case Menu.MemberMoves:
+                                                <div class="battle-sheet capacites">
+                                                    @SheetHead(sheet)
+                                                    <div class="battle-sheet-moves">
+                                                        @for (var i = 0; i < Math.Max(4, sheet.Moves.Count); i++)
+                                                        {
+                                                            if (i >= sheet.Moves.Count)
+                                                            {
+                                                                <div class="battle-sheet-move vide"></div>
+                                                                continue;
+                                                            }
+                                                            var slot = i;
+                                                            <button type="button" class="battle-btn battle-sheet-move type-@sheet.Moves[i].Type.Key"
+                                                                    @onclick="() => { openedMove = slot; menu = Menu.MoveDetail; }">
+                                                                @SheetMove(sheet.Moves[i])
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                    @SheetFoot("RÉSUMÉ", Menu.Summary, Menu.Member, "Pokémon", count, i => opened = (index + i + count) % count)
+                                                </div>
+                                                break;
+
+                                            case Menu.MoveDetail when sheet.Moves.Count > 0:
+                                                var moves = sheet.Moves.Count;
+                                                var shownMove = Math.Clamp(openedMove, 0, moves - 1);
+                                                var info = sheet.Moves[shownMove];
+                                                <div class="battle-sheet detail">
+                                                    @SheetHead(sheet)
+                                                    <div class="battle-sheet-detail">
+                                                        <div class="battle-sheet-move type-@info.Type.Key">@SheetMove(info)</div>
+                                                        <div class="battle-sheet-facts">
+                                                            <div class="battle-stat"><span>CATÉGORIE</span><span>@info.CategoryName</span></div>
+                                                            <div class="battle-stat"><span>PUISSANCE</span><span>@info.PowerText</span></div>
+                                                            <div class="battle-stat"><span>PRÉCISION</span><span>@info.AccuracyText</span></div>
+                                                        </div>
+                                                        <div class="battle-sheet-text">@info.Text</div>
+                                                    </div>
+                                                    @SheetFoot(null, Menu.MoveDetail, Menu.MemberMoves, "Capacité", moves, i => openedMove = (shownMove + i + moves) % moves)
+                                                </div>
+                                                break;
+
+                                            default:
+                                                @* Écran de sélection : le grand panneau envoie le Pokémon au combat (grisé pour celui qui
+                                                   y est déjà et pour un K.O., dont la fiche reste consultable) *@
+                                                <div class="battle-sheet selection">
+                                                    <button type="button" class="battle-btn battle-shift" disabled="@(sheet.Active || sheet.Fainted)"
+                                                            @onclick="() => Choose(BattleChoice.SwitchTo(index + 1))">
+                                                        <span class="battle-shift-name">
+                                                            <span>@sheet.Name</span><span class="battle-gender @sheet.Gender">@Gender(sheet.Gender)</span>
+                                                        </span>
+                                                        <img src="@sheet.IconUrl" alt="@sheet.SpeciesName" data-remplacement="images/pokemon/inconnu.png" />
+                                                        <span class="battle-shift-word">@(sheet.Active ? "AU COMBAT" : sheet.Fainted ? "K.O." : "CHANGER")</span>
+                                                    </button>
+                                                    @SheetTimer()
+                                                    <div class="battle-sheet-foot">
+                                                        <button type="button" class="battle-btn battle-sheet-btn" @onclick="() => menu = Menu.Summary"><span>RÉSUMÉ</span></button>
+                                                        <button type="button" class="battle-btn battle-sheet-btn" @onclick="() => menu = Menu.MemberMoves"><span>CAPACITÉS</span></button>
+                                                        <button type="button" class="battle-btn battle-sheet-btn retour" aria-label="Retour" title="Retour" @onclick="() => menu = Menu.Team"><span aria-hidden="true">↵</span></button>
+                                                    </div>
+                                                </div>
+                                                break;
+                                        }
+                                    }
+                                    else if (ShowsTeam)
+                                    {
+                                        @* Menu POKéMON : six panneaux sur deux colonnes décalées, le message et le retour en bas. Chaque
+                                           panneau ouvre l'écran de sélection du Pokémon (celui qui est au combat et les K.O. compris). *@
                                         <div class="battle-team-menu">
                                             @for (var i = 0; i < request.Side.Pokemon.Count; i++)
                                             {
-                                                var index = i + 1;
-                                                var member = request.Side.Pokemon[i];
-                                                var (hp, max, memberStatus) = BattleProtocol.Condition(member.Condition);
-                                                var (species, _, speciesName) = BattleNames.SpeciesOf(member.Details);
-                                                var (level, gender, _) = BattleProtocol.Details(member.Details);
+                                                var place = i;
+                                                var teammate = request.Side.Pokemon[i];
+                                                var (hp, max, memberStatus) = BattleProtocol.Condition(teammate.Condition);
+                                                var (species, _, speciesName) = BattleNames.SpeciesOf(teammate.Details);
+                                                var (level, gender, _) = BattleProtocol.Details(teammate.Details);
                                                 var fainted = memberStatus == "fnt";
                                                 var percent = max > 0 ? (int)Math.Ceiling(hp * 100.0 / max) : 0;
-                                                <button type="button" class="battle-btn battle-member @(member.Active ? "active" : "") @(fainted ? "fainted" : "")"
-                                                        disabled="@(member.Active || fainted)" @onclick="() => Choose(BattleChoice.SwitchTo(index))">
+                                                <button type="button" class="battle-btn battle-member @(teammate.Active ? "active" : "") @(fainted ? "fainted" : "")"
+                                                        @onclick="() => { opened = place; menu = Menu.Member; }">
                                                     <img src="@PokemonSprites.Url(species, 0, EntityContext.Gen3, false, 0, false)" alt="" data-remplacement="images/pokemon/inconnu.png" />
-                                                    <span class="battle-member-name">@BattleProtocol.Who(member.Ident).Name</span>
+                                                    <span class="battle-member-name">@BattleProtocol.Who(teammate.Ident).Name</span>
                                                     <span class="battle-gender @gender">@Gender(gender)</span>
                                                     <span class="battle-hp">@HpMeter(percent)</span>
                                                     <span class="battle-member-foot">
@@ -263,7 +381,7 @@
                                                             <span class="battle-member-hp">@hp/@max</span>
                                                         }
                                                     </span>
-                                                    <span class="visually-hidden">@speciesName@(member.Active ? ", au combat" : "")</span>
+                                                    <span class="visually-hidden">@speciesName@(teammate.Active ? ", au combat" : "")</span>
                                                 </button>
                                             }
                                             <div class="battle-team-text">
@@ -431,7 +549,11 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private enum Menu { Main, Moves, Team }
+    /// <summary>
+    /// Écran du bas : menu principal, capacités du Pokémon au combat, équipe, puis la fiche d'un Pokémon de l'équipe
+    /// (écran de sélection, résumé, ses capacités, détail d'une capacité).
+    /// </summary>
+    private enum Menu { Main, Moves, Team, Member, Summary, MemberMoves, MoveDetail }
 
     private string userId = "";
     private string pseudo = "";
@@ -446,6 +568,8 @@ else
     private string? message;
     private bool messageIsError;
     private Menu menu;
+    private int opened; // fiche ouverte : place du Pokémon dans la requête
+    private int openedMove; // capacité détaillée sur la fiche
     private BattleLayout layout; // écrans empilés ou côte à côte : préférence du compte
 
     // Lecture des étapes : une à une, au rythme de BattleTiming.
@@ -463,10 +587,13 @@ else
 
     private bool Playing => playing || (snapshot is not null && played < snapshot.StepCount);
 
-    /// <summary>Le joueur doit choisir (toutes les étapes jouées, requête en attente, pas encore de choix).</summary>
-    /// <summary>Le menu de l'équipe occupe tout l'écran du bas (choisi, ou remplacement forcé après un K.O.).</summary>
-    private bool ShowsTeam => CanAct && snapshot?.Request is { } request && (request.MustSwitch || menu == Menu.Team);
+    /// <summary>Écran affiché : après un K.O., l'équipe remplace le menu principal (il faut choisir un remplaçant).</summary>
+    private Menu Shown => snapshot?.Request is { MustSwitch: true } && menu is Menu.Main or Menu.Moves ? Menu.Team : menu;
 
+    /// <summary>L'équipe ou la fiche d'un de ses Pokémon occupe tout l'écran du bas (choisie, ou remplacement forcé après un K.O.).</summary>
+    private bool ShowsTeam => CanAct && snapshot?.Request is not null && Shown is not (Menu.Main or Menu.Moves);
+
+    /// <summary>Le joueur doit choisir (toutes les étapes jouées, requête en attente, pas encore de choix).</summary>
     private bool CanAct => !Playing && snapshot is { Stage: BattleStage.Fighting, Chosen: false, Request.MustAct: true } && !(session?.IsOver ?? true);
 
     private int? SecondsLeft => snapshot?.Deadline is { } deadline
@@ -732,6 +859,67 @@ else
     private static RenderFragment HpMeter(int percent) => __builder =>
     {
         <span class="battle-hp-meter"><span class="battle-hp-label">PV</span><span class="battle-hp-bar"><span class="@HpClass(percent)" style="width: @(percent)%"></span></span></span>
+    };
+
+    // ---------- Fiche d'un Pokémon de l'équipe ----------
+
+    /// <summary>Temps restant pour choisir : il continue de courir pendant qu'on lit une fiche.</summary>
+    private RenderFragment SheetTimer() => __builder =>
+    {
+        if (SecondsLeft is { } remaining)
+        {
+            <span class="battle-timer @(remaining <= 10 ? "urgent" : "")">@remaining s</span>
+        }
+    };
+
+    /// <summary>Bandeau du haut d'une fiche : icône, nom, sexe et types du Pokémon, puis le minuteur.</summary>
+    private RenderFragment SheetHead(BattleSheet sheet) => __builder =>
+    {
+        <div class="battle-sheet-head">
+            <img src="@sheet.IconUrl" alt="@sheet.SpeciesName" data-remplacement="images/pokemon/inconnu.png" />
+            <span class="battle-sheet-name">@sheet.Name</span>
+            <span class="battle-gender @sheet.Gender">@Gender(sheet.Gender)</span>
+            <span class="battle-sheet-types">
+                @foreach (var type in sheet.Types)
+                {
+                    <span class="battle-move-type type-@type.Key">@type.Name</span>
+                }
+            </span>
+            @SheetTimer()
+        </div>
+    };
+
+    /// <summary>Panneau d'une capacité sur la fiche : nom, puis type et PP.</summary>
+    private static RenderFragment SheetMove(BattleSheetMove move) => __builder =>
+    {
+        <span class="battle-sheet-move-name">@move.Name</span>
+        <span class="battle-sheet-move-foot">
+            <span class="battle-move-type">@move.Type.Name</span>
+            @if (move.MaxPp is { } maxPp)
+            {
+                <span class="battle-move-pp">PP @move.Pp/@maxPp</span>
+            }
+        </span>
+    };
+
+    /// <summary>
+    /// Bas d'une fiche : flèches (Pokémon précédent ou suivant de l'équipe ; capacité, sur le détail), bouton vers l'autre
+    /// écran de la fiche (<paramref name="other"/>, absent du détail) et retour.
+    /// </summary>
+    private RenderFragment SheetFoot(string? other, Menu otherMenu, Menu back, string what, int count, Action<int> step) => __builder =>
+    {
+        var feminine = what == "Capacité";
+        <div class="battle-sheet-foot">
+            <button type="button" class="battle-btn battle-sheet-btn fleche" disabled="@(count < 2)" @onclick="() => step(-1)"
+                    aria-label="@($"{what} {(feminine ? "précédente" : "précédent")}")" title="@($"{what} {(feminine ? "précédente" : "précédent")}")"><span aria-hidden="true">▲</span></button>
+            <button type="button" class="battle-btn battle-sheet-btn fleche" disabled="@(count < 2)" @onclick="() => step(1)"
+                    aria-label="@($"{what} {(feminine ? "suivante" : "suivant")}")" title="@($"{what} {(feminine ? "suivante" : "suivant")}")"><span aria-hidden="true">▼</span></button>
+            @if (other is not null)
+            {
+                <button type="button" class="battle-btn battle-sheet-btn autre" @onclick="() => menu = otherMenu"><span>@other</span></button>
+            }
+            <button type="button" class="battle-btn battle-sheet-btn retour" aria-label="Retour" title="Retour" @onclick="() => menu = back"><span aria-hidden="true">↵</span></button>
+        </div>
     };
 
     /// <summary>

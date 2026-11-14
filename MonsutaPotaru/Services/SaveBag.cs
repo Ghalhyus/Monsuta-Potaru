@@ -436,6 +436,19 @@ public static class SaveBag
         _ => index,
     };
 
+    /// <summary>
+    /// Numéro de 4e génération et suivantes de l'objet tenu par ce Pokémon (0 : aucun, ou sans équivalent). Un Pokémon de
+    /// 2e ou de 3e génération garde le numéro de son jeu (<see cref="PKM.HeldItem"/> : 139 est la Baie Oran en 3e
+    /// génération, la Lettre Invit ensuite) ; rien à tenir en 1re génération.
+    /// </summary>
+    public static int HeldItem(PKM pk) => pk.Format switch
+    {
+        1 => 0,
+        2 => Gen2ToNational(pk.HeldItem),
+        3 => ItemConverter.GetItemFuture3((ushort)pk.HeldItem),
+        _ => pk.HeldItem,
+    };
+
     /// <summary>Numéro national d'un objet d'Or/Argent/Cristal (0 sans équivalent, 128 chez PKHeX).</summary>
     private static int Gen2ToNational(int index)
     {
