@@ -51,8 +51,12 @@ const SPRITE_SIZE = 2 / 3;
 const WALK_SPEED = 27; // vitesse de marche (pixels de la carte par seconde), selon le caractère
 const WALK_ANIMATION_SPEED = 30; // vitesse à laquelle l'animation de marche joue à son rythme normal (pieds sans glisser),
                                  // pour des sprites à la taille des pixels de la carte (plus petits : foulée plus courte)
-const DRAG_THRESHOLD = 6; // pixels (CSS) avant qu'un clic devienne un glissement de la vue (ou soulève un Pokémon)
-const LONG_PRESS = 300; // ms d'appui sans bouger, au doigt, pour soulever un Pokémon (sinon le doigt fait glisser la vue)
+const DRAG_THRESHOLD = 6; // pixels (CSS) avant qu'un clic devienne un glissement de la vue
+// Appui sans bouger (souris ou doigt) pour soulever un Pokémon : un glissement avant fait défiler la vue (on ne prend pas un
+// Pokémon en voulant seulement bouger la vue)
+const LONG_PRESS = 500; // ms
+// Cercle qui se remplit à côté du Pokémon pendant l'appui (pixels CSS), montré après <delay> ms (rien sur un simple clic)
+const PRESS_RING = { delay: 150, radius: 8, width: 3, gap: 4 };
 const LIFT = 8; // hauteur (pixels de la carte) d'un Pokémon soulevé au-dessus de son ombre
 const HELD_DEPTH = 3.5; // un Pokémon soulevé passe devant tout (feuillages, brouillard), sous la nuit (4)
 const EDGE_SCROLL = { margin: 48, speed: 420 }; // en le portant près du bord (pixels CSS) : la vue défile (pixels CSS / s)
@@ -615,7 +619,7 @@ export async function create(container, component, options) {
     let k = 1; // pixels d'écran par pixel de la carte (zoom de la caméra)
     let spriteK = 2; // pixels d'écran par pixel de sprite
     let spriteScale = SPRITE_SIZE; // pixels de la carte par pixel de sprite
-    let scene = null, camera = null, night = null, label = null, labelText = null, marker = null;
+    let scene = null, camera = null, night = null, label = null, labelText = null, marker = null, ring = null;
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
     let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
     let clock = 0; // secondes écoulées (remous)
@@ -809,6 +813,7 @@ export async function create(container, component, options) {
         labelText = s.add.text(0, 0, "", { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "8px", color: "#ffffff", resolution: k })
             .setDepth(6.1).setVisible(false);
         marker = s.add.graphics().setDepth(HELD_DEPTH - 0.1).setVisible(false); // case visée par un Pokémon soulevé
+        ring = s.add.graphics().setDepth(6.2).setVisible(false); // appui en cours sur un Pokémon (PRESS_RING)
 
         camera.roundPixels = true;
         applyZoom(k); // zoom et limites de la vue
@@ -994,9 +999,11 @@ export async function create(container, component, options) {
     // ---------- Pokémon soulevé (propriétaire) : suit le pointeur, posé seulement sur une case où il peut marcher ----------
     const spot = new Phaser.Math.Vector2(); // gardé : la position suit le pointeur à chaque image, sans déchets
 
-    function pickUp(p, pointer) {
+    /** Soulevé à l'endroit du pointeur où on l'a pris (<offset> : écart au moment de l'appui ; il a pu marcher depuis). */
+    function pickUp(p, pointer, offset) {
         camera.getWorldPoint(pointer.x, pointer.y, spot);
-        held = { p, from: { x: p.x, y: p.y }, dx: p.x - spot.x, dy: p.y - spot.y, pointer };
+        const dx = offset?.dx ?? p.x - spot.x, dy = offset?.dy ?? p.y - spot.y;
+        held = { p, from: { x: p.x, y: p.y }, dx, dy, pointer };
         Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, afterPlay: null });
         p.setState("held"); // un dormeur se réveille (une attaque prévue n'a pas lieu)
         drag = null;
@@ -1067,11 +1074,12 @@ export async function create(container, component, options) {
                 return;
             }
             if (held) return;
-            // Sur un Pokémon (propriétaire) : à la souris, il est soulevé dès qu'on bouge ; au doigt, après un appui long
-            // (tick), un glissement avant fait défiler la vue
-            const target = canMove ? at(worldOf(pointer)) ?? null : null;
+            // Sur un Pokémon (propriétaire) : soulevé après un appui long sans bouger (tick, cercle de PRESS_RING) ; un
+            // glissement avant fait défiler la vue
+            const point = worldOf(pointer);
+            const target = canMove ? at(point) ?? null : null;
             drag = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY, moved: false,
-                target, touch: pointer.wasTouch, time: performance.now(), pointer };
+                target, offset: target && { dx: target.x - point.x, dy: target.y - point.y }, time: performance.now(), pointer };
         });
         const pinchMove = () => {
             if (!pinching()) return;
@@ -1081,14 +1089,11 @@ export async function create(container, component, options) {
                 pinch.spread = now;
             }
         };
-        // Bouton appuyé : au-delà du seuil, le Pokémon visé est soulevé ou la vue défile
+        // Bouton appuyé : au-delà du seuil, la vue défile (même sur un Pokémon, avant la fin de l'appui long)
         const dragMove = pointer => {
             const dx = pointer.x - drag.x, dy = pointer.y - drag.y;
-            if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) {
-                if (drag.target && !drag.touch) pickUp(drag.target, pointer);
-                else drag.moved = true;
-            }
-            if (drag?.moved) camera.setScroll(drag.scrollX - dx / k, drag.scrollY - dy / k);
+            if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) drag.moved = true;
+            if (drag.moved) camera.setScroll(drag.scrollX - dx / k, drag.scrollY - dy / k);
         };
         s.input.on("pointermove", pointer => {
             if (pinch) {
@@ -1547,6 +1552,30 @@ export async function create(container, component, options) {
         for (const p of pokemon) drawPokemon(p);
         drawMarker();
         drawName(hovered);
+        drawPressRing();
+    }
+
+    /** Appui en cours sur un Pokémon, sans avoir bougé : il sera soulevé à la fin de LONG_PRESS. */
+    const pressing = () => !!(drag?.target && !drag.moved && drag.pointer.isDown && !held);
+
+    /**
+     * Cercle à côté du Pokémon pendant l'appui, rempli selon le temps écoulé (taille en pixels CSS, la même à tous les
+     * zooms) ; redessiné à chaque image tant qu'il est montré.
+     */
+    function drawPressRing() {
+        const elapsed = pressing() ? performance.now() - drag.time : 0;
+        const show = elapsed >= PRESS_RING.delay;
+        ring.setVisible(show);
+        if (!show) return;
+        const p = drag.target, unit = (window.devicePixelRatio || 1) / k; // un pixel CSS en pixels de la carte
+        const r = PRESS_RING.radius * unit, w = PRESS_RING.width * unit, h = p.anim.fh * spriteScale;
+        const x = clamp(p.x + p.anim.fw * spriteScale * 0.3 + PRESS_RING.gap * unit + r, r + w, ground.width - r - w);
+        const y = clamp(p.y - p.altitude - h * 0.4, r + w, ground.height - r - w);
+        const start = -Math.PI / 2, t = Math.min(1, elapsed / LONG_PRESS);
+        ring.clear()
+            .fillStyle(0x000000, 0.35).fillCircle(x, y, r + w / 2)
+            .lineStyle(w, 0xffffff, 0.3).strokeCircle(x, y, r)
+            .lineStyle(w, 0xffffff, 0.95).beginPath().arc(x, y, r, start, start + t * Math.PI * 2).strokePath();
     }
 
     /** Un Pokémon : son ombre (ou ses remous), son image (coupée sous la surface), sa profondeur, ses « z ». */
@@ -1644,8 +1673,8 @@ export async function create(container, component, options) {
         const dt = Math.min(0.1, delta / 1000); // onglet en arrière-plan : pas de bond au retour
         levelAge += dt;
         if (levelAge > 1) { level = nightLevel(); levelAge = 0; } // l'heure, une fois par seconde
-        if (drag?.target && drag.touch && !drag.moved && drag.pointer.isDown && performance.now() - drag.time >= LONG_PRESS)
-            pickUp(drag.target, drag.pointer); // appui long sur un Pokémon
+        if (pressing() && performance.now() - drag.time >= LONG_PRESS)
+            pickUp(drag.target, drag.pointer, drag.offset); // appui long sur un Pokémon
         if (held) { edgeScroll(dt); carry(); }
         step(dt, level);
         animate(dt);

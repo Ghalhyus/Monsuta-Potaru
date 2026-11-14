@@ -528,9 +528,16 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 ## Déplacer un Pokémon (`parc.js`, propriétaire)
 - `create(container, component, { canMove })` : `Park.razor` passe `canMove = !Visitor`. Rien côté serveur (positions
   jamais enregistrées).
-- `pointerdown` sur un Pokémon (`at`) : `drag.target`. Souris : au-delà de `DRAG_THRESHOLD`, `pickUp` au lieu de faire
-  glisser la vue. Doigt (`pointer.wasTouch`) : `tick` soulève après `LONG_PRESS` sans avoir bougé ; avant, un glissement
-  fait défiler la vue. Clic sans bouger : fiche, comme avant.
+- `pointerdown` sur un Pokémon (`at`) : `drag.target`, `drag.offset` (écart pointeur-Pokémon à l'appui). Souris et doigt
+  pareil (demande du 2026-11-14 : « qu'on ne prenne pas un Pokémon lorsque l'on souhaite juste bouger la caméra ») :
+  `tick` soulève après `LONG_PRESS` (0,5 s, d'abord 1 s : trop long) sans avoir dépassé `DRAG_THRESHOLD` (`pressing()`) ; avant, un glissement fait
+  défiler la vue. Il peut marcher pendant l'appui : `pickUp(p, pointer, drag.offset)` le ramène sous le pointeur à
+  l'endroit où on l'avait pris. Clic sans bouger (relâché avant 0,5 s) : fiche, comme avant. (Avant : la souris le
+  soulevait dès qu'on bougeait, le doigt après 0,3 s.)
+- **Cercle de l'appui** (`ring`, `drawPressRing`, `PRESS_RING`) : à droite du Pokémon (à hauteur de son milieu, suit un
+  volant), rempli selon `elapsed / LONG_PRESS` depuis midi, montré après `delay` (150 ms : rien sur un simple clic).
+  Tailles en pixels CSS, converties par `devicePixelRatio / k` (le même à tous les zooms). Profondeur 6,2 (devant la nuit).
+  Redessiné à chaque image tant qu'il est montré, caché dès que l'appui cesse, bouge ou soulève.
 - `held` : `{ p, from, dx, dy, pointer }` ; état `"held"` (animation `Charge` par `ANIMATION_OF`, `OPTIONAL` : planche
   absente = Idle ; `update` ne fait rien), dessiné `LIFT` px plus haut, profondeur `HELD_DEPTH` (3,5 : devant le
   brouillard, sous la nuit). `carry` à chaque image (Vector2 gardé : pas de déchets) suit le pointeur même quand la vue
@@ -539,7 +546,9 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Essais : `MouseEvent` (`mousedown`, `mousemove` sur le canvas, `mouseup` sur `window`) ; doigt : `resize_window`
   « mobile », recharger la page, `new Touch(...)` + `TouchEvent` sur le canvas. Panneau masqué : la caméra n'est à jour
   qu'après un dessin (capture d'écran) : sans, `getWorldPoint` vise à côté et le Pokémon n'est pas pris ; l'appui long
-  attend aussi une image (`tick`).
+  attend aussi une image (`tick`). Essai du 2026-11-14 (panneau masqué, `create` dans une page, un Pikachu posé par
+  `place`, avec 1 s) : capture, `mousedown`, 0,5 s → toujours `idle`, cercle visible ; après 1 s et une capture → `held` ;
+  `mousedown` + `mousemove` de 30 px → vue défilée, toujours `idle` après 1,2 s ; clic de 80 ms → `OnPokemonClicked`.
 
 ## Nage et vol (`parc.js`, demande du 2026-11-01)
 - `ParkHabitats.MovementOf(type1, type2)` → `ParkPokemon.Moves` : « swim » si l'un des types est Eau, sinon « fly » si
@@ -876,8 +885,9 @@ PKHeX rapprochés de ceux de SpriteCollab, `images/donjon/formes.json`). Pour qu
 - le nom au survol, des « z » au-dessus des dormeurs, les plus bas dessinés devant (devant les arbres aussi : chaque
   feuillage est trié selon la ligne de son tronc). Les positions ne sont pas gardées.
 
-**Déplacer un Pokémon** (propriétaire du parc seulement ; pas les visiteurs) : à la souris, appuyer sur lui et bouger le
-**soulève** ; au doigt, il faut un **appui long** (0,3 s) avant de bouger (un glissement direct fait défiler la vue). Il
+**Déplacer un Pokémon** (propriétaire du parc seulement ; pas les visiteurs) : un **appui d'une demi-seconde** sur lui sans
+bouger (souris ou doigt) le **soulève**, un cercle se remplit à côté de lui pendant l'appui ; bouger avant fait défiler la
+vue, relâcher avant ouvre sa fiche. Il
 suit le pointeur, un peu au-dessus de son ombre, devant tout, avec son animation **Charge** (Idle quand SpriteCollab ne
 l'a pas) ; la case visée est encadrée en clair si on peut l'y poser, en **rouge** sinon (eau, sauf pour un type Eau ; lave,
 sauf pour un type Feu ; arbre, rocher, banc, hors de la zone « Parc »). Lâché sur une case interdite, il **revient à sa place** ; posé, il reste quelques secondes

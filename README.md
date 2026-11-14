@@ -461,6 +461,8 @@ chaque paysage, générateurs, types de cases, comportement, tests) : `docs/clau
   d'après le parc enregistré (rien ne bouge avant « Valider ») ; un filtre d'affichage seulement, `SetAsync` revérifie.
 - La fiche n'est donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`). Positions et déplacements à la
   souris ne sont pas enregistrés (navigateur seulement). Visiteurs : rien qui modifie.
+- Déplacer un Pokémon : **appui d'une demi-seconde sans bouger** (souris ou doigt), un cercle se remplit à côté de lui ;
+  bouger avant fait défiler la vue (on ne prend pas un Pokémon en voulant seulement bouger la vue).
 
 ### Living dex
 
