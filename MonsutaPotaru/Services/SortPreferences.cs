@@ -16,6 +16,9 @@ public readonly record struct ItemSort(ItemSortBy By = ItemSortBy.Default, bool 
 /// <summary>Tri de la vue générale des living dex : par génération croissante par défaut.</summary>
 public readonly record struct LivingDexOrder(LivingDexSort By = LivingDexSort.Generation, bool Descending = false);
 
+/// <summary>Tri de la vue générale des complétions : par génération croissante par défaut.</summary>
+public readonly record struct CompletionOrder(CompletionSort By = CompletionSort.Generation, bool Descending = false);
+
 /// <summary>Tri de la vue générale des rubans : par ordre d'ajout (le premier suivi d'abord) par défaut.</summary>
 public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bool Descending = false);
 
@@ -27,7 +30,7 @@ public readonly record struct SortQuery(string? Tri, string? Ordre)
 }
 
 /// <summary>
-/// Les tris de l'inventaire, de « Ma collection » et des vues générales des living dex et des rubans : leurs noms dans l'adresse
+/// Les tris de l'inventaire, de « Ma collection » et des vues générales des living dex, des complétions et des rubans : leurs noms dans l'adresse
 /// (« ?tri= », « ?ordre= »), leurs libellés, et la lecture d'une adresse. Une valeur inconnue (adresse ou formulaire
 /// trafiqués) donne le premier critère et le sens par défaut, jamais une erreur.
 /// </summary>
@@ -70,6 +73,12 @@ public static class SiteSorts
         (LivingDexSort.Completion, "completion", "Complétion"),
     ];
 
+    public static readonly IReadOnlyList<(CompletionSort By, string Slug, string Label)> CompletionChoices =
+    [
+        (CompletionSort.Generation, "generation", "Génération"),
+        (CompletionSort.Completion, "completion", "Complétion"),
+    ];
+
     public static readonly IReadOnlyList<(RibbonSort By, string Slug, string Label)> RibbonChoices =
     [
         (RibbonSort.Arrival, "ajout", "Ajout"),
@@ -80,6 +89,7 @@ public static class SiteSorts
     public static string Slug(ItemSortBy by) => ItemChoices.First(c => c.By == by).Slug;
     public static string Slug(CollectionSortBy by) => CollectionCompactChoices.First(c => c.By == by).Slug;
     public static string Slug(LivingDexSort by) => LivingDexChoices.First(c => c.By == by).Slug;
+    public static string Slug(CompletionSort by) => CompletionChoices.First(c => c.By == by).Slug;
     public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
 
     // ---------- Inventaire : « ordre=desc » pour décroissant ----------
@@ -125,6 +135,15 @@ public static class SiteSorts
 
     public static SortQuery LivingDexQuery(LivingDexOrder order) => new(Slug(order.By), order.Descending ? "desc" : null);
 
+    // ---------- Complétion : « ordre=desc » pour décroissant ----------
+
+    /// <summary>Tri de la vue générale des complétions lu dans l'adresse ; null si elle n'en dit rien.</summary>
+    public static CompletionOrder? CompletionFromQuery(SortQuery query) => query.IsEmpty
+        ? null
+        : new CompletionOrder(CompletionChoices.FirstOrDefault(c => c.Slug == query.Tri, CompletionChoices[0]).By, query.Ordre == "desc");
+
+    public static SortQuery CompletionQuery(CompletionOrder order) => new(Slug(order.By), order.Descending ? "desc" : null);
+
     // ---------- Rubans : « ordre=desc » pour décroissant ----------
 
     /// <summary>Tri de la vue générale des rubans lu dans l'adresse ; null si elle n'en dit rien.</summary>
@@ -146,7 +165,7 @@ public static class SiteSorts
 
 /// <summary>
 /// Tris par défaut d'un compte (« Mon compte » → « Préférences ») : un par onglet de l'inventaire, celui de « Ma
-/// collection » et ceux des vues générales des living dex et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
+/// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
 /// pages du joueur comme sur celles des autres joueurs qu'il consulte. Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>,
 /// avec les noms de l'adresse : <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"}}</c>.
 /// </summary>
@@ -158,6 +177,7 @@ public sealed class SortPreferences
     public IReadOnlyDictionary<ItemCategory, ItemSort> Inventory { get; init; } = new Dictionary<ItemCategory, ItemSort>();
     public CollectionSort Collection { get; init; }
     public LivingDexOrder LivingDex { get; init; }
+    public CompletionOrder Completion { get; init; }
     public RibbonOrder Ribbons { get; init; }
 
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
@@ -173,6 +193,7 @@ public sealed class SortPreferences
         public Dictionary<string, StoredSort>? Inventaire { get; set; }
         public StoredSort? Collection { get; set; }
         public StoredSort? Livingdex { get; set; }
+        public StoredSort? Completion { get; set; }
         public StoredSort? Rubans { get; set; }
     }
 
@@ -194,9 +215,11 @@ public sealed class SortPreferences
             Inventaire = inventory.Count == 0 ? null : inventory,
             Collection = Collection == default ? null : StoredSort.From(SiteSorts.CollectionQuery(Collection)),
             Livingdex = LivingDex == default ? null : StoredSort.From(SiteSorts.LivingDexQuery(LivingDex)),
+            Completion = Completion == default ? null : StoredSort.From(SiteSorts.CompletionQuery(Completion)),
             Rubans = Ribbons == default ? null : StoredSort.From(SiteSorts.RibbonQuery(Ribbons)),
         };
-        return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Rubans is null
+        return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
+            && stored.Rubans is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -227,6 +250,7 @@ public sealed class SortPreferences
             Inventory = inventory,
             Collection = stored.Collection is { } c ? SiteSorts.CollectionFromQuery(c.ToQuery()) ?? default : default,
             LivingDex = stored.Livingdex is { } l ? SiteSorts.LivingDexFromQuery(l.ToQuery()) ?? default : default,
+            Completion = stored.Completion is { } p ? SiteSorts.CompletionFromQuery(p.ToQuery()) ?? default : default,
             Ribbons = stored.Rubans is { } r ? SiteSorts.RibbonFromQuery(r.ToQuery()) ?? default : default,
         };
     }

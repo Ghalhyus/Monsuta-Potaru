@@ -1,3 +1,4 @@
+using System.Numerics;
 using MonsutaPotaru.Data;
 using PKHeX.Core;
 
@@ -5,6 +6,15 @@ namespace MonsutaPotaru.Services;
 
 /// <summary>Section d'une complétion : chacune pèse autant dans le pourcentage global, quel que soit son nombre d'étapes.</summary>
 public enum CompletionSection { Story, Pokedex, Trainers, Items, Encounters, Quests }
+
+/// <summary>Tri des cartes de la vue générale.</summary>
+public enum CompletionSort
+{
+    /// <summary>Dans l'ordre des jeux (génération, puis jeu : Rouge, Bleu, Jaune...).</summary>
+    Generation,
+    /// <summary>Par moyenne exacte des sections ; à égalité, dans l'ordre des jeux.</summary>
+    Completion,
+}
 
 /// <summary>État d'une étape : faite, à faire, ou ratée (plus faisable dans cette partie ; elle compte quand même).</summary>
 public enum CompletionState { Missing, Done, Missed }
@@ -84,6 +94,33 @@ public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress>
             var average = counted.Average(s => (decimal)s.Done / s.Total);
             return (int)Math.Floor(average * 1000);
         }
+    }
+
+    /// <summary>
+    /// Compare deux moyennes exactement, en fractions (sans l'arrondi de <see cref="Tenths"/> ni celui d'un nombre décimal) :
+    /// deux complétions affichées « 45,3 % » restent départagées, et deux moyennes égales le restent.
+    /// </summary>
+    public static int CompareAverages(CompletionProgress a, CompletionProgress b)
+    {
+        var (aNumerator, aDenominator) = a.Average();
+        var (bNumerator, bDenominator) = b.Average();
+        return (aNumerator * bDenominator).CompareTo(bNumerator * aDenominator);
+    }
+
+    /// <summary>Moyenne des sections comptées, en fraction : Σ fait / total, divisée par leur nombre (0 / 1 sans section).</summary>
+    private (BigInteger Numerator, BigInteger Denominator) Average()
+    {
+        var counted = Sections.Where(s => s.Total > 0).ToList();
+        if (counted.Count == 0)
+            return (0, 1);
+        BigInteger numerator = 0, denominator = 1;
+        foreach (var s in counted)
+        {
+            // n / d + fait / total = (n × total + fait × d) / (d × total)
+            numerator = numerator * s.Total + (BigInteger)s.Done * denominator;
+            denominator *= s.Total;
+        }
+        return (numerator, denominator * counted.Count);
     }
 
     /// <summary>« 57,3 % », comme les barres des living dex.</summary>
@@ -172,6 +209,21 @@ public static class CompletionGames
         LivingDexGame.Sword, LivingDexGame.Shield, LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl,
         LivingDexGame.LegendsArceus, LivingDexGame.Scarlet, LivingDexGame.Violet,
     ];
+
+    /// <summary>
+    /// Cartes de la vue générale dans l'ordre choisi : par génération, l'ordre des jeux ou son exact inverse ; par complétion,
+    /// la moyenne exacte des sections, à égalité dans l'ordre des jeux (dans les deux sens).
+    /// </summary>
+    public static List<CompletionSummary> Sort(IEnumerable<CompletionSummary> completions, CompletionSort sort, bool descending)
+    {
+        var byGame = completions.OrderBy(c => c.Game.Game).ToList();
+        if (sort == CompletionSort.Generation)
+            return descending ? [.. byGame.OrderByDescending(c => c.Game.Game)] : byGame;
+        // Order est stable : à égalité, l'ordre des jeux reste.
+        return [.. byGame.Order(Comparer<CompletionSummary>.Create((a, b) => descending
+            ? CompletionProgress.CompareAverages(b.Progress, a.Progress)
+            : CompletionProgress.CompareAverages(a.Progress, b.Progress)))];
+    }
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav switch

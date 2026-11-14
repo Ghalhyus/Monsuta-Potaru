@@ -178,6 +178,8 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
             ["ordre-collection"] = "asc",
             ["tri-livingdex"] = "completion",
             ["ordre-livingdex"] = "desc",
+            ["tri-completion"] = "completion",
+            ["ordre-completion"] = "desc",
             ["tri-rubans"] = "completion",
         });
         var saved = Parser.ParseDocument(sorts);
@@ -187,6 +189,8 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal("defaut", saved.QuerySelector("select[name=tri-baies] option[selected]")?.GetAttribute("value"));
         Assert.Equal("pokedex", saved.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
         Assert.Equal("completion", saved.QuerySelector("select[name=tri-livingdex] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("completion", saved.QuerySelector("select[name=tri-completion] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("desc", saved.QuerySelector("select[name=ordre-completion] option[selected]")?.GetAttribute("value"));
         Assert.Equal("completion", saved.QuerySelector("select[name=tri-rubans] option[selected]")?.GetAttribute("value"));
         var (_, reset) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
         var original = Parser.ParseDocument(reset);

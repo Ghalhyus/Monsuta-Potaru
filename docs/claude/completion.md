@@ -12,8 +12,18 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - **Ratés** (plus faisables dans la partie) : comptés, marqués « raté » ; le 100 % reste strict, même s'il devient
   impossible.
 - Pages publiques (`/joueurs/{pseudo}/completion`, case « Complétion (100 %) » de « Visibilité », `PublicPages.Completion`,
-  cochée pour tous par la migration `CompletionChallenge`). Pas dans les statistiques ni dans les tris par défaut (pas
-  demandé pour l'instant).
+  cochée pour tous par la migration `CompletionChallenge`). Pas dans les statistiques (pas demandé pour l'instant).
+
+## Vue générale : tri et création (2026-11-14, « les mêmes fonctionnalités que Living dex »)
+- **Tri** « Trier par » Génération / Complétion et ↑ / ↓, comme les living dex : `?tri=generation|completion`,
+  `?ordre=desc`, `CompletionGames.Sort`, noms `SiteSorts.CompletionChoices`, `CompletionOrder` / `CompletionSort` ;
+  sans tri dans l'adresse, celui du compte (« Préférences », clé `completion`, voir `comptes.md`).
+- Par complétion : **moyenne exacte** (choix de l'utilisateur), `CompletionProgress.CompareAverages` compare les
+  moyennes en fractions (`BigInteger`) : un `decimal` arrondirait 1 / 3 + 2 / 3, et `Tenths` (arrondi de l'affichage)
+  laisserait des égalités. À égalité, l'ordre des jeux, dans les deux sens (`Order` est stable).
+- **Création** : `Shared/GamePicker.razor`, le même que les living dex (générations repliées au départ, celle du jeu
+  choisi le montre encore ; un jeu déjà pris grisé, « (déjà créée) »). Les tests ouvrent une génération
+  (`.livingdex-generation-toggle`) avant de choisir un jeu.
 
 ## Tables de Rouge / Bleu / Jaune
 - `Gen1CompletionData.cs` est **généré** : `python outils/completion_gen1.py <dossier> MonsutaPotaru/Services/Completion/Gen1CompletionData.cs`,

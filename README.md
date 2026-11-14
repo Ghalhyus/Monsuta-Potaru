@@ -190,8 +190,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 `Account/Pages/Manage/Preferences.razor`, `Services/SortPreferences.cs` (`SiteSorts`, `SortPreferences`,
 `PreferencesService`) ; détails : `docs/claude/comptes.md`.
 
-- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et ceux des vues générales des living dex et
-  des rubans, gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
+- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et ceux des vues générales des living dex, des
+  complétions et des rubans, gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
   seuls les tris différents de l'origine y sont écrits).
 - **Priorité** : l'adresse (`?tri=`, `?ordre=`), sinon le compte. Un tri choisi sur la page s'écrit dans l'adresse, sauf
   s'il est celui du compte ; sinon en entier (`?tri=arrivee` quand le compte trie par nom). L'inventaire ne retient plus
@@ -582,6 +582,11 @@ textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs` à `
   dresseur visible au départ puis parti sans avoir été battu ; en 5e, sauf ceux d'une seule version, que le jeu
   cache dans l'autre) : comptées dans le total,
   marquées « raté » (choix de l'utilisateur : le 100 % reste strict).
+- **Vue générale** : tri « Génération » (ordre des jeux, ou son exact inverse) ou « Complétion » (moyenne exacte des
+  sections, en fractions : deux cartes affichées au même pourcentage restent départagées ; à égalité, l'ordre des jeux),
+  ↑ / ↓ ; gardé dans l'adresse (`?tri=generation|completion`, `?ordre=desc`), sinon celui du compte (« Tris par
+  défaut »). Création : jaquettes groupées par génération, repliées au départ, comme pour les living dex
+  (`Shared/GamePicker.razor`).
 - Page : `?section=pokedex|dresseurs|objets|rencontres|quetes` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
   groupées par lieu dans l'ordre de l'aventure ; Pokédex et Zarbi en sprites du jeu, comme le living dex.
 
@@ -651,8 +656,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
-| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex et des rubans |
-| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte en JSON (`SortPreferences`) et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |
@@ -692,11 +697,12 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » (rubrique « Défis ») : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
+| `MonsutaPotaru/Components/Shared/GamePicker.razor` | Choix du jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération, repliées au départ (le jeu choisi reste visible), jeux déjà pris grisés |
 | `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu (avec le Charme Chroma pour un chromatique), ou Master Ball / Charme Chroma pour les globaux |
 | `MonsutaPotaru/Components/Pages/LivingDexPage.razor` | Page d'un living dex : grille des sprites du jeu (silhouettes des manquants), progression, fiche au clic |
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
 | `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
-| `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), création (jeu, puis sauvegarde) |
+| `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), tri par génération ou par complétion, création (jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
 | `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
 | `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde (1re à 4e génération), textes des étapes (équipes, objets, CT) |

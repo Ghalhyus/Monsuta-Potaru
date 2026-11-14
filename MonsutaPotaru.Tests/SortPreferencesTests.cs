@@ -19,6 +19,7 @@ public sealed class SortPreferencesTests : IDisposable
         },
         Collection = new(CollectionSortBy.Dex, Reversed: true),
         LivingDex = new(LivingDexSort.Completion, Descending: true),
+        Completion = new(CompletionSort.Completion),
         Ribbons = new(RibbonSort.Completion),
     };
 
@@ -26,13 +27,14 @@ public sealed class SortPreferencesTests : IDisposable
     public void Json_KeepsEverySort_AndOnlyWhatDiffersFromTheSite()
     {
         var json = Sample().ToJson();
-        Assert.Equal("""{"inventaire":{"ct":{"tri":"nom"},"baies":{"tri":"quantite","ordre":"desc"}},"collection":{"tri":"pokedex","ordre":"desc"},"livingdex":{"tri":"completion","ordre":"desc"},"rubans":{"tri":"completion"}}""", json);
+        Assert.Equal("""{"inventaire":{"ct":{"tri":"nom"},"baies":{"tri":"quantite","ordre":"desc"}},"collection":{"tri":"pokedex","ordre":"desc"},"livingdex":{"tri":"completion","ordre":"desc"},"completion":{"tri":"completion"},"rubans":{"tri":"completion"}}""", json);
         var read = SortPreferences.FromJson(json);
         Assert.Equal(new ItemSort(ItemSortBy.Name), read.InventoryFor(ItemCategory.Machines));
         Assert.Equal(new ItemSort(ItemSortBy.Quantity, true), read.InventoryFor(ItemCategory.Berries));
         Assert.Equal(default, read.InventoryFor(ItemCategory.Items));
         Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
         Assert.Equal(new LivingDexOrder(LivingDexSort.Completion, true), read.LivingDex);
+        Assert.Equal(new CompletionOrder(CompletionSort.Completion), read.Completion);
         Assert.Equal(new RibbonOrder(RibbonSort.Completion), read.Ribbons);
         Assert.Null(SortPreferences.Default.ToJson()); // tout d'origine : colonne vide
     }
@@ -49,6 +51,7 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Empty(read.Inventory);
         Assert.Equal(default, read.Collection);
         Assert.Equal(default, read.LivingDex);
+        Assert.Equal(default, read.Completion);
     }
 
     [Fact]
@@ -81,6 +84,10 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Null(SiteSorts.LivingDexFromQuery(new(null, null)));
         Assert.Equal(new LivingDexOrder(LivingDexSort.Generation, true), SiteSorts.LivingDexFromQuery(new("generation", "desc")));
         Assert.Equal(new SortQuery("completion", null), SiteSorts.LivingDexQuery(new(LivingDexSort.Completion)));
+        Assert.Null(SiteSorts.CompletionFromQuery(new(null, null)));
+        Assert.Equal(new CompletionOrder(CompletionSort.Generation, true), SiteSorts.CompletionFromQuery(new("generation", "desc")));
+        Assert.Equal(new CompletionOrder(), SiteSorts.CompletionFromQuery(new("pirate", null))); // trafiqué : le tri d'origine
+        Assert.Equal(new SortQuery("completion", "desc"), SiteSorts.CompletionQuery(new(CompletionSort.Completion, true)));
         Assert.Null(SiteSorts.RibbonFromQuery(new(null, null)));
         Assert.Equal(new RibbonOrder(RibbonSort.Name, true), SiteSorts.RibbonFromQuery(new("nom", "desc")));
         Assert.Equal(new RibbonOrder(), SiteSorts.RibbonFromQuery(new("pirate", null))); // trafiqué : le tri d'origine

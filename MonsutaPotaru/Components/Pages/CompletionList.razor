@@ -9,6 +9,7 @@
 @inject CompletionService Completions
 @inject NavigationManager Navigation
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
 <PageTitle>@PageName</PageTitle>
 
@@ -42,7 +43,8 @@ else
             <ul>
                 <li>Sections : <strong>histoire, Pokédex, dresseurs, objets, rencontres uniques</strong> (et quêtes annexes à partir de la 2e génération).</li>
                 <li>Chaque section compte <strong>autant</strong> dans le total, même si elle est plus longue.</li>
-                <li>Pour l'instant : de Rouge / Bleu à Écarlate / Violet (1re à 9e génération, sans Légendes Z-A ; pas de dresseurs en 7e et 8e génération).</li>
+                <li>Pour l'instant : de Rouge / Bleu à Écarlate / Violet (1re à 9e génération, sans Légendes Z-A).</li>
+                <li>À partir de la <strong>7e génération</strong>, le suivi est <strong>incomplet</strong> : certaines étapes du jeu ne sont pas encore comptées (pas de dresseurs en 7e et 8e génération).</li>
             </ul>
         </Help>
     </PageHeader>
@@ -63,19 +65,11 @@ else
             <h2 class="h5">Nouvelle complétion</h2>
             @* D'abord le jeu (une complétion par jeu), puis les sauvegardes stockées qui peuvent être une partie de ce jeu
                (Rouge / Bleu, Or / Argent : PKHeX ne distingue pas les deux, une telle sauvegarde va avec l'un comme l'autre). *@
+            @* Générations repliées au départ, dépliées une à une par leur titre ; repliée, celle du jeu choisi le montre encore. *@
             <div class="form-label">Jeu</div>
-            <div class="livingdex-games mb-3">
-                @foreach (var info in CompletionGames.All.Select(LivingDexGames.Get))
-                {
-                    var value = info.Game;
-                    var isTaken = taken.Contains(value);
-                    <label class="livingdex-game @(game == value ? "selected" : "") @(isTaken ? "taken" : "")" title="@(isTaken ? "Tu as déjà cette complétion" : null)">
-                        <input type="radio" class="visually-hidden" name="completionGame" checked="@(game == value)" disabled="@isTaken" @onchange="() => GameChosen(value)" />
-                        <LivingDexCover Game="info" />
-                        <span>@info.Name@(isTaken ? " (déjà créée)" : "")</span>
-                    </label>
-                }
-            </div>
+            <GamePicker Games="CompletionGames.All.Select(LivingDexGames.Get)" Selected="game" OnChosen="GameChosen"
+                        IsTaken="taken.Contains" Name="completionGame"
+                        TakenTitle="Tu as déjà cette complétion" TakenSuffix="(déjà créée)" />
             @if (game is { } chosenGame)
             {
                 @if (Saves().Count == 0)
@@ -124,8 +118,24 @@ else if (completions.Count == 0)
 }
 else
 {
+    @* Tri gardé dans l'adresse (?tri=completion&ordre=desc) ; sans tri dans l'adresse, celui du compte (« Mon compte » →
+       « Préférences »). Par complétion : la moyenne exacte des sections. *@
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div class="d-flex align-items-center gap-2 livingdex-choice">
+            <label class="small text-nowrap" for="completionSort">Trier par</label>
+            <select id="completionSort" class="form-select form-select-sm w-auto" value="@SiteSorts.Slug(sort)" @onchange="SortChosen">
+                @foreach (var (_, slug, label) in SiteSorts.CompletionChoices)
+                {
+                    <option value="@slug">@label</option>
+                }
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleOrder"
+                    title="@(descending ? "Décroissant : clique pour trier en croissant" : "Croissant : clique pour trier en décroissant")"
+                    aria-label="@(descending ? "Ordre décroissant" : "Ordre croissant")">@(descending ? "↓" : "↑")</button>
+        </div>
+    </div>
     <div class="livingdex-cards">
-        @foreach (var c in completions)
+        @foreach (var c in CompletionGames.Sort(completions, sort, descending))
         {
             <a class="livingdex-card" href="@CardLink(c)">
                 <LivingDexCover Game="c.Game" Alt="@($"Jaquette de {c.Game.Name}")" />
@@ -167,7 +177,13 @@ else
     private bool Visitor => Pseudo is not null;
     private PlayerProfile? player; // joueur consulté, si ses complétions sont publiques
     private bool playerChecked;
+    [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+
     private string userId = "";
+    private CompletionSort sort;
+    private bool descending;
+    private CompletionOrder? defaultOrder; // tri par défaut du compte qui regarde (visiteur compris) ; null : pas encore lu
     private List<CompletionSummary>? completions;
     private HashSet<LivingDexGame> taken = [];
     private List<CompletionCandidate> candidates = [];
@@ -182,6 +198,9 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        // Le tri par défaut est celui du joueur connecté, même chez un autre joueur : sa façon de lire une liste.
+        defaultOrder ??= (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).Completion;
+        (sort, descending) = SiteSorts.CompletionFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultOrder.Value;
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Completion);
@@ -195,6 +214,18 @@ else
         completions = await Completions.ListAsync(userId);
         taken = await Completions.TakenGamesAsync(userId);
     }
+
+    /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
+    private void SortChosen(ChangeEventArgs e) =>
+        ApplyOrder(new(SiteSorts.CompletionChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.CompletionChoices[0]).By, descending));
+
+    /// <summary>Inverse le sens du tri.</summary>
+    private void ToggleOrder() => ApplyOrder(new(sort, !descending));
+
+    /// <summary>Tri gardé dans l'adresse : rien pour celui du compte, sinon critère et sens en entier (« ?tri=generation »).</summary>
+    private void ApplyOrder(CompletionOrder order) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.CompletionQuery(order), SiteSorts.CompletionQuery(defaultOrder ?? default))), replace: true);
 
     private string CardLink(CompletionSummary c) =>
         player is null ? $"completion/{c.Id}" : PlayerService.Link(player.Pseudo, $"completion/{c.Id}");

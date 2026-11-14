@@ -70,46 +70,10 @@ else
                 <button type="button" class="btn @(shinyKind ? "btn-primary" : "btn-outline-primary")" @onclick="() => KindChosen(true)">Chromatique</button>
             </div>
             <div class="form-label">Jeu</div>
-            <div class="livingdex-games mb-3">
-                @foreach (var info in new[] { shinyKind ? GlobalLivingDex.ShinyGame : GlobalLivingDex.Game })
-                {
-                    var value = info.Game;
-                    var globalTaken = taken.Contains(value);
-                    <label class="livingdex-game @(game == value ? "selected" : "") @(globalTaken ? "taken" : "")" title="@(globalTaken ? "Tu as déjà ce living dex" : null)">
-                        <input type="radio" class="visually-hidden" name="dexGame" checked="@(game == value)" disabled="@globalTaken" @onchange="() => GameChosen(value)" />
-                        <LivingDexCover Game="info" />
-                        <span>@info.Name@(globalTaken ? " (déjà créé)" : "")</span>
-                    </label>
-                }
-            </div>
-            @foreach (var generation in LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g))
-                          .Select(g => LivingDexGames.Get(g.Game, shinyKind)).GroupBy(g => g.Generation))
-            {
-            var number = generation.Key;
-            var open = openGenerations.Contains(number);
-            var shownGames = open ? generation.ToList() : generation.Where(g => g.Game == game).ToList();
-            <div class="mb-2">
-                <button type="button" class="livingdex-generation-toggle" aria-expanded="@(open ? "true" : "false")"
-                        @onclick="() => ToggleGeneration(number)">
-                    <span class="chevron" aria-hidden="true">▸</span>@(number == 1 ? "1re" : $"{number}e") génération (@generation.Count() jeux)
-                </button>
-            </div>
-            @if (shownGames.Count > 0)
-            {
-            <div class="livingdex-games mb-3">
-                @foreach (var info in shownGames)
-                {
-                    var value = info.Game;
-                    var isTaken = (shinyKind ? takenShiny : taken).Contains(value);
-                    <label class="livingdex-game @(game == value ? "selected" : "") @(isTaken ? "taken" : "")" title="@(isTaken ? "Tu as déjà ce living dex" : null)">
-                        <input type="radio" class="visually-hidden" name="dexGame" checked="@(game == value)" disabled="@isTaken" @onchange="() => GameChosen(value)" />
-                        <LivingDexCover Game="info" />
-                        <span>@info.Name@(isTaken ? " (déjà créé)" : "")</span>
-                    </label>
-                }
-            </div>
-            }
-            }
+            <GamePicker Ungrouped="[shinyKind ? GlobalLivingDex.ShinyGame : GlobalLivingDex.Game]"
+                        Games="LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g)).Select(g => LivingDexGames.Get(g.Game, shinyKind))"
+                        Selected="game" OnChosen="GameChosen" IsTaken="IsTaken" Name="dexGame"
+                        TakenTitle="Tu as déjà ce living dex" TakenSuffix="(déjà créé)" />
             @if (game is { } globalGame && GlobalLivingDex.IsGlobal(globalGame))
             {
                 <p class="small text-muted mb-3">
@@ -275,7 +239,6 @@ else
     private LivingDexSort sort;
     private bool descending;
     private LivingDexOrder? defaultOrder; // tri par défaut du compte qui regarde (visiteur compris) ; null : pas encore lu
-    private readonly HashSet<byte> openGenerations = [];
     private List<LivingDexSummary>? dexes;
     private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex normal (globaux compris, même cachés par le mode Ultime)
     private HashSet<LivingDexGame> takenShiny = []; // jeux qui ont déjà leur living dex chromatique
@@ -351,11 +314,9 @@ else
         return LivingDexGames.ModeSlug(d.Mode) is { } slug ? $"{page}?mode={slug}" : page;
     }
 
-    private void ToggleGeneration(byte generation)
-    {
-        if (!openGenerations.Remove(generation))
-            openGenerations.Add(generation);
-    }
+    /// <summary>Jeu qui a déjà ce living dex : les globaux dans <see cref="taken"/>, les jeux dans celui du type choisi.</summary>
+    private bool IsTaken(LivingDexGame value) =>
+        (GlobalLivingDex.IsGlobal(value) || !shinyKind ? taken : takenShiny).Contains(value);
 
     private async Task OpenCreation()
     {
@@ -366,7 +327,6 @@ else
         candidates = await Dexes.ListCandidatesAsync(userId);
         game = null;
         saveId = 0;
-        openGenerations.Clear(); // toutes repliées au départ
         creating = true;
     }
 

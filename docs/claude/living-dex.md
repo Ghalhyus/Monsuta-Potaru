@@ -112,7 +112,8 @@ Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, c
 - **Barres de progression** (cartes et page d'un living dex, `Shared/LivingDexProgress.razor`) : pourcentage au centre
   de la barre, avec une décimale **arrondie vers le bas** (« 5,6 % » ; 100 % seulement quand tout y est),
   `LivingDexGames.Percent`.
-- **Création** : « + Créer un living dex », d'abord le **jeu** (jaquettes groupées par génération, **repliées** au
+- **Création** : « + Créer un living dex », d'abord le **jeu** (`Shared/GamePicker.razor`, partagé avec la Complétion :
+  jaquettes groupées par génération, **repliées** au
   départ : le titre de chaque génération, « ▸ 4e génération (5 jeux) », la déplie ou la replie ; repliée, celle du jeu
   choisi le montre encore ; un jeu qui a déjà son living dex est grisé ; boutons **Normal / Chromatique** en tête, voir
   « Living dex chromatique d'un jeu »), puis une de ses **sauvegardes** stockées pas encore liées. PKHeX reconnaît Jaune, Cristal,

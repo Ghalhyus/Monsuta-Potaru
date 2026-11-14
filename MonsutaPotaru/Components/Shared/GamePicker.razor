@@ -1,0 +1,78 @@
+@using MonsutaPotaru.Data
+@using MonsutaPotaru.Services
+@* Choix d'un jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération, repliées au départ ;
+   le titre d'une génération (« ▸ 4e génération (5 jeux) ») la déplie ou la replie ; repliée, celle du jeu choisi le montre
+   encore. Un jeu déjà pris est grisé et ne se choisit pas. Les générations dépliées restent tant que le composant est
+   affiché (le formulaire de création refermé puis rouvert : toutes repliées). *@
+@if (Ungrouped.Count > 0)
+{
+    <div class="livingdex-games mb-3">
+        @foreach (var info in Ungrouped)
+        {
+            @Choice(info)
+        }
+    </div>
+}
+@foreach (var generation in Games.GroupBy(g => g.Generation))
+{
+    var number = generation.Key;
+    var open = openGenerations.Contains(number);
+    var shownGames = open ? generation.ToList() : generation.Where(g => g.Game == Selected).ToList();
+    <div class="mb-2">
+        <button type="button" class="livingdex-generation-toggle" aria-expanded="@(open ? "true" : "false")"
+                @onclick="() => ToggleGeneration(number)">
+            <span class="chevron" aria-hidden="true">▸</span>@(number == 1 ? "1re" : $"{number}e") génération (@generation.Count() jeux)
+        </button>
+    </div>
+    @if (shownGames.Count > 0)
+    {
+        <div class="livingdex-games mb-3">
+            @foreach (var info in shownGames)
+            {
+                @Choice(info)
+            }
+        </div>
+    }
+}
+
+@code {
+    /// <summary>Jeux proposés, dans l'ordre des jeux (groupés par génération dans cet ordre).</summary>
+    [Parameter, EditorRequired] public IEnumerable<LivingDexGameInfo> Games { get; set; } = [];
+
+    /// <summary>Jeux montrés en tête, hors des générations (les living dex globaux).</summary>
+    [Parameter] public IReadOnlyList<LivingDexGameInfo> Ungrouped { get; set; } = [];
+
+    [Parameter] public LivingDexGame? Selected { get; set; }
+    [Parameter] public EventCallback<LivingDexGame> OnChosen { get; set; }
+
+    /// <summary>Le jeu a-t-il déjà son living dex (ou sa complétion) ?</summary>
+    [Parameter] public Func<LivingDexGame, bool> IsTaken { get; set; } = _ => false;
+
+    /// <summary>Infobulle d'un jeu déjà pris (« Tu as déjà ce living dex »).</summary>
+    [Parameter] public string TakenTitle { get; set; } = "";
+
+    /// <summary>Ajouté au nom d'un jeu déjà pris (« (déjà créé) »).</summary>
+    [Parameter] public string TakenSuffix { get; set; } = "";
+
+    /// <summary>Nom du groupe de boutons radio.</summary>
+    [Parameter] public string Name { get; set; } = "game";
+
+    private readonly HashSet<byte> openGenerations = [];
+
+    private RenderFragment Choice(LivingDexGameInfo info) => __builder =>
+    {
+        var value = info.Game;
+        var isTaken = IsTaken(value);
+        <label class="livingdex-game @(Selected == value ? "selected" : "") @(isTaken ? "taken" : "")" title="@(isTaken ? TakenTitle : null)">
+            <input type="radio" class="visually-hidden" name="@Name" checked="@(Selected == value)" disabled="@isTaken" @onchange="() => OnChosen.InvokeAsync(value)" />
+            <LivingDexCover Game="info" />
+            <span>@info.Name@(isTaken ? $" {TakenSuffix}" : "")</span>
+        </label>
+    };
+
+    private void ToggleGeneration(byte generation)
+    {
+        if (!openGenerations.Remove(generation))
+            openGenerations.Add(generation);
+    }
+}
