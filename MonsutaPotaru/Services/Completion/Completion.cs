@@ -28,7 +28,13 @@ public enum CompletionState { Missing, Done, Missed }
 /// génération (<see cref="Gen7CompletionData"/>, par outils/completion_gen7.py) « PS:n » tampon n du Passe Dresseur
 /// (<see cref="Stamp7"/>), « BT:mode:super:n » meilleure série de l'Arbre de Combat (mode 0 Solo, 1 Duo, 2 Multi ; super
 /// 1 pour le mode Super) arrivée à n au moins, « ZC:n » cellule Zygarde n ramassée, « TF:n » titre n de Let's Go débloqué
-/// (1 à 153 : les Experts, 154 Grand Maître, 155 Maître de Combat).
+/// (1 à 153 : les Experts, 154 Grand Maître, 155 Maître de Combat) ; en 8e génération (<see cref="Gen8CompletionData"/>,
+/// par outils/completion_gen8.py) « X:clé » bloc booléen levé (Épée / Bouclier, Légendes Arceus : 32 bits de la clé de
+/// FlagsEditorEX, en hexadécimal), « XV:clé:n » bloc numérique arrivé à n au moins, « HI:n » objet caché n d'Épée / Bouclier
+/// ramassé, « SF:n » drapeau système de DÉ/PS (badges 124 à 131), « BTM:n » rang Expert de la Tour de Combat de DÉ/PS
+/// arrivé à n, « UF:n » forme n de Zarbi au Pokédex de DÉ/PS, « UG:n » objet n des Grands Souterrains possédé (statues),
+/// « LF:espèce:forme » forme obtenue au Pokédex de Hisui, « LC:n » / « LP:n » espèce n de Hisui au niveau de recherche 10
+/// / Parfaite.
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
@@ -147,7 +153,8 @@ public static class CompletionSections
 /// Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille (<see cref="Gen3Completion"/>), Diamant, Perle, Platine, HeartGold et
 /// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), X, Y, Rubis Oméga
 /// et Saphir Alpha (<see cref="Gen6Completion"/>), Soleil, Lune, Ultra-Soleil, Ultra-Lune et Let's Go
-/// (<see cref="Gen7Completion"/>), toutes les langues.
+/// (<see cref="Gen7Completion"/>), Épée, Bouclier, Diamant Étincelant, Perle Scintillante et Légendes Arceus
+/// (<see cref="Gen8Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -160,6 +167,8 @@ public static class CompletionGames
         LivingDexGame.X, LivingDexGame.Y, LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire,
         LivingDexGame.Sun, LivingDexGame.Moon, LivingDexGame.UltraSun, LivingDexGame.UltraMoon,
         LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee,
+        LivingDexGame.Sword, LivingDexGame.Shield, LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl,
+        LivingDexGame.LegendsArceus,
     ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
@@ -167,7 +176,7 @@ public static class CompletionGames
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO or SAV7SM or SAV7USUM or SAV7b =>
+        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO or SAV7SM or SAV7USUM or SAV7b or SAV8SWSH or SAV8BS or SAV8LA =>
             [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
@@ -185,6 +194,7 @@ public static class CompletionGames
             SAV5 sav5 => Gen5Completion.Steps(sav5, game),
             SAV6 sav6 => Gen6Completion.Steps(sav6, game),
             SAV7 or SAV7b => Gen7Completion.Steps(sav, game),
+            SAV8SWSH or SAV8BS or SAV8LA => Gen8Completion.Steps(sav, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
@@ -242,13 +252,22 @@ public static class CompletionLabels
         number <= tms ? $"CT{number:00} {French.movelist[moves[number - 1]]}" : $"CS{number - tms:00} {French.movelist[moves[number - 1]]}";
 }
 
-/// <summary>Lecture des conditions des tables dans une sauvegarde (de la 1re à la 7e génération).</summary>
+/// <summary>Lecture des conditions des tables dans une sauvegarde (de la 1re à la 8e génération).</summary>
 internal sealed class CompletionFlags(SaveFile sav)
 {
     /// <summary>Cellule Zygarde ramassée (0 : absente, 1 : visible sur la carte ; éditeur des cellules de PKHeX).</summary>
     private const ushort ZygardeCellReceived = 2;
 
+    /// <summary>Objets cachés d'Épée / Bouclier : trois blocs de 512 (jeu, Isolarmure, Couronneige ; FlagsEditorEX).</summary>
+    private static readonly uint[] HiddenItemBlocks = [0x6148F6AC, 0xE479EE37, 0xE579EFCA];
+
+    /// <summary>État d'un objet caché d'Épée / Bouclier ramassé (2 : il reviendra, 3 : pour de bon).</summary>
+    private const byte HiddenItemObtained = 2;
+
     private readonly bool[] hidden = sav is SAV1 sav1 ? sav1.EventSpawnFlags : [];
+
+    private readonly Lazy<IReadOnlyList<UndergroundItem8b>> underground =
+        new(() => sav is SAV8BS bdsp ? bdsp.Underground.ReadItems() : []);
 
     public CompletionState State(CompletionRow row) =>
         Test(row.Done) ? CompletionState.Done
@@ -272,7 +291,12 @@ internal sealed class CompletionFlags(SaveFile sav)
             "S" => sav.Data[int.Parse(parts[1])] >= int.Parse(parts[2]),
             "F" => ((SAV1)sav).HallOfFameCount > 0,
             "P" => ((SAV1)sav).PikaFriendship == byte.MaxValue,
-            "N" => sav is SAV5 sav5 ? sav5.Zukan.IsNationalDexUnlocked : ((SAV4)sav).NationalDex,
+            "N" => sav switch
+            {
+                SAV5 sav5 => sav5.Zukan.IsNationalDexUnlocked,
+                SAV8BS bdsp => bdsp.Zukan.HasNationalDex,
+                _ => ((SAV4)sav).NationalDex,
+            },
             "W" => Work(int.Parse(parts[1])) >= int.Parse(parts[2]),
             "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
             "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
@@ -287,6 +311,17 @@ internal sealed class CompletionFlags(SaveFile sav)
             "BT" => ((SAV7)sav).BattleTree.GetTreeStreak(int.Parse(parts[1]), parts[2] == "1", max: true) >= int.Parse(parts[3]),
             "ZC" => ((SAV7)sav).EventWork.GetZygardeCell(int.Parse(parts[1])) == ZygardeCellReceived,
             "TF" => ((SAV7b)sav).EventWork.GetTitleFlag(int.Parse(parts[1])),
+            "X" => Block(parts[1]) is { Type: SCTypeCode.Bool2 },
+            "XV" => Block(parts[1]) is { Type: > SCTypeCode.Array } block && Convert.ToInt64(block.GetValue()) >= long.Parse(parts[2]),
+            "HI" => HiddenItem(int.Parse(parts[1])),
+            "SF" => ((SAV8BS)sav).FlagWork.GetSystemFlag(int.Parse(parts[1])),
+            "BTM" => ((SAV8BS)sav).BattleTower.MasterRankMax >= int.Parse(parts[1]),
+            "UF" => ((SAV8BS)sav).Zukan.GetHasFormFlag(201, byte.Parse(parts[1]), false)
+                || ((SAV8BS)sav).Zukan.GetHasFormFlag(201, byte.Parse(parts[1]), true),
+            "UG" => underground.Value.Any(i => i.Index == int.Parse(parts[1]) && i.Count > 0),
+            "LF" => ((SAV8LA)sav).PokedexSave.HasAnyPokeObtainFlags(ushort.Parse(parts[1]), byte.Parse(parts[2])),
+            "LC" => ((SAV8LA)sav).PokedexSave.IsComplete(ushort.Parse(parts[1])),
+            "LP" => ((SAV8LA)sav).PokedexSave.IsPerfect(ushort.Parse(parts[1])),
             _ => throw new InvalidOperationException($"Condition inconnue : {atom}"),
         };
     }
@@ -302,6 +337,7 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV4 sav4 => sav4.Badges,
         SAV5 sav5 => sav5.Misc.Badges,
         SAV6 sav6 => sav6.Badges,
+        SAV8SWSH swsh => swsh.Badges,
         _ => throw new InvalidOperationException("Pas de badges lisibles dans cette sauvegarde."),
     };
 
@@ -315,6 +351,7 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV6 sav6 => sav6.EventWork.GetEventFlag(flag),
         SAV7 sav7 => sav7.EventWork.GetEventFlag(flag),
         SAV7b lgpe => lgpe.EventWork.GetFlag(flag),
+        SAV8BS bdsp => bdsp.FlagWork.GetFlag(flag),
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
 
@@ -325,6 +362,25 @@ internal sealed class CompletionFlags(SaveFile sav)
         SAV6 sav6 => sav6.EventWork.GetWork(index),
         _ => throw new InvalidOperationException("Pas de variables de script lisibles dans cette sauvegarde."),
     };
+
+    /// <summary>Bloc d'Épée / Bouclier ou de Légendes Arceus (clé en hexadécimal) ; null s'il manque (sauvegarde sans DLC).</summary>
+    private SCBlock? Block(string key)
+    {
+        var accessor = sav switch
+        {
+            SAV8SWSH swsh => swsh.Accessor,
+            SAV8LA la => la.Accessor,
+            _ => throw new InvalidOperationException("Pas de blocs dans cette sauvegarde."),
+        };
+        return accessor.TryGetBlock(Convert.ToUInt32(key, 16), out var block) ? block : null;
+    }
+
+    /// <summary>Objet caché n d'Épée / Bouclier ramassé (4 octets par objet : état, puis tirage) ; bloc absent : pas encore.</summary>
+    private bool HiddenItem(int index)
+    {
+        var block = Block(HiddenItemBlocks[index / 512].ToString("X8"));
+        return block is not null && block.Data[index % 512 * 4] >= HiddenItemObtained;
+    }
 
     /// <summary>Super Training (6e génération) : un meilleur temps enregistré pour une épreuve, c'est qu'elle est réussie.</summary>
     private SuperTrainBlock SuperTraining() => sav switch

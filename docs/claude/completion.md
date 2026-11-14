@@ -394,11 +394,58 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   réussis, 47 échecs tous dus à `showdown/node_modules` absent (`npm ci --prefix showdown` les fait passer).
 
 ### Reste à faire (7e génération, au 2026-11-13)
-1. **Dresseurs** avec les ROM, comme la 6e (`outils/completion_gen6_rom.py` : RomFS, GARC, zones, scripts AMX, textes ;
+1. **Dresseurs** (**en pause**, choix de l'utilisateur, 2026-11-13 : lieux non reliés ; ne pas proposer la couverture partielle de Soleil / Lune sans lui redemander) avec les ROM, comme la 6e (`outils/completion_gen6_rom.py` : RomFS, GARC, zones, scripts AMX, textes ;
    la méthode y est décrite). Soleil, Lune et Ultra-Soleil **déchiffrés** sont déjà dans
    `C:\Users\ghalh\Documents\FanGame\Jeux\3DS\` (vérifié le 2026-11-13 : en-têtes NCCH sans chiffrement) ; Let's Go :
-   à demander (extraction de sa cartouche). Les numéros des archives et les hachages des natives changent sûrement : les
-   retrouver comme en 6e (textes : chercher une classe connue ; natives : corréler avec des numéros connus). Pistes :
+   seulement `…\Jeux\Switch\Pokémon Let’s Go, Eevee!.nsp`, **chiffré** (il faut les clés de sa console) : à
+   l'utilisateur d'en extraire la RomFS (pas de dresseurs de Let's Go d'ici là, son choix du 2026-11-13). Les scripts
+   d'exploration de cette session (lecture des aires, désassemblage AMX, `casetbl`) n'ont pas été gardés : les refaire
+   avec `completion_gen6_rom.py` (`RomFS`, `garc`, `lz11`, `amx`, `texts`). Les numéros des archives et les hachages des natives changent sûrement : les
+   retrouver comme en 6e (textes : chercher une classe connue ; natives : corréler avec des numéros connus).
+   **Trouvé le 2026-11-13** (avec `completion_gen6_rom.py`, qui lit déjà ces RomFS) :
+   - dresseurs : Soleil / Lune `a/1/0/5` (données, 485 de 20 octets : classe à l'octet 0) et `a/1/0/6` (équipes,
+     32 octets par Pokémon : niveau u16 au décalage 14, espèce u16 au 16) ; Ultra `a/1/0/6` (653) et `a/1/0/7` ; classes
+     `a/1/0/4` / `a/1/0/5` ; textes français `a/0/3/3` (Soleil / Lune : fichier 105 les noms, 106 les classes ; Ultra :
+     110 et 111 ; même chiffrement qu'en 6e) ;
+   - **drapeau = base + numéro** : Soleil / Lune 0x81C (183 descriptions de FlagsEditorEX sur 268 tombent juste ; les
+     autres, `FE_SUB…_TR…`, sont des combats à part), Ultra 0xBDC (`TR_FLAG_000`) ;
+   - lieux : aires dans `a/0/8/2` (2 761 membres, 11 par aire : `ED`, `BG`, `TR`, `AS`, `aa`, `AE`, `ZS`, `ZI`, `EA`,
+     `AC`…) ; `ED` = conteneur d'événements par zone (`EP`, `EM`, `EB`, `ES`, `EA`, `ET`, `EG`, `EI`, `FS`, `PR`, chacun
+     un conteneur d'un bloc ; conteneurs de l'aire : u16 magie, u16 nombre, u32 décalages, alignés sur 0x80) ;
+   - **impasses** : les valeurs 3004, 3008… des `ED` sont des décalages internes (toutes multiples de 4), pas des
+     dresseurs ; `TR` est un bloc de même taille partout (terrain ?) ; aucune native des scripts de zones (`ZS`, 284
+     scripts AMX par aire, compressés comme en 6e) ne reçoit de numéro de dresseur en argument constant (corrélation avec
+     les 234 numéros sûrs : 12 au mieux, pour 0x133daa6a / 0x13413496, les mêmes natives de drapeaux qu'en 6e) ;
+   - **à poursuivre** : `EM` = personnages, enregistrements de longueur variable selon le type (u32 nombre, puis pour le
+     type 1 : 30 mots — type, x, y, z flottants, rotation, identifiant 6xx, modèle, script local du type 30096, deux
+     décalages vers des données en fin de bloc ; le type 3 est plus court) : y chercher le numéro du dresseur (sans doute
+     dans les données pointées) ; puis la zone d'un `ED` et son lieu (en-têtes de zones : `a/0/1/2`, `a/0/1/4` à `a/0/1/9`
+     examinés sans résultat net) ; scripts AMX communs dans `a/0/9/2` (500) et `a/0/8/4`.
+   - **combats lancés par les scripts de zones** (`ZS`) : par une fonction locale qui atteint la native `0x6393be9a`
+     (premier argument = numéro du dresseur) : 115 dresseurs en Soleil, 126 en Ultra-Soleil (rival, Capitaines, Team
+     Skull, Prof. Samia…), ~63 recoupent les lieux de FlagsEditorEX. Les dresseurs des routes n'y sont pas : sans doute
+     lancés par le moteur à partir des personnages (`EM`), numéro pas encore trouvé ;
+   - **personnages des aires** (`EM`, enregistrements de type 1, 120 octets : u32 type, x, y, z, rotation, puis mot 9
+     drapeau d'apparition, 11 numéro local, 12 « genre » (9 = 390 personnages en Soleil, presque autant que les 391
+     dresseurs nommés : sans doute les dresseurs), 13 modèle, 14 numéro du cas dans le script de l'aire, 28 / 29
+     décalages vers deux blocs de 28 octets (trajets, flottants)). Le script `ZS` de l'aire n'a qu'une fonction publique
+     qui aiguille par `casetbl` (AMX : nombre, défaut, puis paires valeur / saut relatif) ; ex. aire 11, cas 13 et 15 :
+     appel d'une fonction à 5 arguments (37 ou 35, 1, 0, 7, 1) = numéro du dresseur en premier, qui délègue à une autre
+     (profondeur > 3 : penser à suivre les appels loin) ;
+   - les 500 scripts de `a/0/9/2` (759 en Ultra) ont bien plus de numéros de dresseurs en premier argument d'appels
+     locaux (312 constantes, 142 connues) : scripts par zone ? Mais la forme d'appel (5 arguments, 1, 0, 7, 1) n'en
+     couvre que 39, et la native la plus atteinte (0xb13a389) est générique (480 valeurs) : filtre à trouver ;
+   - **lieu d'une zone : toujours inconnu** (aucune table de ~500 / 961 entrées avec un numéro de lieu ; `a/0/1/7` =
+     éclairage, `a/0/1/3` = rencontres) ; voter par les dresseurs situés par FlagsEditorEX donne des scripts à plusieurs
+     lieux (`a/0/9/2` 0 : Routes 1, 2, 3) : inutilisable tel quel.
+   - **couverture possible sans décoder les zones** (2026-11-13) : Soleil 391 dresseurs nommés, 218 situés par
+     FlagsEditorEX, 269 en ajoutant ceux des scripts situés par les autres dresseurs de la même aire ; Ultra : 519 nommés,
+     **7** situés par FlagsEditorEX seulement (inutilisable sans les zones).
+   - Check-lists de la 7e génération : liens Drive de l'utilisateur (2026-11-13) : Soleil / Lune
+     `1hj84TPacIYE7Zo5rM4o6mcJjmXJ9dSvp`, Ultra `17WvuVZBM0qLbIDdaZe0dBXZ-bl4RTUjg`, Let's Go
+     `1-nDB1WhUGwCPAkanJH8Y9fh0WFe5jHpg` (partagés par lien : `https://drive.google.com/uc?export=download&id=<ID>`,
+     `curl -L --ssl-no-revoke`). La table régénérée avec elles est identique à celle du dépôt.
+   Pistes :
    - données des dresseurs (équipes, classes, noms : GARC de trdata / trpoke sur 3DS, d'après pk3DS ; fichiers de la
      RomFS de Let's Go, format à trouver) et textes des classes et des noms ;
    - **drapeau = base + numéro du dresseur ?** En Ultra, `TR_FLAG_001` = 0x0BDD : vérifier sur les 52 `TR_FLAG_n` levés
@@ -415,9 +462,137 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
    Experts (`TF:n`, ordre supposé d'après PKHeX), ordre des échanges de Let's Go (`FE_FIELD_TRADE_FIRST_01` à `08`),
    Coachs, objets rares de Let's Go gardés après usage (Scope Sylphe, Poké Flûte), lieux des Cœurs de Zygarde d'Ultra.
    **Méthode la plus sûre** pour un drapeau sans nom : deux sauvegardes juste avant et juste après l'action (battre un
-   Coach, finir une épreuve), et comparer les drapeaux et variables qui changent.
+   Coach, finir une épreuve), et comparer les drapeaux et variables qui changent (marche à suivre : « Trouver de
+   nouveaux drapeaux : paires de sauvegardes », plus bas).
    Aussi : l'ordre de `FE_SIREN_COMPLETE_01` à `08` (les épreuves restent comptées par leur cristal Z en attendant).
-3. Check-lists à déposer sur le Drive par l'utilisateur (puis noter leurs ID ici).
+3. Check-lists : sur le Drive de l'utilisateur, ID notés au point 1.
+
+## Épée / Bouclier / Diamant Étincelant / Perle Scintillante / Légendes Arceus (2026-11-13)
+- Choix de l'utilisateur : les trois jeux d'un coup ; **DLC d'Épée / Bouclier toujours comptés** (Isolarmure et
+  Couronneige dans les sections normales, à leur lieu) ; Pokédex d'Épée / Bouclier = **Pokémon présents dans le jeu**,
+  c'est-à-dire les trois Pokédex régionaux (584 espèces, une forme suffit : `Gen8Completion.SwordShieldPokedex`, d'après
+  `PokeDexIndex`, `ArmorDexIndex` et `CrownDexIndex` de PKHeX ; pas ceux qui ne viennent que de HOME, comme Mew) ;
+  DÉ/PS : national de 493 ; Légendes Arceus : les 242 de Hisui, **trois étapes par espèce** (capturé, recherche au
+  niveau 10, Parfait : `PokedexSave8a.IsComplete` / `IsPerfect`), soit 726 étapes dans la section Pokédex ; **pas de
+  dresseurs** ; **CT et DT par possession** (une DT apprise sort du sac et redevient « à faire » : choix assumé) ;
+  missions d'Arceus laissées de côté en attendant une sauvegarde ; quêtes : Tour de Combat, collections (Taupiqueur,
+  Flammes Étranges, Zarbi), concours et souterrains de DÉ/PS, rangs et Monarques d'Arceus, **quand une trace existe**.
+- Check-lists (Drive de l'utilisateur, d'après Pokébip, partagées par lien) : Épée / Bouclier
+  `1tXJnDv3i9B3JD-XWTwgBft0Rev8dCY3c`, DÉ/PS `1I8NBfz0IOYVVo3LdQTYaaV4w8m67LZ2Y`, Légendes Arceus
+  `1G3DSoGfgdZlTERJVW3jrBx5eLhIkuHAT` (`https://drive.google.com/uc?export=download&id=<ID>`, `curl -L --ssl-no-revoke`),
+  à renommer `suivi_completion_pokemon_epee_bouclier.csv`, `suivi_completion_pokemon_diamant_etincelant_perle_scintillante.csv`
+  et `suivi_completion_pokemon_legendes_arceus.csv`.
+- `Gen8CompletionData.cs` : `python outils/completion_gen8.py <dossier> MonsutaPotaru/Services/Completion/Gen8CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script : FlagsEditorEX `flagslist/flags_gen8*_en.txt` ; de PKHeX
+  `Resources/text/locations/gen8`, `gen8b`, `gen8a`, `text/items`, `text/other/en` et `fr`,
+  `text/game/underground_bdsp/text_ug_item_fr.txt`, `Saves/Substructures/Gen8/BS/UgItemUtil.cs`). Cinq tables (Sword,
+  Shield, BrilliantDiamond, ShiningPearl, LegendsArceus) ; sortie attendue : Épée / Bouclier `Story 30, Items 525,
+  Encounters 71, Quests 149`, DÉ/PS `20, 562, 34, 469`, Arceus `16, 0, 17, 145` (comptes repris par `CompletionGen8Tests`).
+  Ordre des lieux : ceux des lignes « Histoire » de la check-list (`story_order`) et `ANCHORS` du script (un lieu sans
+  rang arrête le générateur). Les fichiers du `<dossier>` ne sont pas dans le dépôt.
+- **Lecture** :
+  - Épée / Bouclier et Arceus : sauvegarde en **blocs** (`SCBlockAccessor`) ; un drapeau de FlagsEditorEX (clé de 64 bits)
+    est le bloc des 32 bits du bas, booléen (`Bool2` levé, `Bool1` baissé) : condition `X:clé` ; valeur numérique
+    `XV:clé:n` (rang du Groupe Galaxie `0x50FE632A`, Flammes Étranges par région `0x8B18ADE5`… : `SaveBlockAccessor8LA.cs`
+    de PKHeX). Une **sauvegarde vierge de PKHeX n'a pas ces blocs** (et ses blocs numériques sont sans type :
+    `ChangeStoredType` dans les tests) : le test d'Épée part de `epee.sav` ;
+  - objets cachés d'Épée / Bouclier : **trois blocs de 512 × 4 octets** (`0x6148F6AC` jeu, `0xE479EE37` Isolarmure,
+    `0xE579EFCA` Couronneige ; repris de `FlagsGen8SWSH.cs` de FlagsEditorEX), état au premier octet (2 : ramassé,
+    reviendra ; 3 : pour de bon) : `HI:n`. Exclus : « (recurring) », « random », sans lieu. `epee.sav` vient d'une version
+    sans DLC : les deux autres blocs manquent (jamais faits), et son Pokédex ne connaît que Galar ;
+  - **badges d'Épée / Bouclier** : `SAV8SWSH.Badges` est un **masque de bits** (`epee.sav` : 7 = 3 badges, comme
+    `FSYS_GYM_CLEAR_FIRST` à `THIRD`) ;
+  - DÉ/PS : `FlagWork8b` (`E:n` = `GetFlag`, `SF:n` = `GetSystemFlag`, numéros de FlagsEditorEX) ; **badges** = drapeaux
+    système 124 à 131 (`FlagWork8b.BadgeCount`), supposés dans l'ordre des arènes de Diamant / Perle ; concours Master
+    `SYS_FLAG_CON_*_MASTER` (9 à 13) ; Tour de Combat : `FE_TOWER_MASTER_WINED` et `BattleTowerWork8b.MasterRankMax` ≥ 10
+    (`BTM:10`) ; Zarbi : `Zukan8b.GetHasFormFlag(201, forme)` (`UF:n`) ; statues : `UndergroundItemList8b.ReadItems()`
+    (`UG:n`, 434 statues d'après `UgItemUtil.cs`) ; Pokédex National : `Zukan8b.HasNationalDex` (`N`) ;
+  - Arceus : Zarbi par le Pokédex (`PokedexSave8a.HasAnyPokeObtainFlags(201, forme)`, `LF:201:n`) ; Flammes Étranges
+    comptées par région (Rusti-Cité 7, chaque région 20) : l'ordre des 107 drapeaux `MKRG_ID_*` n'est pas sûr, la n-ième
+    étape d'une région est faite dès que n Flammes y sont trouvées.
+- CT : Épée / Bouclier, `Tm` 1 à 100 = CT00 à CT99 (`PersonalInfo8SWSH.MachineMovesTechnical`), 101 à 200 = DT00 à DT99
+  (`MachineMovesRecord`) ; DÉ/PS : CT01 à CT100 = `Gen4CompletionData.TmMoves` (les CS de Diamant / Perle devenues CT93 à
+  CT100, dans le même ordre ; `PersonalInfo8BDSP.MachineMoves` est interne à PKHeX). En DÉ/PS, une même CT peut être au
+  sol à deux endroits (route et Grands Souterrains) : deux étapes.
+- Pièges :
+  - **caractère invisible** dans une expression régulière écrite par un heredoc Python (le `\1` d'un remplacement devenu
+    l'octet 0x01) : sous-lieux des Grands Souterrains vides ; et un heredoc avec des apostrophes a cassé la commande :
+    écrire ces textes avec l'outil d'écriture ou d'édition de fichiers ;
+  - objets d'une seule version dans FlagsEditorEX : « (Sw) », « (Sh) », « (BD) », « (SP) » en fin de description ;
+    « (fossil spot) » (fossile au hasard) exclu ; apostrophe typographique dans les noms d'objets de PKHeX (« King’s Rock ») ;
+  - échanges d'Épée / Bouclier : `FSYS_NPC_TRADE_01` à `11` rapprochés des lignes E001 à E011 de la check-list
+    (**ordre supposé**, aucune description ; les lignes d'une seule version ont chacune leur drapeau) ; ceux de
+    l'Isolarmure (position variable, sans drapeau) laissés de côté ; DÉ/PS : les 4 drapeaux `IN-GAME TRADE` dans l'ordre ;
+  - drapeaux **« z_… »** de FlagsEditorEX (« KReceivedGiftCharmander », « KCapturedVirizion ») : apparition d'un objet
+    ou d'un Pokémon sur la carte, pas le cadeau ni la capture (celui de Salamèche est levé dans `epee.sav` au 3e badge) :
+    ces rencontres passent par le Pokédex ; les objets au sol (« z_r0101_ItemNormal_0 ») restent justes (ramassés) ;
+  - montures d'Arceus : `FSYS_RIDE_OPEN_01` (Cerbyllin), `03` (Ursaking), `05` (Paragruel) et `07` (Farfurex) ont un nom
+    dans FlagsEditorEX ; Gueriaigle (sans doute `09`) pas compté ;
+  - Pokémon débloqués par la sauvegarde d'un autre jeu (Pikachu / Évoli Gigamax de Let's Go, Jirachi de DÉ/PS, Darkrai et
+    Shaymin d'Arceus) comptés ; cadeaux mystère de DÉ/PS (Darkrai, Shaymin, Arceus) et Mew de la Poké Ball Plus non
+    (`MYSTERY_GIFT` du générateur) ;
+  - **pas de trace trouvée** : rang de la Tour de Combat d'Épée / Bouclier (seulement victoires et séries), missions
+    d'Arceus (11 drapeaux `FEVE_SUB*` seulement), revanches des Monarques (bloc `KNobleRematchRecords` au format inconnu),
+    Pokémon fixes d'Épée / Bouclier (ils reviennent), dresseurs (pas de lieu).
+- Vérifié sur `epee.sav` dans le navigateur (3 badges, sans DLC : 18,6 %, aucun raté ; histoire 10/30, 202 Pokémon sur
+  584, 117 objets, 2 rencontres) ;
+  Bouclier, DÉ/PS et Arceus seulement en mémoire.
+- Guide du joueur (chapitre « Complétion (100 %) ») à jour pour la 8e génération (2026-11-14).
+
+### Reste à faire (8e génération, au 2026-11-13)
+1. **Sauvegardes** de DÉ/PS et de Légendes Arceus à demander (`diamant-etincelant.sav`, `legendes-arceus.sav`…) : y
+   vérifier les badges (ordre des drapeaux 124 à 131), les concours, les statues (une statue posée dans la base
+   quitte-t-elle la liste ? l'étape redeviendrait « à faire »), et pour Arceus les drapeaux de l'histoire, les montures,
+   les missions (deux sauvegardes juste avant et juste après une mission, comparer les blocs) et les revanches des
+   Monarques.
+2. Épée / Bouclier : une sauvegarde **avec les DLC**, pour les blocs des objets cachés de l'Isolarmure et de Couronneige,
+   le Pokédex à trois régions et l'ordre des échanges.
+3. Dresseurs : seulement avec la RomFS (`.xci` chiffré de l'utilisateur : il faut les clés de sa console), comme en 6e.
+
+## Trouver de nouveaux drapeaux : paires de sauvegardes (toutes générations, 2026-11-14)
+Quand FlagsEditorEX ne nomme pas le drapeau d'une étape (ou le nomme mal), la méthode sûre est une **paire de
+sauvegardes** : l'une juste avant l'action, l'autre juste après, puis comparer tout ce qui a changé.
+
+### Ce que fait l'utilisateur, dans le jeu
+1. Se placer juste avant l'action (devant le PNJ, à l'entrée de l'arène, avant de rendre la mission), **sauvegarder**, et
+   copier le fichier : `<jeu>-avant-<action>.sav` (ex. `legendes-arceus-avant-mission-12.sav`).
+2. Faire **une seule** action (rendre une mission, battre un Coach, monter d'un rang), sans rien d'autre : pas de
+   détour, pas de nouveau lieu visité, pas d'objet ramassé, pas d'heure qui change (chaque à-côté lève d'autres drapeaux
+   qui brouillent la comparaison).
+3. **Sauvegarder** tout de suite après, et copier le fichier : `<jeu>-apres-<action>.sav`.
+4. Pour une action qui se répète ou monte par paliers (rang du Groupe Galaxie, Tour de Combat), une troisième
+   sauvegarde après le palier suivant aide à distinguer un compteur d'un drapeau.
+5. Déposer les fichiers dans `MonsutaPotaru.Tests/Sauvegardes/` (ou ailleurs : seule la partie de référence y reste,
+   sous un nom clair, les paires peuvent être supprimées une fois exploitées) et dire à Claude quelle action sépare
+   chaque paire. Récupérer une sauvegarde : émulateur (fichier brut, souvent sans extension), console 3DS (Checkpoint),
+   Switch (JKSV : le fichier `main`).
+
+### Paires utiles (au 2026-11-14)
+- **Légendes Arceus** : avant / après une **mission secondaire** rendue, puis une **mission principale** ; avant / après
+  la **revanche d'un Monarque** (bloc `KNobleRematchRecords`) ; avant / après la monture **Gueriaigle** (`FSYS_RIDE_OPEN_09` ?).
+- **Épée / Bouclier** : avant / après une **montée de rang à la Tour de Combat** (Poké Ball → Super Ball…) ; une partie
+  **avec les DLC** (blocs des objets cachés `0xE479EE37` et `0xE579EFCA`, Pokédex à trois régions) ; avant / après un
+  **échange du jeu** (ordre de `FSYS_NPC_TRADE_01` à `11`).
+- **Diamant Étincelant / Perle Scintillante** : avant / après un **badge** (drapeaux système 124 à 131) ; avant / après
+  avoir **posé une statue** dans la base secrète (reste-t-elle dans `UndergroundItemList8b` ?).
+- **X / Y** : avant / après une **enquête de Beladonis**.
+- **Soleil / Lune, Let's Go** : avant / après une **épreuve** (ordre de `FE_SIREN_COMPLETE_01` à `08`), un **Coach**, un
+  **échange contre une forme d'Alola** (ordre de `FE_FIELD_TRADE_FIRST_01` à `08`), un **titre d'Expert** (`TF:n`).
+
+### Ce que fait Claude : comparer
+- Un petit projet console dans un dossier temporaire (scratchpad), avec le paquet `PKHeX.Core` de la version de
+  `MonsutaPotaru.csproj` ; `SaveUtil.GetSaveFile(octets)` sur les deux fichiers, puis lister **tout ce qui diffère** :
+  - 8e génération, Épée / Bouclier et Arceus : chaque bloc de `sav.Accessor.BlockInfo` (même clé) dont le type
+    (`Bool1` → `Bool2`) ou les octets changent ; DÉ/PS : `FlagWork.GetFlag(n)` (0 à `CountFlag`), `GetSystemFlag(n)`,
+    `GetWork(n)`, `BattleTrainer.GetIsWin(n)`, et `UndergroundItemList8b.ReadItems()` pour les statues ;
+  - 5e à 7e génération : `EventWork.GetEventFlag(n)` et `EventWork.GetWork(n)` (Let's Go : `EventWork.GetFlag(n)`) ;
+    1re à 4e génération : drapeaux d'événements et variables de script, comme dans les générateurs.
+- Rapprocher chaque changement de la liste de FlagsEditorEX du jeu (même clé ou même numéro, colonne du nom interne) ;
+  écarter le bruit : temps de jeu, coordonnées, date et heure, graines aléatoires, compteurs de pas, drapeaux d'arrivée
+  dans un lieu (`FSYS_ARRIVE_*`), apparitions d'objets ou de PNJ (`z_…`, `FV_…`).
+- Un drapeau qui ne change qu'avec l'action est le bon : l'ajouter au générateur (`c.f('NOM')`, ou `X:clé` / `E:n`
+  sans nom, avec un commentaire qui dit d'où il vient), régénérer la table, ajouter un test sur la sauvegarde « après »
+  (et « avant » : l'étape n'y est pas faite), noter le résultat ici et retirer la ligne de « Paires utiles ».
 
 ## Ordre des lieux (3e à 6e génération, 2026-11-12 ; 7e : liste complète écrite à la main, voir plus haut)
 - Dresseurs et objets : groupés par lieu, rangés par `completion_gen3.anchored_rank` : première mention du lieu dans la

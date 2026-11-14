@@ -24,7 +24,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Parc | `docs/claude/parc.md` |
 | Living dex (par jeu, global, chromatique) | `docs/claude/living-dex.md` |
 | Rubans : liste des rubans comptés, suivi d'un Pokémon par empreinte, souvenirs | `docs/claude/rubans.md` |
-| Complétion (100 %) : tables de la 1re à la 7e génération générées d'après pret (pokered, pokecrystal, pokeemerald, binaires de pokediamond…), pokebw2, la ROM de Noire et FlagsEditorEX, conditions, ratés | `docs/claude/completion.md` |
+| Complétion (100 %) : tables de la 1re à la 8e génération générées d'après pret (pokered, pokecrystal, pokeemerald, binaires de pokediamond…), pokebw2, la ROM de Noire et FlagsEditorEX, conditions, ratés | `docs/claude/completion.md` |
 | Statistiques : argent, moyennes des living dex, échanges et combats, sur le profil | `docs/claude/statistiques.md` |
 | Inventaire : sacs, numéros d'objets, CT, nouvelle catégorie | `docs/claude/inventaire.md` |
 | Pièges de PKHeX (octets, sauvegardes vides) | `docs/claude/pkhex.md` |
