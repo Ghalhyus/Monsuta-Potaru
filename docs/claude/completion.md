@@ -549,6 +549,77 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
    le Pokédex à trois régions et l'ordre des échanges.
 3. Dresseurs : seulement avec la RomFS (`.xci` chiffré de l'utilisateur : il faut les clés de sa console), comme en 6e.
 
+## Écarlate / Violet (2026-11-14)
+- Choix de l'utilisateur : **Écarlate / Violet seulement** (Légendes Z-A plus tard, avec sa check-list) ; **DLC toujours
+  comptés**, à leur lieu (Le Masque Turquoise, Le Disque Indigo) ; Pokédex = les **692 espèces présentes dans le jeu**
+  (catégorie « Pokédex » de sa check-list : Paldea, Septentria, Myrtille, légendaires des Friandises ; pas Mew ni ce qui
+  ne vient que de HOME) ; **dresseurs**, **chaque objet au sol**, **CT par recette débloquée** (les CT d'Écarlate /
+  Violet s'usent : la recette reste), **quêtes annexes qui laissent une trace** ; pas de Pokémon de cadeau mystère.
+- Check-list : `completion_ecarlate_violet.csv` (Drive de l'utilisateur, ID `1z8JkEug40Vh1BMOPWqv952NLUfcMDGlP`, partagée
+  par lien), à renommer `suivi_completion_pokemon_ecarlate_violet.csv`.
+- `Gen9CompletionData.cs` : `python outils/completion_gen9.py <dossier> MonsutaPotaru/Services/Completion/Gen9CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script : `flags_gen9sv_en.txt` de FlagsEditorEX ; de PKHeX
+  `Resources/text/locations/gen9/text_sv_00000_en.txt` et `_fr.txt`, `text/items/text_Items_en.txt` et `_fr.txt`,
+  `text/other/en/text_Species_en.txt`, `text/other/fr/text_Species_fr.txt` ; la check-list). Deux tables (Scarlet,
+  Violet) et le Pokédex (`Pokedex`). Sortie attendue : `Pokédex 692`, chaque jeu `Story 53, Trainers 383, Items 3750,
+  Encounters 37, Quests 78` (comptes repris par `CompletionGen9Tests`). Ordre des lieux : `ORDER` du script, **tous** les
+  lieux écrits à la main (route conseillée : Arènes, Dominants et Team Star mêlés, puis Septentria, puis la Myrtille).
+- **Lecture** (d'après `FlagsGen9SV.cs` de FlagsEditorEX) :
+  - drapeaux : un **bloc booléen** par drapeau, clé = 32 bits du bas de FlagsEditorEX (`X:clé`, comme Épée / Bouclier) ;
+    **un drapeau jamais levé n'a souvent pas de bloc** (une sauvegarde vierge de PKHeX n'en a aucun : 0 sur 1 526) ;
+  - variables : blocs numériques ; **badges** = « Index for received Badge … » (`WEVT_GYM_*_CLEAR`, `WEVT_NUSHI_*_CLEAR`,
+    `WEVT_DAN_*_CLEAR`) : rang d'obtention, 0 tant qu'il manque (`XV:clé:1`) ; Adorables battus pareil
+    (`WEVT_S1_*_CLEAR_NUM`) ;
+  - **objets au sol** : liste du bloc `0x2482AD60` (paires u64 clé de FlagsEditorEX, u64 1 = ramassé ; `FI:clé`) ;
+  - **dresseurs** : listes des blocs `0xF018C4AC` et `0x28E475DE` (depuis la version 2.0.2), même format, place libre
+    `0xCBF29CE484222645` (`TR:clé`) ;
+  - CT : `FSYS_UI_WAZA_MACHINE_RELEASE_nnn` (recette débloquée) ; nom par `PersonalInfo9SV.MachineMoves[n]` (CT001 Bélier).
+- Dresseurs : FlagsEditorEX ne donne ni lieu ni équipe. **Lieu** : la zone de leur nom interne (`area09_trainer_…`) prend
+  le lieu de la plupart des objets au sol de la même zone (`itemball_area09_…` ; `_dlc1` : Septentria, objets
+  `itemball_su1_areaNN` ; `_dlc2` : Terra-Dôme, objets `su2_areaNN`, le biome devient le lieu) ; Clan des Monstres
+  (`sp_trainer_0n`) à Jaderaude. **Texte** : classe traduite à la main (`CLASSES`, pas de source française) et prénom
+  anglais de FlagsEditorEX ; genre d'après le nom interne (`_f`, `girl`, `ol` ; `_m`, `boy`, `businessman`), sinon forme
+  épicène (« Musicien(ne) Noelia »), jamais d'après le prénom. **Dresseurs d'Arène** (type EVENT, `gym_*_0n`) : leur
+  clé **ou** le badge (le champion ne se combat qu'après eux). Pas les combats de scénario (rival, Pepper, Team Star,
+  Conseil 4 : type EVENT), ni les revanches (« _strong »), ni 66 dresseurs sans description.
+- Histoire : badges, Dominants et Team Star par leur variable, pouvoirs de la monture (`FSYS_RIDE_*_ENABLE`), appli
+  Pokédex, entretien de la Ligue (`FEVT_CHAMP_PASS_1ST_INTERVIEW`), fins d'histoire (`FSYS_SCENARIO_GAME_CLEAR`, `_SU1`,
+  `_SU2`), Pokédex de Septentria / Myrtille, Ogerpon, Terapagos et Pêchaminus par le Pokédex. **Combats de scénario**
+  (Conseil 4, Alisma, Pania, Conseil 4 de Myrtille, Kassis) : clé de dresseur de FlagsEditorEX (type EVENT, peut-être
+  jamais écrite) **ou** l'histoire finie : à vérifier sur une sauvegarde.
+- Objets : 4 362 objets au sol moins les CT au sol (comptées par la recette, au lieu de leur premier objet au sol, sinon
+  « Machine à CT » avec le lieu de la check-list), cadeaux non-CT des représentants de la Ligue et de Muramasa (Clan des
+  Monstres). Pas les objets cachés (scintillements quotidiens).
+- Rencontres : Koraidon / Miraidon du Laboratoire, Dominants capturés (`NUSHI_*_AFTER_PERMANENT`), Adorables
+  (`FEVT_S1_SUB_01x_CAPTURED`), Fléaux (à leur sanctuaire), Paradoxes, Meloetta, légendaires des Friandises (version de la
+  check-list : `*` = version), Wushours / Shifours, Ursaking Lune Vermeille (`D:901` : un Ursaking ordinaire compte aussi),
+  les trois échanges de Paldea (`FEVT_SUB_044_TRADE_A` à `C`). **Laissés de côté, sans trace** : échanges du Club de la
+  Ligue (30), Miaouss de Galar de Salvio, Œuf de Jacq, Caninos de Hisui, Goinfrex chromatique (le Pokédex ne distingue
+  pas la forme ni le chromatique), Fléaux montrés à Mora.
+- Quêtes : pieux des Fléaux (32), revanches d'Arène (`gym_*_leader_02`) et de la Team Star (`dan_*_boss_02`, `botan_02`) :
+  **clés de dresseur de type EVENT, à vérifier**, raids 3★ à 6★ débloqués, glisse du Mont Nappé (3 parcours), Chasse aux
+  Monstres (3 modes), quête de Billy et O'Nare (3), diplômes du Pokédex (3), coachs spéciaux du Club de la Ligue (15),
+  Gromago. Pas de trace trouvée : Grand Tournoi, contrôles de l'Académie, biomes du Terra-Dôme.
+- Pièges :
+  - FlagsEditorEX **inverse les lieux** de `WEVT_NUSHI_HAGANE_CLEAR` (Acier : Ferdeter, Zone Est nº 3) et
+    `WEVT_NUSHI_JIMEN_CLEAR` (Sol : Désert Rôtissable) : se fier au nom ;
+  - la Team Star Feu s'écrit `hono` dans les dresseurs (`dan_hono_boss_02`), `honoo` dans les drapeaux ;
+  - « Glaseado » (lieu sans équivalent PKHeX) = Mont Nappé ; apostrophe typographique de PKHeX (« Grotte d’Alforneira »)
+    remplacée ;
+  - **heredoc** : une référence arrière de remplacement écrite par un heredoc est encore devenue l'octet 0x01, et un
+    heredoc avec des apostrophes a cassé la commande (2026-11-14) : écrire ces scripts avec l'outil d'écriture de
+    fichiers, et préférer une fonction (`lambda m: m.group(1)`) aux références arrière.
+- **Sauvegarde vierge** (`new SAV9SV()`) : listes et variables présentes (sans type : `ChangeStoredType` dans les tests),
+  drapeaux absents ; pas reconnue par `SaveUtil` une fois écrite : **pas de vérification dans le navigateur** au-delà de
+  la liste des jeux. Testé en mémoire (`CompletionGen9Tests`) ; aucune vraie sauvegarde.
+
+### Reste à faire (9e génération, au 2026-11-14)
+1. **Une vraie sauvegarde** d'Écarlate ou de Violet (Switch : JKSV, le fichier `main`, à ranger en `ecarlate.sav` /
+   `violet.sav`) : vérifier les clés de dresseur des combats de scénario et des revanches (sont-elles écrites ?), les
+   lieux des dresseurs, les recettes de CT (une CT au sol débloque-t-elle sa recette ?), et ajouter un test `Real…`.
+2. **Légendes Z-A** : avec sa check-list (`flags_gen9lza_en.txt` de FlagsEditorEX n'a presque pas de lieux).
+3. Classes des dresseurs : traductions à la main (`CLASSES`) à comparer avec le jeu en français.
+
 ## Trouver de nouveaux drapeaux : paires de sauvegardes (toutes générations, 2026-11-14)
 Quand FlagsEditorEX ne nomme pas le drapeau d'une étape (ou le nomme mal), la méthode sûre est une **paire de
 sauvegardes** : l'une juste avant l'action, l'autre juste après, puis comparer tout ce qui a changé.

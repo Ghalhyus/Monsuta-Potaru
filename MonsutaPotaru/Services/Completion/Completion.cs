@@ -34,7 +34,9 @@ public enum CompletionState { Missing, Done, Missed }
 /// ramassé, « SF:n » drapeau système de DÉ/PS (badges 124 à 131), « BTM:n » rang Expert de la Tour de Combat de DÉ/PS
 /// arrivé à n, « UF:n » forme n de Zarbi au Pokédex de DÉ/PS, « UG:n » objet n des Grands Souterrains possédé (statues),
 /// « LF:espèce:forme » forme obtenue au Pokédex de Hisui, « LC:n » / « LP:n » espèce n de Hisui au niveau de recherche 10
-/// / Parfaite.
+/// / Parfaite ; en 9e génération (<see cref="Gen9CompletionData"/>, par outils/completion_gen9.py) « X:clé » et « XV:clé:n »
+/// comme en Épée / Bouclier (les badges sont des blocs numériques : rang d'obtention), « FI:clé » objet au sol ramassé et
+/// « TR:clé » dresseur battu (clés de 64 bits de FlagsEditorEX, en hexadécimal, dans les listes de la sauvegarde).
 /// </summary>
 /// <param name="Zone">Lieu, dans l'ordre de l'aventure (titre de groupe).</param>
 /// <param name="Detail">Précision sur le lieu (« sous-sol 2 », « Arène, caché »).</param>
@@ -154,7 +156,7 @@ public static class CompletionSections
 /// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), X, Y, Rubis Oméga
 /// et Saphir Alpha (<see cref="Gen6Completion"/>), Soleil, Lune, Ultra-Soleil, Ultra-Lune et Let's Go
 /// (<see cref="Gen7Completion"/>), Épée, Bouclier, Diamant Étincelant, Perle Scintillante et Légendes Arceus
-/// (<see cref="Gen8Completion"/>), toutes les langues.
+/// (<see cref="Gen8Completion"/>), Écarlate et Violet (<see cref="Gen9Completion"/>), toutes les langues.
 /// </summary>
 public static class CompletionGames
 {
@@ -168,7 +170,7 @@ public static class CompletionGames
         LivingDexGame.Sun, LivingDexGame.Moon, LivingDexGame.UltraSun, LivingDexGame.UltraMoon,
         LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee,
         LivingDexGame.Sword, LivingDexGame.Shield, LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl,
-        LivingDexGame.LegendsArceus,
+        LivingDexGame.LegendsArceus, LivingDexGame.Scarlet, LivingDexGame.Violet,
     ];
 
     /// <summary>Jeux possibles pour cette sauvegarde (Rouge ou Bleu, Or ou Argent, Diamant ou Perle : PKHeX ne les distingue pas).</summary>
@@ -176,7 +178,7 @@ public static class CompletionGames
     {
         SAV1 { Japanese: false } => [.. LivingDexGames.For(sav).Intersect(All)],
         SAV2 { Japanese: false, Korean: false } => [.. LivingDexGames.For(sav).Intersect(All)],
-        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO or SAV7SM or SAV7USUM or SAV7b or SAV8SWSH or SAV8BS or SAV8LA =>
+        SAV3 or SAV4 or SAV5 or SAV6XY or SAV6AO or SAV7SM or SAV7USUM or SAV7b or SAV8SWSH or SAV8BS or SAV8LA or SAV9SV =>
             [.. LivingDexGames.For(sav).Intersect(All)], // drapeaux lus par PKHeX : toutes les langues
         _ => [],
     };
@@ -195,6 +197,7 @@ public static class CompletionGames
             SAV6 sav6 => Gen6Completion.Steps(sav6, game),
             SAV7 or SAV7b => Gen7Completion.Steps(sav, game),
             SAV8SWSH or SAV8BS or SAV8LA => Gen8Completion.Steps(sav, game),
+            SAV9SV => Gen9Completion.Steps(sav, game),
             _ => Gen3Completion.Steps((SAV3)sav, game),
         };
     }
@@ -252,7 +255,7 @@ public static class CompletionLabels
         number <= tms ? $"CT{number:00} {French.movelist[moves[number - 1]]}" : $"CS{number - tms:00} {French.movelist[moves[number - 1]]}";
 }
 
-/// <summary>Lecture des conditions des tables dans une sauvegarde (de la 1re à la 8e génération).</summary>
+/// <summary>Lecture des conditions des tables dans une sauvegarde (de la 1re à la 9e génération).</summary>
 internal sealed class CompletionFlags(SaveFile sav)
 {
     /// <summary>Cellule Zygarde ramassée (0 : absente, 1 : visible sur la carte ; éditeur des cellules de PKHeX).</summary>
@@ -268,6 +271,14 @@ internal sealed class CompletionFlags(SaveFile sav)
 
     private readonly Lazy<IReadOnlyList<UndergroundItem8b>> underground =
         new(() => sav is SAV8BS bdsp ? bdsp.Underground.ReadItems() : []);
+
+    /// <summary>
+    /// Écarlate / Violet : objets au sol ramassés (bloc 0x2482AD60) et dresseurs battus (blocs 0xF018C4AC, et 0x28E475DE
+    /// depuis la version 2.0.2) : des listes de paires de 64 bits (clé, 1 si fait) ; d'après FlagsEditorEX.
+    /// </summary>
+    private readonly Lazy<HashSet<ulong>> fieldItems = new(() => Gen9List(sav, [0x2482AD60], 0));
+
+    private readonly Lazy<HashSet<ulong>> trainers = new(() => Gen9List(sav, [0xF018C4AC, 0x28E475DE], 0xCBF29CE484222645));
 
     public CompletionState State(CompletionRow row) =>
         Test(row.Done) ? CompletionState.Done
@@ -314,6 +325,8 @@ internal sealed class CompletionFlags(SaveFile sav)
             "X" => Block(parts[1]) is { Type: SCTypeCode.Bool2 },
             "XV" => Block(parts[1]) is { Type: > SCTypeCode.Array } block && Convert.ToInt64(block.GetValue()) >= long.Parse(parts[2]),
             "HI" => HiddenItem(int.Parse(parts[1])),
+            "FI" => fieldItems.Value.Contains(Convert.ToUInt64(parts[1], 16)),
+            "TR" => trainers.Value.Contains(Convert.ToUInt64(parts[1], 16)),
             "SF" => ((SAV8BS)sav).FlagWork.GetSystemFlag(int.Parse(parts[1])),
             "BTM" => ((SAV8BS)sav).BattleTower.MasterRankMax >= int.Parse(parts[1]),
             "UF" => ((SAV8BS)sav).Zukan.GetHasFormFlag(201, byte.Parse(parts[1]), false)
@@ -363,16 +376,41 @@ internal sealed class CompletionFlags(SaveFile sav)
         _ => throw new InvalidOperationException("Pas de variables de script lisibles dans cette sauvegarde."),
     };
 
-    /// <summary>Bloc d'Épée / Bouclier ou de Légendes Arceus (clé en hexadécimal) ; null s'il manque (sauvegarde sans DLC).</summary>
+    /// <summary>
+    /// Bloc d'Épée / Bouclier, de Légendes Arceus ou d'Écarlate / Violet (clé en hexadécimal) ; null s'il manque
+    /// (sauvegarde sans DLC ; un drapeau jamais levé n'a souvent pas de bloc).
+    /// </summary>
     private SCBlock? Block(string key)
     {
         var accessor = sav switch
         {
             SAV8SWSH swsh => swsh.Accessor,
             SAV8LA la => la.Accessor,
+            SAV9SV sv => sv.Accessor,
             _ => throw new InvalidOperationException("Pas de blocs dans cette sauvegarde."),
         };
         return accessor.TryGetBlock(Convert.ToUInt32(key, 16), out var block) ? block : null;
+    }
+
+    /// <summary>Clés marquées faites (valeur 1) des listes d'Écarlate / Violet ; <paramref name="empty"/> : place libre.</summary>
+    private static HashSet<ulong> Gen9List(SaveFile sav, uint[] keys, ulong empty)
+    {
+        var done = new HashSet<ulong>();
+        if (sav is not SAV9SV sv)
+            return done;
+        foreach (var key in keys)
+        {
+            if (!sv.Accessor.TryGetBlock(key, out var block))
+                continue;
+            var data = block.Data;
+            for (var i = 0; i + 16 <= data.Length; i += 16)
+            {
+                var entry = BitConverter.ToUInt64(data.Slice(i, 8));
+                if (entry != empty && BitConverter.ToUInt64(data.Slice(i + 8, 8)) == 1)
+                    done.Add(entry);
+            }
+        }
+        return done;
     }
 
     /// <summary>Objet caché n d'Épée / Bouclier ramassé (4 octets par objet : état, puis tirage) ; bloc absent : pas encore.</summary>

@@ -36,8 +36,8 @@ public sealed class CompletionPagesTests : PageTestContext
         await cut.Click("Annuler");
         await cut.Click("+ Ajouter une sauvegarde");
 
-        // Jaune : pas de sauvegarde ; Rouge : la sauvegarde proposée d'office (de Rouge à Légendes Arceus : 35 jeux)
-        Assert.Equal(35, cut.FindAll("input[name=completionGame]").Count);
+        // Jaune : pas de sauvegarde ; Rouge : la sauvegarde proposée d'office (de Rouge à Écarlate / Violet : 37 jeux)
+        Assert.Equal(37, cut.FindAll("input[name=completionGame]").Count);
         await cut.FindAll("input[name=completionGame]")[2].ChangeAsync(new() { Value = true });
         cut.WaitForText("Aucune sauvegarde de Pokémon Jaune disponible");
         await cut.FindAll("input[name=completionGame]")[0].ChangeAsync(new() { Value = true });
