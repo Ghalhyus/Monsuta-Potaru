@@ -96,6 +96,13 @@ README : « Comptes », « Administration », « Thèmes ».
 - Dans un test de `SiteFactory`, les accents de la page sont encodés (`&#xE9;`) : lire le texte par AngleSharp
   (`QuerySelector(".alert").TextContent`), pas dans le HTML brut.
 
+## Préférences : disposition des écrans d'un combat (2026-11-14)
+- Même page, même colonne JSON (`"combat":"cote"`, `SortPreferences.Battle`, `BattleLayout`), mais **son propre bloc et
+  son propre formulaire** (`@formname="battle"`, liste `combat` : `empile` / `cote`) : le formulaire des tris recopie la
+  valeur enregistrée, « Revenir aux tris d'origine » ne la change pas.
+- Écriture par `PreferencesService.SetBattleLayoutAsync` (relit les tris, ne change que la disposition), aussi appelée
+  par les boutons de la page « Combat ». Interface du combat : `docs/claude/combats.md`.
+
 ## Tests
 - `AccountServiceTests` monte Identity comme `Program.cs` (`AccountService.ConfigureIdentity`) sur la base de test.
 - Les comptes de `TestDatabase` sont créés sans Identity (pas d'adresse) : n'y appeler aucune méthode qui les revalide.

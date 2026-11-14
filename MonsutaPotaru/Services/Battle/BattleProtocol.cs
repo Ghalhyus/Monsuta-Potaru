@@ -152,6 +152,19 @@ public static class BattleProtocol
         return (position.Length >= 2 ? position[..2] : position, colon < 0 ? "" : ident[(colon + 1)..].Trim());
     }
 
+    /// <summary>« Pikachu, L50, M, shiny » → niveau (100 quand il n'est pas écrit), sexe (« M », « F », « »), chromatique.</summary>
+    public static (int Level, string Gender, bool Shiny) Details(string details)
+    {
+        var parts = details.Split(',', StringSplitOptions.TrimEntries);
+        var level = parts.Select(p => p.StartsWith('L') && int.TryParse(p[1..], out var l) ? l : 0).FirstOrDefault(l => l > 0, 100);
+        var gender = "";
+        if (parts.Contains("M"))
+            gender = "M";
+        else if (parts.Contains("F"))
+            gender = "F";
+        return (level, gender, parts.Contains("shiny"));
+    }
+
     /// <summary>« 51/110 par » → (51, 110, « par ») ; « 0 fnt » → (0, 0, « fnt »).</summary>
     public static (int Hp, int MaxHp, string? Status) Condition(string condition)
     {

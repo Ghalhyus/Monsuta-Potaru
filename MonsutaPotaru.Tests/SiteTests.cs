@@ -198,6 +198,18 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal("arrivee", original.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
         Assert.Equal("desc", original.QuerySelector("select[name=ordre-collection] option[selected]")?.GetAttribute("value")); // les plus récents d'abord
 
+        // Préférences : disposition des écrans d'un combat, dans son propre formulaire (les tris n'y touchent pas ; une
+        // valeur trafiquée donne la disposition d'origine)
+        Assert.Equal("empile", original.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        var (_, battle) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "cote" });
+        var sideBySide = Parser.ParseDocument(battle);
+        Assert.Contains("Disposition des écrans de combat enregistrée.", sideBySide.QuerySelector(".alert")?.TextContent ?? battle);
+        Assert.Equal("cote", sideBySide.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        var (_, sortsAgain) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
+        Assert.Equal("cote", Parser.ParseDocument(sortsAgain).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        var (_, tampered) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "pirate" });
+        Assert.Equal("empile", Parser.ParseDocument(tampered).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>
         {

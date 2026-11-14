@@ -22,6 +22,12 @@ public readonly record struct CompletionOrder(CompletionSort By = CompletionSort
 /// <summary>Tri de la vue générale des rubans : par ordre d'ajout (le premier suivi d'abord) par défaut.</summary>
 public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bool Descending = false);
 
+/// <summary>
+/// Disposition des deux écrans d'un combat (« Multijoueurs » → « Combat ») : l'un au-dessus de l'autre comme sur la console
+/// (d'origine), ou côte à côte. Sur un écran trop étroit, la page les empile toujours.
+/// </summary>
+public enum BattleLayout { Stacked, SideBySide }
+
 /// <summary>Valeurs « tri » et « ordre » d'une adresse (« ?tri=nom&amp;ordre=desc ») ; null : absente.</summary>
 public readonly record struct SortQuery(string? Tri, string? Ordre)
 {
@@ -86,11 +92,23 @@ public static class SiteSorts
         (RibbonSort.Completion, "completion", "Complétion"),
     ];
 
+    /// <summary>Dispositions des écrans d'un combat : nom dans les préférences et le formulaire, libellé.</summary>
+    public static readonly IReadOnlyList<(BattleLayout Layout, string Slug, string Label)> BattleLayoutChoices =
+    [
+        (BattleLayout.Stacked, "empile", "Empilés"),
+        (BattleLayout.SideBySide, "cote", "Côte à côte"),
+    ];
+
     public static string Slug(ItemSortBy by) => ItemChoices.First(c => c.By == by).Slug;
     public static string Slug(CollectionSortBy by) => CollectionCompactChoices.First(c => c.By == by).Slug;
     public static string Slug(LivingDexSort by) => LivingDexChoices.First(c => c.By == by).Slug;
     public static string Slug(CompletionSort by) => CompletionChoices.First(c => c.By == by).Slug;
     public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
+
+    public static string Slug(BattleLayout layout) => BattleLayoutChoices.First(c => c.Layout == layout).Slug;
+
+    /// <summary>Disposition lue dans les préférences ou le formulaire ; absente ou inconnue (trafiquée) : empilés.</summary>
+    public static BattleLayout BattleLayoutFrom(string? slug) => BattleLayoutChoices.FirstOrDefault(c => c.Slug == slug, BattleLayoutChoices[0]).Layout;
 
     // ---------- Inventaire : « ordre=desc » pour décroissant ----------
 
@@ -166,12 +184,13 @@ public static class SiteSorts
 /// <summary>
 /// Tris par défaut d'un compte (« Mon compte » → « Préférences ») : un par onglet de l'inventaire, celui de « Ma
 /// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
-/// pages du joueur comme sur celles des autres joueurs qu'il consulte. Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>,
-/// avec les noms de l'adresse : <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"}}</c>.
+/// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
+/// (<see cref="Battle"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote"}</c>.
 /// </summary>
-public sealed class SortPreferences
+public sealed record SortPreferences
 {
-    /// <summary>Les tris d'origine du site : par défaut dans l'inventaire, par arrivée, par génération, par ajout.</summary>
+    /// <summary>Les réglages d'origine du site : tris par défaut dans l'inventaire, par arrivée, par génération, par ajout ; écrans de combat empilés.</summary>
     public static readonly SortPreferences Default = new();
 
     public IReadOnlyDictionary<ItemCategory, ItemSort> Inventory { get; init; } = new Dictionary<ItemCategory, ItemSort>();
@@ -179,6 +198,7 @@ public sealed class SortPreferences
     public LivingDexOrder LivingDex { get; init; }
     public CompletionOrder Completion { get; init; }
     public RibbonOrder Ribbons { get; init; }
+    public BattleLayout Battle { get; init; }
 
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
 
@@ -195,6 +215,7 @@ public sealed class SortPreferences
         public StoredSort? Livingdex { get; set; }
         public StoredSort? Completion { get; set; }
         public StoredSort? Rubans { get; set; }
+        public string? Combat { get; set; }
     }
 
     private sealed class StoredSort
@@ -205,7 +226,7 @@ public sealed class SortPreferences
         public static StoredSort From(SortQuery query) => new() { Tri = query.Tri, Ordre = query.Ordre };
     }
 
-    /// <summary>JSON à enregistrer ; null quand tout est au tri d'origine (la colonne reste vide).</summary>
+    /// <summary>JSON à enregistrer ; null quand tout est au réglage d'origine (la colonne reste vide).</summary>
     public string? ToJson()
     {
         var inventory = Inventory.Where(s => s.Value != default)
@@ -217,9 +238,10 @@ public sealed class SortPreferences
             Livingdex = LivingDex == default ? null : StoredSort.From(SiteSorts.LivingDexQuery(LivingDex)),
             Completion = Completion == default ? null : StoredSort.From(SiteSorts.CompletionQuery(Completion)),
             Rubans = Ribbons == default ? null : StoredSort.From(SiteSorts.RibbonQuery(Ribbons)),
+            Combat = Battle == default ? null : SiteSorts.Slug(Battle),
         };
         return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
-            && stored.Rubans is null
+            && stored.Rubans is null && stored.Combat is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -252,11 +274,12 @@ public sealed class SortPreferences
             LivingDex = stored.Livingdex is { } l ? SiteSorts.LivingDexFromQuery(l.ToQuery()) ?? default : default,
             Completion = stored.Completion is { } p ? SiteSorts.CompletionFromQuery(p.ToQuery()) ?? default : default,
             Ribbons = stored.Rubans is { } r ? SiteSorts.RibbonFromQuery(r.ToQuery()) ?? default : default,
+            Battle = SiteSorts.BattleLayoutFrom(stored.Combat),
         };
     }
 }
 
-/// <summary>Lecture et enregistrement des préférences d'un compte (aujourd'hui : les tris par défaut).</summary>
+/// <summary>Lecture et enregistrement des préférences d'un compte : les tris par défaut et la disposition des écrans d'un combat.</summary>
 public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
     /// <summary>Tris par défaut du compte ; les tris d'origine sans compte (ou compte supprimé).</summary>
@@ -275,5 +298,12 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
         if (await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(u => u.SetProperty(x => x.SortPreferences, json)) == 0)
             return new(false, "Ce compte n'existe plus.");
         return new(true, "Tris par défaut enregistrés.");
+    }
+
+    /// <summary>Disposition des écrans d'un combat, choisie dans les préférences ou sur la page du combat ; les tris ne changent pas.</summary>
+    public async Task<AccountResult> SetBattleLayoutAsync(string userId, BattleLayout layout)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout });
+        return result.Ok ? new(true, "Disposition des écrans de combat enregistrée.") : result;
     }
 }

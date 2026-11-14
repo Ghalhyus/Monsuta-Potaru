@@ -695,7 +695,7 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .stat-bar-none { grid-column: span 2; }
 .stat-bar-count { white-space: nowrap; }
 
-/* ---------- Combats (Multijoueurs) : interface inspirée de Pokémon Platine ---------- */
+/* ---------- Combats (Multijoueurs) : deux écrans, façon 4e génération ---------- */
 .battle-friend { max-width: 22rem; }
 .battle-order {
     position: absolute; top: .25rem; left: .35rem; min-width: 1.4rem; padding: 0 .3rem; border-radius: 1rem;
@@ -709,50 +709,87 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .battle-team-slot.empty { justify-content: center; border-style: dashed; border-color: var(--bs-border-color); }
 .battle-team-slot img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
 
-/* Les deux écrans : celui du haut (terrain), celui du bas (menu tactile). */
-.battle { max-width: 34rem; margin: 0 auto; font-family: system-ui, sans-serif; user-select: none; }
-.battle-top, .battle-bottom { position: relative; border: 4px solid #3c4650; border-radius: .6rem; overflow: hidden; }
-.battle-top { aspect-ratio: 4 / 3; margin-bottom: .6rem; }
+/* Les deux écrans d'une console à deux écrans, façon 4e génération : celui du haut (terrain), celui du bas (menu tactile).
+   Même largeur (--ecran), 4:3 chacun ; tout ce qu'ils contiennent se mesure en em (1em = 1/32 de la largeur) ou en %,
+   pour garder les proportions à toutes les tailles. Zone étroite (téléphone) : empilés, sur toute la largeur. Zone
+   large : empilés à la taille qui les fait tenir tous les deux dans la hauteur de la fenêtre (--dessus : ce que la page
+   affiche au-dessus, alertes comprises), ou côte à côte (.cote, choix du joueur, boutons .battle-layout). */
+.battle-zone { container-type: inline-size; }
+.battle-layout { display: none; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+.battle {
+    --ecran: min(100cqw, 34rem); --dessus: calc(24.5rem + var(--alertes, 0) * 3.6rem);
+    display: grid; justify-content: center; gap: .5rem; font-family: system-ui, sans-serif; user-select: none;
+}
+@container (min-width: 40rem) {
+    .battle-layout { display: flex; }
+    .battle { --ecran: clamp(17rem, calc((100dvh - var(--dessus)) / 1.5), 34rem); }
+    .battle.cote {
+        --ecran: min(calc((100cqw - .5rem) / 2), clamp(17rem, calc((100dvh - var(--dessus)) * 4 / 3), 48rem));
+        grid-template-columns: auto auto;
+    }
+}
+.battle-top, .battle-bottom {
+    position: relative; width: var(--ecran); aspect-ratio: 4 / 3; overflow: hidden; border: .12em solid #20242a; border-radius: .45em;
+    color: #484848; font-size: calc(var(--ecran) / 32); font-weight: 700; line-height: 1.15;
+}
+
+/* ---------- Écran du haut : ciel et herbe en bandes, socles de terre, boîtes d'infos à bord biseauté ---------- */
 .battle-field {
     position: absolute; inset: 0;
-    background: linear-gradient(#bfe0f6 0%, #e8f4f0 46%, #b4dc8c 46%, #96c870 100%);
+    background:
+        repeating-linear-gradient(rgba(255, 255, 255, .28) 0 .22em, transparent .22em 1.3em) top / 100% 30% no-repeat,
+        linear-gradient(#48c0d0 0, #78dcd0 22%, #b8f0d0 30%, transparent 30%),
+        repeating-linear-gradient(#d4f0a0 0 .55em, #b4e088 .55em 1.5em);
 }
-.battle-base { position: absolute; border-radius: 50%; background: #d6e8a8; border: 3px solid #a8c878; }
-.battle-base.foe { top: 37%; right: 6%; width: 40%; height: 10%; }
-.battle-base.mine { bottom: 22%; left: 3%; width: 46%; height: 11%; }
+.battle-base { position: absolute; border-radius: 50%; background: #e4d4a8; border: .14em solid #bca878; box-shadow: inset 0 -.25em 0 rgba(160, 136, 88, .35); }
+.battle-base.foe { top: 40%; right: 2%; width: 48%; height: 10.5%; }
+.battle-base.mine { bottom: 15%; left: -12%; width: 70%; height: 14%; }
 .battle-sprite { position: absolute; image-rendering: pixelated; object-fit: contain; }
-.battle-sprite.foe { top: 9%; right: 11%; width: 30%; }
-.battle-sprite.mine { bottom: 24%; left: 9%; width: 34%; }
-.battle-info {
-    position: absolute; width: 48%; padding: .35rem .6rem; background: #f8f6e0; border: 3px solid #48505a;
-    border-radius: .9rem .3rem; box-shadow: 0 3px 0 rgba(0, 0, 0, .25); color: #303840; font-size: .85rem;
+.battle-sprite.foe { bottom: 52%; right: 12%; width: 28%; }
+.battle-sprite.mine { bottom: 21%; left: 6%; width: 36%; }
+.battle-info { position: absolute; filter: drop-shadow(0 .16em 0 rgba(0, 0, 0, .28)); }
+.battle-info.foe { top: 8%; left: 0; width: 51%; }
+.battle-info.mine { top: 45%; right: 0; width: 53%; }
+.battle-info-box { position: relative; padding: .5em .7em; background: #404448; }
+.battle-info.foe .battle-info-box { padding-right: 3em; clip-path: polygon(0 0, 90% 0, 100% 100%, 0 100%); }
+.battle-info.mine .battle-info-box { padding-left: 3.6em; clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%); }
+.battle-info-box::before { /* le fond clair, en retrait du bord sombre */
+    content: ""; position: absolute; inset: .16em; background: linear-gradient(#f4f4f0 0 58%, #d4d4d0 58%); clip-path: inherit;
 }
-.battle-info.foe { top: 5%; left: 4%; }
-.battle-info.mine { bottom: 30%; right: 4%; }
-.battle-info-name { display: flex; align-items: baseline; gap: .3rem; font-weight: 700; }
+.battle-info.foe .battle-info-box::before { left: 0; }
+.battle-info.mine .battle-info-box::before { right: 0; }
+.battle-info-box > * { position: relative; }
+.battle-info-name { display: flex; align-items: baseline; gap: .3em; font-size: 1.2em; }
 .battle-info-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.battle-level { margin-left: auto; font-weight: 600; }
-.battle-gender.M { color: #3878e0; }
-.battle-gender.F { color: #e05070; }
-.battle-hp { display: flex; align-items: center; gap: .25rem; margin-top: .15rem; }
-.battle-hp > span { padding: 0 .25rem; border-radius: .2rem; background: #f0a830; color: #fff; font-size: .65rem; font-weight: 700; }
-.battle-hp-bar { flex: 1; display: inline-block; height: .55rem; border: 2px solid #48505a; border-radius: .3rem; background: #586068; overflow: hidden; }
+.battle-level { margin-left: auto; font-size: .85em; white-space: nowrap; }
+.battle-gender { font-size: .9em; }
+.battle-gender.M { color: #2870e0; }
+.battle-gender.F { color: #e04868; }
+.battle-hp { display: flex; align-items: center; justify-content: flex-end; gap: .3em; margin-top: .25em; }
+.battle-hp-meter { display: flex; align-items: center; width: 68%; padding: .13em .22em .13em .4em; border-radius: .35em; background: #404448; }
+.battle-hp-label { margin-right: .35em; color: #f8b020; font-size: .72em; line-height: 1; }
+.battle-hp-bar { flex: 1; display: block; height: .46em; border-radius: .12em; background: #f4f4ec; overflow: hidden; }
 .battle-hp-bar > * { display: block; height: 100%; transition: width .6s ease; }
-.hp-high { background: #58d080; }
-.hp-mid { background: #f8c030; }
-.hp-low { background: #f85838; }
-.battle-info-foot { display: flex; align-items: center; gap: .3rem; min-height: 1.1rem; margin-top: .1rem; }
-.battle-hp-text { margin-left: auto; font-weight: 700; }
-.battle-balls { margin-left: auto; letter-spacing: .05rem; color: #c03838; font-size: .7rem; }
-.battle-status { padding: 0 .3rem; border-radius: .25rem; color: #fff; font-size: .65rem; font-weight: 700; }
+.hp-high { background: #30c048; }
+.hp-mid { background: #f0b820; }
+.hp-low { background: #f05030; }
+.battle-hp-text {
+    width: fit-content; margin: .25em 0 0 auto; padding: 0 .9em; border-radius: .5em; background: #c4c4c0; font-size: 1.1em;
+    font-variant-numeric: tabular-nums;
+}
+.battle-status { padding: .05em .35em; border-radius: .25em; color: #fff; font-size: .78em; line-height: 1.2; white-space: nowrap; }
 .battle-status.brn { background: #e06030; }
 .battle-status.par { background: #c8a818; }
 .battle-status.slp { background: #8890a0; }
 .battle-status.frz { background: #50a8d8; }
 .battle-status.psn, .battle-status.tox { background: #a050b0; }
-.battle-text {
-    position: absolute; left: 2%; right: 2%; bottom: 2%; height: 21%; padding: .5rem .8rem; overflow: hidden;
-    background: #fdfdfd; border: 4px solid #5a6a7c; border-radius: .6rem; color: #283038; font-size: 1rem; line-height: 1.3;
+.battle-status.fnt { background: #c82828; }
+/* Boîte de message : cadre sombre, filet orange, fond blanc (aussi en bas du menu de l'équipe). */
+.battle-text, .battle-team-text { position: absolute; padding: .5em .6em; background: #383c48; }
+.battle-text { left: 0; right: 0; bottom: 0; height: 22%; border-top: .12em solid #20242a; }
+.battle-text > div, .battle-team-text > div {
+    height: 100%; padding: .2em .8em; overflow: hidden; border-radius: .15em; background: #fff;
+    box-shadow: 0 0 0 .1em #383c48, 0 0 0 .2em #e07830; font-size: 1.3em; font-weight: 600; line-height: 1.25;
 }
 
 /* Animations : le Pokémon qui attaque s'avance puis revient, celui qui est touché clignote, K.O. : il tombe. */
@@ -767,55 +804,129 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 @keyframes ko { to { transform: translateY(45%); opacity: 0; } }
 @keyframes entree { from { transform: scale(.2); opacity: 0; } }
 
-/* Écran du bas : menu tactile. */
+/* ---------- Écran du bas : fond clair marqué d'une Poké Ball, barre des Pokéballs, boutons du jeu ---------- */
 .battle-bottom {
-    min-height: 14rem; padding: .8rem; color: #fff;
-    background: repeating-linear-gradient(135deg, #3d4c5a 0 10px, #44546a 10px 20px);
+    background:
+        radial-gradient(circle 8.5em at 50% 57%, transparent 0 30%, #dcecc4 30% 38%, transparent 38% 90%, #dcecc4 90% 100%, transparent 100%),
+        #f4f8e6;
 }
-.battle-bottom button:not(.btn) { /* boutons du jeu ; pas ceux du site (fin du combat) */
-    border: 3px solid rgba(0, 0, 0, .35); border-radius: .9rem; color: #fff; font-weight: 800; letter-spacing: .03rem;
-    text-shadow: 0 2px 0 rgba(0, 0, 0, .35); box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .2);
+.battle-bar {
+    position: absolute; inset: 0 0 auto; height: 13%; display: flex; align-items: center; justify-content: space-between; padding: 0 .5em;
+    background: linear-gradient(#6cc070 0 58%, #a4dc9c 58% 86%, #d0ecc0 86%);
 }
-.battle-bottom button:not(.btn):disabled { opacity: .45; }
-.battle-bottom button:not(.btn):not(:disabled):hover { filter: brightness(1.08); }
-.battle-menu { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 7.5rem 4rem; gap: .5rem; }
-.battle-fight { grid-column: 1 / 4; background: #e05040; font-size: 1.6rem; }
-.battle-bag { background: #d8a828; }
-.battle-run { background: #4878d0; }
-.battle-pokemon { background: #40a848; }
-.battle-moves { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.battle-move { display: flex; flex-direction: column; align-items: flex-start; min-height: 4.5rem; padding: .4rem .7rem; text-align: left; background: #888; }
-.battle-move-name { font-size: 1.05rem; }
-.battle-move-pp, .battle-move-type { font-size: .75rem; font-weight: 700; }
-.battle-back { grid-column: 1 / -1; padding: .4rem; background: #707880; }
-.battle-team-menu { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.battle-member {
-    display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto; align-items: center; column-gap: .4rem;
-    padding: .3rem .5rem; text-align: left; background: #4a8ac8;
+.battle-balls { display: flex; align-items: center; gap: .5em; }
+.battle-balls.foe { flex-direction: row-reverse; gap: .55em; }
+.battle-ball { width: 1.75em; height: 1.75em; border-radius: 50%; background: #8c9088; box-shadow: inset 0 0 0 .14em #7c8078; }
+.battle-balls.foe .battle-ball { width: .9em; height: .9em; }
+.battle-ball.ok, .battle-ball.ko {
+    background:
+        radial-gradient(circle, #fff 0 15%, #303438 16% 27%, transparent 28%),
+        linear-gradient(#e83838 0 44%, #303438 44% 56%, #f8f8f8 56%);
+    box-shadow: 0 0 0 .1em #303438;
 }
-.battle-member.active { background: #c87838; }
-.battle-member.fainted { background: #806060; }
-.battle-member img { grid-row: 1 / 3; width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
-.battle-member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.battle-member-hp { display: flex; align-items: center; gap: .3rem; font-size: .75rem; }
-.battle-member .battle-status { justify-self: start; }
+.battle-ball.ko { filter: grayscale(1) brightness(.72); }
 .battle-timer {
-    position: absolute; top: .35rem; right: .6rem; padding: 0 .5rem; border-radius: 1rem; background: rgba(0, 0, 0, .35);
-    font-weight: 700; font-variant-numeric: tabular-nums;
+    padding: .05em .7em; border-radius: 1em; background: rgba(0, 0, 0, .42); color: #fff; font-size: 1.05em; font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
-.battle-timer.urgent { background: #d03838; }
-.battle-moves, .battle-menu, .battle-team-menu { margin-top: 1.4rem; }
-.battle-waiting { display: grid; place-items: center; min-height: 12rem; font-size: 1.1rem; text-align: center; }
-.battle-result { margin: 1rem 0; text-align: center; font-size: 2rem; font-weight: 800; text-shadow: 0 2px 0 rgba(0, 0, 0, .35); }
-.battle-after { display: flex; justify-content: center; gap: .5rem; }
+.battle-timer.urgent { background: #d03030; }
 
-/* Couleurs des types (capacités). */
-.battle-move.type-normal { background: #a8a878; } .battle-move.type-fire { background: #e8782c; } .battle-move.type-water { background: #5f88e8; }
-.battle-move.type-electric { background: #d8b428; } .battle-move.type-grass { background: #64b448; } .battle-move.type-ice { background: #78c8c8; }
-.battle-move.type-fighting { background: #b83028; } .battle-move.type-poison { background: #9840a0; } .battle-move.type-ground { background: #c8a858; }
-.battle-move.type-flying { background: #9888e0; } .battle-move.type-psychic { background: #e85888; } .battle-move.type-bug { background: #98a820; }
-.battle-move.type-rock { background: #a89038; } .battle-move.type-ghost { background: #685090; } .battle-move.type-dragon { background: #6838e8; }
-.battle-move.type-dark { background: #685040; } .battle-move.type-steel { background: #a0a0c0; }
+/* Bouton du jeu : deux tons (--haut, --bas), bord sombre doublé d'un filet clair, texte blanc cerné. */
+.battle-btn {
+    position: absolute; display: flex; align-items: center; justify-content: center; gap: .4em; padding: 0;
+    border: .16em solid #383c40; border-radius: .9em; background: linear-gradient(var(--haut) 0 var(--coupe, 52%), var(--bas) var(--coupe, 52%));
+    box-shadow: inset 0 0 0 .1em rgba(255, 255, 255, .7); color: #fff; font: inherit; font-weight: 800; letter-spacing: .04em;
+    text-shadow: .07em .07em 0 #40444c, -.06em 0 0 #40444c, .06em 0 0 #40444c, 0 -.06em 0 #40444c;
+}
+.battle-btn:focus-visible { outline: none; }
+.battle-btn:not(:disabled):hover { filter: brightness(1.06); }
+/* Le curseur de sélection du jeu : quatre coins rouges autour du bouton survolé (ou atteint au clavier). */
+.battle-btn:not(:disabled):is(:hover, :focus-visible)::after {
+    --rouge: linear-gradient(#f02020 0 0); --long: 1.15em; --large: .34em;
+    content: ""; position: absolute; inset: -.5em; pointer-events: none; background-repeat: no-repeat;
+    background-image: var(--rouge), var(--rouge), var(--rouge), var(--rouge), var(--rouge), var(--rouge), var(--rouge), var(--rouge);
+    background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
+    background-size: var(--long) var(--large), var(--large) var(--long), var(--long) var(--large), var(--large) var(--long),
+        var(--long) var(--large), var(--large) var(--long), var(--long) var(--large), var(--large) var(--long);
+}
+
+/* Menu principal : ATTAQUE au centre ; SAC (gris : pas de sac en combat de câble), ABANDONNER et POKéMON au bord du bas. */
+.battle-fight { top: 22%; left: 9.5%; right: 9.5%; height: 45%; --haut: #f84838; --bas: #984440; font-size: 1.7em; border-radius: .6em; }
+.battle-fight img { width: 1.9em; height: 1.9em; object-fit: contain; image-rendering: pixelated; }
+.battle-bag, .battle-run, .battle-pokemon, .battle-back { bottom: -1.2em; padding-bottom: 1.2em; --coupe: 46%; font-size: 1.15em; }
+.battle-bag { top: 78%; left: 1%; width: 29.5%; --haut: #b4b4b0; --bas: #8c8c88; color: #e4e4e0; cursor: not-allowed; }
+.battle-run { top: 82%; left: 34%; width: 32%; --haut: #2890d8; --bas: #3c6490; }
+.battle-pokemon { top: 78%; right: 1%; width: 29.5%; --haut: #58a828; --bas: #4c703c; }
+.battle-back { top: 82%; left: 4%; right: 4%; --haut: #2890d8; --bas: #3c6490; font-size: 1.25em; }
+
+/* Capacités : 2 × 2 panneaux à cadre de la couleur du type (--type), nom sur fond blanc, type et PP sur fond beige. */
+.battle-move {
+    position: absolute; width: 47%; height: 27%; flex-direction: column; align-items: stretch; gap: 0; padding: .28em 1.05em;
+    border: .16em solid #383c40; border-radius: .7em; --haut: var(--type, #a8a878); --bas: color-mix(in srgb, var(--type, #a8a878) 68%, #000);
+    --coupe: 56%; color: #585c60; text-shadow: none; letter-spacing: 0;
+}
+.battle-moves > :nth-child(odd) { left: 1.5%; }
+.battle-moves > :nth-child(even) { left: 51.5%; }
+.battle-moves > :nth-child(-n + 2) { top: 17%; }
+.battle-moves > :nth-child(n + 3) { top: 49%; }
+.battle-moves > .battle-back { top: 82%; left: 4%; }
+.battle-move.vide { background: #9088a0; box-shadow: inset 0 0 0 .1em rgba(255, 255, 255, .55); }
+.battle-move:disabled { opacity: .5; }
+.battle-move-name {
+    flex: 1.25; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; font-size: 1.35em; white-space: nowrap;
+}
+.battle-move-foot { flex: 1; display: flex; align-items: center; justify-content: center; gap: .7em; background: #dccca8; }
+.battle-move-type {
+    padding: .05em .45em; border: .08em solid rgba(0, 0, 0, .35); border-radius: .25em; background: var(--type, #a8a878); color: #fff;
+    font-size: .82em; text-transform: uppercase; text-shadow: .06em .06em 0 rgba(0, 0, 0, .45);
+}
+.battle-move-pp { font-size: 1.15em; font-variant-numeric: tabular-nums; }
+
+/* Équipe : six panneaux verts sur deux colonnes décalées ; K.O. en orange, celui qui est au combat en bleu. */
+.battle-member {
+    width: 47.5%; height: 24%; display: grid; grid-template-columns: 3.3em 1fr auto; grid-template-rows: 1.15fr auto 1fr; align-items: center;
+    justify-content: stretch; column-gap: .3em; padding: .15em .8em .2em .35em; text-align: left; --haut: #30a878; --bas: #208858; --coupe: 50%;
+}
+.battle-member:nth-child(odd) { left: 1.5%; }
+.battle-member:nth-child(even) { left: 51%; }
+.battle-member:nth-child(1) { top: 2%; }
+.battle-member:nth-child(2) { top: 6%; }
+.battle-member:nth-child(3) { top: 27.5%; }
+.battle-member:nth-child(4) { top: 31.5%; }
+.battle-member:nth-child(5) { top: 53%; }
+.battle-member:nth-child(6) { top: 57%; }
+.battle-member.active { --haut: #3890c8; --bas: #286898; }
+.battle-member.fainted { --haut: #f08830; --bas: #c86018; }
+.battle-member img { grid-row: 1 / 4; width: 3.3em; height: 3.3em; object-fit: contain; image-rendering: pixelated; }
+.battle-member-name { font-size: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-member .battle-gender { font-size: 1.05em; text-shadow: .05em .05em 0 #fff; }
+.battle-member .battle-hp { grid-column: 2 / 4; justify-content: flex-start; margin: 0; text-shadow: none; }
+.battle-member .battle-hp-meter { width: 100%; }
+.battle-member-foot { grid-column: 2 / 4; display: flex; align-items: center; gap: .4em; font-size: 1.02em; font-variant-numeric: tabular-nums; }
+.battle-member-foot .battle-status { text-shadow: none; }
+.battle-member-hp { margin-left: auto; }
+.battle-team-text { top: 83%; bottom: 0; left: 1.5%; width: 83%; border-radius: .3em .3em 0 0; }
+.battle-team-text > div { display: flex; align-items: center; justify-content: space-between; gap: .5em; }
+.battle-team-text .battle-timer { font-size: .8em; font-weight: 700; }
+.battle-back.retour { top: 81%; bottom: 1.5%; left: 86.5%; right: 1.5%; padding: 0; border-radius: .6em; --coupe: 52%; font-size: 1.9em; line-height: 1; }
+
+/* Attente de l'autre joueur, fin du combat (boutons du site). */
+.battle-waiting, .battle-end { position: absolute; inset: 13% 0 0; display: grid; place-content: center; padding: 0 2em; text-align: center; }
+.battle-waiting { color: #58684c; font-size: 1.4em; }
+.battle-end { gap: 1em; }
+.battle-result { font-size: 2.8em; font-weight: 800; }
+.battle-result.won { color: #288838; }
+.battle-result.lost { color: #c03030; }
+.battle-after { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
+.battle-after .btn { font-size: max(.8rem, 1em); }
+
+/* Couleurs des types (cadre et étiquette des capacités). */
+.battle-move.type-normal { --type: #a8a878; } .battle-move.type-fire { --type: #e8782c; } .battle-move.type-water { --type: #5f88e8; }
+.battle-move.type-electric { --type: #d8b428; } .battle-move.type-grass { --type: #64b448; } .battle-move.type-ice { --type: #78c8c8; }
+.battle-move.type-fighting { --type: #b83028; } .battle-move.type-poison { --type: #9840a0; } .battle-move.type-ground { --type: #c8a858; }
+.battle-move.type-flying { --type: #9888e0; } .battle-move.type-psychic { --type: #e85888; } .battle-move.type-bug { --type: #98a820; }
+.battle-move.type-rock { --type: #a89038; } .battle-move.type-ghost { --type: #685090; } .battle-move.type-dragon { --type: #6838e8; }
+.battle-move.type-dark { --type: #685040; } .battle-move.type-steel { --type: #a0a0c0; }
 
 /* ---------- Porte-monnaie de la barre du haut (Classique, Pokédex ; Ardoise : .ardoise-wallet) ---------- */
 

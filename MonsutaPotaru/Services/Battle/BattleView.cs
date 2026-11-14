@@ -171,15 +171,9 @@ public sealed class BattleView(string viewer)
     {
         var (side, name) = BattleProtocol.Who(ident);
         var (species, forme, speciesName) = BattleNames.SpeciesOf(details);
-        var parts = details.Split(',', StringSplitOptions.TrimEntries);
-        var level = parts.Select(p => p.StartsWith('L') && int.TryParse(p[1..], out var l) ? l : 0).FirstOrDefault(l => l > 0, 100);
-        var gender = "";
-        if (parts.Contains("M"))
-            gender = "M";
-        else if (parts.Contains("F"))
-            gender = "F";
+        var (level, gender, shiny) = BattleProtocol.Details(details);
         var (hp, max, status) = BattleProtocol.Condition(condition);
-        active[side] = new BattleFighter(name, species, forme, speciesName, level, gender, parts.Contains("shiny"), hp, max, status);
+        active[side] = new BattleFighter(name, species, forme, speciesName, level, gender, shiny, hp, max, status);
     }
 
     // ---------- Traduction ----------

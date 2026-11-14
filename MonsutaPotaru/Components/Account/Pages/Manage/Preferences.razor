@@ -9,7 +9,8 @@
 
 <PageTitle>Préférences</PageTitle>
 
-@* Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des vues générales des living dex, des complétions et des rubans : appliqués
+@* Deux réglages, chacun son bloc et son formulaire : les tris par défaut, puis la disposition des écrans d'un combat.
+   Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des vues générales des living dex, des complétions et des rubans : appliqués
    quand l'adresse ne précise pas de tri, chez soi comme chez les autres joueurs. Rendu statique : un formulaire envoyé au
    serveur, des listes HTML simples (name="tri-…" / "ordre-…"), relues avec les règles de l'adresse (SiteSorts). *@
 <Block Title="Tris par défaut">
@@ -58,6 +59,32 @@
         <div class="d-flex flex-wrap gap-2 mt-3">
             <button type="submit" name="Action" value="save" class="btn btn-primary">Enregistrer</button>
             <button type="submit" name="Action" value="reset" class="btn btn-outline-secondary">Revenir aux tris d'origine</button>
+        </div>
+    </form>
+</Block>
+
+@* Disposition des deux écrans d'un combat : son propre formulaire (les tris n'y touchent pas, et inversement). Le même
+   choix se fait pendant un combat, par les boutons de la page « Combat ». *@
+<Block Title="Combat">
+    <p>
+        Choisis comment les deux écrans d'un combat sont placés : l'un au-dessus de l'autre, comme sur la console, ou côte à côte.<br/>
+        Tu peux aussi changer de disposition pendant un combat. Sur un écran étroit, les écrans restent empilés.
+    </p>
+    <form method="post" @formname="battle" @onsubmit="OnBattleSubmitAsync">
+        <AntiforgeryToken />
+        <div class="row g-2 align-items-center mb-2">
+            <label class="col-sm-4 col-xl-2 col-form-label col-form-label-sm" for="combat">Écrans du combat</label>
+            <div class="col-sm-4 col-xl-2">
+                <select id="combat" name="combat" class="form-select form-select-sm">
+                    @foreach (var (layout, slug, text) in SiteSorts.BattleLayoutChoices)
+                    {
+                        <option value="@slug" selected="@(layout == saved.Battle)">@text</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
         </div>
     </form>
 </Block>
@@ -124,8 +151,10 @@
         if (user is null)
             return; // compte supprimé : page redirigée
         // Valeurs du formulaire relues comme une adresse : une valeur inconnue (trafiquée) donne le tri d'origine.
-        var sorts = Action == "reset" ? SortPreferences.Default : new SortPreferences
+        // La disposition du combat a son propre formulaire : elle est gardée telle quelle.
+        var sorts = Action == "reset" ? SortPreferences.Default with { Battle = saved.Battle } : new SortPreferences
         {
+            Battle = saved.Battle,
             Inventory = SiteSorts.InventoryTabs.ToDictionary(t => t.Key, t => SiteSorts.ItemFromQuery(Posted(t.Value)) ?? default),
             Collection = SiteSorts.CollectionFromQuery(Posted(CollectionKey)) ?? default,
             LivingDex = SiteSorts.LivingDexFromQuery(Posted(LivingDexKey)) ?? default,
@@ -139,6 +168,20 @@
             return;
         }
         RedirectManager.RedirectToCurrentPageWithStatus(Action == "reset" ? "Tris d'origine rétablis." : result.Message, HttpContext);
+    }
+
+    /// <summary>Disposition des écrans d'un combat ; une valeur inconnue (trafiquée) donne la disposition d'origine.</summary>
+    private async Task OnBattleSubmitAsync()
+    {
+        if (user is null)
+            return; // compte supprimé : page redirigée
+        var result = await PreferenceStore.SetBattleLayoutAsync(user.Id, SiteSorts.BattleLayoutFrom(HttpContext.Request.Form["combat"].FirstOrDefault()));
+        if (!result.Ok)
+        {
+            message = AccountService.AsError(result.Message);
+            return;
+        }
+        RedirectManager.RedirectToCurrentPageWithStatus(result.Message, HttpContext);
     }
 
     /// <summary>Critère et sens envoyés pour une ligne (« tri-ct », « ordre-ct ») ; absents : chaîne vide (tri d'origine).</summary>

@@ -16,8 +16,8 @@ public class ApplicationUser : IdentityUser
     public string? Theme { get; set; }
 
     /// <summary>
-    /// Tris par défaut choisis dans « Mon compte » → « Préférences » (inventaire, collection, living dex), en JSON (voir
-    /// <see cref="Services.SortPreferences"/>) ; null : les tris d'origine du site.
+    /// Tris par défaut choisis dans « Mon compte » → « Préférences » (inventaire, collection, living dex) et disposition des
+    /// écrans d'un combat, en JSON (voir <see cref="Services.SortPreferences"/>) ; null : les réglages d'origine du site.
     /// </summary>
     [System.ComponentModel.DataAnnotations.MaxLength(1024)]
     public string? SortPreferences { get; set; }

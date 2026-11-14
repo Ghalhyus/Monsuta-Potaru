@@ -33,6 +33,23 @@ README : « Combats ».
   connexion SQLite, que deux fils ne doivent jamais utiliser en même temps (échecs au hasard en CI, « SQLite Error 5:
   'not an error' » dans `CreateFunction`, le 2026-11-01).
 
+## Interface (deux écrans, façon 4e génération)
+- Tout est dessiné en CSS (`app.css`, « Combats ») d'après des captures d'écran fournies par l'utilisateur (carte
+  Trello 108) : disposition, formes et couleurs reprises, **aucun graphisme découpé d'un jeu**, police du site (son choix).
+- Les deux écrans ont la même largeur (`--ecran`) en 4:3 ; leur contenu se mesure en `em` (1em = 1/32 de la largeur) et
+  en % : ne jamais y mettre de `rem` ni de `px` (les proportions casseraient à une autre taille).
+- Disposition : `BattleLayout` (empilés d'origine, côte à côte), boutons `.battle-layout` et « Préférences » ; retenue
+  dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de large,
+  toujours empilés sur toute la largeur et boutons cachés.
+- Zone large : la taille fait tenir les écrans dans la hauteur de la fenêtre, `--dessus` étant la hauteur de ce que la
+  page affiche au-dessus (mesurée dans Ardoise ; `--alertes` compte les alertes, posé par la page). Un élément ajouté
+  au-dessus des écrans : corriger `--dessus`, sinon la page défile. À 2293×850 px CSS (écran de l'utilisateur) : environ
+  305×230 px CSS par écran empilé, 610×460 côte à côte.
+- Boutons du jeu : `.battle-btn` (deux tons `--haut` / `--bas`, coins rouges au survol et au focus clavier). Les
+  capacités prennent la couleur du type par `--type`. SAC est toujours désactivé et gris (pas de sac en combat de câble).
+- Le menu de l'équipe prend tout l'écran du bas (`ShowsTeam`) : pas de barre de Pokéballs, le minuteur passe dans la
+  boîte de message. Un Pokémon K.O. n'a plus ses PV maximum dans la requête de Showdown (« 0 fnt ») : pas de « 0/159 ».
+
 ## Sprites (`BattleSprites`)
 - Ceux du jeu **de celui qui regarde** (sa sauvegarde, connue quand son équipe est acceptée : `BattleTeamResult.Sprites`),
   dans les dossiers des living dex de 3e génération (`dos/`, `chromatique/`, `outils/images.py combats`).
@@ -43,11 +60,15 @@ README : « Combats ».
 ## Tests
 - Les tests de combat lancent le vrai simulateur (`BattleTests.Showdown()` : échec clair s'il n'est pas installé ; il faut Node 22+).
 - Le simulateur tire au hasard (coups critiques, précision) : un test qui attend un menu choisit des attaques sans
-  dégâts (`BattlesPageTests` : Sécrétion contre Groz'Yeux). Un K.O. force un remplacement, sans menu ni FUITE (échec en
+  dégâts (`BattlesPageTests` : Sécrétion contre Groz'Yeux). Un K.O. force un remplacement, sans menu ni ABANDONNER (échec en
   CI le 2026-11-13 : Balayage critique de Férosinge sur Chenipan niveau 4).
 
 ## Essai à deux dans le navigateur
 - Sacha sur `127.0.0.1:5299`, Ondine sur `localhost:5299` ; chacune a une sauvegarde de 3e génération dans la base de
   test (Vert Feuille, Rouge Feu).
-- Clics par `javascript_tool` (un script ne dépasse pas 45 s : découper les attentes). « Fuite » : remplacer
+- Clics par `javascript_tool` (un script ne dépasse pas 45 s : découper les attentes). « ABANDONNER » : remplacer
   `window.confirm` avant de cliquer. Le minuteur se vérifie sans rien choisir pendant ~70 s.
+- Recharger la page pendant un combat le fait perdre (le circuit fermé quitte le combat) : une retouche de CSS se
+  regarde au combat suivant. Pour voir les détails, agrandir les écrans le temps d'une capture
+  (`.battle` : `style.setProperty('--ecran', '520px')`) ; chaque joueur n'a que 60 secondes par choix.
+- Pas de champ pour demander en ami sur « Amis » sans code : passer par `/joueurs/<pseudo>`, « Demander en ami ».

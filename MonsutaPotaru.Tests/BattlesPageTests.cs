@@ -2,12 +2,13 @@ using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MonsutaPotaru.Components.Pages;
+using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Page « Combats » : deux amis sur la même page (même BattleHub, vrai simulateur), demande, équipes, menus du combat,
-/// abandon. Les étapes du combat se jouent au rythme de BattleTiming : les attentes sont longues.
+/// disposition des écrans, abandon. Les étapes du combat se jouent au rythme de BattleTiming : les attentes sont longues.
 /// </summary>
 public sealed class BattlesPageTests : PageTestContext
 {
@@ -52,6 +53,7 @@ public sealed class BattlesPageTests : PageTestContext
     [Fact]
     public async Task Battle_TeamsThenMenus_ThenForfeit()
     {
+        SetSorts("ondine", new SortPreferences { Battle = BattleLayout.SideBySide }); // choisi dans ses préférences
         var (sacha, ondine) = await Requested();
         await ondine.Click("Accepter");
         await ChooseTeam(sacha, lead: 4); // Chenipan niveau 4 (vert-feuille.sav, Sécrétion), face au Férosinge niveau 13 d'Ondine (Groz'Yeux)
@@ -59,14 +61,54 @@ public sealed class BattlesPageTests : PageTestContext
         await ChooseTeam(ondine);
 
         // Premier tour : les menus de Sacha, puis une attaque sans dégâts de chaque côté. Un K.O. forcerait un
-        // remplacement (pas de menu, donc pas de FUITE) : le Balayage de Férosinge met K.O. Chenipan sur un coup critique.
+        // remplacement (pas de menu, donc pas d'ABANDONNER) : le Balayage de Férosinge met K.O. Chenipan sur un coup critique.
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("ATTAQUE")), Long);
+        // Menu principal : pas de sac en combat de câble ; une Pokéball par Pokémon de chaque équipe, six places par rangée
+        Assert.True(sacha.Button("SAC").HasAttribute("disabled"));
+        Assert.NotNull(sacha.Find(".battle-fight img")); // l'icône du Pokémon au combat
+        var size = sacha.FindAll(".battle-balls.mine .battle-ball.ok").Count;
+        Assert.InRange(size, 1, 6);
+        Assert.Equal(6, sacha.FindAll(".battle-balls.mine .battle-ball").Count);
+        Assert.Equal(6, sacha.FindAll(".battle-balls.foe .battle-ball").Count);
+        Assert.NotEmpty(sacha.FindAll(".battle-balls.foe .battle-ball.ok"));
+        Assert.Empty(sacha.FindAll(".battle-ball.ko"));
+        Assert.Matches(@"^\d+/\d+$", sacha.Find(".battle-info.mine .battle-hp-text").TextContent);
+        Assert.Empty(sacha.FindAll(".battle-info.foe .battle-hp-text")); // PV de l'adversaire : la barre seulement
+
+        // Capacités : quatre emplacements (les vides sans bouton), puis ANNULER
         await sacha.Click("ATTAQUE");
-        Assert.NotEmpty(sacha.FindAll(".battle-move"));
-        await sacha.Click("RETOUR");
+        Assert.NotEmpty(sacha.FindAll("button.battle-move"));
+        Assert.Equal(4, sacha.FindAll(".battle-move").Count);
+        Assert.Empty(sacha.FindAll(".battle-fight"));
+        await sacha.Click("ANNULER");
+
+        // Équipe : un panneau par Pokémon (niveau, PV), celui qui est au combat ne se choisit pas ; la barre des
+        // Pokéballs laisse la place aux panneaux, le retour ramène au menu principal
         await sacha.Click("POKéMON");
-        Assert.NotEmpty(sacha.FindAll(".battle-member"));
-        await sacha.Click("RETOUR");
+        Assert.Equal(size, sacha.FindAll(".battle-member").Count);
+        var lead = sacha.Find(".battle-member.active");
+        Assert.True(lead.HasAttribute("disabled"));
+        Assert.Contains("N.4", lead.QuerySelector(".battle-member-foot")!.TextContent);
+        Assert.Contains("Choisis un Pokémon.", sacha.Find(".battle-team-text").TextContent);
+        Assert.Empty(sacha.FindAll(".battle-bar"));
+        await sacha.Find(".battle-back.retour").ClickAsync(new());
+        Assert.NotEmpty(sacha.FindAll(".battle-bar"));
+
+        // Disposition : empilés d'origine pour Sacha, côte à côte pour Ondine (ses préférences) ; le bouton l'applique
+        // tout de suite et la retient dans le compte
+        var preferences = Services.GetRequiredService<PreferencesService>();
+        Assert.Empty(sacha.FindAll(".battle.cote"));
+        Assert.NotEmpty(ondine.FindAll(".battle.cote"));
+        Assert.Equal("true", sacha.Button("Empilés").GetAttribute("aria-pressed"));
+        await sacha.Click("Côte à côte");
+        Assert.NotEmpty(sacha.FindAll(".battle.cote"));
+        Assert.Equal("true", sacha.Button("Côte à côte").GetAttribute("aria-pressed"));
+        Assert.Equal(BattleLayout.SideBySide, (await preferences.SortsAsync("sacha")).Battle);
+        await sacha.Click("Côte à côte"); // déjà choisie : rien
+        await sacha.Click("Empilés");
+        Assert.Empty(sacha.FindAll(".battle.cote"));
+        Assert.Equal(BattleLayout.Stacked, (await preferences.SortsAsync("sacha")).Battle);
+
         await sacha.Click("ATTAQUE");
         await sacha.Click("Sécrétion");
         sacha.WaitForText("En attente de ondine");
@@ -75,10 +117,10 @@ public sealed class BattlesPageTests : PageTestContext
         await ondine.Click("Groz");
 
         // Abandon de Sacha (confirmé), fin du combat des deux côtés
-        sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("FUITE")), Long);
-        await sacha.Click("FUITE"); // « confirm » répond non : rien
+        sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("ABANDONNER")), Long);
+        await sacha.Click("ABANDONNER"); // « confirm » répond non : rien
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
-        await sacha.Click("FUITE");
+        await sacha.Click("ABANDONNER");
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("Nouveau combat")), Long);
         ondine.WaitForAssertion(() => Assert.Contains("Victoire !", ondine.Text()), Long);
         await sacha.Click("Nouveau combat");

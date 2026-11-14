@@ -8,6 +8,7 @@
 @inject BattleHub Hub
 @inject BattleService BattleStore
 @inject FriendService FriendStore
+@inject PreferencesService PreferenceStore
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -15,8 +16,10 @@
 
 @* Multijoueurs → Combats : avec un ami, entre deux sauvegardes stockées de même génération (la 3e pour l'instant).
    Demande (valable BattleHub.RequestLifetime), choix des équipes, puis combat en direct dans le simulateur de Showdown
-   (BattleHub), affiché comme dans Pokémon Platine : écran du haut (terrain, PV, messages), écran du bas (menu). Chaque
-   choix a BattleTiming.Decision ; quitter la page pendant le combat demande confirmation, puis abandonne. *@
+   (BattleHub), affiché sur deux écrans comme dans un jeu de 4e génération : celui du haut (terrain, PV, messages), celui
+   du bas (Pokéballs des équipes, menu principal, capacités, équipe), empilés ou côte à côte au choix du joueur (retenu
+   dans son compte, PreferencesService). Chaque choix a BattleTiming.Decision ; quitter la page pendant le combat demande
+   confirmation, puis abandonne. *@
 <NavigationLock ConfirmExternalNavigation="InBattle" OnBeforeInternalNavigation="BeforeLeaving" />
 
 <PageHeader Title="Combat" Icon="bi-lightning-nav-menu" />
@@ -122,145 +125,214 @@
                     {
                         <div class="alert alert-secondary">@s.Notice</div>
                     }
-                    <div class="battle">
-                        @{
-                            var scene = shownScene ?? snapshot?.Scene;
-                        }
-                        <div class="battle-top">
-                            <div class="battle-field">
-                                @if (scene?.Foe is { } foe)
+                    @* Les deux écrans, dans la disposition choisie (boutons cachés quand la place manque pour les mettre côte à côte). *@
+                    <div class="battle-zone">
+                        <div class="battle-layout">
+                            <span class="small text-muted">Écrans</span>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Disposition des écrans">
+                                @foreach (var (choice, _, label) in SiteSorts.BattleLayoutChoices)
                                 {
-                                    <div class="battle-info foe">
-                                        <div class="battle-info-name">
-                                            <span>@foe.Name</span><span class="battle-gender @foe.Gender">@Gender(foe.Gender)</span>
-                                            <span class="battle-level">N.@foe.Level</span>
-                                        </div>
-                                        <div class="battle-hp"><span>PV</span><div class="battle-hp-bar"><div class="@HpClass(foe.Percent)" style="width: @(foe.Percent)%"></div></div></div>
-                                        <div class="battle-info-foot">
-                                            @if (Status(foe.Status) is { } status)
-                                            {
-                                                <span class="battle-status @foe.Status">@status</span>
-                                            }
-                                            <span class="battle-balls">@Balls(scene.FoeLeft, scene.FoeTeam)</span>
-                                        </div>
-                                    </div>
-                                    @if (foe.Hp > 0 || animated?.Cue == BattleCue.Faint)
-                                    {
-                                        <img @key="@($"foe-{animationKey}")" class="battle-sprite foe @Animation(false)" src="@sprites.Url(foe, false)" alt="@foe.SpeciesName"
-                                             data-remplacement="@BattleSprites.Fallback(foe)" />
-                                    }
-                                }
-                                <div class="battle-base foe"></div>
-                                <div class="battle-base mine"></div>
-                                @if (scene?.Me is { } mine)
-                                {
-                                    @if (mine.Hp > 0 || animated?.Cue == BattleCue.Faint)
-                                    {
-                                        <img @key="@($"mine-{animationKey}")" class="battle-sprite mine @Animation(true)" src="@sprites.Url(mine, true)" alt="@mine.SpeciesName"
-                                             data-remplacement="@BattleSprites.Fallback(mine)" />
-                                    }
-                                    <div class="battle-info mine">
-                                        <div class="battle-info-name">
-                                            <span>@mine.Name</span><span class="battle-gender @mine.Gender">@Gender(mine.Gender)</span>
-                                            <span class="battle-level">N.@mine.Level</span>
-                                        </div>
-                                        <div class="battle-hp"><span>PV</span><div class="battle-hp-bar"><div class="@HpClass(mine.Percent)" style="width: @(mine.Percent)%"></div></div></div>
-                                        <div class="battle-info-foot">
-                                            @if (Status(mine.Status) is { } status)
-                                            {
-                                                <span class="battle-status @mine.Status">@status</span>
-                                            }
-                                            <span class="battle-hp-text">@mine.Hp / @mine.MaxHp</span>
-                                        </div>
-                                    </div>
+                                    var c = choice;
+                                    <button type="button" class="btn btn-outline-secondary @(layout == c ? "active" : "")"
+                                            aria-pressed="@(layout == c ? "true" : "false")" @onclick="() => SetLayout(c)">@label</button>
                                 }
                             </div>
-                            <div class="battle-text" aria-live="polite">@TextBox()</div>
                         </div>
-
-                        <div class="battle-bottom">
-                            @if (s.Stage == BattleStage.Done || s.Stage == BattleStage.Cancelled)
-                            {
-                                @if (s.Stage == BattleStage.Done && !Playing)
-                                {
-                                    <div class="battle-result @(snapshot?.Outcome.ToString().ToLowerInvariant())">
-                                        @(snapshot?.Outcome switch { BattleOutcome.Won => "Victoire !", BattleOutcome.Lost => "Défaite…", _ => "Match nul" })
-                                    </div>
-                                }
-                                <div class="battle-after">
-                                    <a class="btn btn-light" href="">Retour à l'accueil</a>
-                                    <button type="button" class="btn btn-light" @onclick="NewBattle">Nouveau combat</button>
-                                </div>
+                        @* --alertes : nombre d'alertes affichées au-dessus, pour que les écrans tiennent quand même dans la fenêtre *@
+                        <div class="battle @(layout == BattleLayout.SideBySide ? "cote" : "")"
+                             style="--alertes: @((s.OtherIllegal(userId) > 0 ? 1 : 0) + (s.Stage == BattleStage.Cancelled ? 1 : 0))">
+                            @{
+                                var scene = shownScene ?? snapshot?.Scene;
                             }
-                            else if (CanAct && snapshot!.Request is { } request)
-                            {
-                                @if (SecondsLeft is { } seconds)
-                                {
-                                    <div class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</div>
-                                }
-                                @if (request.MustSwitch || menu == Menu.Team)
-                                {
-                                    <div class="battle-team-menu">
-                                        @for (var i = 0; i < request.Side.Pokemon.Count; i++)
+                            @* ---------- Écran du haut : le terrain ---------- *@
+                            <div class="battle-top">
+                                <div class="battle-field">
+                                    <div class="battle-base foe"></div>
+                                    <div class="battle-base mine"></div>
+                                    @if (scene?.Foe is { } foe)
+                                    {
+                                        <div class="battle-info foe">
+                                            <div class="battle-info-box">
+                                                <div class="battle-info-name">
+                                                    <span>@foe.Name</span><span class="battle-gender @foe.Gender">@Gender(foe.Gender)</span>
+                                                    <span class="battle-level">N.@foe.Level</span>
+                                                </div>
+                                                <div class="battle-hp">
+                                                    @if (Status(foe.Status) is { } status)
+                                                    {
+                                                        <span class="battle-status @foe.Status">@status</span>
+                                                    }
+                                                    @HpMeter(foe.Percent)
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @if (foe.Hp > 0 || animated?.Cue == BattleCue.Faint)
                                         {
-                                            var index = i + 1;
-                                            var member = request.Side.Pokemon[i];
-                                            var (hp, max, memberStatus) = BattleProtocol.Condition(member.Condition);
-                                            var (species, _, speciesName) = BattleNames.SpeciesOf(member.Details);
-                                            var fainted = memberStatus == "fnt";
-                                            var percent = max > 0 ? (int)Math.Ceiling(hp * 100.0 / max) : 0;
-                                            <button type="button" class="battle-member @(member.Active ? "active" : "") @(fainted ? "fainted" : "")"
-                                                    disabled="@(member.Active || fainted)" @onclick="() => Choose(BattleChoice.SwitchTo(index))">
-                                                <img src="@PokemonSprites.Url(species, 0, EntityContext.Gen3, false, 0, false)" alt="" data-remplacement="images/pokemon/inconnu.png" />
-                                                <span class="battle-member-name">@BattleProtocol.Who(member.Ident).Name</span>
-                                                <span class="battle-member-hp"><span class="battle-hp-bar"><span class="@HpClass(percent)" style="width: @(percent)%"></span></span> @hp/@max</span>
-                                                @if (Status(fainted ? null : memberStatus) is { } status)
-                                                {
-                                                    <span class="battle-status @memberStatus">@status</span>
-                                                }
-                                                <span class="visually-hidden">@speciesName</span>
-                                            </button>
+                                            <img @key="@($"foe-{animationKey}")" class="battle-sprite foe @Animation(false)" src="@sprites.Url(foe, false)" alt="@foe.SpeciesName"
+                                                 data-remplacement="@BattleSprites.Fallback(foe)" />
                                         }
-                                        @if (!request.MustSwitch)
+                                    }
+                                    @if (scene?.Me is { } mine)
+                                    {
+                                        @if (mine.Hp > 0 || animated?.Cue == BattleCue.Faint)
                                         {
-                                            <button type="button" class="battle-back" @onclick="() => menu = Menu.Main">RETOUR</button>
+                                            <img @key="@($"mine-{animationKey}")" class="battle-sprite mine @Animation(true)" src="@sprites.Url(mine, true)" alt="@mine.SpeciesName"
+                                                 data-remplacement="@BattleSprites.Fallback(mine)" />
                                         }
+                                        <div class="battle-info mine">
+                                            <div class="battle-info-box">
+                                                <div class="battle-info-name">
+                                                    <span>@mine.Name</span><span class="battle-gender @mine.Gender">@Gender(mine.Gender)</span>
+                                                    <span class="battle-level">N.@mine.Level</span>
+                                                </div>
+                                                <div class="battle-hp">
+                                                    @if (Status(mine.Status) is { } status)
+                                                    {
+                                                        <span class="battle-status @mine.Status">@status</span>
+                                                    }
+                                                    @HpMeter(mine.Percent)
+                                                </div>
+                                                <div class="battle-hp-text">@mine.Hp/@mine.MaxHp</div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="battle-text" aria-live="polite"><div>@TextBox()</div></div>
+                            </div>
+
+                            @* ---------- Écran du bas : le menu tactile ---------- *@
+                            <div class="battle-bottom">
+                                @if (!ShowsTeam)
+                                {
+                                    @* Pokéballs des deux équipes (les miennes à gauche), minuteur entre les deux *@
+                                    <div class="battle-bar">
+                                        @BallRow(true, scene?.MyLeft ?? 0, scene?.MyTeam ?? 0)
+                                        @if (CanAct && SecondsLeft is { } seconds)
+                                        {
+                                            <div class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</div>
+                                        }
+                                        @BallRow(false, scene?.FoeLeft ?? 0, scene?.FoeTeam ?? 0)
                                     </div>
                                 }
-                                else if (menu == Menu.Moves && request.Active is [var active, ..])
+                                @if (s.Stage == BattleStage.Done || s.Stage == BattleStage.Cancelled)
                                 {
-                                    <div class="battle-moves">
-                                        @for (var i = 0; i < active.Moves.Count; i++)
+                                    <div class="battle-end">
+                                        @if (s.Stage == BattleStage.Done && !Playing)
                                         {
-                                            var index = i + 1;
-                                            var move = active.Moves[i];
-                                            <button type="button" class="battle-move type-@BattleNames.MoveTypeKey(move.Move)" disabled="@move.IsDisabled"
-                                                    @onclick="() => Choose(BattleChoice.Move(index))">
-                                                <span class="battle-move-name">@BattleNames.Move(move.Move)</span>
-                                                @if (move.MaxPp is { } maxPp)
-                                                {
-                                                    <span class="battle-move-pp">PP @move.Pp/@maxPp</span>
-                                                }
-                                                <span class="battle-move-type">@BattleNames.MoveType(move.Move)</span>
-                                            </button>
+                                            <div class="battle-result @(snapshot?.Outcome.ToString().ToLowerInvariant())">
+                                                @(snapshot?.Outcome switch { BattleOutcome.Won => "Victoire !", BattleOutcome.Lost => "Défaite…", _ => "Match nul" })
+                                            </div>
                                         }
-                                        <button type="button" class="battle-back" @onclick="() => menu = Menu.Main">RETOUR</button>
+                                        <div class="battle-after">
+                                            <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
+                                            <button type="button" class="btn btn-primary" @onclick="NewBattle">Nouveau combat</button>
+                                        </div>
                                     </div>
+                                }
+                                else if (CanAct && snapshot!.Request is { } request)
+                                {
+                                    @if (ShowsTeam)
+                                    {
+                                        @* Menu POKéMON : six panneaux sur deux colonnes décalées, le message et le retour en bas *@
+                                        <div class="battle-team-menu">
+                                            @for (var i = 0; i < request.Side.Pokemon.Count; i++)
+                                            {
+                                                var index = i + 1;
+                                                var member = request.Side.Pokemon[i];
+                                                var (hp, max, memberStatus) = BattleProtocol.Condition(member.Condition);
+                                                var (species, _, speciesName) = BattleNames.SpeciesOf(member.Details);
+                                                var (level, gender, _) = BattleProtocol.Details(member.Details);
+                                                var fainted = memberStatus == "fnt";
+                                                var percent = max > 0 ? (int)Math.Ceiling(hp * 100.0 / max) : 0;
+                                                <button type="button" class="battle-btn battle-member @(member.Active ? "active" : "") @(fainted ? "fainted" : "")"
+                                                        disabled="@(member.Active || fainted)" @onclick="() => Choose(BattleChoice.SwitchTo(index))">
+                                                    <img src="@PokemonSprites.Url(species, 0, EntityContext.Gen3, false, 0, false)" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                                    <span class="battle-member-name">@BattleProtocol.Who(member.Ident).Name</span>
+                                                    <span class="battle-gender @gender">@Gender(gender)</span>
+                                                    <span class="battle-hp">@HpMeter(percent)</span>
+                                                    <span class="battle-member-foot">
+                                                        @if (fainted)
+                                                        {
+                                                            <span class="battle-status fnt">K.O.</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>N.@level</span>
+                                                            @if (Status(memberStatus) is { } status)
+                                                            {
+                                                                <span class="battle-status @memberStatus">@status</span>
+                                                            }
+                                                            <span class="battle-member-hp">@hp/@max</span>
+                                                        }
+                                                    </span>
+                                                    <span class="visually-hidden">@speciesName@(member.Active ? ", au combat" : "")</span>
+                                                </button>
+                                            }
+                                            <div class="battle-team-text">
+                                                <div>
+                                                    <span>Choisis un Pokémon.</span>
+                                                    @if (SecondsLeft is { } seconds)
+                                                    {
+                                                        <span class="battle-timer @(seconds <= 10 ? "urgent" : "")">@seconds s</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            @if (!request.MustSwitch)
+                                            {
+                                                <button type="button" class="battle-btn battle-back retour" aria-label="Annuler" title="Annuler" @onclick="() => menu = Menu.Main"><span aria-hidden="true">↵</span></button>
+                                            }
+                                        </div>
+                                    }
+                                    else if (menu == Menu.Moves && request.Active is [var active, ..])
+                                    {
+                                        @* Capacités : quatre emplacements (les vides restent gris), ANNULER en bas *@
+                                        <div class="battle-moves">
+                                            @for (var i = 0; i < Math.Max(4, active.Moves.Count); i++)
+                                            {
+                                                if (i >= active.Moves.Count)
+                                                {
+                                                    <div class="battle-move vide"></div>
+                                                    continue;
+                                                }
+                                                var index = i + 1;
+                                                var move = active.Moves[i];
+                                                <button type="button" class="battle-btn battle-move type-@BattleNames.MoveTypeKey(move.Move)" disabled="@move.IsDisabled"
+                                                        @onclick="() => Choose(BattleChoice.Move(index))">
+                                                    <span class="battle-move-name">@BattleNames.Move(move.Move)</span>
+                                                    <span class="battle-move-foot">
+                                                        <span class="battle-move-type">@BattleNames.MoveType(move.Move)</span>
+                                                        @if (move.MaxPp is { } maxPp)
+                                                        {
+                                                            <span class="battle-move-pp">PP @move.Pp/@maxPp</span>
+                                                        }
+                                                    </span>
+                                                </button>
+                                            }
+                                            <button type="button" class="battle-btn battle-back" @onclick="() => menu = Menu.Main"><span>ANNULER</span></button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @* Menu principal : pas de sac en combat de câble (bouton gris), « Abandonner » fait perdre *@
+                                        <div class="battle-menu">
+                                            <button type="button" class="battle-btn battle-fight" @onclick="() => menu = Menu.Moves">
+                                                @if (scene?.Me is { } lead)
+                                                {
+                                                    <img src="@BattleSprites.Fallback(lead)" alt="" data-cacher-si-absente />
+                                                }
+                                                <span>ATTAQUE</span>
+                                            </button>
+                                            <button type="button" class="battle-btn battle-bag" disabled title="Pas de sac en combat de câble"><span>SAC</span></button>
+                                            <button type="button" class="battle-btn battle-run" @onclick="Forfeit"><span>ABANDONNER</span></button>
+                                            <button type="button" class="battle-btn battle-pokemon" @onclick="() => menu = Menu.Team"><span>POKéMON</span></button>
+                                        </div>
+                                    }
                                 }
                                 else
                                 {
-                                    <div class="battle-menu">
-                                        <button type="button" class="battle-fight" @onclick="() => menu = Menu.Moves">ATTAQUE</button>
-                                        <button type="button" class="battle-bag" disabled title="Pas de sac en combat de câble">SAC</button>
-                                        <button type="button" class="battle-run" @onclick="Forfeit">FUITE</button>
-                                        <button type="button" class="battle-pokemon" @onclick="() => menu = Menu.Team">POKéMON</button>
-                                    </div>
+                                    <div class="battle-waiting">@(Playing ? "" : $"En attente de {s.Other(userId).Pseudo}…")</div>
                                 }
-                            }
-                            else
-                            {
-                                <div class="battle-waiting">@(Playing ? "" : $"En attente de {s.Other(userId).Pseudo}…")</div>
-                            }
+                            </div>
                         </div>
                     </div>
                     break;
@@ -368,6 +440,7 @@ else
     private string? message;
     private bool messageIsError;
     private Menu menu;
+    private BattleLayout layout; // écrans empilés ou côte à côte : préférence du compte
 
     // Lecture des étapes : une à une, au rythme de BattleTiming.
     private int played;
@@ -385,6 +458,9 @@ else
     private bool Playing => playing || (snapshot is not null && played < snapshot.StepCount);
 
     /// <summary>Le joueur doit choisir (toutes les étapes jouées, requête en attente, pas encore de choix).</summary>
+    /// <summary>Le menu de l'équipe occupe tout l'écran du bas (choisi, ou remplacement forcé après un K.O.).</summary>
+    private bool ShowsTeam => CanAct && snapshot?.Request is { } request && (request.MustSwitch || menu == Menu.Team);
+
     private bool CanAct => !Playing && snapshot is { Stage: BattleStage.Fighting, Chosen: false, Request.MustAct: true } && !(session?.IsOver ?? true);
 
     private int? SecondsLeft => snapshot?.Deadline is { } deadline
@@ -396,6 +472,7 @@ else
         var user = (await AuthState).User;
         userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         pseudo = user.Identity?.Name ?? "";
+        layout = (await PreferenceStore.SortsAsync(userId)).Battle;
         Hub.RequestsChanged += OnRequestsChanged;
         if (Hub.Active(userId) is { } active) // page rechargée pendant un combat : on reprend où il en est
             await Join(active, skipHistory: true);
@@ -562,6 +639,15 @@ else
         BattleHub.Forfeit(session, userId);
     }
 
+    /// <summary>Disposition des écrans : appliquée tout de suite, et retenue dans le compte (comme dans « Préférences »).</summary>
+    private async Task SetLayout(BattleLayout chosen)
+    {
+        if (layout == chosen)
+            return;
+        layout = chosen;
+        await PreferenceStore.SetBattleLayoutAsync(userId, chosen);
+    }
+
     /// <summary>« Annuler le combat » (demande ou choix des équipes) : annulé pour les deux, retour à l'accueil.</summary>
     private void CancelBattle()
     {
@@ -636,8 +722,26 @@ else
         "brn" => "BRU", "par" => "PAR", "slp" => "SOM", "frz" => "GEL", "psn" or "tox" => "PSN", _ => null,
     };
 
-    /// <summary>Pokéballs de l'équipe, comme en jeu : ● restant, ○ K.O.</summary>
-    private static string Balls(int left, int total) => new string('●', Math.Max(0, left)) + new string('○', Math.Max(0, total - left));
+    /// <summary>Barre de PV : l'étiquette « PV » et la jauge, dans la même capsule sombre.</summary>
+    private static RenderFragment HpMeter(int percent) => __builder =>
+    {
+        <span class="battle-hp-meter"><span class="battle-hp-label">PV</span><span class="battle-hp-bar"><span class="@HpClass(percent)" style="width: @(percent)%"></span></span></span>
+    };
+
+    /// <summary>
+    /// Les six Pokéballs d'une équipe, comme en jeu : une Ball par Pokémon en état de se battre, une Ball grise par
+    /// Pokémon K.O., un rond vide par place libre.
+    /// </summary>
+    private static RenderFragment BallRow(bool mine, int left, int team) => __builder =>
+    {
+        <div class="battle-balls @(mine ? "mine" : "foe")" role="img"
+             aria-label="@($"{(mine ? "Ton équipe" : "Équipe adverse")} : {left} Pokémon sur {team} en état de se battre")">
+            @for (var i = 0; i < 6; i++)
+            {
+                <span class="battle-ball @(i < left ? "ok" : i < team ? "ko" : "vide")"></span>
+            }
+        </div>
+    };
 
     public void Dispose()
     {

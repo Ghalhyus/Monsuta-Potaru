@@ -2,7 +2,10 @@ using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
-/// <summary>Tris par défaut du compte (« Mon compte » → « Préférences ») : JSON en base, lecture de l'adresse, service.</summary>
+/// <summary>
+/// Préférences du compte (« Mon compte » → « Préférences ») : tris par défaut et disposition des écrans d'un combat. JSON
+/// en base, lecture de l'adresse, service.
+/// </summary>
 public sealed class SortPreferencesTests : IDisposable
 {
     private readonly TestDatabase _db = new("sacha");
@@ -52,6 +55,38 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Equal(default, read.Collection);
         Assert.Equal(default, read.LivingDex);
         Assert.Equal(default, read.Completion);
+        Assert.Equal(BattleLayout.Stacked, read.Battle);
+    }
+
+    [Fact]
+    public void Json_KeepsTheBattleLayout_WhenItIsNotTheSiteOne()
+    {
+        var sideBySide = new SortPreferences { Battle = BattleLayout.SideBySide };
+        Assert.Equal("""{"combat":"cote"}""", sideBySide.ToJson());
+        Assert.Equal(BattleLayout.SideBySide, SortPreferences.FromJson(sideBySide.ToJson()).Battle);
+        Assert.Null(new SortPreferences { Battle = BattleLayout.Stacked }.ToJson()); // d'origine : colonne vide
+        Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson("""{"combat":"pirate"}""").Battle); // trafiquée
+        Assert.Equal(BattleLayout.Stacked, SiteSorts.BattleLayoutFrom(null));
+        Assert.Equal(BattleLayout.SideBySide, SiteSorts.BattleLayoutFrom("cote"));
+        Assert.Equal("empile", SiteSorts.Slug(BattleLayout.Stacked));
+    }
+
+    [Fact]
+    public async Task Service_SavesTheBattleLayout_WithoutTouchingTheSorts()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample())).Ok);
+        var saved = await service.SetBattleLayoutAsync("sacha", BattleLayout.SideBySide);
+        Assert.True(saved.Ok);
+        Assert.Equal("Disposition des écrans de combat enregistrée.", saved.Message);
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal(BattleLayout.SideBySide, read.Battle);
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal(new ItemSort(ItemSortBy.Name), read.InventoryFor(ItemCategory.Machines));
+
+        var gone = await service.SetBattleLayoutAsync("disparu", BattleLayout.SideBySide);
+        Assert.False(gone.Ok);
+        Assert.Equal("Ce compte n'existe plus.", gone.Message);
     }
 
     [Fact]
