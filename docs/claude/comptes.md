@@ -96,12 +96,18 @@ README : « Comptes », « Administration », « Thèmes ».
 - Dans un test de `SiteFactory`, les accents de la page sont encodés (`&#xE9;`) : lire le texte par AngleSharp
   (`QuerySelector(".alert").TextContent`), pas dans le HTML brut.
 
-## Préférences : disposition des écrans d'un combat (2026-11-14)
-- Même page, même colonne JSON (`"combat":"cote"`, `SortPreferences.Battle`, `BattleLayout`), mais **son propre bloc et
-  son propre formulaire** (`@formname="battle"`, liste `combat` : `empile` / `cote` / `hybride`) : le formulaire des tris recopie la
-  valeur enregistrée, « Revenir aux tris d'origine » ne la change pas.
-- Écriture par `PreferencesService.SetBattleLayoutAsync` (relit les tris, ne change que la disposition), aussi appelée
-  par les boutons de la page « Combat ». Interface du combat : `docs/claude/combats.md`.
+## Préférences : écrans d'un combat (2026-11-14)
+- Même page, même colonne JSON (`"combat":"cote"`, `"combatAgrandi":true` ; `SortPreferences.Battle`, `BattleLayout`,
+  `SortPreferences.BattleEnlarged`), mais **son propre bloc et son propre formulaire** (`@formname="battle"`, liste
+  `combat` : `empile` / `cote` / `hybride`, case `agrandi` de valeur `oui`) : le formulaire des tris recopie les valeurs
+  enregistrées, « Revenir aux tris d'origine » ne les change pas.
+- **Défaut : hybride** (`SiteSorts.DefaultBattleLayout`, jamais écrit ; une valeur inconnue donne l'hybride). Avant le
+  2026-11-14, le défaut (non écrit) était « Empilés » : la migration `HybridBattleDefault` (SQL avec `json_set`) a écrit
+  `"combat":"empile"` dans les comptes qui n'avaient pas de disposition, pour qu'ils ne changent pas (choix de
+  l'utilisateur : seuls les nouveaux comptes passent en hybride). Un défaut qui change encore : même méthode.
+- Écriture : `PreferencesService.SetBattleScreensAsync` (formulaire : les deux), `SetBattleLayoutAsync` et
+  `SetBattleEnlargedAsync` (boutons de la page « Combat ») ; chacune relit les tris et ne change que ce qu'elle reçoit.
+  Interface du combat : `docs/claude/combats.md`.
 
 ## Tests
 - `AccountServiceTests` monte Identity comme `Program.cs` (`AccountService.ConfigureIdentity`) sur la base de test.

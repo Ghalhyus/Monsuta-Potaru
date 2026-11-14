@@ -23,9 +23,10 @@ public readonly record struct CompletionOrder(CompletionSort By = CompletionSort
 public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bool Descending = false);
 
 /// <summary>
-/// Disposition des deux écrans d'un combat (« Multijoueurs » → « Combat ») : l'un au-dessus de l'autre comme sur la console
-/// (d'origine), côte à côte, ou « hybride » (le terrain en grand, le menu dans un panneau à sa droite). Sur un écran trop
-/// étroit, la page les empile toujours.
+/// Disposition des deux écrans d'un combat (« Multijoueurs » → « Combat ») : l'un au-dessus de l'autre comme sur la console,
+/// côte à côte, ou « hybride » (le terrain en grand, le menu dans un panneau à sa droite ; par défaut depuis le 2026-11-14,
+/// les comptes plus anciens ont gardé « Empilés », migration HybridBattleDefault). Sur un écran trop étroit, la page les
+/// empile toujours.
 /// </summary>
 public enum BattleLayout { Stacked, SideBySide, Hybrid }
 
@@ -109,8 +110,12 @@ public static class SiteSorts
 
     public static string Slug(BattleLayout layout) => BattleLayoutChoices.First(c => c.Layout == layout).Slug;
 
-    /// <summary>Disposition lue dans les préférences ou le formulaire ; absente ou inconnue (trafiquée) : empilés.</summary>
-    public static BattleLayout BattleLayoutFrom(string? slug) => BattleLayoutChoices.FirstOrDefault(c => c.Slug == slug, BattleLayoutChoices[0]).Layout;
+    /// <summary>Disposition des écrans d'un combat quand le compte n'en a pas choisi : hybride.</summary>
+    public const BattleLayout DefaultBattleLayout = BattleLayout.Hybrid;
+
+    /// <summary>Disposition lue dans les préférences ou le formulaire ; absente ou inconnue (trafiquée) : hybride.</summary>
+    public static BattleLayout BattleLayoutFrom(string? slug) =>
+        BattleLayoutChoices.FirstOrDefault(c => c.Slug == slug, (Layout: DefaultBattleLayout, Slug: "", Label: "")).Layout;
 
     // ---------- Inventaire : « ordre=desc » pour décroissant ----------
 
@@ -187,12 +192,12 @@ public static class SiteSorts
 /// Tris par défaut d'un compte (« Mon compte » → « Préférences ») : un par onglet de l'inventaire, celui de « Ma
 /// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
 /// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
-/// (<see cref="Battle"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
-/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote"}</c>.
+/// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true}</c>.
 /// </summary>
 public sealed record SortPreferences
 {
-    /// <summary>Les réglages d'origine du site : tris par défaut dans l'inventaire, par arrivée, par génération, par ajout ; écrans de combat empilés.</summary>
+    /// <summary>Les réglages d'origine du site : tris par défaut dans l'inventaire, par arrivée, par génération, par ajout ; écrans de combat en mode hybride, taille normale.</summary>
     public static readonly SortPreferences Default = new();
 
     public IReadOnlyDictionary<ItemCategory, ItemSort> Inventory { get; init; } = new Dictionary<ItemCategory, ItemSort>();
@@ -200,7 +205,10 @@ public sealed record SortPreferences
     public LivingDexOrder LivingDex { get; init; }
     public CompletionOrder Completion { get; init; }
     public RibbonOrder Ribbons { get; init; }
-    public BattleLayout Battle { get; init; }
+    public BattleLayout Battle { get; init; } = SiteSorts.DefaultBattleLayout;
+
+    /// <summary>Écrans de combat agrandis (bouton « Agrandir » de la page du combat) : toute la place du contenu de la page.</summary>
+    public bool BattleEnlarged { get; init; }
 
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
 
@@ -218,6 +226,7 @@ public sealed record SortPreferences
         public StoredSort? Completion { get; set; }
         public StoredSort? Rubans { get; set; }
         public string? Combat { get; set; }
+        public bool? CombatAgrandi { get; set; }
     }
 
     private sealed class StoredSort
@@ -240,10 +249,11 @@ public sealed record SortPreferences
             Livingdex = LivingDex == default ? null : StoredSort.From(SiteSorts.LivingDexQuery(LivingDex)),
             Completion = Completion == default ? null : StoredSort.From(SiteSorts.CompletionQuery(Completion)),
             Rubans = Ribbons == default ? null : StoredSort.From(SiteSorts.RibbonQuery(Ribbons)),
-            Combat = Battle == default ? null : SiteSorts.Slug(Battle),
+            Combat = Battle == SiteSorts.DefaultBattleLayout ? null : SiteSorts.Slug(Battle),
+            CombatAgrandi = BattleEnlarged ? true : null,
         };
         return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
-            && stored.Rubans is null && stored.Combat is null
+            && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -277,6 +287,7 @@ public sealed record SortPreferences
             Completion = stored.Completion is { } p ? SiteSorts.CompletionFromQuery(p.ToQuery()) ?? default : default,
             Ribbons = stored.Rubans is { } r ? SiteSorts.RibbonFromQuery(r.ToQuery()) ?? default : default,
             Battle = SiteSorts.BattleLayoutFrom(stored.Combat),
+            BattleEnlarged = stored.CombatAgrandi == true,
         };
     }
 }
@@ -307,5 +318,19 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
     {
         var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout });
         return result.Ok ? new(true, "Disposition des écrans de combat enregistrée.") : result;
+    }
+
+    /// <summary>Disposition et mode agrandi des écrans d'un combat, choisis dans les préférences ; les tris ne changent pas.</summary>
+    public async Task<AccountResult> SetBattleScreensAsync(string userId, BattleLayout layout, bool enlarged)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout, BattleEnlarged = enlarged });
+        return result.Ok ? new(true, "Écrans de combat enregistrés.") : result;
+    }
+
+    /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetBattleEnlargedAsync(string userId, bool enlarged)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { BattleEnlarged = enlarged });
+        return result.Ok ? new(true, enlarged ? "Écrans de combat agrandis." : "Écrans de combat à leur taille normale.") : result;
     }
 }

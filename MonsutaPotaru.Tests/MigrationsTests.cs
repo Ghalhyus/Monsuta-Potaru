@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using MonsutaPotaru.Data;
+using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
@@ -282,4 +283,53 @@ public sealed class MigrationsTests : IDisposable
             Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM AspNetUsers WHERE ProfilePrivate = 1").SingleAsync());
         }
     }
+
+    [Fact]
+    public async Task HybridBattleDefault_KeepsStackedScreens_ForExistingAccounts()
+    {
+        const string before = "20261111174335_CompletionChallenge"; // juste avant HybridBattleDefault
+        (string Id, string? Json)[] users =
+        [
+            ("sacha", null), // rien choisi : empilés, l'ancien défaut
+            ("ondine", """{"collection":{"tri":"nom"}}"""), // des tris, pas de disposition : empilés aussi
+            ("pierre", """{"combat":"cote"}"""), // disposition choisie : gardée
+            ("flora", """{"combat":"hybride"}"""),
+            ("major", "pas du json"), // illisible (donc empilés) : réécrit
+        ];
+        using (var db = NewContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync(before);
+            // Table des comptes inchangée depuis : le modèle actuel convient
+            db.Users.AddRange(users.Select(u => new ApplicationUser { Id = u.Id, UserName = u.Id, SortPreferences = u.Json }));
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            var migrated = await PreferencesAsync(db);
+            Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(migrated["sacha"]).Battle);
+            var ondine = SortPreferences.FromJson(migrated["ondine"]);
+            Assert.Equal((BattleLayout.Stacked, CollectionSortBy.Name), (ondine.Battle, ondine.Collection.By));
+            Assert.Equal(BattleLayout.SideBySide, SortPreferences.FromJson(migrated["pierre"]).Battle);
+            Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson(migrated["flora"]).Battle);
+            Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(migrated["major"]).Battle);
+            db.Users.Add(new ApplicationUser { Id = "aurore", UserName = "aurore" }); // compte créé après : rien d'enregistré, hybride
+            await db.SaveChangesAsync();
+            Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson((await PreferencesAsync(db))["aurore"]).Battle);
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : « empile » redevient implicite
+            var back = await PreferencesAsync(db);
+            Assert.Null(back["sacha"]);
+            Assert.Equal("""{"collection":{"tri":"nom"}}""", back["ondine"]);
+            Assert.Equal("""{"combat":"cote"}""", back["pierre"]);
+            Assert.Equal("""{"combat":"hybride"}""", back["flora"]);
+            Assert.Equal("""{"combat":"hybride"}""", back["aurore"]);
+        }
+    }
+
+    private static async Task<Dictionary<string, string?>> PreferencesAsync(ApplicationDbContext db) =>
+        await db.Database.SqlQueryRaw<PreferencesRow>("SELECT Id, SortPreferences FROM AspNetUsers").ToDictionaryAsync(r => r.Id, r => r.SortPreferences);
+
+    private sealed class PreferencesRow { public string Id { get; init; } = ""; public string? SortPreferences { get; init; } }
 }

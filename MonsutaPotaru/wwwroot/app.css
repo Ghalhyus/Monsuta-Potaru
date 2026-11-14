@@ -718,7 +718,7 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .battle-zone { container-type: inline-size; }
 .battle-layout { display: none; align-items: center; gap: .5rem; margin-bottom: .6rem; }
 .battle {
-    --ecran: min(100cqw, 34rem); --dessus: calc(24.5rem + var(--alertes, 0) * 3.6rem);
+    --ecran: min(100cqw, 34rem); --dessus: calc(24rem + var(--alertes, 0) * 3.6rem);
     display: grid; justify-content: center; gap: .5rem; font-family: system-ui, sans-serif; user-select: none;
 }
 @container (min-width: 40rem) {
@@ -1094,6 +1094,31 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
     .battle.hybride :is(.battle-waiting, .battle-end) { position: static; flex: 1; padding: 0 1em; }
     .battle.hybride .battle-result { font-size: 2em; }
     .battle.hybride .battle-after { flex-direction: column; }
+}
+
+/* ---------- Mode agrandi (.battle-block.agrandi, bouton « Agrandir » juste à côté du titre du bloc, retenu dans le compte) : la
+   ligne des sauvegardes et les boutons de disposition disparaissent, les écrans n'ont plus de taille maximale et prennent
+   toute la largeur du contenu, sans dépasser la hauteur de la fenêtre (--dessus réduit d'autant). Le menu et la barre du
+   site restent. Zone étroite : rien ne change (écrans déjà sur toute la largeur), le bouton est caché. Le bloc est un
+   conteneur (combat-bloc) : sa largeur, moins les marges intérieures du thème Ardoise, est celle de .battle-zone. */
+.battle-block { container: combat-bloc / inline-size; }
+/* Combat commencé (.en-cours) : le bouton sur la ligne du titre, juste après lui (pas collé à droite), sans hauteur en plus */
+.battle-block.en-cours > .block-header { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: center; column-gap: 1rem; }
+.battle-block.en-cours > .block-header > .block-heading { align-self: auto; }
+@container combat-bloc (max-width: 42.2rem) {
+    .battle-agrandir { display: none; }
+}
+@container combat-bloc (min-width: 42.2rem) {
+    .battle-block.agrandi .battle-saves { display: none; }
+}
+@container (min-width: 40rem) {
+    .battle-block.agrandi .battle-layout { display: none; }
+    .battle-block.agrandi .battle {
+        --dessus: calc(19.1rem + var(--alertes, 0) * 3.6rem);
+        --ecran: min(100cqw, max(17rem, calc((100dvh - var(--dessus)) / 1.5)));
+    }
+    .battle-block.agrandi .battle.cote { --ecran: min(calc((100cqw - .5rem) / 2), max(17rem, calc((100dvh - var(--dessus)) * 4 / 3))); }
+    .battle-block.agrandi .battle.hybride { --ecran: min(calc(100cqw / 1.44), max(17rem, calc((100dvh - var(--dessus)) * 4 / 3))); }
 }
 
 /* Couleurs des types (cadre et étiquette des capacités, types du Pokémon sur sa fiche). */

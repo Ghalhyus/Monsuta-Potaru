@@ -55,7 +55,8 @@ public sealed class SortPreferencesTests : IDisposable
         Assert.Equal(default, read.Collection);
         Assert.Equal(default, read.LivingDex);
         Assert.Equal(default, read.Completion);
-        Assert.Equal(BattleLayout.Stacked, read.Battle);
+        Assert.Equal(BattleLayout.Hybrid, read.Battle);
+        Assert.False(read.BattleEnlarged);
     }
 
     [Fact]
@@ -64,15 +65,52 @@ public sealed class SortPreferencesTests : IDisposable
         var sideBySide = new SortPreferences { Battle = BattleLayout.SideBySide };
         Assert.Equal("""{"combat":"cote"}""", sideBySide.ToJson());
         Assert.Equal(BattleLayout.SideBySide, SortPreferences.FromJson(sideBySide.ToJson()).Battle);
-        Assert.Null(new SortPreferences { Battle = BattleLayout.Stacked }.ToJson()); // d'origine : colonne vide
-        Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson("""{"combat":"pirate"}""").Battle); // trafiquée
-        Assert.Equal(BattleLayout.Stacked, SiteSorts.BattleLayoutFrom(null));
+        Assert.Null(new SortPreferences { Battle = BattleLayout.Hybrid }.ToJson()); // d'origine (hybride) : colonne vide
+        Assert.Equal(BattleLayout.Hybrid, SortPreferences.Default.Battle);
+        Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson("""{"combat":"pirate"}""").Battle); // trafiquée
+        Assert.Equal(BattleLayout.Hybrid, SiteSorts.BattleLayoutFrom(null));
         Assert.Equal(BattleLayout.SideBySide, SiteSorts.BattleLayoutFrom("cote"));
         Assert.Equal("empile", SiteSorts.Slug(BattleLayout.Stacked));
-        var hybrid = new SortPreferences { Battle = BattleLayout.Hybrid };
-        Assert.Equal("""{"combat":"hybride"}""", hybrid.ToJson());
-        Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson(hybrid.ToJson()).Battle);
+        var stacked = new SortPreferences { Battle = BattleLayout.Stacked };
+        Assert.Equal("""{"combat":"empile"}""", stacked.ToJson()); // comptes d'avant le 2026-11-14 (migration HybridBattleDefault)
+        Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(stacked.ToJson()).Battle);
         Assert.Equal(new[] { "Empilés", "Côte à côte", "Hybride" }, SiteSorts.BattleLayoutChoices.Select(c => c.Label));
+    }
+
+    [Fact]
+    public void Json_KeepsTheEnlargedScreens_OnlyWhenChosen()
+    {
+        var enlarged = new SortPreferences { BattleEnlarged = true };
+        Assert.Equal("""{"combatAgrandi":true}""", enlarged.ToJson());
+        Assert.True(SortPreferences.FromJson(enlarged.ToJson()).BattleEnlarged);
+        Assert.Equal("""{"combat":"cote","combatAgrandi":true}""", (enlarged with { Battle = BattleLayout.SideBySide }).ToJson());
+        Assert.Null(new SortPreferences { BattleEnlarged = false }.ToJson());
+        Assert.False(SortPreferences.FromJson("""{"combatAgrandi":false}""").BattleEnlarged);
+        Assert.False(SortPreferences.FromJson("""{"combatAgrandi":"oui"}""").BattleEnlarged); // trafiquée : illisible, réglages d'origine
+    }
+
+    [Fact]
+    public async Task Service_SavesTheEnlargedScreens_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { Battle = BattleLayout.SideBySide })).Ok);
+        var saved = await service.SetBattleEnlargedAsync("sacha", true);
+        Assert.Equal((true, "Écrans de combat agrandis."), (saved.Ok, saved.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.True(read.BattleEnlarged);
+        Assert.Equal(BattleLayout.SideBySide, read.Battle);
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Écrans de combat à leur taille normale.", (await service.SetBattleEnlargedAsync("sacha", false)).Message);
+        Assert.False((await service.SortsAsync("sacha")).BattleEnlarged);
+
+        var both = await service.SetBattleScreensAsync("sacha", BattleLayout.Stacked, true);
+        Assert.Equal((true, "Écrans de combat enregistrés."), (both.Ok, both.Message));
+        read = await service.SortsAsync("sacha");
+        Assert.Equal((BattleLayout.Stacked, true), (read.Battle, read.BattleEnlarged));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+
+        Assert.False((await service.SetBattleEnlargedAsync("disparu", true)).Ok);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetBattleScreensAsync("disparu", BattleLayout.Stacked, true)).Message);
     }
 
     [Fact]

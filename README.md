@@ -156,6 +156,10 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   de bouton SAC : pas de sac en combat de câble), capacités, équipe. Sprites du jeu de chaque joueur
   (`Services/Battle/BattleSprites.cs`), rythme dans `BattleTiming`, traduction française du protocole
   (`Services/Battle/BattleView.cs`, `BattleNames` ; test `BattleTests.RandomBattles_EndAndAreFullyTranslated`).
+- **Disposition** des écrans : empilés, côte à côte ou **hybride** (par défaut ; les comptes créés avant le 2026-11-14
+  gardent « Empilés », migration `HybridBattleDefault`). Bouton **Agrandir / Réduire** juste à côté du titre du combat : écrans
+  sans taille maximale, sur toute la largeur du contenu sans dépasser la hauteur de la fenêtre, ligne des sauvegardes et
+  boutons de disposition cachés, menu du site gardé. Les deux sont retenus dans le compte (« Préférences »).
 - **Fiche d'un Pokémon de son équipe** (`Services/Battle/BattleSheet.cs`), pendant son propre choix seulement : un clic
   sur un Pokémon du menu POKéMON ouvre son écran de sélection (CHANGER, RÉSUMÉ, CAPACITÉS), y compris pour celui qui
   est au combat et pour un K.O. (CHANGER grisé) ; résumé (types, niveau, talent décrit, objet, PV, statistiques hors
@@ -211,8 +215,9 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   ses tris dans le navigateur ; un tri changé dans un onglet est gardé pendant la visite.
 - Chez un autre joueur, ce sont les tris **du visiteur** ; ceux du propriétaire ne sont jamais lus.
 - Formulaire et adresse lus par les mêmes fonctions (`SiteSorts.*FromQuery`) : une valeur inconnue donne le tri d'origine.
-- La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"cote"` ou `"hybride"`, voir
-  « Combats »), dans son propre formulaire : enregistrer ou rétablir les tris ne la change pas, et inversement.
+- La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"empile"` ou `"cote"` ;
+  absente : hybride) et leur **mode agrandi** (`"combatAgrandi":true`), voir « Combats », dans leur propre formulaire :
+  enregistrer ou rétablir les tris ne les change pas, et inversement.
 
 ### Thèmes
 
@@ -676,8 +681,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
-| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans ; disposition des écrans d'un combat |
-| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte et disposition des écrans d'un combat en JSON (`SortPreferences`), et leur service (`PreferencesService`) |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans ; disposition et mode agrandi des écrans d'un combat |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte, disposition et mode agrandi des écrans d'un combat en JSON (`SortPreferences`), et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |

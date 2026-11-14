@@ -198,19 +198,26 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal("arrivee", original.QuerySelector("select[name=tri-collection] option[selected]")?.GetAttribute("value"));
         Assert.Equal("desc", original.QuerySelector("select[name=ordre-collection] option[selected]")?.GetAttribute("value")); // les plus récents d'abord
 
-        // Préférences : disposition des écrans d'un combat, dans son propre formulaire (les tris n'y touchent pas ; une
-        // valeur trafiquée donne la disposition d'origine)
-        Assert.Equal("empile", original.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
-        var (_, battle) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "cote" });
+        // Préférences : disposition et mode agrandi des écrans d'un combat, dans leur propre formulaire (les tris n'y
+        // touchent pas ; une disposition trafiquée donne celle d'origine, l'hybride ; case décochée : taille normale)
+        Assert.Equal("hybride", original.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        Assert.False(original.QuerySelector("input[name=agrandi]")?.HasAttribute("checked") ?? true);
+        var (_, battle) = await Submit(browser, "/Account/Manage/Preferences", "battle",
+            new Dictionary<string, string> { ["combat"] = "cote", ["agrandi"] = "oui" });
         var sideBySide = Parser.ParseDocument(battle);
-        Assert.Contains("Disposition des écrans de combat enregistrée.", sideBySide.QuerySelector(".alert")?.TextContent ?? battle);
+        Assert.Contains("Écrans de combat enregistrés.", sideBySide.QuerySelector(".alert")?.TextContent ?? battle);
         Assert.Equal("cote", sideBySide.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        Assert.True(sideBySide.QuerySelector("input[name=agrandi]")?.HasAttribute("checked"));
         var (_, sortsAgain) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
-        Assert.Equal("cote", Parser.ParseDocument(sortsAgain).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
-        var (_, hybrid) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "hybride" });
-        Assert.Equal("hybride", Parser.ParseDocument(hybrid).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        var kept = Parser.ParseDocument(sortsAgain);
+        Assert.Equal("cote", kept.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        Assert.True(kept.QuerySelector("input[name=agrandi]")?.HasAttribute("checked"));
+        var (_, stacked) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "empile", ["agrandi"] = "" }); // case décochée
+        var normal = Parser.ParseDocument(stacked);
+        Assert.Equal("empile", normal.QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        Assert.False(normal.QuerySelector("input[name=agrandi]")?.HasAttribute("checked") ?? true);
         var (_, tampered) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "pirate" });
-        Assert.Equal("empile", Parser.ParseDocument(tampered).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
+        Assert.Equal("hybride", Parser.ParseDocument(tampered).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
 
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>

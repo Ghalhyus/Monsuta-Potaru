@@ -18,8 +18,9 @@
    Demande (valable BattleHub.RequestLifetime), choix des équipes, puis combat en direct dans le simulateur de Showdown
    (BattleHub), affiché sur deux écrans comme dans un jeu de 4e génération : celui du haut (terrain, PV, messages), celui
    du bas (Pokéballs des équipes, menu principal, capacités, équipe), empilés, côte à côte ou « hybride » (terrain en
-   grand, menu dans un panneau à droite) au choix du joueur (retenu dans son compte, PreferencesService). Chaque choix a BattleTiming.Decision ; quitter la page pendant le combat demande
-   confirmation, puis abandonne. *@
+   grand, menu dans un panneau à droite) au choix du joueur (retenu dans son compte, PreferencesService), à leur taille
+   normale ou agrandis (bouton « Agrandir » : toute la place du contenu de la page, sans cacher le menu du site ; retenu aussi). Chaque choix a
+   BattleTiming.Decision ; quitter la page pendant le combat demande confirmation, puis abandonne. *@
 <NavigationLock ConfirmExternalNavigation="InBattle" OnBeforeInternalNavigation="BeforeLeaving" />
 
 <PageHeader Title="Combat" Icon="bi-lightning-nav-menu" />
@@ -36,15 +37,24 @@
 {
     var me = s.Me(userId);
     var other = s.Other(userId);
-    <Block Title="@($"Combat contre {other.Pseudo}")">
+    var preparing = s.Stage is BattleStage.Requested or BattleStage.TeamBuilding;
+    @* .battle-block : conteneur CSS (bouton « Agrandir » caché quand la zone est trop étroite) ; .en-cours : bouton
+       « Agrandir » juste à côté du titre (demande de l'utilisateur) ; .agrandi : écrans agrandis. *@
+    <Block Title="@($"Combat contre {other.Pseudo}")"
+           Class="@($"battle-block{(preparing ? "" : " en-cours")}{(enlarged && !preparing ? " agrandi" : "")}")">
         <Actions>
-            @if (s.Stage is BattleStage.Requested or BattleStage.TeamBuilding)
+            @if (preparing)
             {
                 <button type="button" class="btn btn-outline-danger" @onclick="CancelBattle">Annuler le combat</button>
             }
+            else
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary battle-agrandir" aria-pressed="@(enlarged ? "true" : "false")"
+                        @onclick="ToggleEnlarged">@(enlarged ? "Réduire" : "Agrandir")</button>
+            }
         </Actions>
         <ChildContent>
-            <p class="small text-muted">Ta sauvegarde : @me.SaveLabel · Sa sauvegarde : @other.SaveLabel</p>
+            <p class="small text-muted battle-saves">Ta sauvegarde : @me.SaveLabel · Sa sauvegarde : @other.SaveLabel</p>
 
             @switch (s.Stage)
             {
@@ -570,7 +580,8 @@ else
     private Menu menu;
     private int opened; // fiche ouverte : place du Pokémon dans la requête
     private int openedMove; // capacité détaillée sur la fiche
-    private BattleLayout layout; // écrans empilés ou côte à côte : préférence du compte
+    private BattleLayout layout; // écrans empilés, côte à côte ou hybride : préférence du compte
+    private bool enlarged; // écrans agrandis : préférence du compte
 
     // Lecture des étapes : une à une, au rythme de BattleTiming.
     private int played;
@@ -605,7 +616,9 @@ else
         var user = (await AuthState).User;
         userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         pseudo = user.Identity?.Name ?? "";
-        layout = (await PreferenceStore.SortsAsync(userId)).Battle;
+        var preferences = await PreferenceStore.SortsAsync(userId);
+        layout = preferences.Battle;
+        enlarged = preferences.BattleEnlarged;
         Hub.RequestsChanged += OnRequestsChanged;
         if (Hub.Active(userId) is { } active) // page rechargée pendant un combat : on reprend où il en est
             await Join(active, skipHistory: true);
@@ -779,6 +792,13 @@ else
             return;
         layout = chosen;
         await PreferenceStore.SetBattleLayoutAsync(userId, chosen);
+    }
+
+    /// <summary>« Agrandir » / « Réduire » : appliqué tout de suite, et retenu dans le compte (comme dans « Préférences »).</summary>
+    private async Task ToggleEnlarged()
+    {
+        enlarged = !enlarged;
+        await PreferenceStore.SetBattleEnlargedAsync(userId, enlarged);
     }
 
     /// <summary>« Annuler le combat » (demande ou choix des équipes) : annulé pour les deux, retour à l'accueil.</summary>

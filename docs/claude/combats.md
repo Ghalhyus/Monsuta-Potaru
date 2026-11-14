@@ -38,8 +38,8 @@ README : « Combats ».
   Trello 108) : disposition, formes et couleurs reprises, **aucun graphisme découpé d'un jeu**, police du site (son choix).
 - Les deux écrans ont la même largeur (`--ecran`) en 4:3 ; leur contenu se mesure en `em` (1em = 1/32 de la largeur) et
   en % : ne jamais y mettre de `rem` ni de `px` (les proportions casseraient à une autre taille).
-- Disposition : `BattleLayout` (empilés d'origine, côte à côte, hybride), boutons `.battle-layout` et « Préférences » ;
-  retenue dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de
+- Disposition : `BattleLayout` (empilés, côte à côte, hybride par défaut depuis le 2026-11-14), boutons `.battle-layout`
+  et « Préférences » ; retenue dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de
   large, toujours empilés sur toute la largeur et boutons cachés, quel que soit le mode choisi.
 - **Mode hybride** (`.battle.hybride`, maquette de l'utilisateur du 2026-11-14) : même page, mêmes éléments, seul le CSS
   change (bloc `@container` « Mode hybride ») : le terrain en grand, `.battle-bottom` réduit à un panneau à droite (44 %
@@ -48,12 +48,24 @@ README : « Combats ».
   La ligne des sauvegardes et les boutons de disposition restent **au-dessus** du combat, comme dans les autres modes
   (l'utilisateur a refusé de les passer dessous pour gagner de la hauteur, le 2026-11-14). Dans le panneau : barre des Pokéballs toujours affichée, sur deux lignes ; équipe sur
   une ligne par Pokémon, sans niveau ni boîte de message. Un bouton ajouté au menu doit aussi tenir dans cette colonne.
+- **Mode agrandi** (maquette de l'utilisateur du 2026-11-14, « comme un plein écran sans cacher l'interface du site ») :
+  bouton « Agrandir » / « Réduire » (`.battle-agrandir`, `aria-pressed`) dans les actions du bloc « Combat contre … »,
+  **juste à côté du titre**, sur sa ligne (demandé par l'utilisateur le 2026-11-14 ; ni sous le titre, règle des autres
+  blocs, ni collé à droite comme sur la maquette) : classe `.en-cours` du bloc, qui passe `.block-header` en ligne. Le
+  bouton n'existe qu'une fois le combat commencé (pendant la demande et le choix des équipes : « Annuler le combat »,
+  sous le titre comme ailleurs, et pas de classe `.agrandi`).
+  Classe `.agrandi` sur le bloc (`.battle-block`, conteneur CSS nommé `combat-bloc`) : CSS seul (bloc « Mode agrandi »
+  après le mode hybride) ; cache `.battle-saves` et `.battle-layout`, enlève les tailles maximales (34/48/56rem) et
+  réduit `--dessus`. Le bouton est caché quand le bloc fait moins de 42.2rem (zone sous 40rem + marges intérieures
+  d'Ardoise : rien à agrandir). Retenu dans le compte (`BattleEnlarged`).
 - `.battle-btn` pose `gap` (donc `row-gap`) : dans une grille serrée (`.battle-member` du mode hybride), le remettre à
   zéro, sinon la dernière ligne déborde et se fait rogner.
 - Zone large : la taille fait tenir les écrans dans la hauteur de la fenêtre, `--dessus` étant la hauteur de ce que la
-  page affiche au-dessus (mesurée dans Ardoise ; `--alertes` compte les alertes, posé par la page). Un élément ajouté
-  au-dessus des écrans : corriger `--dessus`, sinon la page défile. À 2293×850 px CSS (écran de
-  l'utilisateur) : environ 305×230 px CSS par écran empilé, 610×460 côte à côte, terrain de 610×460 en hybride (même hauteur que côte à côte).
+  page affiche au-dessus et au-dessous (mesurée dans Ardoise ; `--alertes` compte les alertes, posé par la page) :
+  24rem en taille normale, 19.1rem en mode agrandi (limites mesurées : 23.9 et 19.0). Un élément ajouté au-dessus des
+  écrans : corriger `--dessus` (les deux), sinon la page défile ; mesure : `document.documentElement.scrollHeight` doit
+  valoir `innerHeight`. À 2293×850 px CSS (écran de l'utilisateur), avec une alerte : terrain de 545 px CSS de large en
+  hybride, 650 agrandi (la hauteur limite : marges sur les côtés).
 - Boutons du jeu : `.battle-btn` (deux tons `--haut` / `--bas`, coins rouges au survol et au focus clavier). Les
   capacités prennent la couleur du type par `--type`. Plus de bouton SAC depuis le 2026-11-14 (inutile pour l'instant,
   choix de l'utilisateur) : ABANDONNER à gauche et POKéMON à droite se partagent le bas de l'écran tactile.
@@ -105,6 +117,9 @@ README : « Combats ».
 - Le volet du navigateur est petit (environ 608×346 px CSS) : pour voir l'écran du bas en entier, réduire `--ecran`
   (370px) puis `scrollIntoView({block: 'end'})` ; pour le mode hybride, émuler une fenêtre de 900×512, replier le menu
   du site et forcer `--ecran` à 500px (la zone doit dépasser 40rem). Changer de disposition ou d'écran ne recharge rien.
+- Taille de l'écran de l'utilisateur : `resize_window` 2293×850 (le volet réduit l'image) ; le bouton « Agrandir » y est
+  visible. Mesurer `--dessus` dans les deux modes par `scrollHeight` (essai d'une valeur : `style.setProperty('--dessus', …)`
+  sur `.battle`, sans recharger).
 - Recharger la page pendant un combat le fait perdre (le circuit fermé quitte le combat) : une retouche de CSS se
   regarde au combat suivant. Pour voir les détails, agrandir les écrans le temps d'une capture
   (`.battle` : `style.setProperty('--ecran', '520px')`) ; chaque joueur n'a que 60 secondes par choix.

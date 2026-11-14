@@ -53,11 +53,17 @@ public sealed class BattlesPageTests : PageTestContext
     [Fact]
     public async Task Battle_TeamsThenMenus_ThenForfeit()
     {
-        SetSorts("ondine", new SortPreferences { Battle = BattleLayout.SideBySide }); // choisi dans ses préférences
+        // Choisis dans leurs préférences : empilés pour Sacha, côte à côte et agrandis pour Ondine
+        SetSorts("sacha", new SortPreferences { Battle = BattleLayout.Stacked });
+        SetSorts("ondine", new SortPreferences { Battle = BattleLayout.SideBySide, BattleEnlarged = true });
         var (sacha, ondine) = await Requested();
         await ondine.Click("Accepter");
         await ChooseTeam(sacha, lead: 4); // Chenipan niveau 4 (vert-feuille.sav, Sécrétion), face au Férosinge niveau 13 d'Ondine (Groz'Yeux)
         sacha.WaitForText("Ton équipe est prête");
+        // Choix des équipes : pas de bouton Agrandir, et la ligne des sauvegardes reste, même pour qui a choisi les écrans agrandis
+        Assert.False(sacha.HasButton("Agrandir"));
+        Assert.False(ondine.HasButton("Réduire"));
+        Assert.Empty(ondine.FindAll(".battle-block.agrandi, .battle-block.en-cours"));
         await ChooseTeam(ondine);
 
         // Premier tour : les menus de Sacha, puis une attaque sans dégâts de chaque côté. Un K.O. forcerait un
@@ -148,7 +154,7 @@ public sealed class BattlesPageTests : PageTestContext
         await sacha.Find(".battle-back.retour").ClickAsync(new());
         Assert.Empty(sacha.FindAll(".battle-bottom.equipe"));
 
-        // Disposition : empilés d'origine pour Sacha, côte à côte pour Ondine (ses préférences) ; le bouton l'applique
+        // Disposition : empilés pour Sacha, côte à côte pour Ondine (leurs préférences) ; le bouton l'applique
         // tout de suite et la retient dans le compte
         var preferences = Services.GetRequiredService<PreferencesService>();
         Assert.Empty(sacha.FindAll(".battle.cote"));
@@ -173,6 +179,25 @@ public sealed class BattlesPageTests : PageTestContext
         await sacha.Click("Empilés");
         Assert.Empty(sacha.FindAll(".battle.cote, .battle.hybride"));
         Assert.Equal(BattleLayout.Stacked, (await preferences.SortsAsync("sacha")).Battle);
+
+        // Agrandir, juste à côté du titre du bloc (.en-cours met la ligne du titre en rangée) : classe .agrandi (la feuille de style cache la ligne des sauvegardes et les
+        // boutons de disposition, et lève la taille maximale), retenu dans le compte sans toucher à la disposition ;
+        // Réduire revient à la taille normale. Ondine, qui l'a choisi dans ses préférences, est déjà agrandie.
+        Assert.NotEmpty(ondine.FindAll(".battle-block.agrandi .battle.cote"));
+        Assert.Empty(sacha.FindAll(".battle-block.agrandi"));
+        var enlarge = sacha.Find(".battle-block.en-cours > .block-header > .block-actions .battle-agrandir");
+        Assert.Equal("Agrandir", enlarge.TextContent);
+        Assert.Equal("false", enlarge.GetAttribute("aria-pressed"));
+        await sacha.Click("Agrandir");
+        Assert.NotEmpty(sacha.FindAll(".battle-block.agrandi"));
+        Assert.NotNull(sacha.Find(".battle-block.agrandi .battle-saves"));
+        Assert.Equal("true", sacha.Button("Réduire").GetAttribute("aria-pressed"));
+        var enlarged = await preferences.SortsAsync("sacha");
+        Assert.True(enlarged.BattleEnlarged);
+        Assert.Equal(BattleLayout.Stacked, enlarged.Battle);
+        await sacha.Click("Réduire");
+        Assert.Empty(sacha.FindAll(".battle-block.agrandi"));
+        Assert.False((await preferences.SortsAsync("sacha")).BattleEnlarged);
 
         // Sacha change de Pokémon par la fiche du deuxième de son équipe (panneau CHANGER) ; Ondine attaque sans dégâts
         await sacha.Click("POKéMON");
