@@ -546,9 +546,12 @@ textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs` à `
   utilisée ou jamais fabriquée), Rencontres uniques (légendaires, Ronflex, Pokémon offerts, échanges du jeu…). En 2e génération,
   une sixième : **Quêtes annexes** (4 puzzles et 26 Zarbi des Ruines d'Alpha, Fratrie des sept jours, Noigrumes de
   Fargas, Ranch Meumeu, pont Pépite, poupée de Copieuse… ; en 3e génération : tableaux des concours de rang Master,
-  symboles de la Zone de Combat, Maîtres des capacités à usage unique, baies du Maître des Baies ; en 4e génération :
+  symboles de la Zone de Combat, Maîtres des capacités à usage unique, baies du Maître des Baies, et à Hoenn les
+  **rubans** des 20 concours, Gagnant, Victoire et Effort ; en 4e génération :
   concours de rang Master, 28 Zarbi, formes de Motisma, Giratina et Shaymin en Platine, puzzles et salles des Ruines
-  d'Alpha en HeartGold / SoulSilver ; en 5e génération : Chefs du Métro de Combat, les 100 parures du Music-Hall, et en
+  d'Alpha en HeartGold / SoulSilver, et les **rubans** des Super Concours Normal à Ultra (Diamant, Perle, Platine), les
+  six Aptitude de la Tour de Combat et Effort ; un ruban compte s'il est sur un Pokémon **de la sauvegarde** (équipe ou
+  boîtes : parti à la banque, l'étape redevient à faire, choix de l'utilisateur) ; en 5e génération : Chefs du Métro de Combat, les 100 parures du Music-Hall, et en
   Noire 2 / Blanche 2 chaque tournoi du PWT et chacune des 254 médailles, dont celles du Gratte-Ciel Noir / de l'Arbre
   Creux Blanc et des films de Pokéwood ; en 6e génération : Maison de Combat (Châtelaines en normal et en Super), les 30
   épreuves du Super Training, en X / Y chaque noble du Château de Combat (son drapeau de dresseur), et en Rubis Oméga / Saphir Alpha la progression des Concours Live ; en 7e génération :
@@ -705,8 +708,9 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), tri par génération ou par complétion, création (jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
 | `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
-| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde (1re à 4e génération), textes des étapes (équipes, objets, CT) |
+| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde (1re à 9e génération ; rubans des Pokémon de la sauvegarde), textes des étapes (équipes, objets, CT) |
 | `MonsutaPotaru/Services/Completion/Gen1Completion.cs` à `Gen9Completion.cs` | Étapes de chaque génération (table du jeu, Pokédex, noms des objets) |
+| `MonsutaPotaru/Services/Completion/CompletionRibbons.cs` | Rubans de la complétion de 3e et 4e génération (concours, Tour de Combat, Effort), lus sur les Pokémon de la sauvegarde |
 | `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs` à `Gen4CompletionData.cs` | Tables générées des étapes de chaque jeu (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
 | `MonsutaPotaru/Data/Completion.cs` | Table des complétions (une par jeu et par compte, supprimée avec sa sauvegarde) |
 | `outils/completion_gen1.py`, `outils/completion_gen1_extract.py` | Génèrent `Gen1CompletionData.cs` d'après les désassemblages pokered et pokeyellow (lieux en français, ordre de l'aventure, étapes choisies à la main dans le script) |

@@ -179,4 +179,26 @@ public sealed class CompletionGen4Tests : IDisposable
         Assert.True(ss.Steps.Single(s => s.Species == 175 && s.Section == CompletionSection.Encounters).Done);
         Assert.Equal(32, ss.Progress.Sections.Single(s => s.Section == CompletionSection.Trainers).Done);
     }
+
+    [Fact]
+    public void Ribbons_SinnohContestsBelowMaster_TowerAndEffort()
+    {
+        static List<CompletionRow> Ribbons(LivingDexGame game) =>
+            [.. Gen4Completion.Rows(game).Where(r => r.Done.StartsWith("RB:", StringComparison.Ordinal))];
+        // Normal, Méga, Ultra (le rang Master a déjà son drapeau), six Aptitude, Effort ; pas de concours en HG / SS
+        Assert.Equal(22, Ribbons(LivingDexGame.Diamond).Count);
+        Assert.Equal(22, Ribbons(LivingDexGame.Platinum).Count);
+        Assert.Equal(7, Ribbons(LivingDexGame.SoulSilver).Count);
+        Assert.DoesNotContain(Ribbons(LivingDexGame.Platinum), r => r.Label!.EndsWith("Master", StringComparison.Ordinal));
+        Assert.Equal("Ébènelle", Ribbons(LivingDexGame.HeartGold).Single(r => r.Done == "RB:Effort").Zone);
+
+        var sav = new SAV4Pt();
+        sav.SetBoxSlotAtIndex(new PK4 { Species = 387, RibbonG4Cool = true, RibbonG4CoolGreat = true, RibbonAbility = true }, 0, 0);
+        bool Done(string label) => Gen4Completion.Steps(sav, LivingDexGame.Platinum).Single(s => s.Label == label).Done;
+        Assert.True(Done("Obtenir le Ruban Sang-Froid Méga"));
+        Assert.False(Done("Obtenir le Ruban Sang-Froid Ultra"));
+        Assert.True(Done("Obtenir le Ruban Aptitude"));
+        Assert.False(Done("Obtenir le Ruban Aptitude Méga"));
+        Assert.False(Done("Obtenir le Ruban Effort (510 EV)"));
+    }
 }

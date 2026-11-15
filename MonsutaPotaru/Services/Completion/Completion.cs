@@ -332,6 +332,9 @@ internal sealed class CompletionFlags(SaveFile sav)
 
     private readonly Lazy<HashSet<ulong>> trainers = new(() => Gen9List(sav, [0xF018C4AC, 0x28E475DE], 0xCBF29CE484222645));
 
+    /// <summary>Pokémon de la sauvegarde (équipe et boîtes, sans les œufs) : leurs rubans comptent (« RB:clé »).</summary>
+    private readonly Lazy<List<PKM>> pokemon = new(() => [.. sav.GetAllPKM().Where(p => p.Species != 0 && !p.IsEgg)]);
+
     public CompletionState State(CompletionRow row) =>
         Test(row.Done) ? CompletionState.Done
         : row.Missed is not null && Test(row.Missed) ? CompletionState.Missed
@@ -363,6 +366,7 @@ internal sealed class CompletionFlags(SaveFile sav)
             "W" => Work(int.Parse(parts[1])) >= int.Parse(parts[2]),
             "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
             "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
+            "RB" => pokemon.Value.Any(p => Ribbons.Holds(p, parts[1])),
             "K" => HasItem(int.Parse(parts[1])),
             "H" => HasItem(int.Parse(parts[1])) || IsHeld(int.Parse(parts[1])),
             "ST" => SuperTraining().GetTime1(int.Parse(parts[1])) > 0,
@@ -420,9 +424,13 @@ internal sealed class CompletionFlags(SaveFile sav)
         _ => throw new InvalidOperationException("Pas de drapeaux d'événements dans cette sauvegarde."),
     };
 
-    /// <summary>Variable de script : 4e génération (0x4000 retiré), 6e génération (numéro de FlagsEditorEX ; pas utilisées en 7e).</summary>
+    /// <summary>
+    /// Variable de script : 3e et 4e génération (0x4000 retiré), 6e génération (numéro de FlagsEditorEX ; pas utilisées en
+    /// 7e).
+    /// </summary>
     private int Work(int index) => sav switch
     {
+        SAV3 sav3 => sav3.GetWork(index),
         SAV4 sav4 => sav4.GetWork(index),
         SAV6 sav6 => sav6.EventWork.GetWork(index),
         _ => throw new InvalidOperationException("Pas de variables de script lisibles dans cette sauvegarde."),

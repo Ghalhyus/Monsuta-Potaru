@@ -13,14 +13,21 @@ public static class Gen4Completion
 {
     private static readonly string[] Items = CompletionLabels.French.GetItemStrings(EntityContext.Gen4, GameVersion.HGSS);
 
-    /// <summary>Étapes de la partie, dans l'ordre : histoire, Pokédex (les 493), dresseurs, objets, rencontres, quêtes.</summary>
+    /// <summary>
+    /// Étapes de la partie, dans l'ordre : histoire, Pokédex (les 493), dresseurs, objets, rencontres, quêtes (à la fin,
+    /// les rubans : <see cref="CompletionRibbons"/>).
+    /// </summary>
     public static List<CompletionStep> Steps(SAV4 sav, LivingDexGame game) =>
-        CompletionGames.Steps(game switch
-        {
-            LivingDexGame.Platinum => Gen4CompletionData.Platinum,
-            LivingDexGame.HeartGold or LivingDexGame.SoulSilver => Gen4CompletionData.HeartGoldSoulSilver,
-            _ => Gen4CompletionData.DiamondPearl,
-        }, new CompletionFlags(sav), 493, Label);
+        CompletionGames.Steps(Rows(game), new CompletionFlags(sav), 493, Label);
+
+    /// <summary>Lignes de la partie : la table du jeu, puis ses rubans.</summary>
+    public static IReadOnlyList<CompletionRow> Rows(LivingDexGame game) => game switch
+    {
+        LivingDexGame.Platinum => [.. Gen4CompletionData.Platinum, .. CompletionRibbons.Sinnoh(platinum: true, heartGold: false)],
+        LivingDexGame.HeartGold or LivingDexGame.SoulSilver =>
+            [.. Gen4CompletionData.HeartGoldSoulSilver, .. CompletionRibbons.Sinnoh(platinum: false, heartGold: true)],
+        _ => [.. Gen4CompletionData.DiamondPearl, .. CompletionRibbons.Sinnoh(platinum: false, heartGold: false)],
+    };
 
     /// <summary>Texte d'une étape : le sien, sinon l'équipe du dresseur, l'objet (une CT avec sa capacité) ou le Pokémon.</summary>
     public static string Label(CompletionRow row) =>

@@ -167,7 +167,9 @@ def build(d, game, places, checklist):
     for t in d['trainers']:
         if t['cls'] in STORY_CLASSES:
             continue
-        key = (t['map'], re.sub(VARIANTS, '', re.sub(r'_(BRENDAN|MAY)_', '_RIVAL_', t['id'])))
+        rival = re.sub(VARIANTS, '', re.sub(r'_(BRENDAN|MAY)_', '_RIVAL_', t['id']))
+        # pokeruby numérote le rival selon le Pokémon de départ (TRAINER_MAY_1, _4, _7 sur la Route 103) : un seul combat
+        key = (t['map'], re.sub(r'^TRAINER_RIVAL_\d+$', 'TRAINER_RIVAL', rival))
         groups.setdefault(key, []).append(t)
     for (map_name, _), ts in groups.items():
         t = ts[0]
@@ -211,6 +213,19 @@ def build(d, game, places, checklist):
         # Cadeaux quotidiens (une baie par jour, drapeau remis à zéro chaque jour) : pas une étape
         if 'DAILY' not in x['flag']:
             item(x, 2, 'cadeau')
+
+    def V(name, value):
+        """Variable de script au moins à <value> (numéro sans le 0x4000, comme PKHeX)."""
+        if name not in k:
+            raise SystemExit(f'Variable inconnue dans {game} : {name}')
+        return f'W:{k[name] - 0x4000}:{value}'
+
+    # Cadeaux sans drapeau juste après (le lecteur ne les voit pas) : leur trace, cherchée dans le script à la main
+    for n, (map_name, item_name, cond, det, *label) in enumerate(EXTRA_GIFTS[game](d, F, V)):
+        value = k[item_name]
+        det = det or ', '.join(p for p in (detail(map_name), 'cadeau') if p)
+        add(I, zone_of(map_name), det, cond, label[0] if label else None, item=0 if value in tm_of else value,
+            tm=tm_of.get(value, 0), sort=3 * 100_000 + n)
 
     # ---------- Rencontres et quêtes ----------
     for i, (zone, det, species, cond, label) in enumerate(cur['encounters']):
@@ -428,6 +443,59 @@ def frlg_quests():
               a('FLAG_TUTOR_FRENZY_PLANT', 'FLAG_TUTOR_BLAST_BURN', 'FLAG_TUTOR_HYDRO_CANNON')))
     return q
 
+
+def item_named(d, *names):
+    """Premier nom d'objet connu du jeu : une CT s'écrit ITEM_TM47_STEEL_WING (pokeruby) ou ITEM_TM47 (pokeemerald)."""
+    for name in names:
+        if name in d['k']:
+            return name
+        found = [c for c in d['k'] if c.startswith(name + '_')]
+        if found:
+            return found[0]
+    raise SystemExit(f'Objet inconnu : {names}')
+
+
+def trick_house(d, V):
+    """Maison des Pièges (Route 110) : la récompense de chaque épreuve (« CompletedPuzzleN »), donnée quand le compteur
+    d'épreuves réussies passe à N (il ne redescend pas). La 8e récompense, une tente, est une décoration."""
+    var = next(n for n in ('VAR_TRICK_HOUSE_LEVEL', 'VAR_TRICK_HOUSE_ROOMS_COMPLETED') if n in d['k'])
+    out = []
+    for label, text in sorted(d['scripts'].items()):
+        m = re.fullmatch(r'Route110_TrickHouseEnd_EventScript_CompletedPuzzle(\d)', label)
+        give = re.search(r'giveitem\s+(ITEM_\w+)', text) if m else None
+        if give:
+            out.append((int(m.group(1)), give.group(1)))
+    return [('Route110_TrickHouseEnd', name, V(var, n), f'Maison des Pièges, épreuve {n}') for n, name in sorted(out)]
+
+
+def hoenn_gifts(d, F, V):
+    k = d['k']
+    # Cherch'Objet : donné juste après le combat contre le rival de la Route 110 (ses drapeaux de dresseur)
+    rival = [t for t in d['trainers'] if t['map'] == 'Route110' and re.search(r'_(BRENDAN|MAY)_', t['id'])]
+    return [
+        ('GraniteCave_StevensRoom', item_named(d, 'ITEM_TM47'), F('FLAG_DELIVERED_STEVEN_LETTER'), None),
+        ('Route111', item_named(d, 'ITEM_TM43'), F('FLAG_RECEIVED_SECRET_POWER'), None),  # data/scripts/secret_power_tm.inc
+        ('Route110', 'ITEM_ITEMFINDER', '|'.join(f'E:{d["trainer_start"] + k[t["id"]]}' for t in rival), None),
+        # Un seul vélo à la fois (échangeable ensuite) : une étape pour les deux
+        ('MauvilleCity_BikeShop', 'ITEM_MACH_BIKE', F('FLAG_RECEIVED_BIKE'), None, 'Vélo Course ou Vélo Cross'),
+        ('Route113_GlassWorkshop', 'ITEM_SOOT_SACK', V('VAR_GLASS_WORKSHOP_STATE', 1), None),
+    ] + trick_house(d, V)
+
+
+def frlg_gifts(d, F, V):
+    return [
+        ('FiveIsland_MemorialPillar', 'ITEM_TM42', F('FLAG_GOT_TM42_AT_MEMORIAL_PILLAR'), None),
+        # Le drapeau est levé avant le cadeau (checkitemspace, setflag, giveitem_msg)
+        ('VermilionCity_PokemonFanClub', 'ITEM_BIKE_VOUCHER', F('FLAG_GOT_BIKE_VOUCHER'), None),
+        ('CeruleanCity_BikeShop', 'ITEM_BICYCLE', F('FLAG_GOT_BICYCLE'), None),
+        ('CeruleanCity', 'ITEM_FAME_CHECKER', F('FLAG_GOT_FAME_CHECKER'), None),
+        ('ViridianCity', 'ITEM_TEACHY_TV', V('VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN', 2), None),
+        # Carte de Kanto : la sœur du rival la donne, ou Ciléo si elle a été refusée (sac plein) ; même variable
+        ('PalletTown_RivalsHouse', 'ITEM_TOWN_MAP', V('VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE', 2), None),
+    ]
+
+
+EXTRA_GIFTS = {'pokeruby': hoenn_gifts, 'pokeemerald': hoenn_gifts, 'pokefirered': frlg_gifts}
 
 CURATED = {}
 

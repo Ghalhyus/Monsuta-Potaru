@@ -67,6 +67,16 @@ def extract(root):
     inc = R('include', 'constants')
     k = c_constants([R('include', 'constants', f) for f in ('flags.h', 'vars.h', 'opponents.h', 'items.h', 'species.h',
                                                           'moves.h', 'trainers.h', 'pokedex.h') if os.path.exists(os.path.join(inc, f))])
+    # pokeemerald nomme les CT et CS par leur capacité dans les scripts (ITEM_TM_STEEL_WING) : des alias créés par les
+    # macros FOREACH_TM / FOREACH_HM de tms_hms.h, dans l'ordre des numéros (ITEM_TM01…). Sans eux, aucune CT ni CS
+    # d'Émeraude n'entrait dans la table (objet inconnu, écarté).
+    tmhm = os.path.join(inc, 'tms_hms.h')
+    if os.path.exists(tmhm):
+        src = open(tmhm, encoding='utf-8').read()
+        for kind in ('TM', 'HM'):
+            body = re.search(rf'#define FOREACH_{kind}\(F\)(.*?)(?:\n\s*\n|#define)', src, re.S).group(1)
+            for n, move in enumerate(re.findall(r'F\((\w+)\)', body), 1):
+                k.setdefault(f'ITEM_{kind}_{move}', k[f'ITEM_{kind}{n:02}'])
     # Numéro interne de l'espèce (Arcko : 277) → numéro national (252), par le nom (SPECIES_X, NATIONAL_DEX_X)
     national = {v: k['NATIONAL_DEX_' + n[8:]] for n, v in k.items() if n.startswith('SPECIES_') and 'NATIONAL_DEX_' + n[8:] in k}
     trainer_start = k.get('TRAINER_FLAGS_START', k.get('TRAINER_FLAG_START'))
@@ -154,7 +164,7 @@ def extract(root):
     sections = [x['id'] for x in json.load(open(R('src', 'data', 'region_map', 'region_map_sections.json'), encoding='utf-8'))['map_sections']] \
         if os.path.exists(R('src', 'data', 'region_map', 'region_map_sections.json')) else None
     return dict(k=k, national=national, trainer_start=trainer_start, initial=initial, ground=ground, hidden=hidden, trainers=trainers,
-                gifts=gifts, mapsec=mapsec, sections=sections)
+                gifts=gifts, mapsec=mapsec, sections=sections, scripts=scripts)
 
 
 if __name__ == '__main__':

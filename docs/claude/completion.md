@@ -124,10 +124,44 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   - un seul chien légendaire erre dans Rouge Feu / Vert Feuille (selon le starter) : une étape, par le Pokédex ;
   - un caractère invisible (retour arrière) s'est glissé dans une expression régulière écrite par un heredoc : écrire
     ces scripts avec l'outil d'écriture de fichiers ; les heredocs avec des apostrophes cassent aussi la commande.
-- Concours : seuls les **tableaux du musée** (rang Master, 5 catégories) laissent une trace ; les rangs Normal à Hyper
-  sont sur les rubans des Pokémon, pas dans la sauvegarde.
-- Vérifié sur `rouge-feu.sav` (début de partie, 2,5 %) et `vert-feuille.sav` (12,6 %) ; Rubis, Saphir et Émeraude
+- Concours : seuls les **tableaux du musée** (rang Master, 5 catégories) laissent une trace dans la sauvegarde ; les
+  rangs sont sur les rubans des Pokémon : voir « Rubans (3e et 4e génération) ».
+- **Corrigé le 2026-11-15** (comparaison avec les check-lists, `Suivi_Pokemon_Rubis_Saphir.csv`, `_Emeraude.csv`,
+  `_RougeFeu_VertFeuille.csv`, Drive de l'utilisateur, ID `1jnhhhYX55_vv4suEPdkKarfYT6wxUqbT`,
+  `172cDLM-Xh8N5ruLEiKRY2wzX72BOceLI`, `1Pvw3GSGyJfjyDfYUfpvOiEUSq8_E4CFD`) :
+  - **Émeraude sans aucune CT ni CS** : pokeemerald les nomme par leur capacité dans les scripts (`ITEM_TM_STEEL_WING`,
+    alias des macros `FOREACH_TM` / `FOREACH_HM` de `include/constants/tms_hms.h`) ; objet inconnu, écarté en silence.
+    `completion_gen3_extract.py` crée ces alias (+46 lignes) ;
+  - **rival de Rubis / Saphir triplé** : pokeruby le numérote selon le Pokémon de départ (`TRAINER_MAY_1`, `_4`, `_7` sur la
+    Route 103), pas par un suffixe `_TREECKO` : trois lignes « Rival » par combat, deux à jamais à faire. Regroupés par
+    carte (`TRAINER_RIVAL_\d+`) ;
+  - **cadeaux sans `setflag` juste après** (`EXTRA_GIFTS` du générateur, trace cherchée à la main) : CT47 (drapeau de la
+    Lettre), CT43 (`data/scripts/secret_power_tm.inc`, hors des cartes), Cherch'Objet (drapeaux du rival de la Route 110),
+    Vélo Course ou Cross (une étape, `FLAG_RECEIVED_BIKE`), Sac à Suie et les 7 récompenses de la Maison des Pièges
+    (variables : `W:n:v`, **lu en 3e génération depuis** : `SAV3.GetWork`, 0x4000 retiré) ; Rouge Feu / Vert Feuille :
+    CT42 du Mémorial, Bon Commande (drapeau levé avant le cadeau), Bicyclette, Memorydex, TV ABC, Carte
+    de Kanto (variable de la maison du rival à 2 : donnée par sa sœur ou par Ciléo).
+  - Laissés de côté : la Luxe Ball de Thémis (Île 5, objet au hasard d'une liste, `field_specials.c`), les foulards du
+    Fan Club et l'Élixir d'Atalanopolis (sans trace durable), les CT des boutiques, du casino et des boissons du toit.
+- Vérifié sur `rouge-feu.sav` (début de partie) et `vert-feuille.sav` (12,7 %) ; Rubis, Saphir et Émeraude
   seulement en mémoire.
+
+## Rubans (3e et 4e génération, 2026-11-15)
+- Choix de l'utilisateur : dans les **quêtes annexes** ; un ruban compte s'il est sur un Pokémon **de la sauvegarde**
+  (équipe et boîtes, `SaveFile.GetAllPKM`, sans les œufs) : parti à la banque ou dans un autre jeu, l'étape redevient à
+  faire ; un Pokémon reçu d'un autre jeu avec ses rubans compte. Condition `RB:clé` (clés de `Ribbons.ContestParts`,
+  `BattleParts` et `All` : `G3CoolSuper`, `Winning`, `Effort`), lue par `Ribbons.Holds`.
+- Les étapes ne sont **pas dans les tables générées** (la même liste pour toutes les parties) :
+  `Services/Completion/CompletionRibbons.cs`, ajoutées à la fin des quêtes par `Gen3Completion.Rows` / `Gen4Completion.Rows`.
+- 3e génération (Rubis, Saphir, Émeraude ; aucun à Kanto) : les **20 de concours** (5 catégories × Normal, Super, Hyper,
+  Master ; Rubis / Saphir : Vergazon, Autéquia, Poivressel, Nénucrique ; Émeraude : tous à Nénucrique, les autres salles
+  sont fermées, contrairement à la check-list), **Gagnant** et **Victoire** (Tour de Combat), **Effort** (marché de
+  Poivressel). Pas Champion ni Artiste (déjà comptés par le Panthéon et les tableaux). Le rang Master **et** le tableau
+  du musée comptent tous deux (choix de l'utilisateur : les 20).
+- 4e génération : Super Concours **Normal, Méga, Ultra** (Diamant, Perle, Platine ; le rang Master a déjà son drapeau,
+  « Gagner le concours … de rang Master » : pas en double), les **six Aptitude** de la Tour de Combat (Aire de Combat en
+  Diamant / Perle, Zone de Combat en Platine et HG / SS ; Aptitude Monde demande le défi Wi-Fi), **Effort** (marché de
+  Rivamar, maison d'Ébènelle en HG / SS : `scr_seq_0947_T30R0301.s` de pokeheartgold, `sunyshore_market` de pokeplatinum).
 
 ## Diamant / Perle / Platine / HeartGold / SoulSilver (2026-11-12)
 - Choix de l'utilisateur : les 6 sections ; **Pokédex national de 493** ; **distributions réelles seulement** (Carte
