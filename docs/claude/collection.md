@@ -36,3 +36,11 @@ README : « Filtres de « Ma collection » », « Mode compact de « Ma collecti
   haut) : la hauteur de défilement est gardée.
 - Une espèce seule n'est jamais « ouverte » (`IsOpen` l'ignore) : sa case est celle de son Pokémon.
 - `PokemonSlot` a pour cela `Count` (pastille du nombre), `Expanded` (`aria-expanded`) et `Class`.
+
+## « Dépôt / Retrait » : Pokémon incompatibles grisés
+- `Bank.razor` `Incompatibility(entry)` : `SaveSession.WithdrawalProblem` (espèce, conversion, `EvaluateCompatibility`,
+  rien d'écrit ; `TryWithdraw` passe par la même méthode `Prepare`). Calculé à la demande pour la page affichée (30 au
+  plus), gardé par identifiant tant que `Session.Save` est le même objet (`checkedSave` ; `Reset` et un nouveau
+  chargement créent un autre `SaveFile` : le cache repart de zéro). Sans sauvegarde : rien n'est grisé.
+- Gris : `PokemonSlot Locked` (style commun, voir `parc.md`). Un clic affiche la raison (`Show`), sans sélectionner ;
+  Maj+clic, « Tout sélectionner », le glisser et « Retirer les N » sautent les grisés.

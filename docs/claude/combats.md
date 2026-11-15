@@ -112,6 +112,9 @@ README : « Combats ».
 - Le simulateur tire au hasard (coups critiques, précision) : un test qui attend un menu choisit des attaques sans
   dégâts (`BattlesPageTests` : Sécrétion contre Groz'Yeux). Un K.O. force un remplacement, sans menu ni ABANDONNER (échec en
   CI le 2026-11-13 : Balayage critique de Férosinge sur Chenipan niveau 4).
+- Sinon, une graine fixe : `BattleHub(..., seed: [1, 2, 3, 4])` rejoue toujours le même combat (`BattleHubTests` : Charge
+  critique de Bulbidou au tour 1, premier Pokémon d'Ondine K.O. 3 fois sur 40, le « tour 2 » n'arrivait jamais ;
+  2026-11-15). Le site garde `BattleSetup.NewSeed`.
 
 ## Essai à deux dans le navigateur
 - Sacha sur `127.0.0.1:5299`, Ondine sur `localhost:5299` ; chacune a une sauvegarde de 3e génération dans la base de

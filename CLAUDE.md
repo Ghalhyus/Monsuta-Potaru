@@ -28,7 +28,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Statistiques : argent, moyennes des living dex, échanges et combats, sur le profil | `docs/claude/statistiques.md` |
 | Inventaire : sacs, numéros d'objets, CT, nouvelle catégorie | `docs/claude/inventaire.md` |
 | Pièges de PKHeX (octets, sauvegardes vides) | `docs/claude/pkhex.md` |
-| Ma collection : colonnes remplies au démarrage, doublons, PID des Pokémon de test | `docs/claude/collection.md` |
+| Ma collection : colonnes remplies au démarrage, doublons, PID des Pokémon de test ; « Dépôt / Retrait » : Pokémon incompatibles grisés | `docs/claude/collection.md` |
 | Tester dans le navigateur : instance de test, compte, envoi d'un `.sav`, deux comptes, anti-copie | `docs/claude/navigateur.md` |
 | CI/CD : workflows, SonarCloud, déploiement | `docs/claude/ci-cd.md` |
 

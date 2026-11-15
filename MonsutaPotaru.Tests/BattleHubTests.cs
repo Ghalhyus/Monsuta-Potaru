@@ -24,7 +24,10 @@ public sealed class BattleHubTests : IDisposable
     private static readonly BattleParty Sacha = new("sacha", "Sacha", 1, "Vert Feuille — David");
     private static readonly BattleParty Ondine = new("ondine", "Ondine", 2, "Rouge Feu — Carfil");
 
-    public BattleHubTests() => _hub = new BattleHub(_time, BattleTests.Showdown(), NullLogger.Instance, ticking: false);
+    // Graine fixe : le combat se déroule toujours pareil. Au hasard, un coup critique de Bulbidou au tour 1 mettait parfois
+    // (3 fois sur 40) le premier Pokémon d'Ondine K.O. : Ondine devait le remplacer, Sacha attendait, et le « tour 2 » où
+    // tous deux choisissent n'arrivait jamais.
+    public BattleHubTests() => _hub = new BattleHub(_time, BattleTests.Showdown(), NullLogger.Instance, ticking: false, seed: [1, 2, 3, 4]);
 
     public void Dispose() => _hub.Dispose();
 

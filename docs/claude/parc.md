@@ -21,6 +21,9 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes. Un paysage réservé à certains
   Pokémon : `ParkLandscapes.Refusal` (raison courte, ou null), repris par `ListCandidatesAsync` (`ParkCandidate.Refusal` :
   grisé) et revérifié par `SetAsync` (`ParkService.RefusalMessage`).
+- Fenêtre de choix : `ParkCandidate.Locked` (pas de sprites ou `Refusal`) → `PokemonSlot Locked`, rangés après les
+  autres (`OrderBy` stable : chaque groupe garde son ordre). Le gris (`.slot.locked img` : noir et blanc, opacité 0,45)
+  est le style commun des cases verrouillées : il vaut aussi pour les cases bloquées de « Dépôt / Retrait ».
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9

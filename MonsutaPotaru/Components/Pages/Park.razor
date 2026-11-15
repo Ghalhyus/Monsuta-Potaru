@@ -160,14 +160,15 @@ else
 @* ---------- Choix des Pokémon du parc ---------- *@
 @if (candidates is not null)
 {
-    var shown = candidates.Where(Matches).ToList();
+    var shown = candidates.Where(Matches).OrderBy(c => c.Locked).ToList(); // ceux qui ne peuvent pas venir à la fin, grisés
     <div class="dialog-backdrop" @onclick="CloseChooser"></div>
     <div class="dialog-panel card" role="dialog" aria-modal="true" aria-label="Pokémon du parc">
         <div class="card-body">
             <h5>Pokémon du parc@(parks.Count > 1 ? $" « {current?.Name} »" : "") <small class="text-muted">· @chosen.Count / @Capacity</small></h5>
             <p class="small text-muted">
                 Tes Pokémon du stockage interne et de tes sauvegardes stockées (💾) : clique pour en ajouter ou en retirer.
-                Ceux dont les sprites n'existent pas encore (🔒) ne peuvent pas venir.
+                Ceux qui ne peuvent pas venir sont grisés, à la fin de la liste : leurs sprites n'existent pas encore, ou ce paysage
+                ne leur convient pas (la raison s'affiche au survol ou au clic).
                 @if (parks.Count > 1)
                 {
                     @($"Ceux d'un autre parc ({string.Join(", ", parks.Where(p => p.Id != ParkId).Select(p => $"{ParkLandscapes.Icon(p.Landscape)} {ParkLandscapes.Where(p.Landscape)}"))}) le quittent pour venir ici.")
@@ -208,7 +209,7 @@ else
                                      Level="c.Level"
                                      Shiny="c.IsShiny"
                                      Marker="@Marker(c)"
-                                     Locked="@(!c.HasSprites || c.Refusal is not null)"
+                                     Locked="c.Locked"
                                      Selected="@chosen.Contains(c.Id)"
                                      OnClick="() => Toggle(c)" />
                     }

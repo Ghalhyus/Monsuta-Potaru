@@ -116,6 +116,36 @@ public sealed class BankPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task IncompatibleBankPokemon_AreGreyed_AndCannotBeChosen()
+    {
+        // Pikachu va dans Noir 2 ; Marisson (n° 650, 6e génération) n'y existe pas.
+        AddToBank("sacha", 25, 650);
+        var cut = Render<Bank>();
+        cut.WaitForText("Charge ta sauvegarde");
+        Assert.Empty(cut.FindAll(".bank-zone .slot.locked")); // sans sauvegarde, rien n'est grisé
+
+        await Upload(cut, new FakeBrowserFile("noir2.sav", SaveSessionTests.CreateBw2Save()));
+        cut.WaitForText("Sauvegarde chargée");
+        var locked = Assert.Single(cut.FindAll(".bank-zone .slot.locked"));
+        Assert.Contains("Marisson", locked.GetAttribute("title"));
+        Assert.Contains("ne peut pas aller dans cette sauvegarde", locked.GetAttribute("title"));
+        Assert.Equal("false", locked.GetAttribute("draggable"));
+
+        // Un clic donne la raison sans le sélectionner, même avec Ctrl
+        await locked.ClickAsync(new());
+        cut.WaitForText("n'existe pas dans cette génération");
+        Assert.Empty(cut.FindAll(".bank-zone .slot.selected"));
+        await cut.Find(".bank-zone .slot.locked").ClickAsync(new MouseEventArgs { CtrlKey = true });
+        Assert.Empty(cut.FindAll(".bank-zone .slot.selected"));
+
+        // « Tout sélectionner » le saute : seul Pikachu est choisi, puis retiré
+        await cut.Buttons("Tout sélectionner")[1].ClickAsync(new());
+        Assert.Contains("Pikachu", Assert.Single(cut.FindAll(".bank-zone .slot.selected")).GetAttribute("title"));
+        await cut.Click("Retirer vers la sauvegarde");
+        cut.WaitForText("Retrait ajouté");
+    }
+
+    [Fact]
     public async Task DragAndDrop_DepositsAndWithdraws()
     {
         var cut = await RenderWithSave();

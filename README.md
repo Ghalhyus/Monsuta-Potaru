@@ -94,7 +94,9 @@ chaque sujet est dans sa fiche `docs/claude/` (voir `CLAUDE.md`).
 4. L'utilisateur **remplace** sa sauvegarde par ce fichier.
 
 Un retrait convertit le Pokémon au format du jeu si PKHeX le peut (PK4 → PK5) et refuse ce qui est incompatible (espèce,
-attaques ou objets absents du jeu, génération antérieure).
+attaques ou objets absents du jeu, génération antérieure). La page grise d'avance les Pokémon du stockage interne
+incompatibles avec la sauvegarde chargée (`SaveSession.WithdrawalProblem`, les mêmes vérifications que `TryWithdraw`) :
+ni sélectionnables ni glissables, un clic donne la raison, « Tout sélectionner » et « Retirer les N » les sautent.
 
 ### Comptes
 
@@ -463,7 +465,8 @@ chaque paysage, générateurs, types de cases, comportement, tests) : `docs/clau
   le parc (numéro venu du navigateur) est à ce joueur. **Un Pokémon dans un seul parc** (table `ParkMembers`, suppression
   en cascade quand il quitte la collection). Nom, cartes et textes de chaque paysage : `ParkLandscapes`.
 - Océan : seuls les nageurs (`ParkLandscapes.Refusal`, revérifié par `ParkService.SetAsync`). Espèces sans sprites
-  SpriteCollab : grisées et refusées.
+  SpriteCollab : refusées. Dans la fenêtre de choix, un Pokémon qui ne peut pas venir (`ParkCandidate.Locked`) est
+  grisé (sprite en noir et blanc, pâle) et rangé à la fin ; un clic donne la raison sans le cocher.
 - **Bonheur** (`ParkHabitats.MoodOf`, d'après la feuille « Habitat » de l'utilisateur) : malheureux si un habitat qu'il
   n'aime pas couvre 50 % ou plus de la zone « Parc », sinon heureux si un habitat qu'il aime en couvre plus de 50 %, sinon
   normal ; un double type aime un habitat si l'un de ses types l'aime.

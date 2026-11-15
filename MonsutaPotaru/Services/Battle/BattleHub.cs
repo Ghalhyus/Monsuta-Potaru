@@ -133,15 +133,19 @@ public sealed class BattleHub : IDisposable
     private readonly TimeProvider time;
     private readonly ShowdownOptions options;
     private readonly ILogger logger;
+    private readonly Func<IReadOnlyList<int>> newSeed;
 
     public BattleHub(ShowdownOptions options, ILogger<BattleHub> logger) : this(TimeProvider.System, options, logger) { }
 
     /// <param name="ticking">Faux pour les tests : <see cref="Tick"/> est alors appelé à la main.</param>
-    public BattleHub(TimeProvider time, ShowdownOptions options, ILogger logger, bool ticking = true)
+    /// <param name="seed">Pour les tests : graine fixe, pour un combat qui se déroule toujours pareil (sinon un coup
+    /// critique au hasard peut changer le tour attendu). Par défaut, <see cref="BattleSetup.NewSeed"/>.</param>
+    public BattleHub(TimeProvider time, ShowdownOptions options, ILogger logger, bool ticking = true, IReadOnlyList<int>? seed = null)
     {
         this.time = time;
         this.options = options;
         this.logger = logger;
+        newSeed = seed is null ? BattleSetup.NewSeed : () => seed;
         if (ticking)
             timer = new Timer(_ => Tick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -233,7 +237,7 @@ public sealed class BattleHub : IDisposable
     {
         try
         {
-            var setup = new BattleSetup(session.Format, BattleSetup.NewSeed(), session.FirstTeam!, session.SecondTeam!);
+            var setup = new BattleSetup(session.Format, newSeed(), session.FirstTeam!, session.SecondTeam!);
             var simulator = ShowdownBattle.Start(options, setup, logger);
             session.Simulator = simulator;
             session.Stage = BattleStage.Fighting;

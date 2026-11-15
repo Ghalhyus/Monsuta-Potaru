@@ -166,7 +166,7 @@
                 var pageCount = (bankEntries.Count + PageSize - 1) / PageSize;
                 bankPage = Math.Clamp(bankPage, 0, pageCount - 1);
 
-                var bankDragCount = SelectedBank().Count(e => !Session.IsPendingWithdrawal(e.Id));
+                var bankDragCount = SelectedBank().Count(e => !Session.IsPendingWithdrawal(e.Id) && Incompatibility(e) is null);
                 <div class="box-nav">
                     <button class="btn btn-sm btn-light" @onclick="() => bankPage--" disabled="@(bankPage == 0)" aria-label="Page précédente">◀</button>
                     <span class="small">Page @(bankPage + 1) / @pageCount</span>
@@ -178,10 +178,13 @@
                     @foreach (var entry in bankEntries.Skip(bankPage * PageSize).Take(PageSize))
                     {
                         var e = entry;
+                        @* Incompatible avec la sauvegarde chargée : grisé, ni sélectionnable ni glissable, un clic donne la raison. *@
+                        var problem = Incompatibility(e);
                         <PokemonSlot Sprite="@PokemonSprites.Url(e)"
-                                     Title="@($"{e.Nickname} ({e.SpeciesName}) N.{e.Level}")"
+                                     Title="@($"{e.Nickname} ({e.SpeciesName}) N.{e.Level}{(problem is null ? "" : " — ne peut pas aller dans cette sauvegarde")}")"
                                      Level="e.Level"
                                      Shiny="e.IsShiny"
+                                     Locked="@(problem is not null)"
                                      Pending="@Session.IsPendingWithdrawal(e.Id)"
                                      Selected="@selectedBankIds.Contains(e.Id)"
                                      OnClick="args => ClickBank(e, args)"
@@ -230,14 +233,14 @@
             }
             else if (SelectedBank() is { Count: > 1 } bankSelection)
             {
-                var available = bankSelection.Where(e => !Session.IsPendingWithdrawal(e.Id)).ToList();
+                var available = bankSelection.Where(e => !Session.IsPendingWithdrawal(e.Id) && Incompatibility(e) is null).ToList();
                 <div class="card">
                     <div class="card-body">
                         <h5>@bankSelection.Count Pokémon sélectionnés</h5>
                         <ul class="selection-list small">
                             @foreach (var e in bankSelection)
                             {
-                                <li>@e.Nickname N.@e.Level @if (Session.IsPendingWithdrawal(e.Id)) { <span class="text-muted">— déjà retiré</span> }</li>
+                                <li>@e.Nickname N.@e.Level @if (Session.IsPendingWithdrawal(e.Id)) { <span class="text-muted">— déjà retiré</span> } else if (Incompatibility(e) is not null) { <span class="text-muted">— incompatible</span> }</li>
                             }
                         </ul>
                         <div class="d-grid gap-2">
@@ -259,7 +262,7 @@
                 <PokemonCard Pokemon="@view">
                     <div class="d-grid gap-2">
                         <button class="btn btn-success" @onclick="() => WithdrawMany([entry])"
-                                disabled="@(busy || !Session.IsLoaded || Session.IsPendingWithdrawal(entry.Id))">
+                                disabled="@(busy || !Session.IsLoaded || Session.IsPendingWithdrawal(entry.Id) || Incompatibility(entry) is not null)">
                             ⬇ Retirer vers la sauvegarde
                         </button>
                         @if (!Session.IsLoaded)
@@ -338,6 +341,27 @@
 
     private PokemonView Describe(PKM pk) => Info.Describe(pk);
 
+    private SaveFile? checkedSave; // sauvegarde pour laquelle « incompatibilities » a été calculé
+    private readonly Dictionary<int, string?> incompatibilities = [];
+
+    /// <summary>
+    /// Pourquoi ce Pokémon de la banque ne peut pas aller dans la sauvegarde chargée (<see cref="SaveSession.WithdrawalProblem"/>),
+    /// ou null ; null aussi sans sauvegarde. Calculé à la demande (page affichée), gardé jusqu'au prochain chargement.
+    /// </summary>
+    private string? Incompatibility(BankPokemon entry)
+    {
+        if (Session.Save is not { } sav)
+            return null;
+        if (!ReferenceEquals(checkedSave, sav))
+        {
+            incompatibilities.Clear();
+            checkedSave = sav;
+        }
+        if (!incompatibilities.TryGetValue(entry.Id, out var problem))
+            incompatibilities[entry.Id] = problem = BankService.ToPkm(entry) is { } pk ? Session.WithdrawalProblem(pk) : "Données illisibles.";
+        return problem;
+    }
+
     private PokemonView? BankView(BankPokemon entry)
     {
         if (!bankViews.TryGetValue(entry.Id, out var view))
@@ -398,6 +422,11 @@
 
     private void ClickBank(BankPokemon entry, MouseEventArgs e)
     {
+        if (Incompatibility(entry) is { } problem)
+        {
+            Show($"{entry.Nickname} : {problem}", isError: true);
+            return;
+        }
         selectedSaveSlots.Clear();
         saveAnchor = null;
 
@@ -406,7 +435,7 @@
         {
             if (!AddsToSelection(e)) selectedBankIds.Clear();
             var index = bankEntries.IndexOf(entry);
-            foreach (var x in bankEntries.Skip(Math.Min(anchorIndex, index)).Take(Math.Abs(anchorIndex - index) + 1))
+            foreach (var x in bankEntries.Skip(Math.Min(anchorIndex, index)).Take(Math.Abs(anchorIndex - index) + 1).Where(x => Incompatibility(x) is null))
                 selectedBankIds.Add(x.Id);
             return;
         }
@@ -433,7 +462,7 @@
     private void SelectWholeBankPage()
     {
         ClearSelection();
-        foreach (var e in bankEntries.Skip(bankPage * PageSize).Take(PageSize).Where(e => !Session.IsPendingWithdrawal(e.Id)))
+        foreach (var e in bankEntries.Skip(bankPage * PageSize).Take(PageSize).Where(e => !Session.IsPendingWithdrawal(e.Id) && Incompatibility(e) is null))
             selectedBankIds.Add(e.Id);
     }
 
@@ -602,7 +631,7 @@
             selectedBankIds.Add(entry.Id);
             bankAnchor = entry.Id;
         }
-        dragBankIds = SelectedBank().Where(e => !Session.IsPendingWithdrawal(e.Id)).Select(e => e.Id).ToList();
+        dragBankIds = SelectedBank().Where(e => !Session.IsPendingWithdrawal(e.Id) && Incompatibility(e) is null).Select(e => e.Id).ToList();
         dragSource = DragSource.Bank;
     }
 

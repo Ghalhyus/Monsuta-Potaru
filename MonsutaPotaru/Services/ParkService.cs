@@ -65,7 +65,11 @@ public sealed record ParkMalus(int Levels, DateTime Until)
 /// <param name="Refusal">Ce qui l'empêche de vivre dans ce paysage (« Ne nage pas » pour l'océan,
 /// <see cref="ParkLandscapes.Refusal"/>) : grisé ; null s'il peut y aller.</param>
 public sealed record ParkCandidate(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
-    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites, ParkLandscape? OtherPark = null, string? Refusal = null);
+    string SpriteUrl, int? StoredSaveId, bool InPark, bool HasSprites, ParkLandscape? OtherPark = null, string? Refusal = null)
+{
+    /// <summary>Ne peut pas venir dans ce parc (pas de sprites, ou refusé par le paysage) : grisé, en fin de liste.</summary>
+    public bool Locked => !HasSprites || Refusal is not null;
+}
 
 /// <summary>Parc d'un joueur, pour la liste déroulante de la page.</summary>
 /// <param name="Count">Pokémon qui y vivent.</param>

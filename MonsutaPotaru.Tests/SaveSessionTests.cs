@@ -170,6 +170,17 @@ public class SaveSessionTests
     }
 
     [Fact]
+    public void WithdrawalProblem_SaysWhy_WithoutWriting()
+    {
+        var session = LoadedSession();
+        var before = session.Save!.Write().ToArray();
+        Assert.Null(session.WithdrawalProblem(CreatePk5(25, 5)));
+        Assert.Contains("n'existe pas dans cette génération", session.WithdrawalProblem(new PK6 { Species = 700 }));
+        Assert.Equal(before, session.Save.Write().ToArray());
+        Assert.Empty(session.Withdrawals);
+    }
+
+    [Fact]
     public void Deposit_OfJustWithdrawn_CancelsTheWithdrawal()
     {
         var session = LoadedSession();

@@ -147,6 +147,39 @@ public sealed class ParkPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task Chooser_GreysThePokemonThatCannotCome_AtTheEnd()
+    {
+        // Tissenboule (n° 917) n'a pas encore de sprites Donjon Mystère ; l'océan ne prend que ceux qui nagent.
+        AddToBank("sacha", 917, 25, 7);
+        GiveMoney("sacha", ParkService.ParkPrice);
+        var ocean = await Parks.BuyAsync("sacha", ParkLandscape.Ocean);
+        Assert.True(ocean.Ok, ocean.Message);
+        var cut = Render<Park>();
+        string[] Shown() => [.. cut.FindAll(".park-candidates .slot").Select(slot => slot.GetAttribute("title")!.Split('(', ')')[1])];
+        string[] Locked() => [.. cut.FindAll(".park-candidates .slot.locked").Select(slot => slot.GetAttribute("title")!.Split('(', ')')[1])];
+
+        // Forêt : Tissenboule grisé, à la fin
+        await cut.Click("Choisir les Pokémon");
+        cut.WaitForText("Pokémon du parc");
+        Assert.Equal("Tissenboule", Shown()[^1]);
+        Assert.Equal(["Tissenboule"], Locked());
+        Assert.Contains("pas encore de sprite", cut.Find(".park-candidates .slot.locked").GetAttribute("title"));
+        await cut.Find(".park-candidates .slot.locked").ClickAsync(new());
+        cut.WaitForText("Tissenboule n'a pas encore de sprites Donjon Mystère");
+        Assert.Contains("· 0 / 20", cut.Text());
+        await cut.Click("Annuler");
+
+        // Océan : seul Carapuce peut venir, en tête ; les deux autres grisés après lui
+        await cut.Find("select.park-choice").ChangeAsync(new() { Value = ocean.ParkId.ToString() });
+        await cut.Click("Choisir les Pokémon");
+        cut.WaitForText("Pokémon du parc");
+        Assert.Equal("Carapuce", Shown()[0]);
+        Assert.Equal(["Pikachu", "Tissenboule"], Locked().Order());
+        Assert.Empty(cut.FindAll(".park-candidates .slot.locked ~ .slot:not(.locked)")); // aucun Pokémon permis après un grisé
+        Assert.Equal(3, Shown().Length);
+    }
+
+    [Fact]
     public async Task Expand_AndBuy_ArePaidWithTheWallet()
     {
         var cut = Render<Park>();

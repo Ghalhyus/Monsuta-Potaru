@@ -126,29 +126,8 @@ public sealed class SaveSession
             if (GetSlot(box, slot) is not null) { error = "Cet emplacement est déjà occupé."; return false; }
         }
 
-        if (pk.Species > sav.MaxSpeciesID)
-        {
-            error = $"Ce Pokémon n'existe pas dans cette génération (espèce n°{pk.Species}).";
+        if (Prepare(pk, out error) is not { } converted)
             return false;
-        }
-
-        var converted = pk;
-        if (pk.GetType() != sav.PKMType)
-        {
-            converted = EntityConverter.ConvertToType(pk, sav.PKMType, out var result);
-            if (converted is null || !result.IsSuccess)
-            {
-                error = $"Conversion {pk.Extension.ToUpperInvariant()} → {sav.BlankPKM.Extension.ToUpperInvariant()} impossible ({result}).";
-                return false;
-            }
-        }
-
-        var problems = sav.EvaluateCompatibility(converted);
-        if (problems.Count > 0)
-        {
-            error = "Incompatible avec cette sauvegarde : " + string.Join(" ; ", problems);
-            return false;
-        }
 
         if (box < 0)
         {
@@ -159,6 +138,43 @@ public sealed class SaveSession
         sav.SetBoxSlotAtIndex(converted, box, slot);
         Withdrawals.Add(new PendingWithdrawal(bankId, box, slot));
         return true;
+    }
+
+    /// <summary>
+    /// Raison pour laquelle ce Pokémon ne peut pas aller dans la sauvegarde chargée (« Dépôt / Retrait » le grise), ou
+    /// null s'il le peut ; rien n'est écrit. Mêmes vérifications que <see cref="TryWithdraw(int, PKM, int, int, out string)"/>.
+    /// </summary>
+    public string? WithdrawalProblem(PKM pk) => Prepare(pk, out var error) is null ? error : null;
+
+    /// <summary>Le Pokémon au format de la sauvegarde (converti au besoin), ou null avec la raison du refus.</summary>
+    private PKM? Prepare(PKM pk, out string error)
+    {
+        error = "";
+        var sav = Save!;
+        if (pk.Species > sav.MaxSpeciesID)
+        {
+            error = $"Ce Pokémon n'existe pas dans cette génération (espèce n°{pk.Species}).";
+            return null;
+        }
+
+        var converted = pk;
+        if (pk.GetType() != sav.PKMType)
+        {
+            converted = EntityConverter.ConvertToType(pk, sav.PKMType, out var result);
+            if (converted is null || !result.IsSuccess)
+            {
+                error = $"Conversion {pk.Extension.ToUpperInvariant()} → {sav.BlankPKM.Extension.ToUpperInvariant()} impossible ({result}).";
+                return null;
+            }
+        }
+
+        var problems = sav.EvaluateCompatibility(converted);
+        if (problems.Count > 0)
+        {
+            error = "Incompatible avec cette sauvegarde : " + string.Join(" ; ", problems);
+            return null;
+        }
+        return converted;
     }
 
     public void UndoWithdrawal(PendingWithdrawal withdrawal)
