@@ -197,6 +197,14 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   des œufs. Les deux sauvegardes sont écrites dans une même transaction (copies `echange-avant` / `echange-apres`) et
   marquées modifiées sur le serveur (`SaveModification.PokemonTraded`).
 - Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
+- **Animation d'échange**, façon 4e génération (`Shared/TradeAnimation.razor`, `wwwroot/js/echange.js`), à chaque échange :
+  le Pokémon envoyé part dans sa Poké Ball, l'autre arrive, puis chaque évolution par échange. Entre amis, chacun voit le
+  Pokémon qu'il envoie et celui qu'il reçoit (et son évolution) ; échange interne : les deux évolutions ; GTS : celui qui
+  accepte, tout de suite, le déposant en récupérant le Pokémon reçu. **Musiques de HeartGold / SoulSilver** (échange,
+  évolution, fanfare : `wwwroot/images/sons/`, **hors Git**, `Services/TradeSounds.cs`) ; un fichier absent ne joue rien,
+  sans aucun l'animation est muette. « Passer » et son coupé (retenu par le navigateur). L'échange est déjà
+  écrit : l'animation ne fait que le montrer, l'évolution ne s'annule pas (seule la Pierre Stase l'empêche). Un œuf est
+  dessiné, sans son image (elle révélerait l'espèce).
 - Comptés dans les **statistiques** (voir « Statistiques ») : table `TradeRecords`.
 - **Échange interne** (`/echange-interne?de=3&vers=5`, rubrique « Mes Pokémon », `Pages/InternalTrade.razor`) : entre deux
   sauvegardes stockées du même compte (deux parties du même jeu comprises, jamais une avec elle-même), en 4 étapes (les
@@ -224,7 +232,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   interne). Celui qui accepte donne un Pokémon de sa collection qui répond à la demande (revérifiée sur le Pokémon,
   légalité recalculée) et reçoit l'offre à sa place (même case, ou stockage interne) ; évolution par échange des deux côtés.
   L'offre est prise par une mise à jour conditionnelle : deux joueurs en même temps, un seul l'obtient. Compté dans
-  `TradeRecords` (statistiques).
+  `TradeRecords` (statistiques). Animation d'échange (voir « Échanges ») pour celui qui accepte, et pour le déposant en
+  récupérant le Pokémon (gardée en JSON dans `GtsPokemon.TradeShow`).
 - **Boîte de réception** : le Pokémon reçu par le déposant, et celui d'une offre expirée (`GtsExpiry`, toutes les heures,
   et à l'ouverture de la page), annulée ou retirée avec sa sauvegarde (suppression : la confirmation l'annonce). **Aucune
   sauvegarde n'est écrite sans son joueur** : il récupère le Pokémon dans le stockage interne ou dans une sauvegarde (première
@@ -700,6 +709,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Friends.razor` | « Multijoueurs » → « Amis » : onglets Amis (recherche, retrait) et Demandes (code ami, reçues, envoyées) |
 | `MonsutaPotaru/Data/Friendship.cs` | Tables des amitiés (deux lignes par amitié) et des demandes d'ami |
 | `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
+| `MonsutaPotaru/Services/TradeSounds.cs` | Musiques de l'animation d'échange présentes sur le serveur (`images/sons/`, hors Git), regardées à chaque animation |
+| `MonsutaPotaru/Services/TradeShow.cs` | Ce que montre l'animation d'échange à un joueur (`TradeShow`) : Pokémon envoyé, Pokémon reçu, évolutions (noms et images avant et après) |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
 | `MonsutaPotaru/Services/GtsService.cs` | GTS : dépôt (depuis la collection), recherche, échange, boîte de réception (annulation, expiration, sauvegarde supprimée, récupération) ; `GtsEvents` (pastille du menu) et `GtsExpiry` (offres expirées, toutes les heures) |
 | `MonsutaPotaru/Data/GtsPokemon.cs` | Table des Pokémon de la GTS : offres en ligne et boîte de réception (`GtsStatus`) |
@@ -723,6 +734,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
 | `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
+| `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex), Multijoueurs (échanges, combats) |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
@@ -815,6 +827,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |
 | `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Banque d'objets » (`/inventaire`, rubrique « Inventaire » ; « Inventaire » sur la page d'un autre joueur) (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
 | `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés), récapitulatif, « Valider » / « Annuler » |
+| `MonsutaPotaru/wwwroot/js/echange.js` | Déroulé de l'animation d'échange (envoi, voyage, arrivée, évolutions ; textes tapés lettre à lettre) et ses musiques (fondus, fanfare attendue) ; son coupé retenu (`localStorage`) |
 | `MonsutaPotaru/wwwroot/js/transfert-objets.js` | Glisser-déposer de cette page (événements pointeur : souris, appui long au doigt ; image qui suit, défilement près des bords) |
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |
 | `MonsutaPotaru/Components/Shared/ItemSprite.razor` | Image d'un objet ; celle de l'objet inconnu quand le site n'en a pas |
@@ -823,6 +836,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/PokemonTraits.cs` | Caractéristiques d'un Pokémon enregistrées pour ces filtres (types récents, nature, talent, IV, forme, Méga) |
 | `MonsutaPotaru/Services/PokemonSprites.cs` | Choix de l'image d'un Pokémon : forme (noms de PKHeX → noms de PokéAPI), Méga-Évolution selon l'objet tenu, femelle, chromatique |
 | `MonsutaPotaru/wwwroot/images/` | Hors du dépôt Git (voir « Lancer en local ») ; images servies par le site : `pokemon/<numéro d'espèce>.png`, `pokemon/<numéro>-<forme>.png` (`19-alola.png`, `6-mega-x.png`, `6-gmax.png`), `pokemon/femelle/`, `pokemon/chromatique/` (mêmes sous-dossiers), `objets/<numéro d'objet>.png`, `objets/ct-<type>.png` pour les CT/DT, un `inconnu.png` dans chaque dossier |
+| `MonsutaPotaru/wwwroot/images/sons/` | Musiques (bande originale de HeartGold / SoulSilver ; hors Git, envoyées par `deploy/sons-serveur.cmd`) : animation d'échange (`echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; combats, rangées mais pas encore jouées (`combat-rival.mp3`, `combat-champion.mp3`, `combat-meneur-de-zone.mp3`, `combat-champion-arene-kanto.mp3`, `combat-champion-arene-johto.mp3`) |
 | `MonsutaPotaru/wwwroot/images/parc/tuiles/` | Planches du pack Cute Fantasy utilisées par la carte du parc (hors Git : copiées par `outils/carte-parc.py`, envoyées par `deploy/fond-parc.cmd`) |
 | `outils/generer-parc.py` | Génère les cartes du parc 1 (`Parc_1-1.tmx` à `Parc_1-4.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
 | `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
@@ -835,6 +849,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `outils/parc_carte.py` | Moteur commun des générateurs (forêt, plage, volcan, désert, océan, grotte, montagne, donjon) : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` (couleur de fond, calque « Lumières ») et aperçus |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
+| `deploy/sons-serveur.cmd` (`sons-serveur.ps1`) | Envoie les musiques (`images/sons/*.mp3` : animation d'échange, combats) dans les images du serveur, par SSH |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
@@ -884,7 +899,8 @@ l'IP du VPS.
    (demande le nom de domaine et le pseudo de ton compte, futur administrateur ; génère le code d'invitation de départ et
    l'affiche à la fin). Inscris-toi ensuite avec ce pseudo : le compte devient administrateur.
 3. Depuis Windows : `deploy\images-serveur.cmd ubuntu@IP_DU_VPS` (images, voir plus bas), puis
-   `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` (planches du parc, copiées en local depuis le pack).
+   `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` (planches du parc, copiées en local depuis le pack), puis
+   `deploy\sons-serveur.cmd ubuntu@IP_DU_VPS` (musiques de l'animation d'échange).
 
 **Mises à jour** : par GitHub (« CI/CD » ci-dessous), ou `deploy\publier.cmd ubuntu@IP_DU_VPS` depuis Windows. Les
 migrations de la base s'appliquent au démarrage ; les données restent dans le volume Docker.
@@ -954,9 +970,10 @@ et servi depuis le disque (`Program.cs` : `MapStaticAssets` ne connaît que les 
 `deploy\images-serveur.cmd ubuntu@IP_DU_VPS` lance `outils/images.py --sortie ~/monsuta-potaru-images` sur le VPS (téléchargement
 depuis les projets d'origine, ~10 minutes la première fois, les images présentes sont gardées), puis redémarre le site,
 qui lit la liste des images au démarrage. À relancer pour mettre les images à jour. Les développeurs les copient depuis le
-VPS avec `outils\recuperer-images.cmd` (voir « Lancer en local »). Seule exception : les planches du parc, qui ne se
-téléchargent nulle part (pack acheté, `outils/carte-parc.py`, voir « Parc ») ; `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` les
-envoie depuis le PC.
+VPS avec `outils\recuperer-images.cmd` (voir « Lancer en local »). Exceptions, qui ne se téléchargent nulle part : les
+planches du parc (pack acheté, `outils/carte-parc.py`, voir « Parc »), que `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` envoie
+depuis le PC, et les musiques de l'animation d'échange (`images/sons/`), envoyées par `deploy\sons-serveur.cmd
+ubuntu@IP_DU_VPS` (jouées aussitôt, sans redémarrage).
 
 **Sauvegardes** : la sauvegarde de l'hébergeur ne couvre souvent que 24 h, or la base est le seul endroit où sont les
 Pokémon déposés. `deploy/sauvegarder.sh` archive chaque nuit le volume dans `~/sauvegardes` sur le VPS ; en garder aussi
@@ -995,6 +1012,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
 | [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert, et tout le désert (sable, falaises, eau, cascade, herbe, cactus, rochers, acacias, plantes) ; îlots et rochers animés de l'océan ; sol, parois, eau, cristaux, stalagmites et torches de la grotte ; herbes, hauteurs à flancs de pierre, rivière, pont de bois, sapins et nids de la montagne ; murs, dallage, bassins d'égout, piliers, pics, objets, or, coffres et petit pont de l'extension Dungeons ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
+| Bande originale de *Pokémon HeartGold / SoulSilver* (GAME FREAK, 2009 ; Shota Kageyama, Junichi Masuda), pistes « Trade », « Evolution » et « Congratulations! Your Pokémon Evolved! », et « Battle! » (Rival, Champion, Frontier Brain, Gym Leader Kanto et Johto), fournies par l'utilisateur | Musiques de l'animation d'échange (`wwwroot/images/sons/` : `echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; musiques des combats rangées pour plus tard (`combat-*.mp3`) ; hors Git, jamais redistribuées avec le code | © Nintendo / GAME FREAK ; non libre |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |

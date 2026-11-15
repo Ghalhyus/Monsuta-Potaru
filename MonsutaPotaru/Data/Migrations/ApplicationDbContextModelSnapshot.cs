@@ -566,6 +566,9 @@ namespace MonsutaPotaru.Migrations
                     b.Property<int?>("StoredSaveId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TradeShow")
+                        .HasColumnType("TEXT");
+
                     b.Property<byte?>("WantedGender")
                         .HasColumnType("INTEGER");
 

@@ -95,6 +95,18 @@ public sealed class TradeServiceTests : IDisposable
         Assert.Contains("Stari", outcome.FirstMessage);
         Assert.Contains("tu as reçu Kadabra, qui a évolué en Alakazam", outcome.SecondMessage);
 
+        // Animation : chacun voit le Pokémon qu'il envoie et celui qu'il reçoit ; seule Ondine voit l'évolution (de son Kadabra).
+        var sachaShow = outcome.FirstShow!;
+        Assert.Equal(("ondine", "Kadabra", "Stari"), (sachaShow.Partner, sachaShow.Sent.Nickname, sachaShow.Received.Nickname));
+        Assert.Empty(sachaShow.Evolutions);
+        Assert.EndsWith("/64.png", sachaShow.Sent.SpriteUrl);
+        var ondineShow = outcome.SecondShow!;
+        Assert.Equal(("sacha", "Stari", "Kadabra"), (ondineShow.Partner, ondineShow.Sent.Nickname, ondineShow.Received.Nickname));
+        var evolution = Assert.Single(ondineShow.Evolutions);
+        Assert.Equal("Alakazam", evolution.EvolvedSpecies);
+        Assert.EndsWith("/64.png", evolution.SpriteUrl); // image avant l'évolution
+        Assert.EndsWith("/65.png", evolution.EvolvedSpriteUrl);
+
         var sacha = await Read(sachaSave);
         Assert.Equal(120, sacha.GetBoxSlotAtIndex(0, 0).Species); // le Stari à la place du Kadabra
         var ondine = await Read(ondineSave);

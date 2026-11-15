@@ -106,6 +106,7 @@ using (var scope = app.Services.CreateScope())
 }
 PokemonSprites.Load(app.Environment.WebRootPath); // images des Pokémon et de leurs formes
 ParkHabitats.Load(app.Environment.WebRootPath); // types de cases des cartes du parc
+TradeSounds.Load(app.Environment.WebRootPath); // musiques de l'animation d'échange (images/sons, hors Git)
 
 // En-têtes de sécurité (nosniff, Referrer-Policy, CSP stricte : aucun script écrit dans la page) : SecurityHeaders.cs.
 app.UseSecurityHeaders(app.Environment.IsDevelopment());

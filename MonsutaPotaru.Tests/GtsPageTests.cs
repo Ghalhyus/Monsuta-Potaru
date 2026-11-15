@@ -72,13 +72,21 @@ public sealed class GtsPageTests : PageTestContext
         Assert.DoesNotContain("ton jeu n'a pas encore", hers.Text()); // rien à télécharger : stockage interne
         await hers.Click("Échanger");
         hers.WaitForText("Échange réussi : tu as reçu Kadabra, qui a évolué en Alakazam dans ton stockage interne.");
+        Assert.Contains("Félicitations ! Ton Kadabra a évolué en Alakazam !", hers.Find(".trade-show").TextContent);
+        await hers.Click("Passer");
+        Assert.Empty(hers.FindAll(".trade-show"));
 
         // La page de Sacha se met à jour : le Machopeur l'attend ; il le récupère dans le stockage interne.
         cut.WaitForText("Boîte de réception");
         Assert.Contains("Échange avec Ondine : tu as reçu Machopeur, qui a évolué en Mackogneur contre ton Kadabra.", cut.Text());
         Assert.Contains("0 / 5", cut.Text());
+        Assert.Empty(cut.FindAll(".trade-show")); // l'animation attend la récupération
         await cut.Click("Récupérer");
         cut.WaitForText("Mackogneur est dans ton stockage interne.");
+        var show = PageTestExtensions.Normalize(cut.Find(".trade-show").TextContent);
+        Assert.Contains("Envoi de Kadabra à Ondine.", show);
+        Assert.Contains("Ondine t'envoie Machopeur.", show);
+        Assert.Contains("Félicitations ! Ton Machopeur a évolué en Mackogneur !", show);
         Assert.DoesNotContain("Boîte de réception", cut.Text());
     }
 

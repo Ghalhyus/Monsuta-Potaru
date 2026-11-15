@@ -48,6 +48,16 @@ public sealed class TradesPageTests : PageTestContext
         await ondine.Click("Valider l'échange");
         sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("Nouvel échange")), TimeSpan.FromSeconds(10));
         ondine.WaitForAssertion(() => Assert.True(ondine.HasButton("Nouvel échange")));
+
+        // Chacun voit son animation : ce qu'il envoie à l'autre, ce qu'il reçoit ; « Passer » la ferme pour de bon.
+        Assert.Contains("à ondine.", sacha.Find(".trade-show").TextContent);
+        Assert.Contains("ondine t'envoie", sacha.Find(".trade-show").TextContent);
+        Assert.Contains("à sacha.", ondine.Find(".trade-show").TextContent);
+        await sacha.Click("Passer");
+        Assert.Empty(sacha.FindAll(".trade-show"));
+        sacha.Render();
+        Assert.Empty(sacha.FindAll(".trade-show"));
+        Assert.Single(ondine.FindAll(".trade-show"));
         await sacha.Click("Nouvel échange");
         sacha.WaitForText("Nouvel échange");
     }

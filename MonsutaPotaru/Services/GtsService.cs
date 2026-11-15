@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MonsutaPotaru.Data;
 using PKHeX.Core;
@@ -67,7 +68,7 @@ public sealed record GtsDepositChoice(GtsPokemonView Pokemon, string Origin, boo
 public sealed record GtsSpecies(ushort Id, string Name);
 
 /// <summary>Résultat d'une opération de la GTS, prêt à afficher.</summary>
-public sealed record GtsResult(bool Ok, string Message);
+public sealed record GtsResult(bool Ok, string Message, TradeShow? Show = null);
 
 /// <summary>
 /// Ce que donnera l'échange choisi : <paramref name="Problem"/> s'il ne peut plus se faire, sinon les évolutions annoncées
@@ -300,6 +301,7 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
             return new(false, "Ce Pokémon n'est plus dans ta boîte de réception.");
         var now = DateTime.UtcNow;
         var name = row.Nickname;
+        var show = ShowOf(row);
 
         if (saveId is null)
         {
@@ -308,7 +310,7 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
             if (!await TrySaveAsync(db))
                 return new(false, "Ce Pokémon n'est plus dans ta boîte de réception.");
             events.Notify(userId);
-            return new(true, $"{name} est dans ton stockage interne.");
+            return new(true, $"{name} est dans ton stockage interne.", show);
         }
 
         var save = await db.StoredSaves.FirstOrDefaultAsync(s => s.Id == saveId && s.OwnerId == userId);
@@ -332,7 +334,25 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
         }
         await storedSaves.WriteBackupAsync(userId, save, "gts-apres");
         events.Notify(userId);
-        return new(true, $"{name} est arrivé dans « {Label(save)} » (boîte {slot.Box + 1}, case {slot.Slot + 1}). {DownloadAdvice}");
+        return new(true, $"{name} est arrivé dans « {Label(save)} » (boîte {slot.Box + 1}, case {slot.Slot + 1}). {DownloadAdvice}", show);
+    }
+
+    /// <summary>
+    /// Animation de l'échange d'un Pokémon de la boîte de réception reçu contre une offre ; null pour un Pokémon rendu
+    /// (offre expirée, annulée...), ou reçu avant que l'animation existe.
+    /// </summary>
+    private static TradeShow? ShowOf(GtsPokemon row)
+    {
+        if (row.Status != GtsStatus.Received || row.TradeShow is not { } json)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<TradeShow>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     // ---------- Dépôt ----------
@@ -700,9 +720,12 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
     /// <summary>
     /// Un échange prêt à écrire : l'offre (suivie), le Pokémon donné et son entrée, sa sauvegarde s'il en vient, ce que
     /// reçoit chacun (converti, évolué) et les noms avant l'évolution.
+    /// Pour l'animation d'échange : <c>OfferedShow</c> et <c>GivenShow</c>, les deux Pokémon tels qu'ils partent ;
+    /// <c>ReceivedShow</c> et <c>GivenArriving</c>, tels qu'ils arrivent, avec leur évolution.
     /// </summary>
     private sealed record Prepared(GtsPokemon Offer, BankPokemon Entry, StoredSave? Save, SaveFile? Sav, TradeSlot? Slot,
-        PKM Received, string ReceivedName, ushort? ReceivedEvolvedTo, PKM Given, string GivenName, ushort? GivenEvolvedTo, string Arrival);
+        PKM Received, string ReceivedName, ushort? ReceivedEvolvedTo, PKM Given, string GivenName, ushort? GivenEvolvedTo, string Arrival,
+        TradeShowPokemon OfferedShow, TradeShowPokemon ReceivedShow, TradeShowPokemon GivenShow, TradeShowPokemon GivenArriving);
 
     private async Task<(Prepared? Ready, string? Problem)> PrepareAsync(ApplicationDbContext db, string userId, int offerId, int bankId)
     {
@@ -733,11 +756,15 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
         var given = pk.Clone();
         var receivedName = FullName(received);
         var givenName = FullName(given);
+        var receivedShow = TradeShowPokemon.Of(info, received);
+        var givenShow = TradeShowPokemon.Of(info, given);
         var receivedEvolvedTo = TradeService.EvolveByTrade(received, given.Species);
         var givenEvolvedTo = TradeService.EvolveByTrade(given, offered.Species);
         var arrival = stored is null ? "ton stockage interne" : $"« {Label(stored.Save)} »";
         return (new(offer, entry, stored?.Save, stored?.Sav, stored is null ? null : SlotAt(stored.Sav, entry.Position),
-            received, receivedName, receivedEvolvedTo, given, givenName, givenEvolvedTo, arrival), null);
+            received, receivedName, receivedEvolvedTo, given, givenName, givenEvolvedTo, arrival,
+            TradeShowPokemon.Of(info, offered), receivedShow.Evolving(info, received, receivedEvolvedTo),
+            givenShow, givenShow.Evolving(info, given, givenEvolvedTo)), null);
     }
 
     /// <summary>Ce que donnera l'échange (évolutions annoncées), ou pourquoi il ne peut pas se faire. Rien n'est écrit.</summary>
@@ -765,7 +792,8 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
         if (p is null)
             return new(false, problem!);
         var now = DateTime.UtcNow;
-        var pseudo = await db.Users.Where(u => u.Id == userId).Select(u => u.Audience == ProfileAudience.Nobody ? null : u.UserName).FirstOrDefaultAsync();
+        var pseudo = await PublicPseudoAsync(db, userId);
+        var depositorPseudo = await PublicPseudoAsync(db, p.Offer.OwnerId);
         var offeredName = p.Offer.Nickname;
         var offeredSpecies = p.Offer.Species;
         var depositor = p.Offer.OwnerId;
@@ -800,6 +828,8 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
             p.Offer.ArrivedAt = now;
             p.Offer.StoredSaveId = null;
             p.Offer.Note = $"Échange avec {pseudo ?? "un dresseur"} : tu as reçu {p.GivenName}{evolved} contre ton {offeredName}.";
+            // Le déposant verra l'échange en récupérant le Pokémon : son offre part, le Pokémon donné arrive (et évolue).
+            p.Offer.TradeShow = JsonSerializer.Serialize(new TradeShow(pseudo ?? "un dresseur", p.OfferedShow, p.GivenArriving));
             db.TradeRecords.Add(new TradeRecord
             {
                 At = now,
@@ -822,8 +852,13 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
 
         var receivedEvolved = p.ReceivedEvolvedTo is null ? "" : $", qui a évolué en {info.Describe(p.Received).SpeciesName}";
         var message = $"Échange réussi : tu as reçu {p.ReceivedName}{receivedEvolved} dans {p.Arrival}.";
-        return new(true, p.Save is null ? message : $"{message} {DownloadAdvice}");
+        return new(true, p.Save is null ? message : $"{message} {DownloadAdvice}",
+            new TradeShow(depositorPseudo ?? "un dresseur", p.GivenShow, p.ReceivedShow));
     }
+
+    /// <summary>Pseudo d'un joueur tel que le voient les autres : null s'il n'en a pas ou si son profil est caché (« Personne »).</summary>
+    private static Task<string?> PublicPseudoAsync(ApplicationDbContext db, string userId) =>
+        db.Users.Where(u => u.Id == userId).Select(u => u.Audience == ProfileAudience.Nobody ? null : u.UserName).FirstOrDefaultAsync();
 
     // ---------- Outils ----------
 

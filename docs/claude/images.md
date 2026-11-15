@@ -11,8 +11,10 @@ README : « Images des Pokémon », « Mise en ligne » (Images), « Lancer en l
   ETag en base64). Les `.xml` et `.json` de `/images` ont `Cache-Control: no-cache` (middleware de `Program.cs`) : sans
   lui, le navigateur gardait un ancien `AnimData.xml` (voir `parc.md`, « Cache du navigateur »).
 - Rien n'est chargé depuis GitHub par le navigateur.
-- Exception : `parc/tuiles/` (planches de la carte du parc, pack Cute Fantasy acheté) ne vient pas de `images.py` mais de
-  `outils/carte-parc.py`, envoyé par `deploy\fond-parc.cmd` (voir `parc.md`).
+- Exceptions, qui ne viennent pas de `images.py` : `parc/tuiles/` (planches de la carte du parc, pack Cute Fantasy
+  acheté), de `outils/carte-parc.py`, envoyé par `deploy\fond-parc.cmd` (voir `parc.md`) ; `sons/` (musiques de
+  l'animation d'échange et des combats, bande originale de HeartGold / SoulSilver déposée par l'utilisateur), envoyé par
+  `deploy\sons-serveur.cmd` (tous les `.mp3` du dossier ; voir `multijoueurs.md` et `combats.md`).
 
 ## Noms des fichiers
 - `pokemon/<numéro d'espèce>.png`, `<numéro>-<forme>.png` (nom de forme de PokéAPI), `femelle/`, et les mêmes sous

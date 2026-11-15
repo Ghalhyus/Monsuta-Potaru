@@ -77,4 +77,9 @@ public class GtsPokemon
     public DateTime? ArrivedAt { get; set; }
     /// <summary>Ce qui s'est passé, prêt à afficher (« Reçu de Sacha en échange de ton Kadabra. »).</summary>
     public string? Note { get; set; }
+    /// <summary>
+    /// Pokémon reçu contre l'offre : l'animation d'échange que le déposant verra en le récupérant
+    /// (<see cref="Services.TradeShow"/> en JSON) ; null sinon.
+    /// </summary>
+    public string? TradeShow { get; set; }
 }

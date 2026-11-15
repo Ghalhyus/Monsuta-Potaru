@@ -278,6 +278,11 @@
         break;
 }
 
+@if (show is not null)
+{
+    <TradeAnimation Show="show" OnClosed="() => show = null" />
+}
+
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
@@ -317,6 +322,7 @@
     private List<GtsCandidate>? candidates;
     private GtsCandidate? given;
     private GtsPreview? preview;
+    private TradeShow? show; // animation de l'échange : offre acceptée, ou Pokémon reçu récupéré
     private bool busy;
     private string? message;
     private bool messageIsError;
@@ -389,6 +395,7 @@
             int? saveId = int.TryParse(destinations.GetValueOrDefault(item.Id), out var id) ? id : null;
             var result = await GtsStore.RetrieveAsync(userId, item.Id, saveId);
             Show(result.Message, !result.Ok);
+            show = result.Show;
             destinations.Remove(item.Id);
             await LoadMine();
         }
@@ -542,6 +549,7 @@
                 return;
             }
             Show(result.Message, error: false);
+            show = result.Show;
             await BackHome();
             await Search();
         }

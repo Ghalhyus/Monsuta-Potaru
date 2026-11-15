@@ -29,7 +29,9 @@ public sealed record TradeSide(string UserId, int SaveId, TradeCandidate Gives);
 
 /// <summary>Résultat d'un échange ; <see cref="FirstMessage"/> et <see cref="SecondMessage"/> : ce que chacun a reçu.</summary>
 /// <param name="Retry">Échec qui permet de choisir de nouveau (un Pokémon a changé, sauvegarde modifiée entre-temps).</param>
-public sealed record TradeOutcome(bool Ok, string FirstMessage, string SecondMessage, bool Retry = false)
+/// <param name="FirstShow">Animation d'échange du premier (null en cas d'échec) ; <paramref name="SecondShow"/> : celle du second.</param>
+public sealed record TradeOutcome(bool Ok, string FirstMessage, string SecondMessage, bool Retry = false,
+    TradeShow? FirstShow = null, TradeShow? SecondShow = null)
 {
     public static TradeOutcome Failed(string message, bool retry = true) => new(false, message, message, retry);
 }
@@ -323,10 +325,22 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
 
     /// <summary>
     /// Un échange prêt à écrire : les deux sauvegardes (suivies par le contexte), les Pokémon qui partent, et ce que chacune
-    /// reçoit, déjà converti et évolué (<c>ReceivedByA</c> : son nom avant l'évolution).
+    /// reçoit, déjà converti et évolué (<c>ReceivedByA</c> : son nom avant l'évolution). Pour l'animation : <c>SentByA</c>, le
+    /// Pokémon que donne A tel qu'il part, et <c>ArrivingA</c>, celui que reçoit A, avec son évolution.
     /// </summary>
     private sealed record Prepared(StoredSave SaveA, SaveFile SavA, PKM PkA, PKM ToA, string ReceivedByA, ushort? EvolvedToA,
-        StoredSave SaveB, SaveFile SavB, PKM PkB, PKM ToB, string ReceivedByB, ushort? EvolvedToB);
+        StoredSave SaveB, SaveFile SavB, PKM PkB, PKM ToB, string ReceivedByB, ushort? EvolvedToB,
+        TradeShowPokemon SentByA, TradeShowPokemon ArrivingA, TradeShowPokemon SentByB, TradeShowPokemon ArrivingB)
+    {
+        /// <summary>Ce que voit A : le Pokémon qu'il envoie, celui qu'il reçoit (et son évolution).</summary>
+        public TradeShow ShowA(string partner) => new(partner, SentByA, ArrivingA);
+
+        public TradeShow ShowB(string partner) => new(partner, SentByB, ArrivingB);
+
+        /// <summary>Échange interne : le joueur voit aussi l'évolution du Pokémon envoyé, à son arrivée dans l'autre sauvegarde.</summary>
+        public TradeShow InternalShow(string partner) => new(partner,
+            SentByA with { EvolvedSpecies = ArrivingB.EvolvedSpecies, EvolvedSpriteUrl = ArrivingB.EvolvedSpriteUrl }, ArrivingA);
+    }
 
     /// <summary>
     /// Relit les deux sauvegardes et prépare l'échange : <paramref name="first"/> donne <c>first.Gives</c> à la sauvegarde
@@ -360,9 +374,13 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
             return (null, TradeOutcome.Failed("Un des deux Pokémon ne peut plus aller dans l'autre jeu : choisis-en un autre."));
         var receivedByA = ReceivedName(toA); // avant l'évolution : « tu as reçu Kadabra, qui a évolué en Alakazam »
         var receivedByB = ReceivedName(toB);
+        var arrivingA = TradeShowPokemon.Of(info, toA);
+        var arrivingB = TradeShowPokemon.Of(info, toB);
         var evolvedToB = EvolveByTrade(toB, pkB.Species);
         var evolvedToA = EvolveByTrade(toA, pkA.Species);
-        return (new Prepared(saveA, savA, pkA, toA, receivedByA, evolvedToA, saveB, savB, pkB, toB, receivedByB, evolvedToB), null);
+        return (new Prepared(saveA, savA, pkA, toA, receivedByA, evolvedToA, saveB, savB, pkB, toB, receivedByB, evolvedToB,
+            TradeShowPokemon.Of(info, pkA), arrivingA.Evolving(info, toA, evolvedToA),
+            TradeShowPokemon.Of(info, pkB), arrivingB.Evolving(info, toB, evolvedToB)), null);
     }
 
     /// <summary>
@@ -429,7 +447,11 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
             logger.LogInformation("Échange entre les comptes {First} (sauvegarde {SaveA}) et {Second} (sauvegarde {SaveB}).",
                 first.UserId, p.SaveA.Id, second.UserId, p.SaveB.Id);
 
-        return new(true, Received(p.ReceivedByA, p.ToA, p.EvolvedToA, p.SaveA), Received(p.ReceivedByB, p.ToB, p.EvolvedToB, p.SaveB));
+        var pseudos = await db.Users.AsNoTracking().Where(u => u.Id == first.UserId || u.Id == second.UserId)
+            .ToDictionaryAsync(u => u.Id, u => u.UserName);
+        string PseudoOf(string id) => pseudos.GetValueOrDefault(id) is { } name && AccountService.HasPseudo(name) ? name : "ton ami";
+        return new(true, Received(p.ReceivedByA, p.ToA, p.EvolvedToA, p.SaveA), Received(p.ReceivedByB, p.ToB, p.EvolvedToB, p.SaveB),
+            FirstShow: p.ShowA(PseudoOf(second.UserId)), SecondShow: p.ShowB(PseudoOf(first.UserId)));
     }
 
     /// <summary>
@@ -470,7 +492,8 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         var message = $"Échange réussi : « {Label(p.SaveA)} » a reçu {p.ReceivedByA}{Evolved(p.ToA, p.EvolvedToA)}, "
             + $"et « {Label(p.SaveB)} » a reçu {p.ReceivedByB}{Evolved(p.ToB, p.EvolvedToB)}. "
             + "Télécharge les deux sauvegardes (« Mes sauvegardes », ou « Récupérer » depuis ta 3DS) et remets-les dans tes jeux.";
-        return new(true, message, message);
+        var show = p.InternalShow($"« {Label(p.SaveB)} »");
+        return new(true, message, message, FirstShow: show, SecondShow: show);
     }
 
     internal static void Set(SaveFile sav, TradeSlot slot, PKM pk)

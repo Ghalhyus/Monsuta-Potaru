@@ -83,6 +83,16 @@ public sealed class InternalTradePageTests : PageTestContext
         cut.WaitForText("Échange réussi");
         Assert.Contains("a reçu Kadabra, qui a évolué en Alakazam", cut.Text());
 
+        // Animation : envoi, arrivée, puis l'évolution du Kadabra (le joueur la voit aussi) ; « Passer » la ferme.
+        var show = PageTestExtensions.Normalize(cut.Find(".trade-show").TextContent);
+        Assert.Contains("Envoi de Kadabra à « Jeu de génération 5 — Regis ».", show);
+        Assert.Contains("« Jeu de génération 5 — Regis » t'envoie Stari.", show);
+        Assert.Contains("Hein ? Kadabra évolue !", show);
+        Assert.Contains("Félicitations ! Ton Kadabra a évolué en Alakazam !", show);
+        Assert.Equal(2, cut.FindAll(".trade-show [data-acteur='evolution-0'] img").Count); // avant, après
+        await cut.Click("Passer");
+        Assert.Empty(cut.FindAll(".trade-show"));
+
         Assert.Equal(120, (await Read(sacha)).GetBoxSlotAtIndex(0, 0).Species);
         Assert.Equal(65, (await Read(regis)).GetPartySlotAtIndex(0).Species);
 

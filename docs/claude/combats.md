@@ -2,6 +2,16 @@
 
 README : « Combats ».
 
+## Musiques (pas encore jouées)
+- L'utilisateur a déposé le 2026-11-15 cinq pistes « Battle! » de la bande originale de HeartGold / SoulSilver, rangées
+  hors Git dans `wwwroot/images/sons/` : `combat-rival.mp3` (134 s), `combat-champion.mp3` (122 s),
+  `combat-meneur-de-zone.mp3` (Frontier Brain, 191 s), `combat-champion-arene-kanto.mp3` (141 s),
+  `combat-champion-arene-johto.mp3` (145 s). Il a demandé de **ne rien brancher pour l'instant**.
+- Pour plus tard, questions déjà posées sans réponse : piste au hasard (la même pour les deux) ou choisie dans
+  « Préférences », boucle (les pistes finissent par un fondu : reprise au début ou points de boucle), fin du combat (fondu,
+  victoire.mp3 si fournie), bouton du son (à côté d'« Agrandir », réglage partagé avec l'animation d'échange). Modèle à
+  suivre : `TradeSounds` et la classe `Music` de `wwwroot/js/echange.js` (`docs/claude/multijoueurs.md`).
+
 ## Moteur
 - Simulateur de Pokémon Showdown (`showdown/`, `@pkmn/sim` en version fixée ; `npm ci --ignore-scripts --prefix showdown` en local et
   dans la CI ; étape `node` du `Dockerfile`). Aucune mécanique de combat réécrite en C# : le site traduit le protocole

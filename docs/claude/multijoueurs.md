@@ -42,6 +42,43 @@ README : « Multijoueurs », « Échanges ».
 - Mécanique commune : `PrepareAsync` (relecture, empreintes, œufs, conversion, évolution sur des copies) puis
   `WriteAsync` (transaction, copies, trace anti-copie ; ligne `TradeRecords` pour les amis seulement).
 
+## Animation d'échange (`Shared/TradeAnimation.razor`, `wwwroot/js/echange.js`, `Services/TradeShow.cs`)
+- Choix de l'utilisateur (2026-11-15) : à chaque échange (entre amis, interne, GTS), façon 4e génération ; entre amis,
+  chacun voit ce qu'il reçoit (pas l'évolution du Pokémon donné) ; échange interne : les deux évolutions (reçu, puis
+  envoyé) ; GTS : celui qui accepte tout de suite, le déposant à la récupération ; boutons « Passer » et son coupé.
+- Musiques (fournies par l'utilisateur, le 2026-11-15) : pistes « Trade », « Evolution » et « Congratulations! Your
+  Pokémon Evolved! » de la bande originale de HeartGold / SoulSilver, © Nintendo, **jamais dans Git** :
+  `wwwroot/images/sons/echange.mp3`, `evolution.mp3`, `felicitations.mp3` (dossier des images, déjà ignoré et monté depuis
+  le serveur), envoyées par `deploy\sons-serveur.cmd`, rapatriées par `recuperer-images.cmd`. Choix : sans fichier, rien
+  (pas de jingle de remplacement).
+- `Services/TradeSounds` (`Load(webRoot)` dans `Program.cs`) regarde la présence à chaque animation : le composant ne met
+  `data-musique-echange` / `-evolution` / `-felicitations` (les deux dernières seulement s'il y a une évolution) que pour un
+  fichier présent, sans quoi aucune requête ; sans aucune musique, pas de bouton du son. `TradeAnimationTests` passe par
+  `TradeSounds.Load` sur un dossier temporaire (état statique : ne pas s'y fier dans d'autres tests).
+- echange.js (`Music`) : échange en boucle dès l'envoi ; à chaque évolution, fondu de l'échange (0,5 s) et évolution depuis
+  le début ; à la nouvelle forme, l'évolution s'arrête (0,2 s) et la fanfare (5 s) joue ; le message « Félicitations ! »
+  reste jusqu'à la fin de la fanfare (au plus 8 s). Sans évolution : fondu de 1,5 s après l'arrivée. `close()` à « Passer »
+  et à la fermeture. Un `play()` refusé par le navigateur (pas de clic sur la page) ne bloque pas l'animation.
+- `TradeShow(Partner, Sent, Received)` : `TradeShowPokemon` avec nom, image **avant** l'évolution et, s'il évolue, espèce
+  et image après. L'image d'avant se prend avant `EvolveByTrade` (`PrepareAsync` des deux services). Œuf : pas d'image
+  (`SpriteUrl` null, dessiné en CSS), elle révélerait l'espèce.
+- Où il arrive : `TradeOutcome.FirstShow` / `SecondShow` (pseudos relus en base : `HasPseudo`, sinon « ton ami » ;
+  interne : « « nom de la seconde sauvegarde » »), `GtsResult.Show` (`AcceptAsync`, `RetrieveAsync`). Le déposant de la
+  GTS : JSON dans `GtsPokemon.TradeShow`, écrit à l'échange (null pour une offre expirée, annulée, ou reçue avant la
+  migration `GtsTradeShow` : pas d'animation).
+- Les pages : `show` (interne, GTS) ; entre amis, condition sur `TradeStage.Done` et `closedShow` (id de la session) pour ne
+  pas la rejouer à chaque rendu. Composant hors du `Block` : `position: fixed`.
+- Les textes sont dans le composant (`Lines`, clés `envoi`, `arrivee`, `evolution-<i>-debut` / `-fin`, éléments
+  `data-ligne` cachés) ; echange.js les lit et ne fait que le minutage (Web Animations, `AbortController` pour « Passer »).
+  Acteurs centrés par la propriété CSS `translate` : echange.js anime `transform` sans les décentrer.
+- **Le fond ne bouge jamais** (demandé par l'utilisateur le 2026-11-15 : anneaux qui grossissaient pendant le voyage et
+  étincelles qui montaient pendant l'évolution retirés). Seul l'assombrissement de l'évolution reste, en fondu.
+- Navigateur intégré masqué : ses animations tournent ~3 fois trop lentement (500 ms en 1,7 s) ; ne pas en conclure un
+  retard du code. Son clic réel peut échouer (« page did not finish rendering ») : cliquer par script ; les musiques ont
+  quand même joué. Pour voir ce qui joue : envelopper `HTMLMediaElement.prototype.play` / `pause` dans la page (journal).
+- Essai dans le navigateur : `noir.sav` + `noire-2.sav` (Carabing de Noir ↔ Escargaume de Noire 2 : deux évolutions ;
+  Géolithe de Noir contre n'importe quoi : une).
+
 ## Recherche des Pokémon à choisir (échanges, équipe de combat)
 - `Shared/PokemonPickerSearch.razor` (champ et `CollectionFilterChips`), sur les trois pages ; état dans la page
   (`InternalTrade.PickerFilter`, un par étape), rien dans l'adresse.

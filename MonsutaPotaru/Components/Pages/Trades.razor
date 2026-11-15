@@ -165,6 +165,12 @@
             }
         </ChildContent>
     </Block>
+    @* Échange fait : chacun voit le Pokémon qu'il envoie, celui qu'il reçoit et son évolution, une fois. *@
+    @if (s.Stage == TradeStage.Done && closedShow != s.Id && s.Outcome is { Ok: true } outcome
+         && (s.IsFirst(userId) ? outcome.FirstShow : outcome.SecondShow) is { } show)
+    {
+        <TradeAnimation Show="show" OnClosed="() => closedShow = s.Id" />
+    }
 }
 else
 {
@@ -264,6 +270,7 @@ else
     private string pseudo = "";
     private TradeSession? session;
     private TradeStage? shownStage; // pour recharger les Pokémon de l'autre à chaque retour au choix
+    private Guid? closedShow; // échange dont l'animation est déjà fermée
     private List<TradeCandidate>? theirs;
     private string search = ""; // recherche et pastilles de « Ma collection » sur ses Pokémon, gardées le temps de la page
     private PokemonCriteria criteria = PokemonCriteria.None;

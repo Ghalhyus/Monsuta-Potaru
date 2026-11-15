@@ -103,6 +103,12 @@ public sealed class InternalTradeServiceTests : IDisposable
         Assert.True(outcome.Ok, outcome.FirstMessage);
         Assert.Contains("« Jeu de génération 5 — Sacha » a reçu Stari, et « Jeu de génération 5 — Regis » a reçu Kadabra, qui a évolué en Alakazam.", outcome.FirstMessage);
 
+        // Animation : la première sauvegarde envoie le Kadabra à la seconde ; le joueur voit aussi son évolution.
+        var show = outcome.FirstShow!;
+        Assert.Equal(("« Jeu de génération 5 — Regis »", "Kadabra", "Stari"), (show.Partner, show.Sent.Nickname, show.Received.Nickname));
+        Assert.False(show.Received.Evolves);
+        Assert.Equal("Alakazam", Assert.Single(show.Evolutions).EvolvedSpecies);
+
         Assert.Equal(120, (await Read(first)).GetBoxSlotAtIndex(0, 0).Species); // le Stari à la place du Kadabra
         var regis = await Read(second);
         Assert.Equal(65, regis.GetPartySlotAtIndex(0).Species); // Alakazam à la place du Stari

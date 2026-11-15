@@ -671,6 +671,68 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .pokemon-picker-search > input { max-width: 20rem; }
 .trade-candidate-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- Animation d'échange (Shared/TradeAnimation.razor, wwwroot/js/echange.js), façon 4e génération ----------
+   Un écran 4:3 (--ecran) au milieu de la fenêtre ; tout se mesure en em (1em = 1/32 de sa largeur) ou en %. Les
+   acteurs (Pokémon, Poké Ball) sont centrés par « translate » : echange.js anime « transform » sans les décentrer. */
+.trade-show-backdrop { position: fixed; inset: 0; z-index: 1060; background: rgba(0, 0, 0, .65); }
+.trade-show {
+    --ecran: min(calc(100vw - 2rem), 40rem, calc((100dvh - 6rem) * 4 / 3));
+    position: fixed; z-index: 1070; top: 50%; left: 50%; translate: -50% -50%; width: var(--ecran);
+    display: flex; flex-direction: column; gap: .5rem; user-select: none;
+}
+.trade-show-screen {
+    position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border: .12em solid #20242a; border-radius: .45em;
+    font-size: calc(var(--ecran) / 32); font-family: system-ui, sans-serif; color: #383838;
+    background: radial-gradient(ellipse at 50% 42%, #9ee0f0 0, #4aa8d8 45%, #2a5ca8 100%);
+}
+/* Anneaux de lumière, fixes (le fond ne bouge jamais : choix de l'utilisateur). */
+.trade-show-sky {
+    position: absolute; inset: 0;
+    background: repeating-radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .16) 0 .35em, transparent .35em 3.2em);
+    opacity: .7;
+}
+/* Évolution : l'écran s'assombrit (en fondu), avec des étincelles fixes. */
+.trade-show-screen::after {
+    content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .8s; pointer-events: none;
+    background:
+        radial-gradient(circle at 20% 80%, rgba(255, 255, 255, .8) 0 .15em, transparent .2em),
+        radial-gradient(circle at 75% 70%, rgba(255, 255, 255, .7) 0 .12em, transparent .18em),
+        radial-gradient(circle at 40% 90%, rgba(255, 255, 255, .7) 0 .1em, transparent .16em),
+        radial-gradient(circle at 62% 85%, rgba(255, 255, 255, .8) 0 .15em, transparent .2em),
+        radial-gradient(ellipse at 50% 42%, #2c3c70 0, #141a38 70%);
+    background-size: 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 100%;
+}
+.trade-show-evolving::after { opacity: 1; }
+.trade-show-actor, .trade-show-ball {
+    position: absolute; z-index: 1; left: 50%; top: 40%; translate: -50% -50%; visibility: hidden;
+}
+.trade-show-visible { visibility: visible; }
+.trade-show-actor { width: 12em; height: 12em; display: flex; align-items: center; justify-content: center; }
+.trade-show-sprite { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.trade-show-egg {
+    width: 45%; height: 58%; border-radius: 50% 50% 50% 50% / 60% 60% 42% 42%; box-shadow: 0 0 0 .15em #50584a;
+    background:
+        radial-gradient(circle at 30% 30%, #8cc870 0 14%, transparent 15%),
+        radial-gradient(circle at 68% 48%, #8cc870 0 11%, transparent 12%),
+        radial-gradient(circle at 40% 72%, #8cc870 0 12%, transparent 13%),
+        #f6f2dc;
+}
+.trade-show-ball {
+    width: 3.2em; height: 3.2em; border-radius: 50%; box-shadow: 0 0 0 .14em #303438;
+    background:
+        radial-gradient(circle, #fff 0 15%, #303438 16% 27%, transparent 28%),
+        linear-gradient(#e83838 0 44%, #303438 44% 56%, #f8f8f8 56%);
+}
+.trade-show-flash { position: absolute; inset: 0; z-index: 2; background: #fff; opacity: 0; pointer-events: none; }
+/* Boîte de texte : comme celle des combats (cadre sombre, filet orange, fond blanc). */
+.trade-show-text {
+    position: absolute; z-index: 3; left: 3%; right: 3%; bottom: 3%; height: 22%; padding: .45em .9em; overflow: hidden;
+    border-radius: .3em; background: #fff; box-shadow: 0 0 0 .2em #383c48, 0 0 0 .35em #e07830;
+    font-size: 1.3em; font-weight: 600; line-height: 1.3; visibility: hidden;
+}
+.trade-show-text-on { visibility: visible; }
+.trade-show-controls { display: flex; justify-content: center; gap: .5rem; }
+
 /* ---------- GTS (Multijoueurs) : offres, boîte de réception, critères ---------- */
 .gts-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .75rem; }
 .gts-wanted-sprite { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }

@@ -218,6 +218,10 @@ public sealed class GtsServiceTests : IDisposable
         var result = await _gts.AcceptAsync("sacha", offer.Id, candidate.BankId);
         Assert.True(result.Ok, result.Message);
         Assert.StartsWith("Échange réussi : tu as reçu Kadabra, qui a évolué en Alakazam dans « Jeu de génération 5 — Sacha ».", result.Message);
+        // Animation de Sacha : son Machopeur part chez Ondine, le Kadabra arrive et évolue.
+        var show = result.Show!;
+        Assert.Equal(("ondine", "Machopeur", "Kadabra"), (show.Partner, show.Sent.Nickname, show.Received.Nickname));
+        Assert.Equal("Alakazam", Assert.Single(show.Evolutions).EvolvedSpecies);
 
         Assert.Equal(Alakazam, (await Read(mine)).GetPartySlotAtIndex(1).Species); // à la place du Machopeur
         Assert.True((await _saves.ListAsync("sacha")).Single().MustDownloadBeforeUpdate);
@@ -234,6 +238,14 @@ public sealed class GtsServiceTests : IDisposable
         var again = await _gts.AcceptAsync("pierre", offer.Id, AddToBank("pierre", Machoke));
         Assert.False(again.Ok);
         Assert.Contains("n'est plus disponible", again.Message);
+
+        // Ondine voit l'échange en récupérant le Pokémon : son Kadabra part, le Machopeur arrive et évolue.
+        var retrieved = await _gts.RetrieveAsync("ondine", inbox.Id, null);
+        Assert.True(retrieved.Ok, retrieved.Message);
+        var herShow = retrieved.Show!;
+        Assert.Equal(("sacha", "Kadabra", "Machopeur"), (herShow.Partner, herShow.Sent.Nickname, herShow.Received.Nickname));
+        Assert.Equal("Mackogneur", Assert.Single(herShow.Evolutions).EvolvedSpecies);
+        Assert.EndsWith("/68.png", herShow.Received.EvolvedSpriteUrl);
     }
 
     [Fact]
@@ -352,6 +364,8 @@ public sealed class GtsServiceTests : IDisposable
         var toBank = await _gts.RetrieveAsync("sacha", staryu, null);
         Assert.True(toBank.Ok, toBank.Message);
         Assert.Equal("Stari est dans ton stockage interne.", toBank.Message);
+        Assert.Null(toBank.Show); // offre annulée : pas d'échange à montrer
+        Assert.Null(toSave.Show);
         Assert.Empty(await _gts.InboxAsync("sacha"));
         Assert.Empty(Rows());
         using var db = _db.NewContext();
