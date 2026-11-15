@@ -113,11 +113,16 @@ else
         <div class="collection-backdrop" @onclick="CloseDetail"></div>
         <div class="collection-dialog" role="dialog" aria-modal="true" aria-label="@selectedView.Nickname">
             <PokemonCard Pokemon="@selectedView" HideTrainerId="Visitor" Portrait="@selectedPortrait"
-                         PortraitTitle="@selectedMood?.Message">
+                         PortraitTitle="@(selectedMalus ?? selectedMood?.Message)">
                 <Summary>
                     @if (selectedMood is not null)
                     {
                         <div class="small mt-1 park-mood park-mood-@selectedMood.Mood.ToString().ToLowerInvariant()">@selectedMood.Message</div>
+                    }
+                    @if (selectedMalus is not null)
+                    {
+                        @* Malus « attaqué » (ParkService.RecordAttackAsync) : l'humeur affichée par le portrait *@
+                        <div class="small mt-1 park-mood park-mood-sad park-malus">@selectedMalus</div>
                     }
                 </Summary>
                 <ChildContent>
@@ -387,6 +392,7 @@ else
     private PokemonView? selectedView;
     private ParkMoodResult? selectedMood; // humeur du Pokémon de la fiche, selon les habitats du parc (ParkHabitats)
     private string? selectedPortrait; // son portrait Donjon Mystère (Normal, Happy, Sad), à la place du sprite
+    private string? selectedMalus; // son malus « attaqué » en cours, prêt à afficher (ParkMalus.Message), ou null
 
     protected override async Task OnInitializedAsync()
     {
@@ -462,6 +468,8 @@ else
             size = expansions + 1,
             fullscreen = parkBlock,
         });
+        // Relue : temps restant des malus « attaqué » (ParkPokemon.Malus) à jour, même longtemps après le chargement
+        members = await Parks.ListAsync(userId, ParkId);
         await engine.InvokeVoidAsync("setPokemon", members);
         if (showHabitats)
             await engine.InvokeVoidAsync("showHabitats", HabitatColors());
@@ -563,9 +571,43 @@ else
         selectedView = Info.Describe(pk, entry.IsLegal);
         // Humeur selon les types de cases de ce parc (son paysage, sa taille : ses agrandissements)
         selectedMood = ParkHabitats.MoodOf(entry.Type1, entry.Type2, ParkHabitats.Map(current.Landscape, expansions + 1));
-        selectedPortrait = PokemonSprites.DonjonPortraitUrl(entry, selectedMood.Portrait);
+        ShowMalus(await Parks.GetMalusAsync(userId, ParkId, id));
         StateHasChanged();
     });
+
+    /// <summary>Portrait et ligne du malus « attaqué » de la fiche ouverte (humeur de l'habitat abaissée, ou non).</summary>
+    private void ShowMalus(ParkMalus? malus)
+    {
+        if (selected is null || selectedMood is null)
+            return;
+        var now = DateTime.UtcNow;
+        var mood = malus is null ? selectedMood.Mood : ParkHabitats.WithMalus(selectedMood.Mood, malus.Levels);
+        selectedMalus = malus?.Message(selectedMood.Mood, now);
+        selectedPortrait = PokemonSprites.DonjonPortraitUrl(selected, mood.ToString());
+    }
+
+    /// <summary>
+    /// Un Pokémon de ce parc vient d'être attaqué (parc.js, page du propriétaire seulement) : son malus est enregistré
+    /// (le numéro vient du navigateur : le service revérifie qu'il est dans ce parc du joueur) et rendu à parc.js, qui
+    /// abaisse son humeur ; null pour un visiteur ou un Pokémon qui n'est pas là.
+    /// </summary>
+    [JSInvokable]
+    public async Task<ParkMalusInfo?> OnPokemonAttacked(int id)
+    {
+        ParkMalus? malus = null;
+        await InvokeAsync(async () =>
+        {
+            if (Visitor || current is null)
+                return;
+            malus = await Parks.RecordAttackAsync(userId, ParkId, id);
+            if (malus is not null && selected?.Id == id)
+            {
+                ShowMalus(malus); // fiche ouverte sur lui : portrait et ligne à jour
+                StateHasChanged();
+            }
+        });
+        return malus?.Info(DateTime.UtcNow);
+    }
 
     /// <summary>Mode debug : la fiche se ferme et le Pokémon attaque le plus proche (dans le navigateur seulement).</summary>
     private async Task AttackSelected()
@@ -584,6 +626,7 @@ else
         selectedView = null;
         selectedMood = null;
         selectedPortrait = null;
+        selectedMalus = null;
     }
 
     private async Task RemoveSelected()

@@ -209,6 +209,37 @@ public sealed class ParkPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task AttackedPokemon_GetsItsMalus_InTheParkAndItsCard()
+    {
+        var ids = AddToBank("sacha", 133, 25); // Évoli, heureux dans la forêt
+        var forest = (await Parks.ListParksAsync("sacha"))[0].Id;
+        Assert.True((await Parks.SetAsync("sacha", forest, ids)).Ok);
+        var cut = Render<Park>();
+        cut.WaitForText("2 / 20");
+
+        // Fiche ouverte pendant l'attaque (parc.js) : portrait et ligne du malus à jour
+        await cut.Instance.OnPokemonClicked(ids[0]);
+        cut.WaitForText("Retirer du parc");
+        Assert.Empty(cut.FindAll(".park-malus"));
+        var malus = await cut.Instance.OnPokemonAttacked(ids[0]);
+        Assert.Equal(1, malus?.Levels);
+        Assert.InRange(malus!.Seconds, 895, 900);
+        cut.WaitForAssertion(() => Assert.Contains("Attaqué : neutre au lieu d'heureux encore 15 min.", cut.Find(".park-malus").TextContent));
+        Assert.Equal(2, (await cut.Instance.OnPokemonAttacked(ids[0]))?.Levels);
+        cut.WaitForAssertion(() => Assert.Contains("malheureux au lieu d'heureux encore 30 min", cut.Find(".park-malus").TextContent));
+
+        // Fiche rouverte plus tard, ou d'un autre Pokémon
+        await cut.Click("Fermer");
+        await cut.Instance.OnPokemonClicked(ids[0]);
+        cut.WaitForText("Attaqué : malheureux");
+        Assert.Null(await cut.Instance.OnPokemonAttacked(999_999)); // pas dans le parc
+        await cut.Click("Fermer");
+        Assert.NotNull(await cut.Instance.OnPokemonAttacked(ids[1])); // fiche fermée : rien à mettre à jour
+        await cut.Instance.OnPokemonClicked(ids[1]);
+        cut.WaitForText("Attaqué :");
+    }
+
+    [Fact]
     public async Task Visitor_WatchesAPublicPark_WithoutChanging()
     {
         var ids = AddToBank("ondine", 7);
@@ -216,6 +247,8 @@ public sealed class ParkPageTests : PageTestContext
         var cut = Render<Park>(p => p.Add(x => x.Pseudo, "ondine"));
         cut.WaitForText("Les Pokémon de ondine vivent ici");
         Assert.False(cut.HasButton("Choisir les Pokémon"));
+        Assert.Null(await cut.Instance.OnPokemonAttacked(ids[0])); // les attaques chez un visiteur ne comptent pas
+        Assert.Null(await Parks.GetMalusAsync("ondine", (await Parks.ListParksAsync("ondine"))[0].Id, ids[0]));
         await cut.Instance.OnPokemonClicked(ids[0]);
         cut.WaitForText("Fermer");
         Assert.False(cut.HasButton("Retirer du parc"));

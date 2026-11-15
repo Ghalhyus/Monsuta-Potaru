@@ -589,6 +589,26 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   chemin). États joués une fois : `ONCE` (`play`, dernière image gardée, `then` ensuite). Soulever un Pokémon annule
   `prey`, `hit` et `then`. Debug : `attack(id)` (le plus proche, famille comprise, quel que soit le bonheur), bouton
   de la fiche dans `Park.razor`. Planches Attack / Hurt absentes : Idle (`OPTIONAL`).
+- **Malus « attaqué »** (demande du 2026-11-14 ; choix de l'utilisateur : sur le serveur, un malheureux du malus attaque
+  comme les autres, fiche + signe au parc) : `ParkMember.MalusUntil` / `MalusLevels`, migration `ParkAttackMalus` (écrite à
+  la main : `dotnet ef` absent ; designer copié du snapshot). `RecordAttackAsync` : une seule `ExecuteUpdate` avec des
+  `CASE` (malus en cours : niveau + 1 jusqu'à `MaxMalusLevels` = 2, fin + 15 min par `AddMinutes` de SQLite ; sinon 1
+  niveau, maintenant + 15 min). **Arrondi** : la fin calculée par SQLite n'a que des millisecondes ; `SecondsLeft`
+  arrondit au plus proche (au-dessus, un test donnait parfois « 26 min » au lieu de 25). `SetAsync` efface le malus d'un
+  Pokémon qui change de parc.
+  `ParkPokemon.Mood` reste l'humeur de l'habitat, `ParkPokemon.Malus` (`ParkMalusInfo` : niveaux, secondes restantes) à
+  côté ; `parc.js` : `setMalus` (fin = `Date.now()` + secondes ; `skew` avance avec `simulate`), `moodOf(p)` (liste
+  `MOODS`, même règle que `ParkHabitats.WithMalus`) partout où `p.mood` comptait, malus fini → `p.malus = null`.
+  Frappé (`p.hit` → `hurt`) : `reportAttack` → `OnPokemonAttacked` de la page (rien si `canMove` est faux : visiteur),
+  qui rend le nouveau malus. `StartEngine` relit la liste (temps restants à jour).
+  Fiche : `GetMalusAsync`, portrait de l'humeur abaissée, ligne `.park-malus` (`ParkMalus.Message` : « Attaqué : neutre au
+  lieu d'heureux encore 15 min. », « déjà malheureux, son malus dure encore… »), mise à jour si la fiche est ouverte.
+- **Nuage d'orage** (`STORM`, `drawStorm`, `stormOf`) au-dessus de tout malheureux (`moodOf`, habitat ou malus) : dessin en
+  pixels de sprite (une case de `spriteK` pixels, image à l'échelle 1/k, refaite si `spriteK` change, comme les ombres),
+  pluie sur deux images qui alternent (0,25 s), éclair double toutes les 2,5 à 5 s, léger balancement ; profondeur 6 ; bas
+  du nuage à `h × 0,6 + 2` au-dessus des pieds. Essai du 2026-11-14 (module dans une page, faux composant qui rend
+  `{ levels: 2, seconds: 900 }`) : `attack(1)` → `OnPokemonAttacked(2)` appelé, Évoli « happy » → « sad » avec son nuage ;
+  malus de 5 s fini → humeur de l'habitat, plus de nuage.
 - **Cache du navigateur** (2026-10-31, « les animations ne se jouent pas ») : `/images` n'avait aucun `Cache-Control`,
   le navigateur gardait l'ancien `AnimData.xml` (sans Attack ni Hurt) des Pokémon déjà vus, et jouait Idle. Depuis :
   `loadSheets` demande `AnimData.xml?animations=<ANIMATIONS>` (nouvelle adresse dès que la liste change) et `Program.cs`
@@ -865,8 +885,11 @@ PKHeX rapprochés de ceux de SpriteCollab, `images/donjon/formes.json`). Pour qu
 - le **malheur** (humeur « malheureux », voir « Bonheur ») : toutes les 45 s à 1 min 30 environ, il marche jusqu'au
   Pokémon le plus proche à 8 cases au plus (pas de sa famille, éveillé ou endormi) et l'**attaque** (animation Attack) ;
   le Pokémon frappé a mal (Hurt, un dormeur se réveille), puis **s'enfuit** deux fois plus vite à 6 à 10 cases de
-  l'attaquant, sans répliquer. Immobile, un malheureux **boude** aussi (Hurt seul) toutes les 40 s environ. L'humeur est
-  donnée par la page (`ParkPokemon.Mood`) ; les attaques se passent dans le navigateur (un visiteur voit les siennes). En
+  l'attaquant, sans répliquer. Immobile, un malheureux **boude** aussi (Hurt seul) toutes les 40 s environ. Un **nuage
+  d'orage** pleut au-dessus de chaque malheureux. Le Pokémon frappé prend le **malus « attaqué »** : un niveau de bonheur
+  en moins pendant 15 min, un de plus et 15 min de plus s'il est attaqué de nouveau (jamais sous malheureux), enregistré
+  par la page du propriétaire ; devenu malheureux, il attaque à son tour. L'humeur est
+  donnée par la page (`ParkPokemon.Mood`, `Malus`) ; les attaques se passent dans le navigateur (un visiteur voit les siennes, sans malus). En
   **mode debug**, « Attaquer (debug) » dans la fiche d'un Pokémon le fait attaquer le plus proche, quel que soit son
   bonheur ;
 - des **chemins** qui contournent les obstacles (recherche de chemin sur les cases de la carte, lissée en lignes droites) :

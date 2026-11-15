@@ -457,6 +457,12 @@ chaque paysage, générateurs, types de cases, comportement, tests) : `docs/clau
 - **Bonheur** (`ParkHabitats.MoodOf`, d'après la feuille « Habitat » de l'utilisateur) : malheureux si un habitat qu'il
   n'aime pas couvre 50 % ou plus de la zone « Parc », sinon heureux si un habitat qu'il aime en couvre plus de 50 %, sinon
   normal ; un double type aime un habitat si l'un de ses types l'aime.
+- **Malus « attaqué »** (`ParkService.RecordAttackAsync`, colonnes `MalusUntil` et `MalusLevels` de `ParkMembers`,
+  migration `ParkAttackMalus`) : attaqué, un Pokémon perd un niveau de bonheur (heureux → neutre → malheureux) pendant
+  15 min ; attaqué de nouveau pendant son malus, un niveau de plus (jamais sous malheureux) et 15 min de plus sur le même
+  compteur ; fini, tout est oublié et l'habitat décide de nouveau. Enregistré seulement depuis la page du propriétaire
+  (numéro revérifié : ce Pokémon, dans ce parc du joueur) ; changer de parc l'efface. Un malheureux (habitat ou malus)
+  attaque et boude, avec un nuage d'orage au-dessus de lui.
 - Fenêtre « Choisir les Pokémon » : liste « Tous les Pokémon » (par défaut) / « Ceux de ce parc » / « Dans aucun parc »,
   d'après le parc enregistré (rien ne bouge avant « Valider ») ; un filtre d'affichage seulement, `SetAsync` revérifie.
 - La fiche n'est donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`). Positions et déplacements à la
@@ -718,10 +724,10 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/wwwroot/parc/grotte-1-1.json` … `grotte-1-4.json` | Cartes de la grotte, une par taille, même format (plus la couleur de fond, le calque d'objets « Lumières » et les torches animées) |
 | `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes de la forêt, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
 | `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`), façon de se déplacer (`MovementOf` : nage, vol ; à la montagne, tout type Vol vole) |
-| `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution |
+| `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution ; malus « attaqué » (`RecordAttackAsync`, `ParkMalus`) |
 | `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage, Volcan, Désert, Océan, Grotte, Montagne, Donjon) : nom, carte, pictogramme, textes de la page, et qui ne peut pas y vivre (`Refusal` : l'océan, seulement les nageurs ; `ChooserNote` : la remarque de la fenêtre de choix, à l'océan et à la montagne) |
 | `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
-| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
+| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc, leur malus « attaqué » ; supprimée avec le Pokémon ou le parc) |
 | `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » (rubrique « Défis ») : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
 | `MonsutaPotaru/Components/Shared/GamePicker.razor` | Choix du jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération, repliées au départ (le jeu choisi reste visible), jeux déjà pris grisés |

@@ -220,6 +220,33 @@ public static class ParkHabitats
             ?? new(ParkMood.Normal, Habitat.None, 0);
     }
 
+    /// <summary>
+    /// Humeur abaissée de <paramref name="levels"/> niveaux (malus « attaqué », <see cref="ParkService.RecordAttackAsync"/>) :
+    /// heureux, neutre, malheureux ; jamais plus bas que malheureux. Même règle dans parc.js (<c>moodOf</c>).
+    /// </summary>
+    public static ParkMood WithMalus(ParkMood mood, int levels) =>
+        (Rank(mood) - Math.Max(0, levels)) switch
+        {
+            >= 2 => ParkMood.Happy,
+            1 => ParkMood.Normal,
+            _ => ParkMood.Sad,
+        };
+
+    private static int Rank(ParkMood mood) => mood switch
+    {
+        ParkMood.Happy => 2,
+        ParkMood.Normal => 1,
+        _ => 0,
+    };
+
+    /// <summary>« heureux », « neutre », « malheureux ».</summary>
+    public static string Adjective(ParkMood mood) => mood switch
+    {
+        ParkMood.Happy => "heureux",
+        ParkMood.Sad => "malheureux",
+        _ => "neutre",
+    };
+
     private static Dictionary<(ParkLandscape, int), ParkHabitatMap> _maps = [];
 
     /// <summary>

@@ -565,6 +565,12 @@ namespace MonsutaPotaru.Migrations
                     b.Property<DateTime>("AddedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("MalusLevels")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("MalusUntil")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("OwnerId")
                         .IsRequired()
                         .HasColumnType("TEXT");

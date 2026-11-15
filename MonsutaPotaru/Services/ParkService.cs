@@ -13,8 +13,50 @@ namespace MonsutaPotaru.Services;
 /// <param name="Moves">Façon de se déplacer dans ce paysage (<see cref="ParkHabitats.MovementOf(byte, byte, ParkLandscape)"/>) :
 /// « swim » (nage), « lava » (va dans la lave), « swim-lava » (les deux), « fly » (survole l'eau, la lave, les rebords et
 /// les flancs de la montagne, se pose à terre ou sur un sommet) ou null (marche seulement).</param>
+/// <param name="Malus">Malus « attaqué » en cours (niveaux en moins, secondes restantes), ou null : parc.js abaisse
+/// <paramref name="Mood"/> jusqu'à la fin, puis l'habitat décide de nouveau.</param>
 public sealed record ParkPokemon(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny,
-    string SpriteFolder, int Family, byte Nature, string Mood = "normal", string? Moves = null);
+    string SpriteFolder, int Family, byte Nature, string Mood = "normal", string? Moves = null, ParkMalusInfo? Malus = null);
+
+/// <summary>Malus « attaqué » envoyé à parc.js : niveaux de bonheur en moins pendant encore <paramref name="Seconds"/> secondes.</summary>
+public sealed record ParkMalusInfo(int Levels, int Seconds);
+
+/// <summary>
+/// Malus « attaqué » d'un Pokémon du parc (<see cref="ParkService.RecordAttackAsync"/>) : <paramref name="Levels"/> niveaux
+/// de bonheur en moins jusqu'à <paramref name="Until"/> (UTC).
+/// </summary>
+public sealed record ParkMalus(int Levels, DateTime Until)
+{
+    /// <summary>Le malus en cours à <paramref name="now"/>, ou null s'il n'y en a pas (jamais attaqué, ou malus fini).</summary>
+    public static ParkMalus? Active(int levels, DateTime? until, DateTime now) =>
+        levels > 0 && until is { } end && end > now ? new(levels, end) : null;
+
+    /// <summary>
+    /// Secondes restantes, arrondies (au moins 1) : la fin calculée par SQLite (AddMinutes) n'a que des millisecondes,
+    /// arrondir au-dessus donnait parfois une seconde (et une minute) de trop.
+    /// </summary>
+    public int SecondsLeft(DateTime now) => Math.Max(1, (int)Math.Round((Until - now).TotalSeconds, MidpointRounding.AwayFromZero));
+
+    public ParkMalusInfo Info(DateTime now) => new(Levels, SecondsLeft(now));
+
+    /// <summary>
+    /// Ligne de la fiche, prête à afficher : « Attaqué : neutre au lieu d'heureux encore 12 min. » (humeur de l'habitat
+    /// <paramref name="habitatMood"/>).
+    /// </summary>
+    public string Message(ParkMood habitatMood, DateTime now)
+    {
+        var mood = ParkHabitats.WithMalus(habitatMood, Levels);
+        var left = Duration((SecondsLeft(now) + 59) / 60); // minutes commencées
+        if (mood == habitatMood)
+            return $"Attaqué : déjà malheureux, son malus dure encore {left}.";
+        var instead = habitatMood == ParkMood.Happy ? "d'heureux" : $"de {ParkHabitats.Adjective(habitatMood)}";
+        return $"Attaqué : {ParkHabitats.Adjective(mood)} au lieu {instead} encore {left}.";
+    }
+
+    /// <summary>« 12 min », « 1 h 05 ».</summary>
+    private static string Duration(int minutes) =>
+        minutes < 60 ? $"{Math.Max(1, minutes)} min" : $"{minutes / 60} h {minutes % 60:00}";
+}
 
 /// <summary>Pokémon proposé dans la fenêtre « Choisir les Pokémon » (sans les œufs).</summary>
 /// <param name="InPark">Il vit dans le parc affiché.</param>
@@ -62,6 +104,11 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
     public const long ExpansionPrice = 25_000;
     /// <summary>Prix d'un nouveau parc : celui d'un agrandissement (choix de l'utilisateur).</summary>
     public const long ParkPrice = ExpansionPrice;
+
+    /// <summary>Durée du malus « attaqué », ajoutée à chaque nouvelle attaque (choix de l'utilisateur, 2026-11-14).</summary>
+    public static readonly TimeSpan MalusDuration = TimeSpan.FromMinutes(15);
+    /// <summary>Niveaux de bonheur perdus au plus : d'heureux à malheureux (on ne descend pas plus bas que malheureux).</summary>
+    public const int MaxMalusLevels = 2;
 
     private const string UnknownPark = "Ce parc n'existe pas.";
 
@@ -202,15 +249,59 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         var members = await db.ParkMembers.AsNoTracking()
             .Where(m => m.ParkId == parkId)
             .OrderBy(m => m.AddedAt).ThenBy(m => m.BankPokemonId)
-            .Select(m => m.BankPokemon!)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.Gender, p.HeldItem, p.Nature, p.Type1, p.Type2 })
+            .Select(m => new
+            {
+                m.BankPokemon!.Id, m.BankPokemon.Species, m.BankPokemon.Form, m.BankPokemon.Context, m.BankPokemon.SpeciesName,
+                m.BankPokemon.Nickname, m.BankPokemon.Level, m.BankPokemon.IsShiny, m.BankPokemon.Gender, m.BankPokemon.HeldItem,
+                m.BankPokemon.Nature, m.BankPokemon.Type1, m.BankPokemon.Type2, m.MalusLevels, m.MalusUntil,
+            })
             .ToListAsync();
-        // Humeur selon les habitats de la carte du parc (son paysage, sa taille)
+        // Humeur selon les habitats de la carte du parc (son paysage, sa taille) ; le malus « attaqué » l'abaisse dans parc.js
         var map = ParkHabitats.Map(park.Landscape, park.Expansions + 1);
+        var now = DateTime.UtcNow;
         return members.Select(p => new ParkPokemon(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny,
             PokemonSprites.DonjonFolder(p.Species, p.Form, (EntityContext)p.Context, p.IsShiny, p.Gender == 1, p.HeldItem ?? 0),
             Family(p.Species), p.Nature ?? 0, ParkHabitats.MoodOf(p.Type1, p.Type2, map).Mood.ToString().ToLowerInvariant(),
-            ParkHabitats.MovementOf(p.Type1, p.Type2, park.Landscape))).ToList();
+            ParkHabitats.MovementOf(p.Type1, p.Type2, park.Landscape),
+            ParkMalus.Active(p.MalusLevels, p.MalusUntil, now)?.Info(now))).ToList();
+    }
+
+    /// <summary>
+    /// Ce Pokémon du parc a été attaqué (parc.js, dans la page du propriétaire) : un niveau de bonheur en moins pendant
+    /// <see cref="MalusDuration"/> ; attaqué de nouveau pendant son malus, un niveau de plus (au plus
+    /// <see cref="MaxMalusLevels"/>) et <see cref="MalusDuration"/> de plus sur le compteur. Le malus fini, tout est oublié.
+    /// En une seule mise à jour (deux attaques simultanées comptent toutes les deux). Le numéro vient du navigateur : rien
+    /// (null) si ce Pokémon n'est pas dans ce parc du joueur.
+    /// </summary>
+    /// <param name="now">Pour les tests : l'heure de l'attaque (UTC).</param>
+    public async Task<ParkMalus?> RecordAttackAsync(string ownerId, int parkId, int bankPokemonId, DateTime? now = null)
+    {
+        var at = now ?? DateTime.UtcNow;
+        var end = at + MalusDuration;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var member = db.ParkMembers.Where(m => m.OwnerId == ownerId && m.ParkId == parkId && m.BankPokemonId == bankPokemonId);
+        var updated = await member.ExecuteUpdateAsync(m => m
+            .SetProperty(x => x.MalusLevels, x => x.MalusUntil != null && x.MalusUntil > at
+                ? (x.MalusLevels >= MaxMalusLevels ? MaxMalusLevels : x.MalusLevels + 1)
+                : 1)
+            .SetProperty(x => x.MalusUntil, x => x.MalusUntil != null && x.MalusUntil > at
+                ? x.MalusUntil.Value.AddMinutes(MalusDuration.TotalMinutes)
+                : end));
+        if (updated == 0)
+            return null;
+        var row = await member.AsNoTracking().Select(m => new { m.MalusLevels, m.MalusUntil }).FirstAsync();
+        return new(row.MalusLevels, row.MalusUntil!.Value);
+    }
+
+    /// <summary>Malus « attaqué » en cours de ce Pokémon de ce parc du joueur (fiche), ou null.</summary>
+    public async Task<ParkMalus?> GetMalusAsync(string ownerId, int parkId, int bankPokemonId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var row = await db.ParkMembers.AsNoTracking()
+            .Where(m => m.OwnerId == ownerId && m.ParkId == parkId && m.BankPokemonId == bankPokemonId)
+            .Select(m => new { m.MalusLevels, m.MalusUntil })
+            .FirstOrDefaultAsync();
+        return row is null ? null : ParkMalus.Active(row.MalusLevels, row.MalusUntil, DateTime.UtcNow);
     }
 
     /// <summary>
@@ -287,9 +378,11 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         await using var tx = await db.Database.BeginTransactionAsync();
         var now = DateTime.UtcNow;
         await db.ParkMembers.Where(m => m.ParkId == parkId && !wanted.Contains(m.BankPokemonId)).ExecuteDeleteAsync();
-        // Venus d'un autre parc : ils arrivent après ceux qui restent, comme les nouveaux
+        // Venus d'un autre parc : ils arrivent après ceux qui restent, comme les nouveaux ; leur malus « attaqué » reste
+        // dans l'ancien parc (il disparaît quand le Pokémon le quitte)
         var moved = await db.ParkMembers.Where(m => m.OwnerId == ownerId && m.ParkId != parkId && wanted.Contains(m.BankPokemonId))
-            .ExecuteUpdateAsync(m => m.SetProperty(x => x.ParkId, parkId).SetProperty(x => x.AddedAt, now));
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.ParkId, parkId).SetProperty(x => x.AddedAt, now)
+                .SetProperty(x => x.MalusUntil, (DateTime?)null).SetProperty(x => x.MalusLevels, 0));
         var present = await db.ParkMembers.Where(m => m.ParkId == parkId).Select(m => m.BankPokemonId).ToListAsync();
         db.ParkMembers.AddRange(wanted.Except(present).Select(id => new ParkMember { BankPokemonId = id, OwnerId = ownerId, ParkId = parkId, AddedAt = now }));
         await db.SaveChangesAsync();

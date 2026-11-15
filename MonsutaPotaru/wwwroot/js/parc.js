@@ -68,6 +68,34 @@ const ONCE = new Set(["attack", "hurt"]);
 // Pokémon malheureux (habitats du parc : Services/ParkHabitats.cs) : de temps en temps, il attaque un Pokémon proche
 // (secondes entre deux attaques ; sans cible à portée, il réessaie un peu plus tard) et boude (Hurt joué seul, immobile)
 const SAD = { attackEvery: [45, 90], retry: [5, 10], reach: 128, sulkEvery: [30, 50] };
+// Humeurs, de la plus basse à la plus haute : le malus « attaqué » (ParkPokemon.Malus, ParkService.RecordAttackAsync)
+// descend de ses niveaux dans cette liste, jamais plus bas que « sad » (même règle que ParkHabitats.WithMalus)
+const MOODS = ["sad", "normal", "happy"];
+// Nuage d'orage au-dessus d'un Pokémon malheureux (habitat ou malus), en pixels de sprite : « + » haut éclairé, « # »
+// nuage, « - » dessous sombre ; trois images sous le nuage, la pluie (deux images qui alternent) et l'éclair (un instant
+// de temps en temps). <cloud> : lignes du nuage seul (le bas du nuage est posé au-dessus de la tête).
+const STORM = {
+    cloud: [
+        "     +++       ",
+        "   ++###+ ++   ",
+        "  +######+##+  ",
+        " +###########+ ",
+        "+#############+",
+        "+#############+",
+        " -###########- ",
+        "  -----------  ",
+    ],
+    frames: {
+        rain1: ["  b   b   b    ", "               ", "    b   b   b  ", "               "],
+        rain2: ["               ", "  b   b   b    ", "               ", "    b   b   b  "],
+        bolt: ["       yy      ", "      yy       ", "     yyyy      ", "       y       "],
+    },
+    colors: { "+": "#8a93a6", "#": "#646c7e", "-": "#474d5c", b: "#8fc8ff", y: "#ffe066" },
+    rain: 0.25, // secondes par image de pluie
+    flashEvery: [2.5, 5], // secondes entre deux éclairs
+    flash: 0.12, // durée d'un éclair (deux fois de suite)
+    gap: 2, // pixels de la carte entre la tête et le nuage
+};
 const STRIKE_RANGE = 26; // distance (pixels de la carte) d'où il frappe
 const FLEE = { speed: 2, distance: [96, 160] }; // le Pokémon frappé s'enfuit plus vite, à 6 à 10 cases de l'attaquant
 // Énergie (par seconde) : 3 à 5 minutes d'activité le jour avant une sieste d'environ une minute ; la nuit, ils
@@ -488,7 +516,9 @@ class Pokemon {
         this.zzz = 0;
         this.vx = 0; // vitesse actuelle : accélère, tourne et freine progressivement
         this.vy = 0;
-        this.mood = info.mood ?? "normal"; // « sad » : attaque les autres et boude de temps en temps
+        this.mood = info.mood ?? "normal"; // selon l'habitat ; « sad » : attaque les autres et boude (moodOf : malus compris)
+        this.malus = null; // malus « attaqué » : { levels, end } (setMalus)
+        this.nextFlash = random(...STORM.flashEvery); // nuage d'orage : prochain éclair (secondes de clock)
         this.nextAttack = random(...SAD.attackEvery);
         this.nextSulk = random(...SAD.sulkEvery);
         this.prey = null; // Pokémon qu'il va attaquer
@@ -623,6 +653,32 @@ export async function create(container, component, options) {
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
     let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
     let clock = 0; // secondes écoulées (remous)
+    let skew = 0; // secondes ajoutées à l'horloge par simulate (essais) : la fin d'un malus arrive aussi en accéléré
+    const wallNow = () => Date.now() + skew * 1000;
+
+    /** Malus « attaqué » reçu de la page (ParkMalusInfo : niveaux, secondes restantes), ou null. */
+    const setMalus = (p, malus) => {
+        p.malus = malus?.levels > 0 && malus.seconds > 0 ? { levels: malus.levels, end: wallNow() + malus.seconds * 1000 } : null;
+    };
+
+    /** Humeur du moment : celle de l'habitat, abaissée par le malus « attaqué » tant qu'il dure. */
+    const moodOf = p => {
+        if (!p.malus) return p.mood;
+        if (wallNow() >= p.malus.end) { p.malus = null; return p.mood; } // fini : l'habitat décide de nouveau
+        const rank = MOODS.indexOf(p.mood);
+        return MOODS[Math.max(0, (rank < 0 ? 1 : rank) - p.malus.levels)];
+    };
+
+    /**
+     * Attaqué (frappé) : la page du propriétaire enregistre le malus et rend le nouveau (niveaux, temps restant) ; chez un
+     * visiteur, rien (il voit les malus enregistrés, pas ceux de ses propres animations).
+     */
+    const reportAttack = p => {
+        if (!canMove) return;
+        Promise.resolve(component.invokeMethodAsync("OnPokemonAttacked", p.id))
+            .then(malus => { if (malus && pokemon.includes(p)) setMalus(p, malus); })
+            .catch(() => { /* page fermée ou circuit coupé : l'humeur ne change pas */ });
+    };
     const animated = []; // tuiles animées de la carte : { image, animation, offset, index } (animatedTiles)
     let animationClock = 0; // millisecondes écoulées (tuiles animées)
 
@@ -1240,7 +1296,7 @@ export async function create(container, component, options) {
 
     /** Malheureux : de temps en temps, il s'en prend à un Pokémon proche (pas de sa famille), même endormi. Vrai s'il part. */
     function attackIfSad(p) {
-        if (p.mood !== "sad" || p.nextAttack > 0) return false;
+        if (moodOf(p) !== "sad" || p.nextAttack > 0) return false;
         const prey = preyOf(p, false);
         if (!prey) {
             p.nextAttack = random(...SAD.retry);
@@ -1315,13 +1371,14 @@ export async function create(container, component, options) {
             const by = p.hit.by;
             p.hit = null;
             hurt(p, by);
+            reportAttack(p); // malus « attaqué » (page du propriétaire)
             return;
         }
         if (ONCE.has(p.state)) { // animation jouée une fois (attaque, douleur), puis la suite
             playedOnce(p, dt);
             return;
         }
-        if (p.mood === "sad" && p.state !== "sleep") { p.nextAttack -= dt; p.nextSulk -= dt; }
+        if (moodOf(p) === "sad" && p.state !== "sleep") { p.nextAttack -= dt; p.nextSulk -= dt; }
         if (p.state === "sleep") {
             sleepOn(p, dt, night);
             return;
@@ -1368,7 +1425,7 @@ export async function create(container, component, options) {
         p.timer -= dt;
         p.lookTimer -= dt;
         if (p.lookTimer <= 0 && !nearMouse) lookAround(p);
-        if (p.mood === "sad" && p.nextSulk <= 0) { // malheureux : il boude un instant
+        if (moodOf(p) === "sad" && p.nextSulk <= 0) { // malheureux : il boude un instant
             p.nextSulk = random(...SAD.sulkEvery);
             p.play("hurt");
             return;
@@ -1607,6 +1664,43 @@ export async function create(container, component, options) {
         const depth = lift ? HELD_DEPTH : depthOf(Math.round(p.y));
         if (p.sprite.depth !== depth) p.sprite.setDepth(depth);
         drawZzz(p, anim.fh * s);
+        drawStorm(p, anim.fh * s, lift);
+    }
+
+    /**
+     * Nuage d'orage au-dessus d'un malheureux (habitat ou malus « attaqué ») : pluie qui alterne, éclair double de temps
+     * en temps, léger balancement ; caché sinon.
+     */
+    function drawStorm(p, h, lift) {
+        const sad = moodOf(p) === "sad";
+        p.storm.setVisible(sad);
+        if (!sad) return;
+        if (clock >= p.nextFlash + STORM.flash * 3) p.nextFlash = clock + random(...STORM.flashEvery);
+        const t = clock - p.nextFlash, flashing = (t >= 0 && t < STORM.flash) || (t >= STORM.flash * 2 && t < STORM.flash * 3);
+        const frame = flashing ? "bolt" : Math.floor(clock / STORM.rain + p.id) % 2 ? "rain2" : "rain1";
+        const sway = Math.round(Math.sin(clock * 1.3 + p.id) * 0.8 * spriteK) / spriteK * spriteScale;
+        // Bas du nuage (ligne STORM.cloud.length de l'image) posé au-dessus de la tête, comme le nom au survol
+        const bottom = p.y - p.altitude - lift - h * 0.6 - STORM.gap;
+        p.storm.setTexture(stormOf(frame)).setScale(1 / k)
+            .setOrigin(0.5, STORM.cloud.length / (STORM.cloud.length + STORM.frames.rain1.length))
+            .setPosition(snap(p.x + sway), snap(Math.max(STORM.cloud.length * spriteScale, bottom)));
+    }
+
+    /** Image du nuage d'orage (avec la pluie ou l'éclair), un carré de spriteK pixels par pixel de sprite (refaite comme les ombres). */
+    function stormOf(frame) {
+        const key = `orage:${frame}:${spriteK}`;
+        if (!scene.textures.exists(key)) {
+            const rows = [...STORM.cloud, ...STORM.frames[frame]];
+            const texture = scene.textures.createCanvas(key, rows[0].length * spriteK, rows.length * spriteK);
+            const context = texture.getContext();
+            rows.forEach((row, y) => [...row].forEach((c, x) => {
+                if (!STORM.colors[c]) return;
+                context.fillStyle = STORM.colors[c];
+                context.fillRect(x * spriteK, y * spriteK, spriteK, spriteK);
+            }));
+            texture.refresh();
+        }
+        return key;
     }
 
     function drawZzz(p, h) {
@@ -1691,7 +1785,7 @@ export async function create(container, component, options) {
         if (held?.p === p) held = null;
         if (drag?.target === p) drag.target = null;
         if (hovered === p) hovered = null;
-        p.sprite.destroy(); p.shadow.destroy(); for (const text of p.texts) text.destroy();
+        p.sprite.destroy(); p.shadow.destroy(); p.storm.destroy(); for (const text of p.texts) text.destroy();
     };
     let lists = 0; // numéro de la dernière liste reçue (setPokemon)
 
@@ -1713,6 +1807,8 @@ export async function create(container, component, options) {
         p.shadow = scene.add.image(0, 0, shadowOf(p.anim)).setDepth(1.9);
         p.texts = ["z", "Z"].map(z => scene.add.text(0, 0, z, { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "7px",
             color: "#ffffff", resolution: k }).setDepth(6).setVisible(false));
+        p.storm = scene.add.image(0, 0, stormOf("rain1")).setDepth(6).setVisible(false); // malheureux : nuage d'orage
+        setMalus(p, item.info.malus);
         return p;
     };
 
@@ -1724,6 +1820,7 @@ export async function create(container, component, options) {
             for (const p of kept) {
                 const info = list.find(i => i.id === p.id);
                 p.mood = info.mood ?? "normal";
+                setMalus(p, info.malus);
                 p.moves = info.moves ?? null;
             }
             for (const p of pokemon) if (!kept.includes(p)) removeFromScene(p);
@@ -1769,9 +1866,9 @@ export async function create(container, component, options) {
          */
         simulate(seconds, hour) {
             const level = hour === undefined ? nightLevel() : nightLevel(new Date(2000, 0, 1, Math.floor(hour), (hour % 1) * 60));
-            for (let t = 0; t < seconds; t += 1 / 30) step(1 / 30, level);
+            for (let t = 0; t < seconds; t += 1 / 30) { skew += 1 / 30; step(1 / 30, level); }
             draw(level);
-            return pokemon.map(p => ({ id: p.id, species: p.species, mood: p.mood, moves: p.moves, state: p.state, intent: p.intent,
+            return pokemon.map(p => ({ id: p.id, species: p.species, mood: moodOf(p), habitatMood: p.mood, malus: p.malus?.levels ?? 0, moves: p.moves, state: p.state, intent: p.intent,
                 x: Math.round(p.x), y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100,
                 free: ground.isFree(p.x, p.y, p.pass), // jamais sur une case qui lui est interdite
                 water: ground.liquidAt(p.x, p.y) === WATER, // dans l'eau (nageur) ou au-dessus (volant)

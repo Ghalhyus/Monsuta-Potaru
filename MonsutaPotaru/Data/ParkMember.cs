@@ -18,4 +18,13 @@ public class ParkMember
     public Park? Park { get; set; }
 
     public DateTime AddedAt { get; set; }
+
+    /// <summary>
+    /// Fin du malus « attaqué » (UTC) : tant qu'elle n'est pas passée, il a <see cref="MalusLevels"/> niveaux de bonheur
+    /// en moins (<see cref="Services.ParkService.RecordAttackAsync"/>) ; null ou passée : aucun malus.
+    /// </summary>
+    public DateTime? MalusUntil { get; set; }
+
+    /// <summary>Niveaux de bonheur perdus par les attaques (1 ou 2, voir <see cref="Services.ParkService.MaxMalusLevels"/>).</summary>
+    public int MalusLevels { get; set; }
 }
