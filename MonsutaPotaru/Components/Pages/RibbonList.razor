@@ -7,11 +7,13 @@
 @inject RibbonService RibbonStore
 @inject NavigationManager Navigation
 @inject PreferencesService Preferences
+@inject StoredSaveService Saves
 
 <PageTitle>Rubans</PageTitle>
 
 @* Suivi des rubans : une carte par Pokémon suivi (rubans obtenus sur le total), et l'ajout de n'importe quel Pokémon de la
-   collection (stockage interne ou sauvegarde stockée). Recherche par nom et tri (ajout, nom, complétion) au-dessus. *@
+   collection (stockage interne ou sauvegarde stockée), choisi comme au dépôt GTS (CollectionPicker). Recherche par nom et tri
+   (ajout, nom, complétion) au-dessus des cartes. *@
 <PageHeader Title="Rubans" Icon="bi-award-nav-menu">
     <Help>
         <p>
@@ -43,48 +45,24 @@
 
 @if (adding)
 {
+    @* Choix dans toute la collection, comme le dépôt GTS : recherche, origine, tri, colonnes et pastilles de « Ma collection ».
+       Œufs, Pokémon sans empreinte et déjà suivis grisés (un clic donne la raison). *@
     <div class="card mb-3">
         <div class="card-body">
             <h2 class="h5">Suivre un Pokémon</h2>
-            <label class="form-label" for="ribbonCandidateSearch">Pokémon de ta collection</label>
-            <input id="ribbonCandidateSearch" type="search" class="form-control mb-2" placeholder="Espèce ou surnom"
-                   value="@candidateSearch" @oninput="CandidateSearchChanged" />
-            @if (candidates.Count == 0)
-            {
-                <p class="text-muted mb-3">
-                    @(string.IsNullOrWhiteSpace(candidateSearch)
-                        ? "Aucun Pokémon à suivre : ta collection est vide, ou tous ses Pokémon sont déjà suivis (les œufs ne comptent pas)."
-                        : "Aucun Pokémon de ta collection ne correspond, ou il est déjà suivi.")
-                </p>
-            }
-            else
-            {
-                <div class="ribbon-candidates mb-2" role="radiogroup" aria-label="Pokémon à suivre">
-                    @foreach (var c in candidates)
-                    {
-                        var candidate = c;
-                        <button type="button" class="ribbon-candidate @(chosen == candidate.BankId ? "selected" : "")" role="radio"
-                                aria-checked="@(chosen == candidate.BankId ? "true" : "false")" @onclick="() => chosen = candidate.BankId">
-                            <img src="@candidate.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
-                            <span class="ribbon-candidate-body">
-                                <strong class="d-block text-truncate">@candidate.Nickname@(candidate.IsShiny ? " ★" : "")</strong>
-                                <span class="d-block small text-muted text-truncate">
-                                    @(RibbonService.IsNickname(candidate.Nickname, candidate.SpeciesName) ? $"{candidate.SpeciesName}, " : "")niveau @candidate.Level
-                                </span>
-                                <span class="d-block small text-muted text-truncate" title="@candidate.Location">@candidate.Location</span>
-                            </span>
-                        </button>
-                    }
-                </div>
-                @if (candidates.Count == RibbonService.CandidatePage)
-                {
-                    <p class="small text-muted">Les @RibbonService.CandidatePage premiers par nom : cherche le tien par son espèce ou son surnom.</p>
-                }
-            }
-            <div class="d-flex flex-wrap gap-2 mt-2">
-                <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || candidates.All(c => c.BankId != chosen))">Suivre</button>
+            <p class="small text-muted">
+                Choisis un Pokémon de ta collection (stockage interne ou sauvegarde stockée 💾). Ceux qui ne peuvent pas être suivis
+                sont grisés : les œufs, et ceux que tu suis déjà.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || picked is null)">
+                    @(picked is null ? "Suivre" : $"Suivre {picked.Nickname}")
+                </button>
                 <button type="button" class="btn btn-outline-secondary" @onclick="() => adding = false">Annuler</button>
             </div>
+            <CollectionPicker @key="pickerKey" UserId="@userId" Saves="saves" DefaultSort="defaultSort" SelectedId="picked?.Id"
+                              OnPick="item => picked = item" Problem="item => unavailable.GetValueOrDefault(item.Id)"
+                              @bind-Columns="pickerColumns" />
         </div>
     </div>
 }
@@ -157,9 +135,12 @@ else
     private RibbonOrder? defaultOrder; // tri par défaut du compte ; null : pas encore lu
     private string? search;
     private bool adding;
-    private string? candidateSearch;
-    private List<RibbonCandidate> candidates = [];
-    private int chosen;
+    private List<StoredSaveInfo> saves = [];
+    private CollectionSort defaultSort;
+    private Dictionary<int, string> unavailable = []; // raison de chaque Pokémon grisé dans le choix
+    private BankListItem? picked;
+    private int? pickerColumns; // colonnes choisies au curseur (null : selon la fenêtre), gardées le temps de la page
+    private int pickerKey; // change à chaque ouverture : le choix repart de zéro (recherche, filtres, tri du compte)
     private bool busy;
     private string? message;
     private bool messageIsError;
@@ -186,22 +167,20 @@ else
     private async Task OpenAdding()
     {
         message = null;
-        candidateSearch = null;
-        chosen = 0;
-        candidates = await RibbonStore.ListCandidatesAsync(userId, null);
+        picked = null;
+        saves = await Saves.ListAsync(userId);
+        defaultSort = (await Preferences.SortsAsync(userId)).Collection;
+        unavailable = await RibbonStore.UnavailableAsync(userId);
+        pickerKey++;
         adding = true;
-    }
-
-    private async Task CandidateSearchChanged(ChangeEventArgs e)
-    {
-        candidateSearch = e.Value?.ToString();
-        candidates = await RibbonStore.ListCandidatesAsync(userId, candidateSearch);
     }
 
     private async Task Add()
     {
+        if (picked is null)
+            return;
         busy = true;
-        var result = await RibbonStore.AddAsync(userId, chosen);
+        var result = await RibbonStore.AddAsync(userId, picked.Id);
         busy = false;
         if (result.Ok)
         {
@@ -210,6 +189,7 @@ else
         }
         message = result.Message;
         messageIsError = true;
-        candidates = await RibbonStore.ListCandidatesAsync(userId, candidateSearch);
+        picked = null;
+        unavailable = await RibbonStore.UnavailableAsync(userId); // ajouté entre-temps ailleurs : grisé à son tour
     }
 }

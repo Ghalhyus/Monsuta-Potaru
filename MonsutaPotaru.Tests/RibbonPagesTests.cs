@@ -27,42 +27,56 @@ public sealed class RibbonPagesTests : PageTestContext
     [Fact]
     public async Task List_AddsAPokemonFromTheCollection()
     {
-        AddToBank("sacha", 25, 133);
+        var ids = AddToBank("sacha", 25, 133, 1);
+        using (var db = Db.NewContext())
+        {
+            db.BankPokemon.Single(p => p.Id == ids[2]).IsEgg = true;
+            db.SaveChanges();
+        }
         var cut = Render<RibbonList>();
         cut.WaitForText("Tu ne suis encore aucun Pokémon.");
 
+        // Le choix du dépôt GTS : toute la collection, l'œuf grisé avec sa raison
         await cut.Click("+ Suivre un Pokémon");
-        cut.WaitForText("Suivre un Pokémon");
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll(".collection-picker .slot").Count));
         Assert.True(cut.Button("Suivre").HasAttribute("disabled"));
-        Assert.Equal(2, cut.FindAll(".ribbon-candidate").Count);
-        await cut.Find("#ribbonCandidateSearch").InputAsync(new() { Value = "zzz" });
-        cut.WaitForText("Aucun Pokémon de ta collection ne correspond");
-        await cut.Click("Annuler");
-        await cut.Click("+ Suivre un Pokémon");
+        await cut.Find(".collection-picker .slot.locked").ClickAsync(new());
+        cut.WaitForText("Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.");
+        Assert.True(cut.Button("Suivre").HasAttribute("disabled"));
+        Assert.NotNull(cut.Find(".collection-toolbar .filter-chips")); // pastilles de « Ma collection »
 
-        await cut.Find("#ribbonCandidateSearch").InputAsync(new() { Value = "pika" });
-        var candidate = Assert.Single(cut.FindAll(".ribbon-candidate"));
-        Assert.Contains("Stockage interne", candidate.TextContent);
-        await candidate.ClickAsync(new());
-        Assert.Equal("true", cut.Find(".ribbon-candidate").GetAttribute("aria-checked"));
-        await cut.Click("Suivre");
+        await cut.Find(".collection-toolbar input").InputAsync(new() { Value = "zzz" });
+        cut.WaitForText("Aucun Pokémon ne correspond.");
+        await cut.Click("Annuler");
+        await cut.Click("+ Suivre un Pokémon"); // le choix repart de zéro
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll(".collection-picker .slot").Count));
+
+        await cut.Find(".collection-toolbar input").InputAsync(new() { Value = "pika" });
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".collection-picker .slot")));
+        await cut.Find(".collection-picker .slot").ClickAsync(new());
+        Assert.Contains("selected", cut.Find(".collection-picker .slot").ClassList);
+        await cut.Click("Suivre Pikachu");
         Assert.Matches(@"rubans/\d+$", Navigation.Uri);
         Assert.Single(await RibbonStore.ListAsync("sacha"));
     }
 
     [Fact]
-    public async Task List_AddRefused_ShowsTheMessage()
+    public async Task List_GraysTrackedPokemon_AndAddRefusedShowsTheMessage()
     {
-        var bankId = AddToBank("sacha", 25).Single();
+        var ids = AddToBank("sacha", 25, 133);
+        await RibbonStore.AddAsync("sacha", ids[1]);
         var cut = Render<RibbonList>();
         await cut.Click("+ Suivre un Pokémon");
-        await cut.Find(".ribbon-candidate").ClickAsync(new());
-        await RibbonStore.AddAsync("sacha", bankId); // ajouté entre-temps depuis un autre onglet
-        await cut.Click("Suivre");
+        cut.WaitForAssertion(() => Assert.Contains("Évoli est déjà suivi.", cut.Find(".collection-picker .slot.locked").GetAttribute("title")));
+
+        await cut.Find(".collection-picker .slot:not(.locked)").ClickAsync(new());
+        await RibbonStore.AddAsync("sacha", ids[0]); // ajouté entre-temps depuis un autre onglet
+        await cut.Click("Suivre Pikachu");
         cut.WaitForText("Pikachu est déjà suivi.");
-        cut.WaitForText("tous ses Pokémon sont déjà suivis");
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".collection-picker .slot.locked").Count)); // grisé à son tour
+        Assert.True(cut.Button("Suivre").HasAttribute("disabled"));
         await cut.Find(".alert .btn-close").ClickAsync(new());
-        Assert.DoesNotContain("déjà suivi.", cut.Markup);
+        Assert.Empty(cut.FindAll(".alert"));
     }
 
     [Fact]

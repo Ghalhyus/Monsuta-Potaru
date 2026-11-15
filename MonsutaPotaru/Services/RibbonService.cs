@@ -33,9 +33,6 @@ public sealed record RibbonView(int Id, string Nickname, string SpeciesName, str
     public int Total => Ribbons.Sum(r => r.Worth);
 }
 
-/// <summary>Pokémon de la collection qu'on peut ajouter au suivi.</summary>
-public sealed record RibbonCandidate(int BankId, string Nickname, string SpeciesName, byte Level, bool IsShiny, string SpriteUrl, string Location);
-
 public sealed record RibbonResult(bool Ok, string Message, int Id = 0);
 
 /// <summary>
@@ -45,9 +42,6 @@ public sealed record RibbonResult(bool Ok, string Message, int Id = 0);
 /// </summary>
 public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFactory, ILogger<RibbonService> logger)
 {
-    /// <summary>Nombre de Pokémon proposés à la fois dans l'ajout (la recherche affine).</summary>
-    public const int CandidatePage = 60;
-
     /// <summary>Pokémon suivis du compte, mis à jour d'après la collection.</summary>
     public async Task<List<RibbonSummary>> ListAsync(string ownerId)
     {
@@ -71,33 +65,25 @@ public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFact
     }
 
     /// <summary>
-    /// Pokémon de la collection pas encore suivis (ni œufs, ni Pokémon sans empreinte), cherchés par espèce ou surnom comme
-    /// dans « Ma collection » ; les <see cref="CandidatePage"/> premiers par nom, puis du plus récent au plus ancien.
+    /// Pokémon de la collection qui ne peuvent pas être ajoutés au suivi, avec la raison (celle de <see cref="AddAsync"/>) :
+    /// les œufs, ceux sans empreinte et ceux déjà suivis. Grisés dans le choix (<c>CollectionPicker</c>) ; l'ajout revérifie.
     /// </summary>
-    public async Task<List<RibbonCandidate>> ListCandidatesAsync(string ownerId, string? search)
+    public async Task<Dictionary<int, string>> UnavailableAsync(string ownerId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var tracked = db.RibbonTrackers.Where(r => r.OwnerId == ownerId).Select(r => r.Fingerprint);
-        var query = db.BankPokemon.AsNoTracking()
-            .Where(p => p.OwnerId == ownerId && !p.IsEgg && p.Fingerprint != null && p.Fingerprint != "" && !tracked.Contains(p.Fingerprint));
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = $"%{search.Trim()}%";
-            query = query.Where(p => EF.Functions.Like(p.SpeciesName, s) || EF.Functions.Like(p.Nickname, s));
-        }
-        var rows = await query.OrderBy(p => p.SortName).ThenBy(p => p.Species).ThenByDescending(p => p.DepositedAt).ThenBy(p => p.Position)
-            .Take(CandidatePage)
-            .Select(p => new
-            {
-                p.Id, p.Nickname, p.SpeciesName, p.Level, p.IsShiny, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, p.Location,
-                Game = p.StoredSave == null ? null : p.StoredSave.GameName,
-                Trainer = p.StoredSave == null ? null : p.StoredSave.TrainerName,
-            })
+        var rows = await db.BankPokemon.AsNoTracking()
+            .Where(p => p.OwnerId == ownerId && (p.IsEgg || p.Fingerprint == null || p.Fingerprint == "" || tracked.Contains(p.Fingerprint)))
+            .Select(p => new { p.Id, p.IsEgg, p.Fingerprint, p.Nickname })
             .ToListAsync();
-        return [.. rows.Select(p => new RibbonCandidate(p.Id, p.Nickname, p.SpeciesName, p.Level, p.IsShiny,
-            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, false),
-            LocationOf(p.Game, p.Trainer, p.Location)))];
+        return rows.ToDictionary(p => p.Id, p =>
+            p.IsEgg ? EggRefusal
+            : string.IsNullOrEmpty(p.Fingerprint) ? UnidentifiedRefusal
+            : $"{p.Nickname} est déjà suivi.");
     }
+
+    private const string EggRefusal = "Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.";
+    private const string UnidentifiedRefusal = "Ce Pokémon ne peut pas être suivi : il n'a pas pu être identifié.";
 
     /// <summary>Ajoute ce Pokémon du compte au suivi (une fois : retrouvé par son empreinte).</summary>
     public async Task<RibbonResult> AddAsync(string ownerId, int bankId)
@@ -108,9 +94,9 @@ public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFact
         if (pokemon is null)
             return new(false, "Ce Pokémon n'est plus dans ta collection.");
         if (pokemon.IsEgg)
-            return new(false, "Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.");
+            return new(false, EggRefusal);
         if (string.IsNullOrEmpty(pokemon.Fingerprint))
-            return new(false, "Ce Pokémon ne peut pas être suivi : il n'a pas pu être identifié.");
+            return new(false, UnidentifiedRefusal);
         var name = pokemon.Nickname;
         if (await db.RibbonTrackers.AnyAsync(r => r.OwnerId == ownerId && r.Fingerprint == pokemon.Fingerprint))
             return new(false, $"{name} est déjà suivi.");

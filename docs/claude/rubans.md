@@ -53,8 +53,11 @@ README : « Rubans ». Rubans comptés : `Services/Ribbons.cs` ; suivi : `Servic
   le suivi le perd (accepté).
 - Pas de page publique chez les autres joueurs pour l'instant (pas de réglage de visibilité). Les **statistiques** (onglet
   « Défis », `statistiques.md`) montrent pourtant leurs totaux et moyennes à un visiteur (case « Statistiques »).
-- Ajout : `ListCandidatesAsync` rend les 60 premiers par nom (`CandidatePage`), la recherche affine (LIKE, comme « Ma
-  collection »). La recherche de la vue générale est en mémoire, sans accents (`BankPokemon.SortKey`).
+- Ajout (2026-11-15, demandé « comme le parc ») : `CollectionPicker`, le choix du dépôt GTS (recherche, origine, tri,
+  colonnes, pastilles ; colonnes gardées le temps de la page, `@key` changé à chaque ouverture pour repartir de zéro).
+  Grisés : `UnavailableAsync` (id → raison : œuf, sans empreinte, déjà suivi), relu après un refus de `AddAsync`.
+  **Choix de l'utilisateur** : pastilles dans l'ajout seulement, pas sur la liste des suivis (ni liste « Origine »).
+  La recherche de la vue générale est en mémoire, sans accents (`BankPokemon.SortKey`).
 - Surnom : comparé à l'espèce sans majuscules ni accents (`IsNickname`) : « PIKACHU » de 3e génération n'est pas un surnom.
 - Nom de la page de liste : `RibbonList` (une classe `Ribbons` dans `Components.Pages` cacherait `Services.Ribbons`).
 

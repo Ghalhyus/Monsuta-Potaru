@@ -87,18 +87,26 @@ public sealed class RibbonServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Candidates_SkipTrackedPokemonAndEggs_AndSearch()
+    public async Task Unavailable_GivesEggsUnidentifiedAndTrackedPokemon_WithTheirReason()
     {
         var pikachu = Bank("sacha", 25, 1);
-        Bank("sacha", 133, 2);
-        Bank("sacha", 172, 3, egg: true);
+        var eevee = Bank("sacha", 133, 2);
+        var egg = Bank("sacha", 172, 3, egg: true);
+        var unknown = Bank("sacha", 1, 4);
+        Bank("ondine", 7, 5, egg: true); // un autre compte
+        await using (var db = _db.NewContext())
+            await db.BankPokemon.Where(p => p.Id == unknown.Id).ExecuteUpdateAsync(p => p.SetProperty(x => x.Fingerprint, (string?)null));
         var service = Service();
-        Assert.Equal(["Évoli", "Pikachu"], (await service.ListCandidatesAsync("sacha", null)).Select(c => c.SpeciesName));
-        Assert.Equal(["Pikachu"], (await service.ListCandidatesAsync("sacha", " pika ")).Select(c => c.SpeciesName));
-
         await service.AddAsync("sacha", pikachu.Id);
-        var candidate = Assert.Single(await service.ListCandidatesAsync("sacha", null));
-        Assert.Equal(("Évoli", "Stockage interne", 20), (candidate.SpeciesName, candidate.Location, (int)candidate.Level));
+
+        var unavailable = await service.UnavailableAsync("sacha");
+        Assert.Equal(new Dictionary<int, string>
+        {
+            [pikachu.Id] = "Pikachu est déjà suivi.",
+            [egg.Id] = "Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.",
+            [unknown.Id] = "Ce Pokémon ne peut pas être suivi : il n'a pas pu être identifié.",
+        }, unavailable);
+        Assert.DoesNotContain(eevee.Id, unavailable.Keys);
     }
 
     /// <summary>
@@ -111,9 +119,12 @@ public sealed class RibbonServiceTests : IDisposable
         var pk = SaveSessionTests.CreatePk5(25, 20, "Ludo", 7);
         await StoreSave("sacha", pk, 10);
         var service = Service();
-        var first = (await service.ListCandidatesAsync("sacha", null)).Single();
-        Assert.EndsWith(" — Ludo · Boîte 1, case 1", first.Location); // jeu, dresseur, place
-        var id = (await service.AddAsync("sacha", first.BankId)).Id;
+        int firstBankId;
+        await using (var db = _db.NewContext())
+            firstBankId = db.BankPokemon.Single().Id;
+        var id = (await service.AddAsync("sacha", firstBankId)).Id;
+        var firstLocation = Assert.Single(await service.ListAsync("sacha")).Location;
+        Assert.EndsWith(" — Ludo · Boîte 1, case 1", firstLocation); // jeu, dresseur, place
 
         // Mise à jour de la sauvegarde : un ruban de plus, nouvelle ligne en base
         pk.RibbonChampionSinnoh = true;
@@ -122,8 +133,8 @@ public sealed class RibbonServiceTests : IDisposable
         await StoreSave("sacha", pk, 11);
         var view = (await service.GetAsync("sacha", id))!;
         Assert.Equal(2, view.Earned);
-        Assert.NotEqual(first.BankId, view.BankId);
-        Assert.Equal(first.Location, view.Location);
+        Assert.NotEqual(firstBankId, view.BankId);
+        Assert.Equal(firstLocation, view.Location);
 
         // Le Pokémon quitte la sauvegarde : le suivi reste, avec ses derniers rubans
         await StoreSave("sacha", SaveSessionTests.CreatePk5(133, 5, "Ludo", 8), 12);

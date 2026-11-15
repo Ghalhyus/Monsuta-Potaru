@@ -562,6 +562,9 @@ migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `
   empreinte), **retrouvé par son empreinte** (`BankPokemon.Fingerprint`) : les lignes d'une sauvegarde stockée sont
   recréées à chaque mise à jour. Un suivi par Pokémon et par compte (index unique compte + empreinte). L'identifiant
   envoyé par le navigateur est revérifié (Pokémon du compte).
+- **Ajout** : choix dans toute la collection avec `Shared/CollectionPicker.razor` (comme le dépôt GTS : recherche, origine,
+  tri, colonnes, pastilles de « Ma collection », rien dans l'adresse) ; œufs, Pokémon sans empreinte et déjà suivis grisés
+  avec leur raison (`RibbonService.UnavailableAsync`, mêmes messages que `AddAsync`, qui revérifie).
 - Chaque lecture reprend l'état du Pokémon dans le compte (le plus récent s'il y en a plusieurs) ; **parti** du compte, le
   suivi garde son dernier état connu (octets et affichage) et se remet à jour s'il revient. Arrêter le suivi ne touche pas
   au Pokémon.
@@ -724,7 +727,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/GtsService.cs` | GTS : dépôt (depuis la collection), recherche, échange, boîte de réception (annulation, expiration, sauvegarde supprimée, récupération) ; `GtsEvents` (pastille du menu) et `GtsExpiry` (offres expirées, toutes les heures) |
 | `MonsutaPotaru/Data/GtsPokemon.cs` | Table des Pokémon de la GTS : offres en ligne et boîte de réception (`GtsStatus`) |
 | `MonsutaPotaru/Components/Pages/Gts.razor` | « Multijoueurs » → « GTS » (`/gts`) : boîte de réception, mes offres, recherche, dépôt en deux étapes, échange (choix, confirmation) |
-| `MonsutaPotaru/Components/Shared/CollectionPicker.razor` | Choix d'un Pokémon dans toute « Ma collection » (recherche, origine, tri, pastilles, colonnes au curseur ; grisés), par tranches |
+| `MonsutaPotaru/Components/Shared/CollectionPicker.razor` | Choix d'un Pokémon dans toute « Ma collection » (recherche, origine, tri, pastilles, colonnes au curseur ; grisés), par tranches : dépôt GTS, ajout d'un suivi de rubans |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement ; ajoute à la requête les PP, PV maximum et types de chaque Pokémon de l'équipe) |
 | `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride), fiche d'un Pokémon de l'équipe |
 | `MonsutaPotaru/Services/Battle/BattleSheet.cs` | Fiche d'un Pokémon de l'équipe pendant un combat, lue dans la requête : résumé, capacités, détail d'une capacité |
@@ -820,10 +823,10 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `outils/completion_gen7.py`, `completion_gen7_ordre.json` | Génèrent `Gen7CompletionData.cs` (Soleil à Ultra-Lune, Let's Go) d'après les listes de drapeaux de FlagsEditorEX (objets au sol, cachés, cadeaux de Let's Go, rencontres, drapeaux de l'histoire), les lieux des cellules Zygarde de PKHeX et les check-lists de l'utilisateur (CT, cristaux Z, légendaires, Scanner des Îles, Experts) ; ordre des lieux écrit à la main |
 | `outils/completion_gen4.py`, `outils/completion_gen4_extract.py`, `completion_gen4_lieux.json`, `completion_gen4_ordre.json` | Génèrent `Gen4CompletionData.cs` d'après pokeplatinum et pokeheartgold (constantes, cartes JSON, scripts) et pokediamond (fichiers binaires du jeu : événements des cartes, scripts compilés) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
-| `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection |
+| `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection (`CollectionPicker`) |
 | `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
 | `MonsutaPotaru/Services/Ribbons.cs` | Les 42 rubans affichés (nom, famille, façon de les obtenir, image), la complétion sur 88 (rubans des souvenirs un par un), et leur lecture dans chaque format de PKHeX |
-| `MonsutaPotaru/Services/RibbonService.cs` | Suivi des rubans : ajout, Pokémon retrouvé par son empreinte et mis à jour, Pokémon proposés, tri et recherche de la vue générale |
+| `MonsutaPotaru/Services/RibbonService.cs` | Suivi des rubans : ajout, Pokémon retrouvé par son empreinte et mis à jour, Pokémon qui ne peuvent pas être ajoutés (grisés), tri et recherche de la vue générale |
 | `MonsutaPotaru/Data/RibbonTracker.cs` | Table des suivis de rubans (empreinte du Pokémon et son dernier état connu ; un par Pokémon et par compte) |
 | `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`), sinon celui du compte (« Tris par défaut ») ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`, avec en plus le tri par quantité) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |
