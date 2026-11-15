@@ -66,7 +66,7 @@ public sealed class StatisticsServiceTests : IDisposable
     [Fact]
     public void Summarize_CountsEachLivingDexInTheModesItHas()
     {
-        var red = new LivingDexCompletion(LivingDexGames.Get(LivingDexGame.Red), [P(151, 151)]); // National seul
+        var red = new LivingDexCompletion(LivingDexGames.Get(LivingDexGame.Red), [P(151, 151, LivingDexMode.Regional)]); // Régional seul
         var silver = new LivingDexCompletion(LivingDexGames.Get(LivingDexGame.Silver),
             [P(50, 251, LivingDexMode.Regional), P(50, 251), P(50, 276, LivingDexMode.Complete)]);
         var global = new LivingDexCompletion(GlobalLivingDex.Game,
@@ -75,10 +75,10 @@ public sealed class StatisticsServiceTests : IDisposable
         var stats = StatisticsService.Summarize([red, silver, global]);
 
         Assert.Equal(3, stats.Count);
-        // Général : le plus grand mode de chacun (National de Rouge, Complet d'Argent, Ultime du global).
+        // Général : le plus grand mode de chacun (Régional de Rouge, Complet d'Argent, Ultime du global).
         Assert.Equal(StatisticsService.Average([P(151, 151), P(50, 276), P(0, 1_578)]), stats.General);
-        Assert.Equal(new LivingDexAverage(1, 0, 199), stats.Regional); // Argent seul : 50 / 251 = 19,9 %
-        Assert.Equal((3, 2), (stats.National.Count, stats.National.Completed));
+        Assert.Equal(new LivingDexAverage(2, 1, 599), stats.Regional); // Rouge 100 % et Argent 50 / 251 = 19,9 %
+        Assert.Equal((2, 1), (stats.National.Count, stats.National.Completed)); // Rouge n'y est pas
         Assert.Equal((2, 1), (stats.Complete.Count, stats.Complete.Completed));
     }
 
@@ -108,8 +108,8 @@ public sealed class StatisticsServiceTests : IDisposable
 
         var (normal, shiny) = await _stats.LivingDexAsync("sacha");
         Assert.Equal(3, normal.Count);
-        Assert.Equal(1, normal.Regional.Count); // Argent seul
-        Assert.Equal(3, normal.National.Count);
+        Assert.Equal(2, normal.Regional.Count); // Rouge (son seul mode) et Argent
+        Assert.Equal(2, normal.National.Count); // Argent et le global, pas Rouge
         Assert.Equal(2, normal.Complete.Count); // Argent et le global
         Assert.Equal(1, shiny.Count);
         Assert.Equal(0, shiny.Regional.Count); // le global chromatique n'a pas de Régional

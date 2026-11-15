@@ -24,7 +24,7 @@ public sealed record LivingDexAverage(int Count, int Completed, int Tenths)
 /// <summary>
 /// Statistiques d'un groupe de living dex (les normaux, ou les chromatiques) : le général compte chacun dans son plus grand
 /// mode (Complet, Ultime pour les globaux, son seul mode pour un chromatique d'un jeu) ; les autres, seulement ceux qui ont
-/// ce mode (un living dex de 1re génération, « National seul », n'entre ni dans le régional ni dans le complet).
+/// ce mode (un living dex de 1re génération, Régional seulement, n'entre ni dans le national ni dans le complet).
 /// </summary>
 public sealed record LivingDexStats(LivingDexAverage General, LivingDexAverage Regional, LivingDexAverage National, LivingDexAverage Complete)
 {

@@ -69,6 +69,28 @@ public sealed class LivingDexPagesTests : PageTestContext
     }
 
     [Fact]
+    public async Task FirstGeneration_ShownOnlyInRegional_WithKantoNumbers()
+    {
+        var saveId = await StoreReal("sacha", "rouge.sav");
+        var id = (await Dexes.CreateAsync("sacha", saveId, LivingDexGame.Red)).Id!.Value;
+        var list = Render<LivingDexes>();
+        list.WaitForText("Les living dex de 1re génération n'ont que le mode Régional : choisis « Régional » pour les voir.");
+        Assert.Empty(list.FindAll(".livingdex-card"));
+        await list.Click("Complet");
+        list.WaitForText("n'ont que le mode Régional");
+        await list.Click("Régional");
+        list.WaitForAssertion(() => Assert.Single(list.FindAll(".livingdex-card")));
+        Assert.DoesNotContain(" seul", list.Find(".livingdex-card").TextContent);
+        Assert.Contains("mode=regional", list.Find(".livingdex-card").GetAttribute("href"));
+
+        // Sa page, même demandée en National : le Pokédex de Kanto, sans boutons de mode.
+        var page = Render<LivingDexPage>(p => p.Add(x => x.Id, id));
+        page.WaitForAssertion(() => Assert.Equal(151, page.FindAll(".livingdex-slot").Count));
+        Assert.StartsWith("Kanto #001 Bulbizarre (national #001)", page.Find(".livingdex-slot").GetAttribute("title"));
+        Assert.False(page.HasButton("National"));
+    }
+
+    [Fact]
     public async Task List_CreatesAShinyLivingDex_AndFiltersTheCards()
     {
         await StoreReal("sacha", "noir.sav");

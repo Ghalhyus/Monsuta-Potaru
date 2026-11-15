@@ -12,8 +12,8 @@ README : « Statistiques ». Page `Components/Pages/Statistics.razor` (deux adre
   `Amount < 0` dans `WalletOperations` (tout achat futur y entre tout seul). Les crédits du mode debug entrent dans le
   solde, donc dans le déposé.
 - Living dex : **moyenne** des pourcentages (pas le total des cases), **chromatiques à part**, le général dans le
-  **plus grand mode** (`Modes[^1]`). Un mode caché parce qu'identique à un autre (Complet de la 1re génération) ne compte
-  pas : même règle que les modes affichés.
+  **plus grand mode** (`Modes[^1]`). Un mode caché parce qu'identique à un autre ne compte pas : même règle que les modes
+  affichés. **1re génération** : seulement en régional (demandé le 2026-11-15 ; avant, en national).
 - Visible sur le profil : `PublicPages.Statistics` (16). Migration `StatisticsVisibility` : `PublicPages | 16` pour
   **tous** les comptes existants (pas seulement ceux qui montraient tout). Les trois onglets pour un visiteur (le solde se
   voit déjà dans son Inventaire).

@@ -208,7 +208,9 @@ public sealed class GlobalLivingDexTests : IDisposable
         Assert.True(shinyView.Entries.Single(e => e.Species == 1).Owned);
         Assert.StartsWith("images/pokemon/chromatique/", shinyView.Entries[0].Sprite);
         Assert.Equal([LivingDexGame.Global, LivingDexGame.GlobalShiny, LivingDexGame.Red],
-            LivingDexGames.Sort(await _dex.ListAsync("sacha"), LivingDexSort.Completion, descending: true).Select(c => c.Game.Game));
+            LivingDexGames.Sort(await _dex.ListAsync("sacha", LivingDexMode.Regional), LivingDexSort.Completion, descending: true).Select(c => c.Game.Game));
+        Assert.Equal([LivingDexGame.Global, LivingDexGame.GlobalShiny], // le Rouge n'a que le Régional
+            (await _dex.ListAsync("sacha")).Select(c => c.Game.Game));
         Assert.Equal(["Pokémon Rouge"], (await _dex.NamesBySaveAsync("sacha")).Values);
     }
 }

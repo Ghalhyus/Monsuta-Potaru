@@ -1194,7 +1194,9 @@ public static class LivingDexGames
 
     /// <summary>
     /// Modes proposés, dans l'ordre Régional, National, Complet : un mode qui demande exactement les mêmes Pokémon
-    /// qu'un autre, dans le même ordre, est caché. En 1re génération, il ne reste que le National ; en 2e, le Pokédex de
+    /// qu'un autre, dans le même ordre, est caché. En 1re génération, les trois sont identiques : il ne reste que le
+    /// Régional (Kanto), qui seul compte dans les statistiques, et la carte n'est montrée qu'en Régional
+    /// (<see cref="RegionalOnly"/>, demandé le 2026-11-15) ; en 2e, le Pokédex de
     /// Johto a les mêmes 251 Pokémon que le national mais dans un autre ordre, et Zarbi ses 26 lettres : les trois modes ;
     /// à partir de la 3e, le Pokédex régional, le national et les formes : les trois. Let's Go : son Pokédex est tout ce
     /// qu'il peut contenir, le National et le Complet (formes d'Alola, Méga). Légendes Arceus : comme Johto, le Pokédex de
@@ -1214,8 +1216,18 @@ public static class LivingDexGames
         modes.Add(LivingDexMode.National);
         if (!Slots(game, LivingDexMode.Complete).SequenceEqual(national))
             modes.Add(LivingDexMode.Complete);
+        if (modes is [LivingDexMode.National] && game.Regional.Count > 0)
+            return [LivingDexMode.Regional]; // 1re génération : son Pokédex régional est tout le national
         return modes;
     }
+
+    /// <summary>
+    /// Living dex d'un jeu qui n'a que le Régional (1re génération) : dans la vue générale, il n'apparaît qu'en Régional,
+    /// sans carte « Régional seul » dans les autres modes. Pas les chromatiques des jeux, qui n'ont aussi que le Régional
+    /// mais restent montrés partout (« Régional seul »).
+    /// </summary>
+    public static bool RegionalOnly(LivingDexGameInfo game) =>
+        !game.Shiny && !GlobalLivingDex.IsGlobal(game.Game) && Modes(game) is [LivingDexMode.Regional];
 
     public static string ModeName(LivingDexMode mode) => mode switch
     {
@@ -1312,7 +1324,8 @@ public sealed class LivingDexService(
     /// <summary>
     /// Living dex du compte, progression comptée dans un mode (vue générale) : le National pour un jeu qui ne propose pas
     /// ce mode, le seul mode d'un living dex chromatique d'un jeu (<see cref="LivingDexSummary.Mode"/>), comme sur sa page.
-    /// En Ultime, seulement ceux qui ont ce mode (les living dex globaux).
+    /// En Ultime, seulement ceux qui ont ce mode (les living dex globaux) ; ceux de 1re génération, seulement en Régional
+    /// (<see cref="LivingDexGames.RegionalOnly"/>).
     /// </summary>
     public async Task<List<LivingDexSummary>> ListAsync(string ownerId, LivingDexMode mode = LivingDexMode.National)
     {
@@ -1325,7 +1338,7 @@ public sealed class LivingDexService(
         {
             var game = LivingDexGames.Get(d.Game, d.Shiny);
             var modes = LivingDexGames.Modes(game);
-            if (mode == LivingDexMode.Ultimate && !modes.Contains(mode))
+            if (!modes.Contains(mode) && (mode == LivingDexMode.Ultimate || LivingDexGames.RegionalOnly(game)))
                 continue;
             var shown = ShownMode(modes, mode);
             var entries = d.StoredSaveId is { } saveId ? await EntriesAsync(db, game, saveId, shown)
@@ -1364,7 +1377,10 @@ public sealed class LivingDexService(
         return result;
     }
 
-    /// <summary>Mode affiché : celui demandé s'il est proposé, sinon le National, sinon le seul mode du living dex (chromatique d'un jeu).</summary>
+    /// <summary>
+    /// Mode affiché : celui demandé s'il est proposé, sinon le National, sinon le seul mode du living dex (chromatique d'un
+    /// jeu, 1re génération).
+    /// </summary>
     private static LivingDexMode ShownMode(IReadOnlyList<LivingDexMode> modes, LivingDexMode mode)
     {
         if (modes.Contains(mode))

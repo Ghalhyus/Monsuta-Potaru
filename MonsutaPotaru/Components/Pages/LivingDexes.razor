@@ -177,7 +177,8 @@ else
     var shownDexes = dexes.Where(d => LivingDexGames.Matches(d.Game, kind)).ToList();
     @if (shownDexes.Count == 0)
     {
-        @* Ultime : seuls les living dex qui ont ce mode sont montrés ; le filtre peut aussi ne rien laisser. *@
+        @* Ultime : seuls les living dex qui ont ce mode sont montrés ; ceux de 1re génération, seulement en Régional ; le
+           filtre peut aussi ne rien laisser. *@
         <p class="text-muted">@EmptyMessage</p>
     }
     <div class="livingdex-cards">
@@ -283,7 +284,10 @@ else
     private void SetKind(LivingDexKind value) =>
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", LivingDexGames.KindSlug(value)), replace: true);
 
-    /// <summary>Aucune carte à montrer : mode Ultime sans living dex global, ou filtre qui ne laisse rien.</summary>
+    /// <summary>
+    /// Aucune carte à montrer : mode Ultime sans living dex global, living dex de 1re génération seuls hors du Régional, ou
+    /// filtre qui ne laisse rien.
+    /// </summary>
     private string EmptyMessage
     {
         get
@@ -291,6 +295,8 @@ else
             var create = Visitor ? "." : " : crée-en un avec « + Créer un living dex ».";
             if (mode == LivingDexMode.Ultimate)
                 return kind == LivingDexKind.Shiny ? $"Seul le living dex global chromatique a le mode Ultime{create}" : $"Seuls les living dex globaux ont le mode Ultime{create}";
+            if (kind != LivingDexKind.Shiny && taken.Any(g => LivingDexGames.RegionalOnly(LivingDexGames.Get(g))))
+                return "Les living dex de 1re génération n'ont que le mode Régional : choisis « Régional » pour les voir.";
             return kind == LivingDexKind.Shiny ? $"Aucun living dex chromatique{create}" : $"Aucun living dex normal{create}";
         }
     }

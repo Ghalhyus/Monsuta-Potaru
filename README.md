@@ -533,7 +533,9 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
 - **Comptage** : équipe et boîtes de la sauvegarde liée (pas les œufs), donc à jour à chaque mise à jour de la sauvegarde.
 - **Modes** : Régional, National, Complet (chaque forme qu'une sauvegarde du jeu peut contenir, pas le sexe) ; en
   Régional et National n'importe quelle forme compte, en Complet la forme exacte. Un mode identique à un autre, ordre
-  compris, est caché. Cases qui demandent un exemplaire de plus (Méga, Primo, Gigamax), un objet dans le sac (Shaymin
+  compris, est caché ; la 1re génération, où les trois sont identiques, garde le **Régional** (Kanto) : sa carte n'apparaît
+  qu'en Régional dans la vue générale, et elle ne compte qu'en régional dans les statistiques (`LivingDexGames.RegionalOnly`).
+  Cases qui demandent un exemplaire de plus (Méga, Primo, Gigamax), un objet dans le sac (Shaymin
   Céleste, Hoopa Déchaîné jusqu'à la 6e, Méga de Let's Go) ou une forme fixée par le jeu (Deoxys de 3e génération).
 - **Chromatique d'un jeu** (`LivingDex.Shiny`, `LivingDexGames.Get(jeu, shiny: true)`) : pas en 1re génération
   (`HasShiny`) ; seulement les chromatiques de sa sauvegarde ; un seul mode, le Régional (Let's Go : son Pokédex, en
@@ -543,7 +545,8 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
 - Vue générale : `?mode=regional|complet|ultime`, `?filtre=chromatiques|normaux` (global chromatique compris dans
   « chromatiques », `LivingDexGames.Matches`), `?tri=generation|completion`, `?ordre=desc` (`LivingDexGames.Sort` : le chromatique
   d'un jeu suit son normal ; sans tri dans l'adresse, celui du compte, voir « Tris par défaut ») ; une carte sans le
-  mode demandé compte en National, ou dans son seul mode (« Régional seul ») ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
+  mode demandé compte en National, ou dans son seul mode (« Régional seul »), sauf la 1re génération, cachée hors du
+  Régional ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
   (`Shared/GridColumns.cs`, commun avec « Ma collection »).
 - **Global** (`LivingDexGame.Global`, `StoredSaveId` null) : stockage interne seulement, sans œufs ni chromatiques,
   chaque exemplaire pour une seule case ; formes reconnues par leur nom anglais chez PKHeX ; National 1 025, Complet
@@ -685,8 +688,8 @@ Détails : `docs/claude/statistiques.md`.
 - **Living dex** : les normaux (globaux compris) et les chromatiques **à part**. Pourcentage = **moyenne** des
   pourcentages des living dex (chacun pèse autant ; fractions exactes, arrondi vers le bas comme les barres : 100 %
   seulement quand tous sont complets). Un living dex ne compte que dans les modes qu'il a (`LivingDexGames.Modes` : un
-  Rouge, « National seul », n'entre ni dans le régional ni dans le complet) ; le **général** prend chacun dans son plus
-  grand mode (Complet, Ultime pour les globaux, son seul mode pour un chromatique d'un jeu). **Complété** : 100 % dans le
+  Rouge, Régional seulement, n'entre ni dans le national ni dans le complet) ; le **général** prend chacun dans son plus
+  grand mode (Complet, Ultime pour les globaux, Régional pour la 1re génération, son seul mode pour un chromatique d'un jeu). **Complété** : 100 % dans le
   mode. Même comptage que la vue générale (`LivingDexService.ProgressAsync`).
 - **Rubans** (onglet Défis) : sur les **Pokémon suivis** seulement (« Rubans », les partis avec leurs derniers rubans
   connus) : rubans gagnés en tout, **chaque ruban réuni dans un souvenir compte** (comme la complétion sur 88), rubans

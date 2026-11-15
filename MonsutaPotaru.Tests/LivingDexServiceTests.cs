@@ -46,14 +46,22 @@ public sealed class LivingDexServiceTests : IDisposable
     }
 
     [Fact]
-    public void FirstGeneration_OnlyHasTheNationalMode_Of151()
+    public void FirstGeneration_OnlyHasTheRegionalMode_Of151()
     {
         foreach (var game in LivingDexGames.All.Where(g => g.Generation == 1))
         {
-            Assert.Equal([LivingDexMode.National], LivingDexGames.Modes(game)); // une région, aucune forme : Régional et Complet cachés
-            Assert.Equal(151, LivingDexGames.Slots(game, LivingDexMode.National).Count);
+            // Une région, aucune forme : les trois modes sont identiques, il ne reste que le Régional (Kanto).
+            Assert.Equal([LivingDexMode.Regional], LivingDexGames.Modes(game));
+            Assert.True(LivingDexGames.RegionalOnly(game));
+            Assert.Equal(151, LivingDexGames.Slots(game, LivingDexMode.Regional).Count);
+            Assert.Equal(LivingDexGames.Slots(game, LivingDexMode.National), LivingDexGames.Slots(game, LivingDexMode.Regional));
             Assert.Equal(LivingDexGames.Slots(game, LivingDexMode.National), LivingDexGames.Slots(game, LivingDexMode.Complete));
+            Assert.Equal("Kanto", game.Region);
         }
+        // Pas les autres living dex qui n'ont qu'un mode : chromatiques des jeux, Let's Go, globaux.
+        Assert.False(LivingDexGames.RegionalOnly(LivingDexGames.Get(LivingDexGame.Gold, shiny: true)));
+        Assert.False(LivingDexGames.RegionalOnly(LivingDexGames.Get(LivingDexGame.LetsGoPikachu)));
+        Assert.False(LivingDexGames.RegionalOnly(GlobalLivingDex.Game));
         Assert.Equal("images/livingdex/rouge-bleu/", LivingDexGames.Get(LivingDexGame.Blue).SpriteFolder);
         Assert.Equal("images/livingdex/jaune/", LivingDexGames.Get(LivingDexGame.Yellow).SpriteFolder);
         Assert.Equal("images/livingdex/jaquettes/rouge.png", LivingDexGames.Get(LivingDexGame.Red).Cover);
@@ -633,7 +641,12 @@ public sealed class LivingDexServiceTests : IDisposable
             (await _dex.CreateAsync("sacha", blue, LivingDexGame.Red)).Message);
         Assert.True((await _dex.CreateAsync("sacha", blue, LivingDexGame.Blue)).Ok);
 
-        Assert.Equal(["Pokémon Rouge", "Pokémon Bleu", "Pokémon Épée"], (await _dex.ListAsync("sacha")).Select(d => d.Game.Name));
+        Assert.Equal(["Pokémon Rouge", "Pokémon Bleu", "Pokémon Épée"], (await _dex.ListAsync("sacha", LivingDexMode.Regional)).Select(d => d.Game.Name));
+        // 1re génération : seulement en Régional, ni en National ni en Complet.
+        Assert.Equal(["Pokémon Épée"], (await _dex.ListAsync("sacha")).Select(d => d.Game.Name));
+        Assert.Equal(["Pokémon Épée"], (await _dex.ListAsync("sacha", LivingDexMode.Complete)).Select(d => d.Game.Name));
+        var redView = (await _dex.GetAsync("sacha", created.Id!.Value))!; // demandé en National : son seul mode
+        Assert.Equal((LivingDexMode.Regional, 151), (redView.Mode, redView.Entries.Count));
         Assert.Empty(await _dex.ListAsync("ondine"));
         Assert.False(await _dex.DeleteAsync("ondine", created.Id!.Value));
         Assert.True(await _dex.DeleteAsync("sacha", created.Id!.Value));
@@ -646,9 +659,9 @@ public sealed class LivingDexServiceTests : IDisposable
         var red = await Store("sacha", "rouge.sav");
         var id = (await _dex.CreateAsync("sacha", red, LivingDexGame.Red)).Id!.Value;
 
-        var view = await _dex.GetAsync("sacha", id, LivingDexMode.Complete); // pas proposé en 1re génération : National
+        var view = await _dex.GetAsync("sacha", id, LivingDexMode.Complete); // pas proposé en 1re génération : Régional
         Assert.NotNull(view);
-        Assert.Equal(LivingDexMode.National, view.Mode);
+        Assert.Equal(LivingDexMode.Regional, view.Mode);
         Assert.Equal(151, view.Entries.Count);
         Assert.Equal(Enumerable.Range(1, 151), view.Entries.Select(e => (int)e.Species));
 
@@ -658,7 +671,7 @@ public sealed class LivingDexServiceTests : IDisposable
                 .Select(p => new { p.Species, p.Id, p.Location }).AsEnumerable().Select(p => (p.Species, p.Id, p.Location)).ToList();
         var species = pokemon.Select(p => p.Species).Distinct().ToList();
         Assert.Equal(species.Count, view.Owned);
-        Assert.Equal(species.Count, Assert.Single(await _dex.ListAsync("sacha")).Owned);
+        Assert.Equal(species.Count, Assert.Single(await _dex.ListAsync("sacha", LivingDexMode.Regional)).Owned);
 
         // Chaque espèce possédée : son premier exemplaire (équipe, puis boîtes), en couleur ; les autres manquent.
         var first = pokemon.First();
@@ -850,7 +863,7 @@ public sealed class LivingDexServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task List_CountsInTheChosenMode_NationalWhenTheGameHasNotIt()
+    public async Task List_CountsInTheChosenMode_FirstGenerationOnlyInRegional()
     {
         var red = await Store("sacha", "rouge.sav");
         var silver = await Store("sacha", "argent.sav");
@@ -860,12 +873,14 @@ public sealed class LivingDexServiceTests : IDisposable
         foreach (var mode in new[] { LivingDexMode.Regional, LivingDexMode.National, LivingDexMode.Complete })
         {
             var cards = await _dex.ListAsync("sacha", mode);
-            // Rouge n'a que le National ; Argent compte comme sa page dans ce mode.
-            Assert.Equal((LivingDexMode.National, 151), (cards[0].Mode, cards[0].Total));
+            // Rouge n'a que le Régional : montré seulement dans ce mode ; Argent compte comme sa page dans chaque mode.
+            Assert.Equal(mode == LivingDexMode.Regional ? 2 : 1, cards.Count);
+            if (mode == LivingDexMode.Regional)
+                Assert.Equal((LivingDexGame.Red, LivingDexMode.Regional, 151), (cards[0].Game.Game, cards[0].Mode, cards[0].Total));
             var page = (await _dex.GetAsync("sacha", silverId, mode))!;
-            Assert.Equal((mode, page.Owned, page.Entries.Count), (cards[1].Mode, cards[1].Owned, cards[1].Total));
+            Assert.Equal((mode, page.Owned, page.Entries.Count), (cards[^1].Mode, cards[^1].Owned, cards[^1].Total));
         }
-        Assert.Equal(276, (await _dex.ListAsync("sacha", LivingDexMode.Complete))[1].Total); // 251 + 25 lettres de Zarbi
+        Assert.Equal(276, Assert.Single(await _dex.ListAsync("sacha", LivingDexMode.Complete)).Total); // 251 + 25 lettres de Zarbi
     }
 
     [Fact]

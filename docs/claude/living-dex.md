@@ -103,12 +103,14 @@ Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, c
 
 - **Vue générale** (`/livingdex`) : une carte par living dex (jaquette, sauvegarde, barre de progression, « x / y »).
   Boutons **Régional / National / Complet** pour la progression de toutes les cartes (`?mode=regional`, `?mode=complet`) :
-  une carte dont le jeu n'a pas ce mode compte en National et l'indique (« National seul », 1re génération) ; un clic
+  une carte dont le jeu n'a pas ce mode compte en National et l'indique (« National seul » : le global en Régional ;
+  « Régional seul » : chromatique d'un jeu) ; **la 1re génération n'apparaît qu'en Régional** (demandé le 2026-11-15,
+  `LivingDexGames.RegionalOnly`, message « … n'ont que le mode Régional » si plus rien ne s'affiche) ; un clic
   sur une carte ouvre le living dex dans le mode affiché. Même comptage que sur sa page (`LivingDexService.EntriesAsync`).
   **Tri** à côté (« Trier par » Génération / Complétion, et ↑ / ↓ pour le sens ; `?tri=generation|completion`,
   `?ordre=desc`, `LivingDexGames.Sort` ; sans tri dans l'adresse, celui du compte, « Préférences », voir `comptes.md` ;
   noms : `SiteSorts.LivingDexChoices`) : par génération, l'ordre des jeux ou son exact inverse ; par complétion, le pourcentage exact
-  dans le mode affiché (celui de la carte, le National pour « National seul »), à égalité dans l'ordre des jeux.
+  dans le mode affiché (celui de la carte), à égalité dans l'ordre des jeux.
 - **Barres de progression** (cartes et page d'un living dex, `Shared/LivingDexProgress.razor`) : pourcentage au centre
   de la barre, avec une décimale **arrondie vers le bas** (« 5,6 % » ; 100 % seulement quand tout y est),
   `LivingDexGames.Percent`.
@@ -130,7 +132,8 @@ Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, c
   Sancoki / Tritosor ou les lettres de Zarbi ; pas le sexe ; **seulement celles qu'une sauvegarde du jeu peut contenir**).
   En Régional et National, n'importe quelle forme d'une espèce compte ; en Complet, la forme exacte. **Un mode identique à
   un autre, ordre compris, est caché** :
-  - 1re génération (une région, aucune forme) : le National seul, 151 Pokémon, sans onglets ;
+  - 1re génération (une région, aucune forme ; les trois modes identiques) : le **Régional** seul (Kanto, 151 Pokémon,
+    infobulle « Kanto #001 Bulbizarre (national #001) »), sans onglets ; seul mode compté dans les statistiques ;
   - 2e génération : **Régional** (Pokédex de Johto, `?mode=regional` : les mêmes 251 Pokémon que le national, dans l'ordre
     et avec les numéros du jeu, Germignon n° 1, Celebi n° 251 ; infobulle « Johto #001 Germignon (national #152) »),
     **National** (251) et **Complet** (276 : les 26 lettres de Zarbi, A à Z, enregistrées dans chaque Zarbi ; aucune autre
