@@ -10,7 +10,8 @@ namespace MonsutaPotaru.Services;
 public sealed record StoredSaveInfo(
     int Id, string FileName, string GameName, byte Generation, string TrainerName, string TrainerId,
     int PlayTimeSeconds, int PokemonCount, DateTime UploadedAt, DateTime UpdatedAt,
-    bool ModifiedOnServer, bool MustDownloadBeforeUpdate, long WithdrawnOnServer, bool ItemsChangedOnServer, bool PokemonTradedOnServer = false)
+    bool ModifiedOnServer, bool MustDownloadBeforeUpdate, long WithdrawnOnServer, bool ItemsChangedOnServer, bool PokemonTradedOnServer = false,
+    bool GtsChangedOnServer = false)
 {
     public string Label => $"{GameName} — {TrainerName}";
 
@@ -18,7 +19,7 @@ public sealed record StoredSaveInfo(
     public string LabelAndFile => $"{Label} · {FileName}";
 
     /// <summary>« un retrait de 5 000 ₽ et un transfert d'objets » (voir <see cref="StoredSaveService.DescribeServerChanges"/>).</summary>
-    public string ServerChanges => StoredSaveService.DescribeServerChanges(WithdrawnOnServer, ItemsChangedOnServer, PokemonTradedOnServer);
+    public string ServerChanges => StoredSaveService.DescribeServerChanges(WithdrawnOnServer, ItemsChangedOnServer, PokemonTradedOnServer, GtsChangedOnServer);
 }
 
 public enum StoreStatus { Ok, Invalid, AlreadyStored, NotFound, WrongTrainer, OlderPlayTime, ModifiedOnServer, Conflict, CollectionFull, Duplicate }
@@ -78,7 +79,7 @@ public sealed class StoredSaveService(
                 select new StoredSaveInfo(s.Id, s.FileName, s.GameName, s.Generation, s.TrainerName, s.TrainerId,
                     s.PlayTimeSeconds, s.PokemonCount, s.UploadedAt, s.UpdatedAt,
                     m != null, m != null && !s.DownloadedSinceModification, m != null ? m.Withdrawn : 0, m != null && m.ItemsChanged,
-                    m != null && m.PokemonTraded))
+                    m != null && m.PokemonTraded, m != null && m.GtsChanged))
             .ToListAsync();
     }
 
@@ -271,17 +272,20 @@ public sealed class StoredSaveService(
 
     /// <summary>
     /// Ce que le serveur a changé dans la partie : « un retrait de 5 000 ₽ », « un transfert d'objets », « un échange de
-    /// Pokémon », ou plusieurs (« un retrait de 5 000 ₽, un transfert d'objets et un échange de Pokémon »).
+    /// Pokémon », « un passage par la GTS », ou plusieurs (« un retrait de 5 000 ₽, un transfert d'objets et un échange de
+    /// Pokémon »).
     /// </summary>
-    public static string DescribeServerChanges(long withdrawn, bool ballsChanged, bool pokemonTraded = false)
+    public static string DescribeServerChanges(long withdrawn, bool ballsChanged, bool pokemonTraded = false, bool gtsChanged = false)
     {
-        var parts = new List<string>(3);
+        var parts = new List<string>(4);
         if (withdrawn > 0)
             parts.Add($"un retrait de {InventoryService.FormatMoney(withdrawn)}");
         if (ballsChanged)
             parts.Add("un transfert d'objets");
         if (pokemonTraded)
             parts.Add("un échange de Pokémon");
+        if (gtsChanged)
+            parts.Add("un passage par la GTS");
         return parts.Count switch
         {
             0 => "une modification",
@@ -291,7 +295,7 @@ public sealed class StoredSaveService(
     }
 
     private static string DescribeServerChanges(SaveModification modification) =>
-        DescribeServerChanges(modification.Withdrawn, modification.ItemsChanged, modification.PokemonTraded);
+        DescribeServerChanges(modification.Withdrawn, modification.ItemsChanged, modification.PokemonTraded, modification.GtsChanged);
 
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
@@ -349,13 +353,17 @@ public sealed class StoredSaveService(
         return new(StoreStatus.Ok, $"Sauvegarde « {save.FileName} » retirée du serveur ({save.PokemonCount} Pokémon).");
     }
 
-    /// <summary>Copie de sécurité, puis retrait de la sauvegarde et de ses Pokémon (jeton de concurrence <c>Version</c>).</summary>
+    /// <summary>
+    /// Copie de sécurité, puis retrait de la sauvegarde et de ses Pokémon (jeton de concurrence <c>Version</c>). Les offres de
+    /// la GTS dont le Pokémon venait de cette sauvegarde sont retirées : leur Pokémon va dans la boîte de réception.
+    /// </summary>
     private async Task RemoveAsync(ApplicationDbContext db, string ownerId, StoredSave save)
     {
         await WriteBackupAsync(ownerId, save, "supprimee");
 
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.BankPokemon.Where(p => p.StoredSaveId == save.Id).ExecuteDeleteAsync();
+        await GtsService.EndOffersOfSaveAsync(db, save, DateTime.UtcNow);
         db.StoredSaves.Remove(save);
         await db.SaveChangesAsync();
         await tx.CommitAsync();

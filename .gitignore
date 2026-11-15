@@ -27,3 +27,6 @@ showdown/node_modules/
 # Caches de Python (recréés à chaque lancement des scripts de outils/)
 __pycache__/
 *.pyc
+
+# Liste de succès (docs/succes.csv) : gardée hors du dépôt
+/docs/succes.csv

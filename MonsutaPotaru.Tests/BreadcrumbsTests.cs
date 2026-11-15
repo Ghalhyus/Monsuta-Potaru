@@ -25,6 +25,7 @@ public class BreadcrumbsTests
     [InlineData("sauvegardes", "Sauvegardes › Mes sauvegardes")]
     [InlineData("sauvegardes/3ds", "Sauvegardes › Synchronisation 3DS")]
     [InlineData("echanges", "Multijoueurs › Échange")]
+    [InlineData("gts", "Multijoueurs › GTS")]
     [InlineData("combats", "Multijoueurs › Combat")]
     [InlineData("amis", "Multijoueurs › Amis")]
     [InlineData("joueurs", "Multijoueurs › Rechercher un joueur")]

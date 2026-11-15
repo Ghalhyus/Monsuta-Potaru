@@ -24,6 +24,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
     public DbSet<BattleRecord> BattleRecords => Set<BattleRecord>();
+    public DbSet<GtsPokemon> GtsPokemon => Set<GtsPokemon>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -50,6 +51,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(b => b.FirstId);
             e.HasIndex(b => b.SecondId);
+        });
+
+        builder.Entity<GtsPokemon>(e =>
+        {
+            e.HasIndex(g => new { g.Status, g.Species }); // recherche des offres
+            e.HasIndex(g => g.OwnerId);
+            e.HasIndex(g => g.StoredSaveId);
+            e.HasOne(g => g.Owner).WithMany().HasForeignKey(g => g.OwnerId).OnDelete(DeleteBehavior.Cascade);
+            // La suppression de la sauvegarde retire d'abord l'offre (StoredSaveService.RemoveAsync) ; le lien tombe ensuite.
+            e.HasOne(g => g.StoredSave).WithMany().HasForeignKey(g => g.StoredSaveId).OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<FriendRequest>(e =>

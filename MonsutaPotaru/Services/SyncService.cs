@@ -339,7 +339,7 @@ public sealed class SyncService(
                 Refusal: SyncCompareRefusal.OtherGame);
 
         var modification = await db.SaveModifications.AsNoTracking().FirstOrDefaultAsync(m => m.IdentityKey == stored.IdentityKey);
-        var changes = modification is null ? null : StoredSaveService.DescribeServerChanges(modification.Withdrawn, modification.ItemsChanged, modification.PokemonTraded);
+        var changes = modification is null ? null : StoredSaveService.DescribeServerChanges(modification.Withdrawn, modification.ItemsChanged, modification.PokemonTraded, modification.GtsChanged);
         var onConsole = SaveIdentity.FormatPlayTime(identity.PlayTimeSeconds);
         var site = SaveIdentity.FormatPlayTime(stored.PlayTimeSeconds);
         if (identity.PlayTimeSeconds > stored.PlayTimeSeconds)

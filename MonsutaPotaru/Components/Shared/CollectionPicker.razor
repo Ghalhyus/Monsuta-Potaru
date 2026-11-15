@@ -1,0 +1,260 @@
+@using MonsutaPotaru.Services
+@implements IAsyncDisposable
+@inject BankService BankStore
+@inject IJSRuntime JS
+@* Choix d'un Pokémon dans toute « Ma collection » (dépôt sur la GTS) : la même recherche, la même origine, le même tri et
+   les mêmes pastilles que « Ma collection », sans le mode compact ; rien dans l'adresse. Les Pokémon arrivent par
+   tranches (« Afficher plus ») ; ceux qui ne peuvent pas être choisis sont grisés (Problem), un clic donne la raison.
+   Nombre de colonnes au curseur, comme « Ma collection » : sans choix, il suit la largeur de la fenêtre (GridColumns). *@
+<div class="collection-toolbar">
+    <input class="form-control form-control-sm" placeholder="Rechercher (espèce ou surnom)…" aria-label="Rechercher un Pokémon"
+           @bind="search" @bind:event="oninput" @bind:after="Reload" />
+    <select class="form-select form-select-sm collection-filter" aria-label="Origine des Pokémon" @bind="source" @bind:after="Reload">
+        <option value="">Tout</option>
+        <option value="@BankSource">Stockage interne</option>
+        @foreach (var s in Saves)
+        {
+            <option value="@s.Id">💾 @s.LabelAndFile</option>
+        }
+    </select>
+    <div class="collection-sort">
+        <select class="form-select form-select-sm" aria-label="Trier par" value="@SiteSorts.CollectionChoices.First(c => c.By == sort.By).Slug" @onchange="SortChanged">
+            @foreach (var choice in SiteSorts.CollectionChoices)
+            {
+                <option value="@choice.Slug">Tri : @choice.Label</option>
+            }
+        </select>
+        <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre" @onclick="ReverseSort">@OrderLabel</button>
+    </div>
+    <label class="collection-columns small">
+        Colonnes
+        <input type="range" class="form-range" min="@GridColumns.Min" max="@GridColumns.Max"
+               @bind="columns" @bind:event="oninput" @bind:after="ColumnsChosen" />
+        <span class="fw-semibold">@columns</span>
+    </label>
+    <CollectionFilterChips Value="criteria" ValueChanged="CriteriaChanged" Abilities="abilities" />
+</div>
+
+@if (refusal is not null)
+{
+    <div class="alert alert-warning alert-dismissible small py-2" role="alert">
+        @refusal
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => refusal = null"></button>
+    </div>
+}
+
+@if (items is null)
+{
+    <p class="text-muted small">Chargement…</p>
+}
+else if (total == 0)
+{
+    <p class="text-muted">
+        @(string.IsNullOrWhiteSpace(search) && source == "" && criteria.IsEmpty ? "Ta collection est vide pour l'instant." : "Aucun Pokémon ne correspond.")
+    </p>
+}
+else
+{
+    <div class="collection-picker" style="--columns: @columns">
+        @foreach (var item in items)
+        {
+            var it = item;
+            var problem = Problem?.Invoke(it);
+            var stored = it.StoredSaveId is { } sid ? Saves.FirstOrDefault(s => s.Id == sid) : null;
+            <PokemonSlot Sprite="@it.SpriteUrl"
+                         Title="@SlotTitle(it, stored, problem)"
+                         Level="it.Level"
+                         Shiny="it.IsShiny"
+                         Marker="@(it.StoredSaveId is null ? null : "💾")"
+                         Selected="@(SelectedId == it.Id)"
+                         Locked="@(problem is not null)"
+                         OnClick="() => Click(it, problem)" />
+        }
+    </div>
+    @if (items.Count < total)
+    {
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="More">Afficher plus (@(total - items.Count) restants)</button>
+        </div>
+    }
+}
+
+@code {
+    private const string BankSource = "banque";
+
+    /// <summary>
+    /// Taille d'une tranche : ce que montre la grille d'un coup, puis à chaque « Afficher plus » (arrondie à des lignes
+    /// pleines : <see cref="Take"/>).
+    /// </summary>
+    public const int PageSize = 120;
+
+    /// <summary>
+    /// Nombre de colonnes choisi au curseur, gardé par la page (null : il suit la largeur de la fenêtre) ; rien dans
+    /// l'adresse.
+    /// </summary>
+    [Parameter] public int? Columns { get; set; }
+    [Parameter] public EventCallback<int?> ColumnsChanged { get; set; }
+
+    [Parameter, EditorRequired] public string UserId { get; set; } = "";
+
+    /// <summary>Sauvegardes stockées du joueur : la liste « Origine » et l'origine affichée des Pokémon.</summary>
+    [Parameter] public IReadOnlyList<StoredSaveInfo> Saves { get; set; } = [];
+
+    /// <summary>Tri du compte (« Préférences »), celui de départ.</summary>
+    [Parameter] public CollectionSort DefaultSort { get; set; }
+
+    [Parameter] public int? SelectedId { get; set; }
+
+    /// <summary>Un Pokémon qui peut être choisi a été cliqué.</summary>
+    [Parameter] public EventCallback<BankListItem> OnPick { get; set; }
+
+    /// <summary>Pourquoi un Pokémon ne peut pas être choisi (grisé), null s'il le peut.</summary>
+    [Parameter] public Func<BankListItem, string?>? Problem { get; set; }
+
+    private string search = "";
+    private string source = "";
+    private CollectionSort sort;
+    private PokemonCriteria criteria = PokemonCriteria.None;
+    private List<int> abilities = [];
+    private List<BankListItem>? items;
+    private int total;
+    private int reloadRequest;
+    private string? refusal;
+    private int columns = GridColumns.Default;
+    private int screenColumns = GridColumns.Default; // largeur de fenêtre inconnue tant que la page n'est pas interactive
+    private DotNetObjectReference<CollectionPicker>? selfRef;
+    private IJSObjectReference? screenWatcher;
+
+    /// <summary>Une tranche en lignes pleines : au moins <see cref="PageSize"/> Pokémon.</summary>
+    private int Take => (PageSize + columns - 1) / columns * columns;
+
+    private CollectionFilter Filter
+    {
+        get
+        {
+            var origin = source == BankSource ? CollectionFilter.Bank
+                : int.TryParse(source, out var id) ? CollectionFilter.Save(id) : CollectionFilter.All;
+            return origin with { Criteria = criteria };
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        columns = GridColumns.Clamp(Columns ?? screenColumns);
+        sort = DefaultSort;
+        abilities = await BankStore.ListAbilitiesAsync(UserId);
+        await Reload();
+    }
+
+    /// <summary>Nouvelle recherche, origine, tri ou pastilles : recompte, puis la première tranche.</summary>
+    private async Task Reload()
+    {
+        var request = ++reloadRequest;
+        var count = await BankStore.CountAsync(UserId, search, Filter);
+        var first = await BankStore.GetRangeAsync(UserId, search, 0, Take, Filter, sort);
+        if (request != reloadRequest)
+            return; // une demande plus récente a déjà relancé le chargement
+        total = count;
+        items = first;
+    }
+
+    private async Task More()
+    {
+        if (items is null)
+            return;
+        var next = await BankStore.GetRangeAsync(UserId, search, items.Count, Take, Filter, sort);
+        items.AddRange(next.Where(n => items.All(i => i.Id != n.Id)));
+    }
+
+    /// <summary>Choix au curseur, rendu à la page ; revenir à la valeur de la fenêtre lui rend la main.</summary>
+    private Task ColumnsChosen() => ColumnsChanged.InvokeAsync(columns == screenColumns ? null : columns);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        selfRef = DotNetObjectReference.Create(this);
+        screenWatcher = await JS.InvokeAsync<IJSObjectReference>("watchScreenSize", GridColumns.NarrowWidth, GridColumns.WindowWidths, selfRef);
+        ApplyScreenSize(await screenWatcher.InvokeAsync<int>("size"));
+    }
+
+    /// <summary>Appelé par le navigateur quand la largeur de la fenêtre change de tranche.</summary>
+    [JSInvokable]
+    public Task OnScreenSizeChanged(int size) => InvokeAsync(() => ApplyScreenSize(size));
+
+    private void ApplyScreenSize(int size)
+    {
+        screenColumns = GridColumns.ForScreen(size);
+        if (Columns is not null || columns == screenColumns)
+            return; // nombre choisi au curseur : la taille de la fenêtre n'y touche pas
+        columns = screenColumns;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (screenWatcher is not null)
+        {
+            try
+            {
+                await screenWatcher.InvokeVoidAsync("dispose");
+                await screenWatcher.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // onglet fermé : plus rien à nettoyer côté navigateur
+            }
+        }
+        selfRef?.Dispose();
+    }
+
+    private bool Descending => SiteSorts.IsDescending(sort);
+
+    private string OrderLabel => (sort.By, Descending) switch
+    {
+        (CollectionSortBy.Arrival, true) => "↓ Récents d'abord",
+        (CollectionSortBy.Arrival, false) => "↑ Anciens d'abord",
+        (CollectionSortBy.Name, false) => "↑ A → Z",
+        (CollectionSortBy.Name, true) => "↓ Z → A",
+        (_, false) => "↑ Croissant",
+        (_, true) => "↓ Décroissant",
+    };
+
+    private async Task SortChanged(ChangeEventArgs e)
+    {
+        sort = new(SiteSorts.CollectionChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.CollectionChoices[0]).By);
+        await Reload();
+    }
+
+    private async Task ReverseSort()
+    {
+        sort = sort with { Reversed = !sort.Reversed };
+        await Reload();
+    }
+
+    private async Task CriteriaChanged(PokemonCriteria value)
+    {
+        criteria = value;
+        await Reload();
+    }
+
+    private async Task Click(BankListItem item, string? problem)
+    {
+        if (problem is not null)
+        {
+            refusal = problem;
+            return;
+        }
+        refusal = null;
+        await OnPick.InvokeAsync(item);
+    }
+
+    /// <summary>Bulle d'un Pokémon : surnom, espèce, niveau, sa sauvegarde et sa place, et pourquoi il est grisé.</summary>
+    private static string SlotTitle(BankListItem item, StoredSaveInfo? stored, string? problem)
+    {
+        var title = $"{item.Nickname} ({item.SpeciesName}) N.{item.Level}";
+        if (stored is not null)
+            title += $" — {stored.Label} · {item.Location}";
+        return problem is null ? title : $"{title} — {problem}";
+    }
+}

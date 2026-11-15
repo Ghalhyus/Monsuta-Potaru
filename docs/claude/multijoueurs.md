@@ -67,6 +67,35 @@ README : « Multijoueurs », « Échanges ».
   dans un second bloc. L'espace sous le bloc collé est un `padding` du bandeau (fond de la page), pas une marge du bloc :
   sinon la grille se voit entre les deux.
 
+## GTS (`Services/GtsService.cs`, `Pages/Gts.razor`)
+- Choix de l'utilisateur (2026-11-15) : boîte de réception (rien n'est écrit dans une sauvegarde sans son joueur : le
+  Pokémon reçu, expiré, annulé ou d'une sauvegarde supprimée attend qu'il le récupère), dépôt depuis toute « Ma
+  collection », offre retirée et Pokémon rendu quand sa sauvegarde est supprimée, 5 offres par compte.
+- Une seule table `GtsPokemon` : `Status` `Offered` = offre, sinon case de la boîte de réception (au moment de l'échange,
+  la ligne de l'offre reçoit les octets du Pokémon donné). Elle compte dans `CollectionCapacity` et dans
+  `PokemonFingerprint.FindAsync` (étiquette `GtsLabel`) : sinon une vieille copie de la sauvegarde ferait revenir le
+  Pokémon pendant qu'il est sur la GTS.
+- Un Pokémon d'une sauvegarde se retrouve par `BankPokemon.Position` (ordre de `StoredSaveService.ReadAllPokemon` :
+  équipe, boîtes, puis le reste) : `GtsService.SlotAt` ; l'empreinte confirme. Le reste (pension, Boîte Combat...) et les
+  cases verrouillées ne partent pas. Dans la grille, les grisés se devinent d'après `BankListItem.Location` (`PickProblem`) ;
+  le service revérifie.
+- Famille de l'offre (`FamilyContext`, `FamilyRegion`) : celle de la sauvegarde, ou `TradeFamily.Of(PKM)` au stockage
+  interne (région des cartouches Game Boy lue dans le Pokémon). Celui qui accepte depuis le stockage interne garde les
+  deux formats tels quels.
+- Échange : la demande est revérifiée sur le Pokémon lu (niveau, sexe, chromatique, **légalité recalculée** : la colonne
+  `IsLegal` n'est qu'un affichage). L'offre est prise par `ExecuteUpdateAsync` conditionnel (`Status == Offered`, pas
+  expirée) dans la transaction : un second joueur reçoit « n'est plus disponible ». Le Pokémon donné évolue par échange
+  avant d'aller dans la boîte du déposant.
+- Expiration : `GtsExpiry` (`BackgroundService`, toutes les heures) et `ExpireAsync` à l'ouverture de la page ; la
+  recherche ignore déjà une offre dont `ExpiresAt` est passé.
+- Pastille du menu : `SiteMenuBase.gtsInbox`, relue à chaque navigation et sur `GtsEvents.InboxChanged` (échange accepté
+  par un autre joueur, expiration, annulation, récupération). La page GTS s'y abonne aussi (boîte et offres relues).
+- Suppression d'une sauvegarde : `GtsService.EndOffersOfSaveAsync` dans la transaction de `StoredSaveService.RemoveAsync`
+  (avant la suppression : la clé étrangère `StoredSaveId` est en `SetNull`). « Mes sauvegardes » annonce les offres retirées.
+- Tests : `GtsServiceTests` (service), `GtsPageTests` (page, deux joueurs avec `RenderAs`, boîte mise à jour en direct).
+  Les Pokémon de test doivent avoir réellement le niveau demandé (pas seulement la colonne `Level`) : la légalité et le
+  niveau sont relus dans les octets.
+
 ## Valeurs trafiquées (Blazor Server)
 - La valeur d'un événement (`<select>`, champ, `[JSInvokable]`) vient du navigateur. Un service appelé avec l'identifiant
   d'un autre compte revérifie la relation lui-même (amitié : `FriendService.RelationAsync`, visibilité :

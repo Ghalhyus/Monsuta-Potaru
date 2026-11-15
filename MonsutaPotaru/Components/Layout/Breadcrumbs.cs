@@ -38,6 +38,7 @@ public static class Breadcrumbs
             "joueurs" => Player(parts),
             "amis" => [new(Multiplayer, null), new("Amis", null)],
             "echanges" => [new(Multiplayer, null), new("Échange", null)],
+            "gts" => [new(Multiplayer, null), new("GTS", null)],
             "combats" => [new(Multiplayer, null), new("Combat", null)],
             "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new(Saves, null), new("Synchronisation 3DS", null)],
             "sauvegardes" => [new(Saves, null), new("Mes sauvegardes", null)],

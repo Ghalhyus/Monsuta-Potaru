@@ -52,6 +52,9 @@ public sealed class TestDatabase : IDisposable
 
     public TradeService Trades() => new(Factory, StoredSaves(), new PokemonInfo(), NullLogger<TradeService>.Instance);
 
+    public GtsService Gts(GtsEvents? events = null) =>
+        new(Factory, StoredSaves(), new PokemonInfo(), events ?? new GtsEvents(), NullLogger<GtsService>.Instance);
+
     public void Dispose()
     {
         _connection.Dispose();

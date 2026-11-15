@@ -55,6 +55,17 @@ public readonly record struct TradeFamily(EntityContext Context, GameBoyRegion R
         _ => GameBoyRegion.International,
     });
 
+    /// <summary>
+    /// Famille d'un Pokémon du stockage interne (GTS) : celle de son format, et pour la 1re et la 2e génération la région
+    /// de sa cartouche.
+    /// </summary>
+    public static TradeFamily Of(PKM pk) => new(pk.Context, pk switch
+    {
+        GBPKM { Japanese: true } => GameBoyRegion.Japanese,
+        PK2 { Korean: true } => GameBoyRegion.Korean,
+        _ => GameBoyRegion.International,
+    });
+
     private bool GameBoy => Context is EntityContext.Gen1 or EntityContext.Gen2;
 
     public bool CanTradeWith(TradeFamily other)
@@ -223,7 +234,7 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         }
     }
 
-    private static PKM? Get(SaveFile sav, TradeSlot slot)
+    internal static PKM? Get(SaveFile sav, TradeSlot slot)
     {
         if (slot.InParty)
             return slot.Slot >= 0 && slot.Slot < sav.PartyCount ? sav.GetPartySlotAtIndex(slot.Slot) : null;
@@ -235,7 +246,7 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
     /// Le Pokémon au format de l'autre sauvegarde, s'il peut y aller ; null sinon. Time Capsule : vers la 1re génération,
     /// seulement les espèces et les attaques qu'elle connaît, et pas d'œuf.
     /// </summary>
-    private static PKM? ConvertFor(PKM pk, SaveFile to)
+    internal static PKM? ConvertFor(PKM pk, SaveFile to)
     {
         if (pk.IsEgg && to.Generation == 1)
             return null;
@@ -462,7 +473,7 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         return new(true, message, message);
     }
 
-    private static void Set(SaveFile sav, TradeSlot slot, PKM pk)
+    internal static void Set(SaveFile sav, TradeSlot slot, PKM pk)
     {
         if (slot.InParty)
             sav.SetPartySlotAtIndex(pk, slot.Slot, EntityImportSettings.All); // dresseur actuel, Pokédex
@@ -486,7 +497,10 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         $"Échange réussi : tu as reçu {name}{Evolved(pk, evolvedTo)} dans « {Label(save)} ». "
         + "Télécharge cette sauvegarde (« Mes sauvegardes », ou « Récupérer » depuis ta 3DS) et remets-la dans ton jeu.";
 
-    /// <summary>Échanges réussis du joueur avec ses amis (pas les échanges internes) : en tout, et avec combien de partenaires.</summary>
+    /// <summary>
+    /// Échanges réussis du joueur avec d'autres joueurs, amis et GTS (pas les échanges internes) : en tout, et avec combien de
+    /// partenaires.
+    /// </summary>
     public async Task<TradeStats> StatsAsync(string userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

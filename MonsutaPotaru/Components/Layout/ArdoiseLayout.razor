@@ -74,7 +74,7 @@
                     <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Multijoueurs</span>
                     @if (PlayerRequests > 0)
                     {
-                        <span class="ardoise-badge ardoise-group-badge" title="Demandes d'ami, d'échange et de combat reçues">@PlayerRequests</span>
+                        <span class="ardoise-badge ardoise-group-badge" title="Demandes d'ami, d'échange et de combat reçues, Pokémon de la GTS à récupérer">@PlayerRequests</span>
                     }
                 </button>
                 <div class="ardoise-subitems">
@@ -94,6 +94,13 @@
                         @if (tradeRequests > 0)
                         {
                             <span class="ardoise-badge" title="Demandes d'échange reçues">@tradeRequests</span>
+                        }
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="gts">
+                        <span class="ardoise-label">GTS</span>
+                        @if (gtsInbox > 0)
+                        {
+                            <span class="ardoise-badge" title="Pokémon à récupérer dans ta boîte de réception">@gtsInbox</span>
                         }
                     </NavLink>
                     <NavLink class="ardoise-link" href="combats">

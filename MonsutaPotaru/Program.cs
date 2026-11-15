@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components.Authorization;
+﻿using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +79,9 @@ builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FriendService>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddSingleton<TradeHub>(); // échanges en cours, partagés entre les deux joueurs
+builder.Services.AddScoped<GtsService>(); // Multijoueurs → GTS
+builder.Services.AddSingleton<GtsEvents>(); // boîte de réception de la GTS changée (pastille du menu)
+builder.Services.AddHostedService<GtsExpiry>(); // offres de la GTS arrivées à leur terme, toutes les heures
 // Combats : simulateur de Pokémon Showdown (dossier showdown, Node.js), un processus par combat en cours.
 builder.Services.AddSingleton(sp => ShowdownOptions.From(builder.Configuration, builder.Environment));
 builder.Services.AddScoped<BattleService>();

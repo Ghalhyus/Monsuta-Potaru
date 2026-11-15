@@ -146,11 +146,15 @@ public sealed class SaveSession
     /// </summary>
     public string? WithdrawalProblem(PKM pk) => Prepare(pk, out var error) is null ? error : null;
 
-    /// <summary>Le Pokémon au format de la sauvegarde (converti au besoin), ou null avec la raison du refus.</summary>
-    private PKM? Prepare(PKM pk, out string error)
+    private PKM? Prepare(PKM pk, out string error) => PrepareFor(Save!, pk, out error);
+
+    /// <summary>
+    /// Le Pokémon au format de <paramref name="sav"/> (converti au besoin), ou null avec la raison du refus : les règles d'un
+    /// retrait du stockage interne (aussi celles de la boîte de réception de la GTS).
+    /// </summary>
+    internal static PKM? PrepareFor(SaveFile sav, PKM pk, out string error)
     {
         error = "";
-        var sav = Save!;
         if (pk.Species > sav.MaxSpeciesID)
         {
             error = $"Ce Pokémon n'existe pas dans cette génération (espèce n°{pk.Species}).";

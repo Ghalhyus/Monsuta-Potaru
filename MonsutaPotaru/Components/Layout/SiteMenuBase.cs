@@ -18,6 +18,8 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     [Inject] private FriendService Friends { get; set; } = default!;
     [Inject] private TradeHub Trades { get; set; } = default!;
     [Inject] private BattleHub Battles { get; set; } = default!;
+    [Inject] private GtsService Gts { get; set; } = default!;
+    [Inject] private GtsEvents GtsEvents { get; set; } = default!;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
@@ -28,9 +30,10 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     protected int pendingRequests; // demandes d'ami reçues, relues à chaque navigation
     protected int tradeRequests; // demandes d'échange reçues (en direct, TradeHub)
     protected int battleRequests; // demandes de combat reçues (en direct, BattleHub)
+    protected int gtsInbox; // Pokémon dans la boîte de réception de la GTS (relus à chaque navigation, et en direct)
 
-    /// <summary>Toutes les demandes reçues : la pastille du menu « Multijoueurs ».</summary>
-    protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests;
+    /// <summary>Toutes les demandes reçues, et la boîte de réception de la GTS : la pastille du menu « Multijoueurs ».</summary>
+    protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests + gtsInbox;
 
     // Rubriques du menu : fermées, chacune ouverte d'elle-même sur l'une de ses pages (puis ouvertes et fermées d'un clic).
 
@@ -46,8 +49,8 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     /// <summary>Rubrique « Sauvegardes » ouverte : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
     protected bool savesOpen => IsOn("sauvegardes");
 
-    /// <summary>Rubrique « Multijoueurs » ouverte : sur la recherche, les pages d'un joueur, « Amis », « Échange » ou « Combat ».</summary>
-    protected bool playersOpen => IsOn("joueurs", "amis", "echanges", "combats");
+    /// <summary>Rubrique « Multijoueurs » ouverte : sur la recherche, les pages d'un joueur, « Amis », « Échange », « GTS » ou « Combat ».</summary>
+    protected bool playersOpen => IsOn("joueurs", "amis", "echanges", "gts", "combats");
 
     /// <summary>
     /// La page affichée est l'une de ces pages ou une page sous elles (« livingdex/3 », « collection?tri=nom ») ; la
@@ -72,6 +75,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Friends.Changed += OnFriendsChanged;
         Trades.RequestsChanged += OnTradeRequestsChanged;
         Battles.RequestsChanged += OnBattleRequestsChanged;
+        GtsEvents.InboxChanged += OnGtsInboxChanged;
 
         // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Banque d'objets » après un retrait).
         userId = AuthState is null ? null : (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -81,7 +85,19 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
             pendingRequests = await Friends.PendingCountAsync(userId);
             tradeRequests = Trades.Incoming(userId).Count;
             battleRequests = Battles.Incoming(userId).Count;
+            gtsInbox = await Gts.InboxCountAsync(userId);
         }
+    }
+
+    private void OnGtsInboxChanged(string user)
+    {
+        if (user != userId)
+            return;
+        InvokeAsync(async () =>
+        {
+            gtsInbox = await Gts.InboxCountAsync(user);
+            StateHasChanged();
+        });
     }
 
     private void OnBattleRequestsChanged(string user)
@@ -119,7 +135,10 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         if (userId is not null)
+        {
             pendingRequests = await Friends.PendingCountAsync(userId);
+            gtsInbox = await Gts.InboxCountAsync(userId);
+        }
         StateHasChanged();
     });
 
@@ -139,5 +158,6 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Friends.Changed -= OnFriendsChanged;
         Trades.RequestsChanged -= OnTradeRequestsChanged;
         Battles.RequestsChanged -= OnBattleRequestsChanged;
+        GtsEvents.InboxChanged -= OnGtsInboxChanged;
     }
 }

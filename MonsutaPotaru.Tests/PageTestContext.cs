@@ -45,6 +45,8 @@ public abstract class PageTestContext : BunitContext
         Services.AddScoped<FriendService>();
         Services.AddScoped<TradeService>();
         Services.AddSingleton<TradeHub>();
+        Services.AddScoped<GtsService>();
+        Services.AddSingleton<GtsEvents>();
         Services.AddScoped<BattleService>();
         Services.AddSingleton(_ => new BattleHub(BattleTests.Showdown(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BattleHub>.Instance));

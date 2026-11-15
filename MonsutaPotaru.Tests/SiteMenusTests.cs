@@ -22,7 +22,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["Ma collection", "Parc", "Dépôt / Retrait", "Échange interne"],
         ["Banque d'objets", "Transfert d'inventaire"],
         ["Living dex", "Rubans", "Complétion (100 %)"],
-        ["Rechercher un joueur", "Amis", "Échange", "Combat"],
+        ["Rechercher un joueur", "Amis", "Échange", "GTS", "Combat"],
         ["Mes sauvegardes", "Synchronisation 3DS"],
     ];
 
@@ -31,7 +31,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["collection", "parc", "transfert", "echange-interne"],
         ["inventaire", "inventaire/transfert"],
         ["livingdex", "rubans", "completion"],
-        ["joueurs", "amis", "echanges", "combats"],
+        ["joueurs", "amis", "echanges", "gts", "combats"],
         ["sauvegardes", "sauvegardes/3ds"],
     ];
 

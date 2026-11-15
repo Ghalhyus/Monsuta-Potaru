@@ -82,7 +82,7 @@
                     <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Multijoueurs
                     @if (PlayerRequests > 0 && !playersOpen)
                     {
-                        <span class="badge bg-danger ms-2" title="Demandes d'ami, d'échange et de combat reçues">@PlayerRequests</span>
+                        <span class="badge bg-danger ms-2" title="Demandes d'ami, d'échange et de combat reçues, Pokémon de la GTS à récupérer">@PlayerRequests</span>
                     }
                 </summary>
                 <div class="nav-subitems">
@@ -101,6 +101,13 @@
                         @if (tradeRequests > 0)
                         {
                             <span class="badge bg-danger ms-2" title="Demandes d'échange reçues">@tradeRequests</span>
+                        }
+                    </NavLink>
+                    <NavLink class="nav-link" href="gts">
+                        <span class="bi bi-globe-nav-menu" aria-hidden="true"></span> GTS
+                        @if (gtsInbox > 0)
+                        {
+                            <span class="badge bg-danger ms-2" title="Pokémon à récupérer dans ta boîte de réception">@gtsInbox</span>
                         }
                     </NavLink>
                     <NavLink class="nav-link" href="combats">

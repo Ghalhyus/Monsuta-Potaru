@@ -207,6 +207,33 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   (avertissement). Étapes 2 et 3 : recherche et pastilles de « Ma collection », propres à chaque étape et gardées au
   « Retour ». **Pas compté** dans `TradeRecords` ni dans les statistiques.
 
+### GTS
+
+`/gts`, `Pages/Gts.razor` ; mécanique `Services/GtsService.cs` (table `GtsPokemon`). Détails : `docs/claude/multijoueurs.md`.
+
+- **Dépôt** : un Pokémon de toute « Ma collection » (stockage interne, ou équipe et boîtes d'une sauvegarde stockée ; ni œuf,
+  ni pension, ni case verrouillée, ni dernier Pokémon hors œufs de l'équipe), choisi avec la recherche, l'origine, le tri et
+  les pastilles de « Ma collection » (sans mode compact ; colonnes au curseur, sinon selon la largeur de la fenêtre, gardées le
+  temps de la page ; `Shared/CollectionPicker.razor`, grisés : `GtsService.PickProblem`).
+  Il quitte aussitôt sa place : sauvegarde modifiée sur le serveur (`SaveModification.GtsChanged`, « un passage par la
+  GTS »), à télécharger. 5 offres en ligne par compte, 30 jours chacune.
+- **Demande** : une espèce que le jeu du Pokémon connaît (`IsPresentInGame`), niveaux « de » / « à », sexe (refusé si
+  l'espèce ne l'a pas), chromatique ou non, refus des illégaux (légalité PKHeX). Les mêmes critères pour **chercher** parmi
+  les offres des autres (les 100 plus récentes), plus « Uniquement si je possède le Pokémon demandé ».
+- **Échange** : comme sur console (`TradeFamily` de la sauvegarde d'où vient le Pokémon, ou de son format au stockage
+  interne). Celui qui accepte donne un Pokémon de sa collection qui répond à la demande (revérifiée sur le Pokémon,
+  légalité recalculée) et reçoit l'offre à sa place (même case, ou stockage interne) ; évolution par échange des deux côtés.
+  L'offre est prise par une mise à jour conditionnelle : deux joueurs en même temps, un seul l'obtient. Compté dans
+  `TradeRecords` (statistiques).
+- **Boîte de réception** : le Pokémon reçu par le déposant, et celui d'une offre expirée (`GtsExpiry`, toutes les heures,
+  et à l'ouverture de la page), annulée ou retirée avec sa sauvegarde (suppression : la confirmation l'annonce). **Aucune
+  sauvegarde n'est écrite sans son joueur** : il récupère le Pokémon dans le stockage interne ou dans une sauvegarde (première
+  case libre des boîtes, règles d'un retrait du stockage interne : `SaveSession.PrepareFor`). Pastille du menu en direct
+  (`GtsEvents`).
+- Un Pokémon de la GTS (offre ou boîte) **reste au compte** : il compte dans la taille de la collection et dans les doublons
+  (une vieille copie de sa sauvegarde est refusée, « (GTS) »).
+- Pseudo du déposant et de celui qui accepte affichés, sauf profil « Personne » (« un dresseur »).
+
 ### Tris par défaut (« Mon compte » → « Préférences »)
 
 `Account/Pages/Manage/Preferences.razor`, `Services/SortPreferences.cs` (`SiteSorts`, `SortPreferences`,
@@ -654,7 +681,7 @@ Détails : `docs/claude/statistiques.md`.
 
 ### Taille de la collection
 
-Chaque compte a une limite (stockage interne + sauvegardes stockées, œufs compris) : 1 000 au départ. Toute opération qui
+Chaque compte a une limite (stockage interne + sauvegardes stockées + Pokémon de la GTS, œufs compris) : 1 000 au départ. Toute opération qui
 la dépasserait est refusée **en entier** avec un message qui chiffre le manque : dépôt dans le stockage interne (dès le
 glisser-déposer, puis à la validation), ajout ou mise à jour d'une sauvegarde stockée. Ce qui réduit la collection n'est
 jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 ₽ (journal de l'inventaire). Valeurs dans
@@ -674,6 +701,10 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Data/Friendship.cs` | Tables des amitiés (deux lignes par amitié) et des demandes d'ami |
 | `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
+| `MonsutaPotaru/Services/GtsService.cs` | GTS : dépôt (depuis la collection), recherche, échange, boîte de réception (annulation, expiration, sauvegarde supprimée, récupération) ; `GtsEvents` (pastille du menu) et `GtsExpiry` (offres expirées, toutes les heures) |
+| `MonsutaPotaru/Data/GtsPokemon.cs` | Table des Pokémon de la GTS : offres en ligne et boîte de réception (`GtsStatus`) |
+| `MonsutaPotaru/Components/Pages/Gts.razor` | « Multijoueurs » → « GTS » (`/gts`) : boîte de réception, mes offres, recherche, dépôt en deux étapes, échange (choix, confirmation) |
+| `MonsutaPotaru/Components/Shared/CollectionPicker.razor` | Choix d'un Pokémon dans toute « Ma collection » (recherche, origine, tri, pastilles, colonnes au curseur ; grisés), par tranches |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement ; ajoute à la requête les PP, PV maximum et types de chaque Pokémon de l'équipe) |
 | `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride), fiche d'un Pokémon de l'équipe |
 | `MonsutaPotaru/Services/Battle/BattleSheet.cs` | Fiche d'un Pokémon de l'équipe pendant un combat, lue dans la requête : résumé, capacités, détail d'une capacité |

@@ -6,8 +6,9 @@ namespace MonsutaPotaru.Services;
 
 /// <summary>Ce qu'il faut pour afficher un Pokémon de la banque dans une grille.</summary>
 /// <param name="StoredSaveId">Renseigné pour un Pokémon d'une sauvegarde stockée (lecture seule).</param>
+/// <param name="Location">Place dans la sauvegarde stockée (« Équipe 1 », « Boîte 2, case 5 », « Pension 1 »).</param>
 public sealed record BankListItem(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny, bool IsEgg, bool IsLegal, int? StoredSaveId,
-    string SpriteUrl);
+    string SpriteUrl, string? Location = null);
 
 /// <summary>
 /// Filtre de « Ma collection » : tout, la banque seule, ou une sauvegarde stockée ; <paramref name="Criteria"/> ajoute les
@@ -111,7 +112,7 @@ public sealed class BankService(
     /// <summary>Case d'un Pokémon dans la grille (sans ses octets).</summary>
     private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, BankListItem>> ListItem = p =>
         new BankListItem(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.IsEgg, p.IsLegal, p.StoredSaveId,
-            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg));
+            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg), p.Location);
 
     /// <summary>Talents présents dans la collection (hors œufs), pour la liste du filtre « Talent ».</summary>
     public async Task<List<int>> ListAbilitiesAsync(string ownerId)
@@ -257,6 +258,10 @@ public sealed class BankService(
     public static string AlreadyInStorageMessage(string name) =>
         $"{name} est déjà dans ton stockage interne (le même Pokémon, d'une vieille copie de la sauvegarde ?) : dépôt refusé.";
 
+    /// <summary>Refus d'un dépôt : ce Pokémon est déjà sur la GTS (vieille copie de la sauvegarde ?).</summary>
+    public static string AlreadyOnGtsMessage(string name) =>
+        $"{name} est déjà sur la GTS (le même Pokémon, d'une vieille copie de la sauvegarde ?) : dépôt refusé.";
+
     public static PKM? ToPkm(BankPokemon entry) =>
         EntityFormat.GetFromBytes(entry.Data.ToArray(), (EntityContext)entry.Context);
 
@@ -320,8 +325,11 @@ public sealed class BankService(
         var deposited = session.Deposits.Select(d => PokemonFingerprint.Of(d.Pokemon)).ToList();
         var inStorage = await PokemonFingerprint.FindAsync(db, ownerId, deposited, internalOnly: true);
         if (inStorage.Count > 0)
-            throw new InvalidOperationException(AlreadyInStorageMessage(inStorage[0].IsEgg ? "Un Œuf" : inStorage[0].SpeciesName)
+        {
+            var name = inStorage[0].IsEgg ? "Un Œuf" : inStorage[0].SpeciesName;
+            throw new InvalidOperationException((inStorage[0].StoredSaveLabel == PokemonFingerprint.GtsLabel ? AlreadyOnGtsMessage(name) : AlreadyInStorageMessage(name))
                 + " Annule son dépôt, puis valide de nouveau.");
+        }
 
         foreach (var w in session.Withdrawals)
         {
