@@ -663,6 +663,9 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .trade-candidate.selected { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .25); }
 .trade-candidate:disabled { cursor: default; opacity: .7; }
 .trade-candidate img, .trade-pokemon-sprite { width: 56px; height: 56px; object-fit: contain; image-rendering: pixelated; }
+/* Recherche de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat). */
+.pokemon-picker-search { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem; margin-bottom: .75rem; }
+.pokemon-picker-search > input { max-width: 20rem; }
 .trade-candidate-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- Échange interne : étapes numérotées, choix des sauvegardes ---------- */
@@ -677,7 +680,6 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .internal-trade-step.done .internal-trade-step-number { border-color: var(--bs-success); color: var(--bs-success); }
 .internal-trade-choose { max-width: 36rem; }
 .internal-trade-choice { max-width: 36rem; }
-.internal-trade-search { max-width: 22rem; }
 /* L'espace sous le bloc est dans le bandeau (fond de la page) : la grille qui défile disparaît avant le bloc. */
 .internal-trade-sticky { padding-bottom: .75rem; }
 .internal-trade-sticky > .block, [data-theme="ardoise"] main .internal-trade-sticky > .block { margin-bottom: 0; }

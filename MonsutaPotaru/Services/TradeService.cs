@@ -17,8 +17,9 @@ public readonly record struct TradeSlot(int Box, int Slot)
 /// </summary>
 /// <param name="Problem">Échange interne : pourquoi ce Pokémon ne peut pas être choisi avec celui déjà choisi en face
 /// (une équipe qui garderait seulement des œufs) ; null s'il peut l'être.</param>
+/// <param name="Traits">Ce que regardent la recherche et les filtres de « Ma collection » au-dessus de la grille.</param>
 public sealed record TradeCandidate(TradeSlot Slot, string Fingerprint, ushort Species, string Name, string SpeciesName, int Level,
-    bool IsEgg, bool IsShiny, string SpriteUrl, string Location, string? Problem = null);
+    bool IsEgg, bool IsShiny, string SpriteUrl, string Location, PokemonFilterTraits Traits, string? Problem = null);
 
 /// <summary>Deux sauvegardes qui peuvent échanger (<see cref="TradeFamily.CanTradeWith"/>) : la mienne et celle de l'ami.</summary>
 public sealed record TradeSavePair(StoredSaveInfo Mine, StoredSaveInfo Theirs);
@@ -199,7 +200,7 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
             var location = slot.InParty ? $"Équipe {slot.Slot + 1}" : $"Boîte {slot.Box + 1}, case {slot.Slot + 1}";
             candidates.Add(new TradeCandidate(slot, PokemonFingerprint.Of(pk), pk.Species, pk.IsEgg ? "Œuf" : view.Nickname,
                 pk.IsEgg ? "" : view.SpeciesName, pk.IsEgg ? 0 : pk.CurrentLevel, pk.IsEgg, pk.IsShiny && !pk.IsEgg,
-                PokemonSprites.Url(pk), location, problem(slot, pk)));
+                PokemonSprites.Url(pk), location, PokemonFilterTraits.Of(pk, view), problem(slot, pk)));
         }
         return candidates;
     }

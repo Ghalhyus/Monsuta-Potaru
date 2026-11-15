@@ -42,6 +42,17 @@ README : « Multijoueurs », « Échanges ».
 - Mécanique commune : `PrepareAsync` (relecture, empreintes, œufs, conversion, évolution sur des copies) puis
   `WriteAsync` (transaction, copies, trace anti-copie ; ligne `TradeRecords` pour les amis seulement).
 
+## Recherche des Pokémon à choisir (échanges, équipe de combat)
+- `Shared/PokemonPickerSearch.razor` (champ et `CollectionFilterChips`), sur les trois pages ; état dans la page
+  (`InternalTrade.PickerFilter`, un par étape), rien dans l'adresse.
+- `TradeCandidate.Traits` / `BattleCandidate.Traits` (`PokemonFilterTraits.Of`, calculé comme `PokemonTraits.Fill`) :
+  valeurs simples, car les pages retrouvent le Pokémon choisi **par égalité des records** (`sent = sendable.FirstOrDefault(c
+  => c == sent)`) : n'y mettre ni `BankPokemon` ni tableau.
+- `PokemonSearch.Filter` applique `PokemonCriteria.Apply` (le code de la base) sur des `BankPokemon` faits en mémoire
+  (`ToRow`) : une règle de filtre ajoutée à `PokemonCriteria` vaut ici aussi, si `PokemonFilterTraits` porte la valeur.
+- Un œuf a `SpeciesName` vide dans ses caractéristiques : la recherche ne révèle pas son espèce.
+- Combat : `NoEggs` retire la pastille « Œuf ».
+
 ## Échange interne (`Pages/InternalTrade.razor`)
 - Étapes : `Step` (Saves, Send, Receive, Confirm, Done). Seule la paire est dans l'adresse (`?de=&vers=`, traitée dans
   `OnParametersSetAsync`, une fois par paire : `shownPair`) ; les Pokémon choisis restent en mémoire. « Retour » de
@@ -51,7 +62,7 @@ README : « Multijoueurs », « Échanges ».
   évolutions et détecter un changement avant « Échanger ».
 - Échec avec `Retry` : retour à l'étape 2, Pokémon relus ; sinon retour à l'étape 1, sauvegardes relues.
 - Pas de visiteur, pas de `NavigationLock` (rien en cours chez un autre joueur).
-- Étapes 2 et 3 : repère, titre, boutons, Pokémon choisi et recherche dans `.internal-trade-sticky` (collé sous la barre
+- Étapes 2 et 3 : repère, titre, boutons, Pokémon choisi, recherche et pastilles dans `.internal-trade-sticky` (collé sous la barre
   du haut, 3,5 rem, à partir de 641 px de large et 600 px de haut, comme la barre de « Ma collection ») ; la grille est
   dans un second bloc. L'espace sous le bloc collé est un `padding` du bandeau (fond de la page), pas une marge du bloc :
   sinon la grille se voit entre les deux.

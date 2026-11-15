@@ -122,8 +122,14 @@
                     }
                     else
                     {
+                        <PokemonPickerSearch @bind-Search="search" @bind-Criteria="criteria" Abilities="PokemonSearch.Abilities(theirs, c => c.Traits)" />
+                        var shown = PokemonSearch.Filter(theirs, search, criteria, c => c.Traits);
+                        @if (shown.Count == 0)
+                        {
+                            <p class="text-muted small">Aucun Pokémon ne correspond.</p>
+                        }
                         <div class="trade-candidates">
-                            @foreach (var candidate in theirs)
+                            @foreach (var candidate in shown)
                             {
                                 var c = candidate;
                                 <button type="button" class="trade-candidate @(wants?.Slot == c.Slot ? "selected" : "")" title="@c.Location"
@@ -259,6 +265,8 @@ else
     private TradeSession? session;
     private TradeStage? shownStage; // pour recharger les Pokémon de l'autre à chaque retour au choix
     private List<TradeCandidate>? theirs;
+    private string search = ""; // recherche et pastilles de « Ma collection » sur ses Pokémon, gardées le temps de la page
+    private PokemonCriteria criteria = PokemonCriteria.None;
     private List<FriendEntry>? friends;
     private string friendId = "";
     private List<TradeSavePair>? pairs;

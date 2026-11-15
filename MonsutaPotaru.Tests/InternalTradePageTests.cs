@@ -93,17 +93,37 @@ public sealed class InternalTradePageTests : PageTestContext
     }
 
     [Fact]
-    public async Task Search_FiltersByNameOrPlace()
+    public async Task SearchAndChips_FilterTheGrid_AndStayAtTheirStep()
     {
         var (sacha, regis) = await StoreTwo();
         Navigation.NavigateTo($"echange-interne?de={sacha}&vers={regis}");
         var cut = Render<InternalTrade>();
         cut.WaitForText("2. Choisis le Pokémon envoyé");
         Assert.Equal(2, cut.FindAll(".trade-candidate").Count);
-        await cut.Find(".internal-trade-search").InputAsync(new() { Value = "boite 1" }); // sans accent
+
+        // Recherche de « Ma collection » : espèce ou surnom, sans accent ; plus la place dans la sauvegarde.
+        await cut.Find(".pokemon-picker-text").InputAsync(new() { Value = "kada" });
         Assert.Contains("Kadabra", Assert.Single(cut.FindAll(".trade-candidate")).TextContent);
-        await cut.Find(".internal-trade-search").InputAsync(new() { Value = "Mew" });
-        cut.WaitForText("Aucun Pokémon ne correspond à « Mew »");
+        await cut.Find(".pokemon-picker-text").InputAsync(new() { Value = "boite 1" });
+        cut.WaitForText("Aucun Pokémon ne correspond.");
+        await cut.Find(".pokemon-picker-text").InputAsync(new() { Value = "" });
+
+        // Pastille « Type : Électrik » : il reste Pikachu ; le Pokémon choisi reste choisi même caché.
+        await Pick(cut, "Kadabra");
+        await cut.Click("+ Filtre");
+        await cut.Click("Type");
+        await cut.FindAll(".filter-popover label").First(l => l.TextContent.Contains("Électrik")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
+        Assert.Contains("Pikachu", Assert.Single(cut.FindAll(".trade-candidate")).TextContent);
+        Assert.Contains("Kadabra", cut.Find(".internal-trade-choice").TextContent);
+
+        // L'étape 3 a ses propres filtres ; au retour, ceux de l'étape 2 sont toujours là.
+        await cut.Click("Valider");
+        cut.WaitForText("3. Choisis le Pokémon reçu");
+        Assert.Equal(2, cut.FindAll(".trade-candidate").Count);
+        await cut.Click("Retour");
+        cut.WaitForText("2. Choisis le Pokémon envoyé");
+        Assert.Contains("Électrik", cut.Find(".filter-chip.active").TextContent);
+        Assert.Contains("Pikachu", Assert.Single(cut.FindAll(".trade-candidate")).TextContent);
     }
 
     [Fact]

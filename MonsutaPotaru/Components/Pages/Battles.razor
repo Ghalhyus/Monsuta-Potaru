@@ -99,8 +99,15 @@
                             }
                             <button type="button" class="btn btn-primary ms-auto" @onclick="SubmitTeam" disabled="@(busy || team.Count != size)">Valider l'équipe</button>
                         </div>
+                        <PokemonPickerSearch @bind-Search="search" @bind-Criteria="criteria" NoEggs="true"
+                                             Abilities="PokemonSearch.Abilities(candidates, c => c.Traits)" />
+                        var shown = PokemonSearch.Filter(candidates, search, criteria, c => c.Traits);
+                        @if (shown.Count == 0)
+                        {
+                            <p class="text-muted small">Aucun Pokémon ne correspond.</p>
+                        }
                         <div class="trade-candidates">
-                            @foreach (var candidate in candidates)
+                            @foreach (var candidate in shown)
                             {
                                 var c = candidate;
                                 var order = team.IndexOf(c);
@@ -574,6 +581,8 @@ else
     private List<BattleSavePair>? pairs;
     private List<BattleCandidate>? candidates;
     private readonly List<BattleCandidate> team = [];
+    private string search = ""; // recherche et pastilles de « Ma collection » sur mes Pokémon, gardées le temps de la page
+    private PokemonCriteria criteria = PokemonCriteria.None;
     private bool busy;
     private string? message;
     private bool messageIsError;

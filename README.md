@@ -147,7 +147,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   réels transmis. Deoxys a la forme du jeu de sa sauvegarde.
 - **Déroulé** : avec un ami, en direct ; paire de sauvegardes de même génération (`BattleService.SavePairsAsync`, amitié
   revérifiée), demande valable 10 minutes, un combat à la fois. Équipe de 6 (équipe et boîtes, sans œufs), place et
-  empreinte revérifiées au départ (`BattleService.TeamAsync`).
+  empreinte revérifiées au départ (`BattleService.TeamAsync`). Recherche et pastilles de « Ma collection » au-dessus
+  des Pokémon (sans la pastille « Œuf ») ; un Pokémon déjà dans l'équipe y reste quand un filtre le cache.
 - **Combat** (`Services/Battle/BattleHub.cs`, singleton en mémoire) : chaque choix est vérifié par le serveur sur la
   dernière requête de Showdown ; 60 secondes par choix (`BattleHub.Tick`), sinon défaite ; abandon (bouton
   « ABANDONNER », confirmé), départ de la page ou onglet fermé : défaite ; simulateur arrêté par erreur : combat annulé.
@@ -186,7 +187,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   génération seulement). Les conditions de progression du jeu ne sont pas vérifiées. Avec un ami, en direct. Le serveur revérifie l'amitié avant de montrer les
   sauvegardes de l'autre (`TradeService.SavePairsAsync`). Demande valable 10 minutes, un échange à la fois.
 - Chacun choisit le Pokémon qu'il **reçoit** (équipe et boîtes, hors cases verrouillées, œufs compris), parmi ceux que sa
-  sauvegarde accepte (`SaveFile.IsCompatiblePKM` après conversion) ; validation par les deux.
+  sauvegarde accepte (`SaveFile.IsCompatiblePKM` après conversion) ; validation par les deux. Recherche et pastilles de
+  « Ma collection » au-dessus des Pokémon de l'ami (voir « Filtres de « Ma collection » »).
 - **Échange** : chaque Pokémon prend la place de l'autre, au format de l'autre jeu, avec le joueur comme dresseur actuel
   (`EntityImportSettings.All`) ; évolution par échange selon PKHeX (simple, objet tenu consommé, Carabing ↔ Escargaume ;
   ni œuf, ni Pierre Stase). Refusé si un Pokémon a changé depuis le choix (empreinte) ou si une équipe ne garderait que
@@ -200,7 +202,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   annoncées), « Retour » à chaque étape. Même mécanique et mêmes refus que l'échange entre amis
   (`TradeService.ExecuteInternalAsync`, sauvegardes revérifiées : au compte, différentes, compatibles) ; un œuf qui
   laisserait une équipe sans Pokémon est grisé (`InternalReceivableAsync`). Sauvegarde pas encore téléchargée acceptée
-  (avertissement). **Pas compté** dans `TradeRecords` ni dans les statistiques.
+  (avertissement). Étapes 2 et 3 : recherche et pastilles de « Ma collection », propres à chaque étape et gardées au
+  « Retour ». **Pas compté** dans `TradeRecords` ni dans les statistiques.
 
 ### Tris par défaut (« Mon compte » → « Préférences »)
 
@@ -372,6 +375,13 @@ IV (minimum par statistique), niveau (« de » / « à », bornes comprises, inv
 en « et » ; les œufs sont exclus dès qu'un autre filtre qu'« Œuf » est actif (leur espèce reste cachée). Tout est gardé
 dans l'adresse avec la recherche, l'origine et le tri
 (`?generation=1,2&type=feu,eau&sexe=f&iv=pv31,vit25&niveau=20-40&surnom=oui&mega=oui`, `niveau=-29`, `niveau=51-`).
+
+Les mêmes pastilles et la même recherche (espèce ou surnom, casse et accents ignorés) sont au-dessus des Pokémon à
+choisir de l'échange entre amis, de l'échange interne et de l'équipe de combat (`Shared/PokemonPickerSearch.razor`) :
+ces Pokémon sont lus dans une sauvegarde, filtrés en mémoire avec les mêmes règles (`PokemonFilterTraits`,
+`PokemonSearch.Filter`), dans l'ordre des boîtes, sans tri ; rien dans l'adresse (gardés le temps de la page). La
+recherche ne trouve pas un œuf par son espèce, même chez l'ami. Sur les Pokémon d'un ami, nature et IV ne sont pas
+affichés mais se devinent avec les filtres (voulu : choisir « le Pokémon aux bons IV »).
 
 1re et 2e génération : IV ramenés à l'échelle actuelle (× 2 + 1 ; Atq. Spé. et Déf. Spé. = « Spécial »), nature de leur
 transfert vers les jeux suivants (expérience modulo 25), pas de talent. Ces caractéristiques sont enregistrées avec
@@ -679,6 +689,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
 | `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
+| `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex), Multijoueurs (échanges, combats) |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
 | `MonsutaPotaru/Services/StatisticsService.cs` | Statistiques : argent déposé et dépensé, moyennes des living dex |
@@ -774,6 +785,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |
 | `MonsutaPotaru/Components/Shared/ItemSprite.razor` | Image d'un objet ; celle de l'objet inconnu quand le site n'en a pas |
 | `MonsutaPotaru/Services/PokemonCriteria.cs` | Filtres de « Ma collection » : valeurs choisies, requête en base, lecture et écriture dans l'adresse |
+| `MonsutaPotaru/Services/PokemonFilterTraits.cs` | Caractéristiques des filtres d'un Pokémon lu dans une sauvegarde, recherche et filtres en mémoire (`PokemonSearch`) pour les Pokémon à choisir |
 | `MonsutaPotaru/Services/PokemonTraits.cs` | Caractéristiques d'un Pokémon enregistrées pour ces filtres (types récents, nature, talent, IV, forme, Méga) |
 | `MonsutaPotaru/Services/PokemonSprites.cs` | Choix de l'image d'un Pokémon : forme (noms de PKHeX → noms de PokéAPI), Méga-Évolution selon l'objet tenu, femelle, chromatique |
 | `MonsutaPotaru/wwwroot/images/` | Hors du dépôt Git (voir « Lancer en local ») ; images servies par le site : `pokemon/<numéro d'espèce>.png`, `pokemon/<numéro>-<forme>.png` (`19-alola.png`, `6-mega-x.png`, `6-gmax.png`), `pokemon/femelle/`, `pokemon/chromatique/` (mêmes sous-dossiers), `objets/<numéro d'objet>.png`, `objets/ct-<type>.png` pour les CT/DT, un `inconnu.png` dans chaque dossier |

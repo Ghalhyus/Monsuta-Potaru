@@ -20,6 +20,10 @@ README : « Combats ».
 - Recensement des lignes produites par Showdown : en Node (`BattleStreams`, équipes au hasard en « gen3customgame » :
   `@pkmn/sim` n'a pas le générateur d'équipes aléatoires).
 
+## Choix de l'équipe
+- Recherche et pastilles de « Ma collection » au-dessus des Pokémon (`PokemonPickerSearch`, `NoEggs`) : voir
+  `multijoueurs.md`, « Recherche des Pokémon à choisir ». L'équipe (`team`) n'est jamais réduite par un filtre.
+
 ## Combat en direct
 - `BattleHub` tient l'état sous `BattleSession.Gate` (le simulateur écrit sur son propre fil) ; les pages lisent par
   `Snapshot` et `Steps` (copies).

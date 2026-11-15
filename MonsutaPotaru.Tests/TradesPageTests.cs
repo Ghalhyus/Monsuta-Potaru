@@ -53,6 +53,28 @@ public sealed class TradesPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task SearchAndChips_FilterTheFriendsPokemon()
+    {
+        var (sacha, ondine) = await Requested();
+        await ondine.Click("Accepter");
+        sacha.WaitForText("Pokémon de ondine que ta sauvegarde peut recevoir");
+        Assert.Equal(2, sacha.FindAll(".trade-candidate").Count); // Pikachu et Salamèche
+
+        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "SALA" });
+        Assert.Contains("Salamèche", Assert.Single(sacha.FindAll(".trade-candidate")).TextContent);
+        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "" });
+
+        await sacha.Click("+ Filtre");
+        await sacha.Click("Niveau");
+        await sacha.Find("input[aria-label='Niveau minimal']").ChangeAsync(new() { Value = "10" });
+        await sacha.Find(".trade-candidate").ClickAsync(new());
+        sacha.WaitForAssertion(() => Assert.Contains("Salamèche", sacha.Find(".trade-candidate.selected").TextContent));
+        await sacha.Find("input[aria-label='Niveau minimal']").ChangeAsync(new() { Value = "50" });
+        sacha.WaitForText("Aucun Pokémon ne correspond.");
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
     public async Task Request_Refused_ThenCancelled()
     {
         var (sacha, ondine) = await Requested();

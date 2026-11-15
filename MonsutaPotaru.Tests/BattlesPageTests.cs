@@ -224,6 +224,32 @@ public sealed class BattlesPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task TeamBuilding_SearchAndChips_KeepTheTeam()
+    {
+        var (sacha, ondine) = await Requested();
+        await ondine.Click("Accepter");
+        sacha.WaitForText("Valider l'équipe");
+        var all = sacha.FindAll(".trade-candidate").Count;
+        Assert.True(all > 1);
+
+        // Pas de filtre « Œuf » : l'équipe n'en a jamais.
+        await sacha.Click("+ Filtre");
+        Assert.DoesNotContain(sacha.FindAll(".filter-popover .dropdown-item"), b => b.TextContent == "Œuf");
+        await sacha.Click("+ Filtre");
+
+        // Le premier Pokémon choisi, puis une recherche qui le cache : il reste dans l'équipe.
+        var first = sacha.Find(".trade-candidate .trade-candidate-name").TextContent.Replace(" ✨", "");
+        await sacha.Find(".trade-candidate").ClickAsync(new());
+        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "aucun pokémon de ce nom" });
+        sacha.WaitForText("Aucun Pokémon ne correspond.");
+        Assert.Empty(sacha.FindAll(".trade-candidate"));
+        Assert.Contains(first, sacha.Find(".battle-team-slot:not(.empty)").TextContent);
+        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "" });
+        Assert.Equal(all, sacha.FindAll(".trade-candidate").Count);
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
     public async Task Request_Refused_ThenCancelledFromTeamBuilding()
     {
         var (sacha, ondine) = await Requested();

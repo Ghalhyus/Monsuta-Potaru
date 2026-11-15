@@ -114,12 +114,12 @@ else
                     <ChildContent>
                         <p>Pokémon que <strong>« @First.Label »</strong> envoie à <strong>« @Second.Label »</strong> :</p>
                         @Choice(sent)
-                        @Search(sendable, searchSend, v => searchSend = v)
+                        @Search(sendable, sendFilter)
                     </ChildContent>
                 </Block>
             </div>
             <Block Class="internal-trade-grid">
-                @Grid(sendable, sent, c => sent = c, searchSend,
+                @Grid(sendable, sent, c => sent = c, sendFilter,
                     $"Aucun : « {Second.Label} » ne peut recevoir aucun Pokémon de « {First.Label} ».")
             </Block>
             break;
@@ -138,12 +138,12 @@ else
                             de @sent!.Name :
                         </p>
                         @Choice(received)
-                        @Search(receivable, searchReceive, v => searchReceive = v)
+                        @Search(receivable, receiveFilter)
                     </ChildContent>
                 </Block>
             </div>
             <Block Class="internal-trade-grid">
-                @Grid(receivable, received, c => received = c, searchReceive,
+                @Grid(receivable, received, c => received = c, receiveFilter,
                     $"Aucun : « {First.Label} » ne peut recevoir aucun Pokémon de « {Second.Label} ».")
             </Block>
             break;
@@ -215,12 +215,10 @@ else
     private List<TradeCandidate>? sendable, receivable;
     private TradeCandidate? sent, received;
     private TradePreview? preview;
-    private string searchSend = "", searchReceive = "";
+    private readonly PickerFilter sendFilter = new(), receiveFilter = new(); // recherche et pastilles de chaque étape (gardées au retour)
     private bool busy;
     private string? message;
     private bool messageIsError;
-
-    private static readonly System.Globalization.CompareInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR").CompareInfo;
 
     private StoredSaveInfo First => SaveOf(firstId)!.Save;
     private StoredSaveInfo Second => SaveOf(secondId)!.Save;
@@ -386,10 +384,12 @@ else
         Navigation.NavigateTo("echange-interne");
     }
 
-    private static bool Matches(TradeCandidate c, string search) =>
-        search.Trim() is not { Length: > 0 } text
-        || new[] { c.Name, c.SpeciesName, c.Location }.Any(s => French.IndexOf(s, text,
-            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0);
+    /// <summary>Recherche (espèce ou surnom) et pastilles de « Ma collection » d'une étape.</summary>
+    private sealed class PickerFilter
+    {
+        public string Search { get; set; } = "";
+        public PokemonCriteria Criteria { get; set; } = PokemonCriteria.None;
+    }
 
     /// <summary>« modifiée par le site, pas encore téléchargée » sous une sauvegarde choisie.</summary>
     private static RenderFragment SaveWarning(StoredSaveInfo? save) => __builder =>
@@ -438,19 +438,19 @@ else
         </ol>
     };
 
-    /// <summary>Recherche (nom, espèce, place) au-dessus de la grille ; absente s'il n'y a aucun Pokémon.</summary>
-    private RenderFragment Search(List<TradeCandidate>? candidates, string search, Action<string> setSearch) => __builder =>
+    /// <summary>Recherche et pastilles de « Ma collection » au-dessus de la grille ; absentes s'il n'y a aucun Pokémon.</summary>
+    private RenderFragment Search(List<TradeCandidate>? candidates, PickerFilter filter) => __builder =>
     {
         @if (candidates is { Count: > 0 })
         {
-            <input type="search" class="form-control form-control-sm internal-trade-search" placeholder="Rechercher (nom, espèce, boîte)…"
-                   aria-label="Rechercher un Pokémon" value="@search" @oninput="e => setSearch(e.Value?.ToString() ?? string.Empty)" />
+            <PokemonPickerSearch @bind-Search="filter.Search" @bind-Criteria="filter.Criteria"
+                                 Abilities="PokemonSearch.Abilities(candidates, c => c.Traits)" />
         }
     };
 
-    /// <summary>Grille de Pokémon filtrée par la recherche ; un Pokémon avec une raison est grisé.</summary>
+    /// <summary>Grille de Pokémon filtrée par la recherche et les pastilles ; un Pokémon avec une raison est grisé.</summary>
     private RenderFragment Grid(List<TradeCandidate>? candidates, TradeCandidate? chosen, Action<TradeCandidate> choose,
-        string search, string empty) => __builder =>
+        PickerFilter filter, string empty) => __builder =>
     {
         @if (candidates is null)
         {
@@ -462,10 +462,10 @@ else
         }
         else
         {
-            var shown = candidates.Where(c => Matches(c, search)).ToList();
+            var shown = PokemonSearch.Filter(candidates, filter.Search, filter.Criteria, c => c.Traits);
             @if (shown.Count == 0)
             {
-                <p class="text-muted small mb-0">Aucun Pokémon ne correspond à « @search.Trim() ».</p>
+                <p class="text-muted small mb-0">Aucun Pokémon ne correspond.</p>
             }
             <div class="trade-candidates">
                 @foreach (var candidate in shown)
