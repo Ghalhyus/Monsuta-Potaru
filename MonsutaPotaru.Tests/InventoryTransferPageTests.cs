@@ -13,7 +13,7 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class InventoryTransferPageTests : PageTestContext
 {
-    private const int PokeBall = 4, Potion = 17, HealthFeather = 565; // Plume Santé : inconnue de Platine
+    private const int PokeBall = 4, Potion = 17, HealthFeather = 565, FireGem = 548; // Plume Santé, Joyau Feu : inconnus de Platine
 
     private async Task<int> StorePlatinum()
     {
@@ -41,6 +41,56 @@ public sealed class InventoryTransferPageTests : PageTestContext
         var cut = Render<InventoryTransfer>();
         cut.WaitForText("Il faut au moins deux sauvegardes stockées");
         Assert.Contains("Transfert d'inventaire", cut.Text());
+    }
+
+    [Fact]
+    public async Task HideSwitch_HidesGreyedItemsOfBothColumns_ButNotThoseThatMove()
+    {
+        var platine = await StorePlatinum(); // 30 Poké Ball...
+        var b2 = await StoreBw2(items: [(PokeBall, 998), (HealthFeather, 2)]); // une place pour une Poké Ball
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo($"inventaire/transfert?gauche={platine}&droite={b2}");
+        var cut = Render<InventoryTransfer>();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("#hideGreyed")));
+        Assert.False(cut.Find("#hideGreyed").HasAttribute("checked")); // montrés par défaut
+        await Tab(cut, "droite", "Médicaments");
+        Assert.Contains("transfer-item-greyed", Row(cut, "droite", HealthFeather).ClassList); // inconnue de Platine
+        Assert.Matches(@"· \d+ objets? grisés?", Text(cut.Find(".transfer-hide-greyed")));
+
+        // Une Poké Ball de gauche à droite : le sac de droite est plein, la ligne de gauche devient grisée mais bouge
+        await Tab(cut, "gauche", "Pokéballs");
+        await Row(cut, "gauche", PokeBall).QuerySelector(".transfer-send")!.ClickAsync(new());
+        Assert.Contains("transfer-item-greyed", Row(cut, "gauche", PokeBall).ClassList);
+        Assert.Contains("−1", Text(Row(cut, "gauche", PokeBall)));
+
+        // Cachés : dans l'adresse ; la Plume Santé disparaît, la Poké Ball qui part reste
+        await cut.Find("#hideGreyed").ChangeAsync(new() { Value = true });
+        Assert.Contains("invalides=caches", nav.Uri);
+        Assert.Contains("caché", Text(cut.Find(".transfer-hide-greyed")));
+        Assert.Empty(cut.FindAll($".transfer-column-droite .transfer-item[data-item=\"{HealthFeather}\"]"));
+        Assert.NotNull(Row(cut, "gauche", PokeBall));
+
+        // Un onglet dont tout est caché le dit, et sa pastille ne compte que les objets visibles
+        var featherTab = cut.FindAll(".transfer-column-droite .nav-tabs button").First(b => b.ClassList.Contains("active"));
+        Assert.Contains("Tous les objets de cet onglet sont cachés : ils ne peuvent pas aller dans", Text(Column(cut, "droite")));
+        Assert.Equal("0", featherTab.QuerySelector(".badge")!.TextContent.Trim());
+
+        // Montrés à nouveau : l'adresse l'oublie
+        await cut.Find("#hideGreyed").ChangeAsync(new() { Value = false });
+        Assert.DoesNotContain("invalides=", nav.Uri);
+        Assert.NotNull(Row(cut, "droite", HealthFeather));
+    }
+
+    [Fact]
+    public async Task HideSwitch_ReadFromTheAddress_OpensATabWithVisibleItems()
+    {
+        var platine = await StorePlatinum();
+        var b2 = await StoreBw2(items: [(PokeBall, 3), (FireGem, 1)]); // Joyau Feu : seul objet de « Objets », inconnu de Platine
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"inventaire/transfert?gauche={platine}&droite={b2}&invalides=caches");
+        var cut = Render<InventoryTransfer>();
+        cut.WaitForAssertion(() => Assert.True(cut.Find("#hideGreyed").HasAttribute("checked")));
+        Assert.Empty(cut.FindAll($".transfer-column-droite .transfer-item[data-item=\"{FireGem}\"]"));
+        Assert.NotNull(Row(cut, "droite", PokeBall)); // l'onglet des Pokéballs, pas « Objets », où tout est caché
     }
 
     [Fact]

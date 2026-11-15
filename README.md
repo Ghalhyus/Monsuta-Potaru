@@ -480,7 +480,8 @@ utilisées. Détails : `docs/claude/images.md`.
   `InventoryService.TransferBetweenSavesAsync`) : sans passer par l'inventaire interne, dans les deux sens, glisser-déposer
   (souris, ou appui long au doigt : `wwwroot/js/transfert-objets.js`) ou bouton flèche, compteur par objet (1 au départ,
   borné à ce que l'objet a et à la place dans l'autre). Mêmes règles qu'un retrait puis un dépôt : un objet refusé par
-  l'autre jeu est grisé (raison au survol) ; CT par capacité ; onglets Sac / PC de la 1re à la 3e génération. Rien n'est
+  l'autre jeu est grisé (raison au survol) ; un interrupteur cache les grisés des deux colonnes (`?invalides=caches`),
+  sauf un objet qui bouge déjà, et les pastilles des onglets ne comptent alors que les visibles ; CT par capacité ; onglets Sac / PC de la 1re à la 3e génération. Rien n'est
   écrit avant « Valider » : dans chaque sauvegarde, retraits puis dépôts ; les deux écrites en **une seule transaction**
   (refus de l'une : aucune ne change), copies avant/après, **les deux modifiées sur le serveur**, une ligne de journal
   par sauvegarde (`TransferItemsBetweenSaves` : envoyé, reçu).
@@ -843,7 +844,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/SaveBag.cs` | Objets du sac et du PC d'une sauvegarde (objets, Pokéballs, médicaments, baies, CT/DT par capacité ; jamais les objets rares, Lettres ni CS) : lecture, retrait, dépôt (PKHeX), conversion des numéros d'objets des jeux de 1re à 3e génération |
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |
 | `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Banque d'objets » (`/inventaire`, rubrique « Inventaire » ; « Inventaire » sur la page d'un autre joueur) (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
-| `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés), récapitulatif, « Valider » / « Annuler » |
+| `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés, interrupteur qui les cache), récapitulatif, « Valider » / « Annuler » |
 | `MonsutaPotaru/wwwroot/js/echange.js` | Déroulé de l'animation d'échange (envoi, voyage, arrivée, évolutions ; textes tapés lettre à lettre) et ses musiques (fondus, fanfare attendue) ; son coupé retenu (`localStorage`) |
 | `MonsutaPotaru/wwwroot/js/transfert-objets.js` | Glisser-déposer de cette page (événements pointeur : souris, appui long au doigt ; image qui suit, défilement près des bords) |
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |

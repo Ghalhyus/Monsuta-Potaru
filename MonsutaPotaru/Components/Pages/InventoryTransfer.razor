@@ -17,7 +17,8 @@
    de gauche, puis celle de droite (dans l'adresse : ?gauche=3&droite=5), puis les objets glissés d'une colonne à l'autre,
    dans les deux sens. Rien n'est écrit avant « Valider », qui modifie les deux sauvegardes en une seule opération
    (InventoryService.TransferBetweenSavesAsync, mêmes règles qu'un retrait et un dépôt). Glisser à la souris ou au doigt :
-   wwwroot/js/transfert-objets.js ; chaque objet a aussi un bouton flèche qui fait la même chose. *@
+   wwwroot/js/transfert-objets.js ; chaque objet a aussi un bouton flèche qui fait la même chose. Un interrupteur cache les
+   objets grisés des deux colonnes (?invalides=caches), sauf ceux qui bougent déjà. *@
 
 <div class="transfer-page" @ref="root">
     <PageHeader Title="Transfert d'inventaire" Icon="bi-bag-nav-menu" BackHref="inventaire" BackLabel="Banque d'objets">
@@ -52,6 +53,19 @@
     }
     else
     {
+        @if (SaveOf(Side.Left) is not null && SaveOf(Side.Right) is not null)
+        {
+            @* Commun aux deux colonnes, gardé dans l'adresse ; compte les objets grisés des endroits affichés, tous onglets. *@
+            var greyedCount = Sides.Sum(side => Rows(side).Count(Hideable));
+            <div class="form-check form-switch mb-2 transfer-hide-greyed">
+                <input class="form-check-input" type="checkbox" role="switch" id="hideGreyed" checked="@hideGreyed" @onchange="ToggleHidden" />
+                <label class="form-check-label" for="hideGreyed">Cacher les objets qui ne peuvent pas passer</label>
+                @if (greyedCount > 0)
+                {
+                    <span class="small text-muted ms-1">· @greyedCount objet@(greyedCount > 1 ? "s" : "") @(hideGreyed ? "caché" : "grisé")@(greyedCount > 1 ? "s" : "")</span>
+                }
+            </div>
+        }
         <div class="transfer-layout">
             @foreach (var s in Sides)
             {
@@ -97,7 +111,7 @@
                             @foreach (var category in ItemCategories.All)
                             {
                                 var c = category.Category;
-                                var inTab = rows.Where(r => r.Item.Category == c).ToList();
+                                var inTab = rows.Where(r => r.Item.Category == c && Visible(r)).ToList();
                                 <li class="nav-item" role="presentation">
                                     <button type="button" role="tab" class="nav-link @(state.Tab == c ? "active" : "")"
                                             aria-selected="@(state.Tab == c ? "true" : "false")" @onclick="() => state.Tab = c">
@@ -132,10 +146,15 @@
                         </div>
 
                         var all = rows.Where(r => r.Item.Category == state.Tab).ToList();
-                        var shown = Sort(all.Where(r => Matches(r, state)), state);
+                        var visible = all.Where(Visible).ToList();
+                        var shown = Sort(visible.Where(r => Matches(r, state)), state);
                         @if (all.Count == 0)
                         {
                             <p class="text-muted small">Rien dans cette catégorie dans @(state.Place == BagPlace.Pc ? "ce PC" : "ce sac").</p>
+                        }
+                        else if (visible.Count == 0)
+                        {
+                            <p class="text-muted small">Tous les objets de cet onglet sont cachés : ils ne peuvent pas aller dans « @other!.Label ».</p>
                         }
                         else if (shown.Count == 0)
                         {
@@ -147,7 +166,7 @@
                                 @foreach (var row in shown)
                                 {
                                     var r = row;
-                                    var greyed = r.Problem is not null;
+                                    var greyed = IsGreyed(r);
                                     var n = CounterValue(side, r);
                                     <li class="item-tile transfer-item @(greyed ? "transfer-item-greyed" : "") @(r.Incoming > 0 ? "transfer-item-incoming" : "")"
                                         data-item="@r.Item.ItemId" data-draggable="@(r.Max > 0 && !busy ? "true" : "false")"
@@ -241,6 +260,12 @@
     /// <summary>Sauvegarde de droite dans l'adresse (« ?droite=5 »).</summary>
     [SupplyParameterFromQuery(Name = "droite")] private int? RightParam { get; set; }
 
+    /// <summary>Objets grisés cachés (« ?invalides=caches ») ; absent : montrés.</summary>
+    [SupplyParameterFromQuery(Name = HiddenQueryName)] private string? HiddenParam { get; set; }
+
+    private const string HiddenQueryName = "invalides";
+    private const string HiddenQueryValue = "caches";
+
     private enum Side { Left, Right }
 
     private static readonly Side[] Sides = [Side.Left, Side.Right];
@@ -285,6 +310,7 @@
     /// <summary>Compteur de chaque objet (colonne, endroit, objet) ; absent : 1.</summary>
     private Dictionary<(Side Side, BagPlace Place, int ItemId), int> counters = [];
     private int typed; // saisies des compteurs (voir le @key de leur champ)
+    private bool hideGreyed; // objets grisés cachés (adresse)
     private bool busy;
     private string? message;
     private bool messageIsError;
@@ -298,7 +324,30 @@
         preferences = await Preferences.SortsAsync(userId);
     }
 
-    protected override void OnParametersSet() => SelectSaves(LeftParam, RightParam == LeftParam ? null : RightParam);
+    protected override void OnParametersSet()
+    {
+        hideGreyed = HiddenParam == HiddenQueryValue;
+        SelectSaves(LeftParam, RightParam == LeftParam ? null : RightParam);
+    }
+
+    /// <summary>Cacher ou montrer les objets grisés des deux colonnes, gardé dans l'adresse.</summary>
+    private void ToggleHidden(ChangeEventArgs e)
+    {
+        hideGreyed = e.Value is true;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(HiddenQueryName, hideGreyed ? HiddenQueryValue : null), replace: true);
+    }
+
+    /// <summary>Ligne grisée : elle ne peut pas aller dans l'endroit affiché de l'autre colonne (raison dans <see cref="Row.Problem"/>).</summary>
+    private static bool IsGreyed(Row row) => row.Problem is not null;
+
+    /// <summary>
+    /// Ligne que l'interrupteur cache : grisée, sauf si l'objet bouge (reçu ou envoyé) : grisé parce que le sac d'en face
+    /// s'est rempli, il reste visible, pour qu'on voie toujours ce qui part.
+    /// </summary>
+    private static bool Hideable(Row row) => IsGreyed(row) && row.Incoming == 0 && row.Outgoing == 0;
+
+    /// <summary>Ligne affichée : toutes, ou sans celles que l'interrupteur cache.</summary>
+    private bool Visible(Row row) => !hideGreyed || !Hideable(row);
 
     /// <summary>Sauvegardes des deux colonnes ; un changement efface les objets en attente (ils concernaient l'ancienne).</summary>
     private void SelectSaves(int? left, int? right)
@@ -394,15 +443,17 @@
 
     private void ChangeSave(Side side) => Choose(side, null);
 
-    /// <summary>Chaque colonne ouvre le premier onglet qui a des objets.</summary>
+    /// <summary>Chaque colonne ouvre le premier onglet qui a des objets (visibles, quand les grisés sont cachés).</summary>
     private void FirstTabsWithItems()
     {
         foreach (var side in Sides)
         {
             if (SaveOf(side) is not { } save)
                 continue;
-            var items = save.ItemsIn(columns[side].Place);
-            columns[side].Tab = ItemCategories.All.Select(c => c.Category).FirstOrDefault(c => items.Any(i => i.Category == c), ItemCategory.Items);
+            var categories = hideGreyed && SaveOf(OtherSide(side)) is not null
+                ? Rows(side).Where(Visible).Select(r => r.Item.Category).ToHashSet()
+                : save.ItemsIn(columns[side].Place).Select(i => i.Category).ToHashSet();
+            columns[side].Tab = ItemCategories.All.Select(c => c.Category).FirstOrDefault(categories.Contains, ItemCategory.Items);
         }
     }
 

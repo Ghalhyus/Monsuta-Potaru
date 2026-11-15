@@ -57,6 +57,13 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   `ItemSource.CapacityIn` et `LockedMachines` de l'autre sauvegarde, sur l'état après les envois en attente ; ce que la page
   ne voit pas (20 objets différents dans le sac de Rouge / Bleu, seuil de 80 CT avec l'autre endroit) est refusé par le
   service à la validation, avec son message.
+- **Cacher les grisés** (demandé le 2026-11-15) : interrupteur au-dessus des colonnes, commun aux deux, dans l'adresse
+  (`?invalides=caches`, absent : montrés). Cache **toutes** les lignes grisées (`Row.Problem` : inconnu de l'autre jeu,
+  CT absente, refus du PC, sac plein, seuil de 80 CT : choix de l'utilisateur), **sauf celles qui bougent**
+  (`Hideable` : badge + ou −, sinon la ligne envoyée disparaîtrait quand le sac d'en face se remplit). Compteur des
+  grisés / cachés à côté (endroits affichés, tous onglets) ; pastilles des onglets sur les seules lignes visibles ;
+  onglet vide par ce filtre : « Tous les objets de cet onglet sont cachés… » ; à l'ouverture, premier onglet qui a des
+  objets visibles.
 - Tri : un par colonne et par onglet, pour la visite seulement (pas dans l'adresse : deux colonnes), au départ celui du
   compte (`PreferencesService`, `SortPreferences.InventoryFor`), comme la page « Banque d'objets ».
 - Glisser : `wwwroot/js/transfert-objets.js` (module, `init(root, dotnet)` → `dispose`), appelle `Drop(colonne, objet)`
