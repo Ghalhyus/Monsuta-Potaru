@@ -35,7 +35,7 @@ else
     else
     {
         <PageHeader Title="Statistiques" Icon="bi-grid-nav-menu">
-            <Help>Ton argent, tes living dex, tes échanges et tes combats.</Help>
+            <Help>Ton argent, tes living dex, tes rubans, tes complétions, tes échanges et tes combats.</Help>
         </PageHeader>
     }
 
@@ -95,6 +95,26 @@ else
                     {
                         <LivingDexStatsBlock Title="Living dex" Stats="dex.Normal" Visitor="Visitor" />
                         <LivingDexStatsBlock Title="Living dex chromatiques" Stats="dex.Shiny" Visitor="Visitor" Shiny="true" />
+                    }
+                    @if (ribbons is null)
+                    {
+                        <Block Title="Rubans">
+                            <p class="text-muted">Chargement…</p>
+                        </Block>
+                    }
+                    else
+                    {
+                        <RibbonStatsBlock Stats="ribbons" Visitor="Visitor" />
+                    }
+                    @if (completions is null)
+                    {
+                        <Block Title="Complétion (100 %)">
+                            <p class="text-muted">Chargement…</p>
+                        </Block>
+                    }
+                    else
+                    {
+                        <CompletionStatsBlock Stats="completions" Visitor="Visitor" />
                     }
                     break;
 
@@ -212,6 +232,8 @@ else
     // Chiffres de chaque onglet, calculés à sa première ouverture et gardés pour la visite.
     private MoneyStats? money;
     private (LivingDexStats Normal, LivingDexStats Shiny)? livingDex;
+    private RibbonStats? ribbons;
+    private CompletionStats? completions;
     private TradeStats? trades;
     private BattleRecordStats? battles;
 
@@ -239,6 +261,8 @@ else
             userId = shown;
             money = null;
             livingDex = null;
+            ribbons = null;
+            completions = null;
             trades = null;
             battles = null;
         }
@@ -249,6 +273,8 @@ else
                 break;
             case StatsTab.Challenges:
                 livingDex ??= await Stats.LivingDexAsync(userId);
+                ribbons ??= await Stats.RibbonsAsync(userId);
+                completions ??= await Stats.CompletionsAsync(userId);
                 break;
             default:
                 trades ??= await Trades.StatsAsync(userId);

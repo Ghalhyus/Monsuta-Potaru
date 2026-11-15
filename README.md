@@ -685,6 +685,15 @@ Détails : `docs/claude/statistiques.md`.
   Rouge, « National seul », n'entre ni dans le régional ni dans le complet) ; le **général** prend chacun dans son plus
   grand mode (Complet, Ultime pour les globaux, son seul mode pour un chromatique d'un jeu). **Complété** : 100 % dans le
   mode. Même comptage que la vue générale (`LivingDexService.ProgressAsync`).
+- **Rubans** (onglet Défis) : sur les **Pokémon suivis** seulement (« Rubans », les partis avec leurs derniers rubans
+  connus) : rubans gagnés en tout, **chaque ruban réuni dans un souvenir compte** (comme la complétion sur 88), rubans
+  par Pokémon (dixièmes, arrondi vers le bas), complétion moyenne (moyenne exacte, même règle que les living dex),
+  Pokémon complets.
+- **Complétion (100 %)** (onglet Défis) : moyenne des pourcentages globaux des complétions (un 0 % pour une sauvegarde
+  illisible), puis de chaque section **sur les seules complétions qui l'ont** (pas de quêtes annexes en 1re génération) ;
+  complétions à 100 %. Même comptage que la vue générale (`CompletionService.ListAsync`).
+- Un visiteur voit les rubans et les complétions dès que la case « Statistiques » est cochée, même si ses pages Rubans
+  (jamais publiques) ou Complétion sont cachées : les moyennes seulement, sans lien.
 - **Échange** et **Combat** : tables `TradeRecords` et `BattleRecords`, sans clé étrangère (elles survivent à la
   suppression du compte du partenaire) ; l'échange interne n'y est pas.
 
@@ -736,9 +745,11 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex), Multijoueurs (échanges, combats) |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats) |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
-| `MonsutaPotaru/Services/StatisticsService.cs` | Statistiques : argent déposé et dépensé, moyennes des living dex |
+| `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |
+| `MonsutaPotaru/Components/Shared/CompletionStatsBlock.razor` | Statistiques des complétions : moyenne générale et par section en barres, complétions à 100 % |
+| `MonsutaPotaru/Services/StatisticsService.cs` | Statistiques : argent déposé et dépensé, moyennes des living dex, rubans des Pokémon suivis, moyennes des complétions |
 | `MonsutaPotaru/Data/TradeRecord.cs` | Table des échanges réussis (statistiques, succès) |
 | `MonsutaPotaru/Components/Pages/PlayerSearch.razor` | « Multijoueurs » → « Rechercher un joueur » (`/joueurs`) |
 | `MonsutaPotaru/Components/Pages/PlayerProfilePage.razor` | Profil d'un joueur (`/joueurs/{pseudo}`) : ses pages publiques en onglets |

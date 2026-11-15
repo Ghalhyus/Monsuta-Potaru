@@ -11,6 +11,8 @@ namespace MonsutaPotaru.Tests;
 public sealed class StatisticsPageTests : PageTestContext
 {
     private LivingDexService Dexes => Services.GetRequiredService<LivingDexService>();
+    private RibbonService RibbonStore => Services.GetRequiredService<RibbonService>();
+    private CompletionService Completions => Services.GetRequiredService<CompletionService>();
     private NavigationManager Navigation => Services.GetRequiredService<NavigationManager>();
 
     private IRenderedComponent<Statistics> Open(string query = "", string? pseudo = null)
@@ -82,6 +84,45 @@ public sealed class StatisticsPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task Challenges_RibbonsAndCompletions()
+    {
+        var empty = Open("?onglet=defis");
+        empty.WaitForText("Aucun Pokémon suivi pour l'instant. Ajoutes-en un dans Rubans."); // avec l'espace avant le lien
+        Assert.Contains("Aucune complétion pour l'instant. Crées-en une dans Complétion (100 %).", empty.Text());
+        Assert.Contains("Aucun living dex pour l'instant. Crée-en un dans Living dex.", empty.Text());
+        Assert.Single(empty.FindAll("a[href='rubans']"));
+        Assert.Single(empty.FindAll("a[href='completion']"));
+
+        // Deux Pokémon suivis sans ruban ; la complétion de Rouge (pas de quêtes annexes).
+        foreach (var bankId in AddToBank("sacha", 25, 133))
+            Assert.True((await RibbonStore.AddAsync("sacha", bankId)).Ok);
+        var saveId = await StoreReal("sacha", "rouge.sav");
+        Assert.True((await Completions.CreateAsync("sacha", saveId, LivingDexGame.Red)).Ok);
+        var red = Assert.Single(await Completions.ListAsync("sacha")).Progress;
+
+        var cut = Open("?onglet=defis");
+
+        cut.WaitForText("Rubans gagnés");
+        var ribbons = cut.FindAll(".block")[2];
+        Assert.Equal("2", ribbons.QuerySelector(".block-count")?.TextContent);
+        Assert.Contains($"Tes 2 Pokémon suivis : chaque ruban réuni dans un souvenir compte (complétion sur {Ribbons.Total} rubans).", ribbons.TextContent);
+        // Rubans gagnés, par Pokémon, Pokémon complets.
+        Assert.Equal(["0", "0", "0 / 2"], ribbons.QuerySelectorAll(".stat-value").Select(v => v.TextContent));
+        Assert.Equal(["Complétion moyenne"], ribbons.QuerySelectorAll(".stat-bar-label").Select(l => l.TextContent));
+        Assert.Equal(LivingDexGames.Percent(0, 1), ribbons.QuerySelector(".livingdex-progress-label")?.TextContent);
+
+        var completion = cut.FindAll(".block")[3];
+        Assert.Equal("1", completion.QuerySelector(".block-count")?.TextContent);
+        Assert.Equal(["Générale", "Histoire", "Pokédex", "Dresseurs", "Objets", "Rencontres uniques", "Quêtes annexes"],
+            completion.QuerySelectorAll(".stat-bar-label").Select(l => l.TextContent));
+        Assert.Equal(red.Percent, completion.QuerySelector(".livingdex-progress-label")?.TextContent); // le même que la vue générale
+        Assert.Contains("Aucune complétion n'a cette section.", completion.TextContent); // quêtes annexes
+        Assert.Equal(Enumerable.Repeat("1 complétion", 6), completion.QuerySelectorAll(".stat-bar-count").Select(c => c.TextContent));
+        Assert.Equal(["0 / 1"], completion.QuerySelectorAll(".stat-value").Select(v => v.TextContent));
+        Assert.DoesNotContain("pour l'instant", ribbons.TextContent + completion.TextContent);
+    }
+
+    [Fact]
     public void Multiplayer_TradesAndBattles()
     {
         var empty = Open("?onglet=multijoueurs");
@@ -124,6 +165,13 @@ public sealed class StatisticsPageTests : PageTestContext
         var challenges = Open("?onglet=defis", "ondine");
         challenges.WaitForText("Moyenne de ses living dex");
         Assert.DoesNotContain("Crée-en un", challenges.Text());
+        Assert.Contains("Aucun Pokémon suivi pour l'instant.", challenges.Text());
+        Assert.DoesNotContain("Ajoutes-en", challenges.Text());
+        Assert.DoesNotContain("Crées-en", challenges.Text());
+
+        Assert.True((await RibbonStore.AddAsync("ondine", AddToBank("ondine", 25)[0])).Ok);
+        var ribbons = Open("?onglet=defis", "ondine");
+        ribbons.WaitForText("Son Pokémon suivi :");
 
         var multiplayer = Open("?onglet=multijoueurs", "ondine");
         multiplayer.WaitForText("Échanges réussis");

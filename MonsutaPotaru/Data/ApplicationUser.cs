@@ -49,7 +49,7 @@ public enum PublicPages
     Park = 2,
     Inventory = 4,
     LivingDex = 8,
-    /// <summary>Page « Statistiques » (argent, living dex, échanges, combats) ; cochée pour tous à son arrivée.</summary>
+    /// <summary>Page « Statistiques » (argent, living dex, rubans, complétions, échanges, combats) ; cochée pour tous à son arrivée.</summary>
     Statistics = 16,
     /// <summary>Pages « Complétion (100 %) » (la liste et chaque complétion) ; cochée pour tous à son arrivée.</summary>
     Completion = 32,

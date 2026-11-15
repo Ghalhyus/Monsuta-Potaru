@@ -102,13 +102,16 @@ public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress>
     /// </summary>
     public static int CompareAverages(CompletionProgress a, CompletionProgress b)
     {
-        var (aNumerator, aDenominator) = a.Average();
-        var (bNumerator, bDenominator) = b.Average();
+        var (aNumerator, aDenominator) = a.AverageFraction();
+        var (bNumerator, bDenominator) = b.AverageFraction();
         return (aNumerator * bDenominator).CompareTo(bNumerator * aDenominator);
     }
 
-    /// <summary>Moyenne des sections comptées, en fraction : Σ fait / total, divisée par leur nombre (0 / 1 sans section).</summary>
-    private (BigInteger Numerator, BigInteger Denominator) Average()
+    /// <summary>
+    /// Moyenne des sections comptées, en fraction : Σ fait / total, divisée par leur nombre (0 / 1 sans section). Sert au
+    /// tri et aux statistiques (moyenne exacte de plusieurs complétions).
+    /// </summary>
+    public (BigInteger Numerator, BigInteger Denominator) AverageFraction()
     {
         var counted = Sections.Where(s => s.Total > 0).ToList();
         if (counted.Count == 0)

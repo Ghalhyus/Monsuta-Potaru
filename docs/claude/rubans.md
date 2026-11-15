@@ -51,7 +51,8 @@ README : « Rubans ». Rubans comptés : `Services/Ribbons.cs` ; suivi : `Servic
   dernier état connu sert quand il est parti. Pas de lien vers `BankPokemon` (il disparaît à chaque mise à jour).
 - 1re / 2e génération : empreinte IV + dresseur + famille ; elle change au transfert par la Banque Pokémon (nouveau PID) :
   le suivi le perd (accepté).
-- Pas de page publique chez les autres joueurs pour l'instant (pas de réglage de visibilité).
+- Pas de page publique chez les autres joueurs pour l'instant (pas de réglage de visibilité). Les **statistiques** (onglet
+  « Défis », `statistiques.md`) montrent pourtant leurs totaux et moyennes à un visiteur (case « Statistiques »).
 - Ajout : `ListCandidatesAsync` rend les 60 premiers par nom (`CandidatePage`), la recherche affine (LIKE, comme « Ma
   collection »). La recherche de la vue générale est en mémoire, sans accents (`BankPokemon.SortKey`).
 - Surnom : comparé à l'espèce sans majuscules ni accents (`IsNickname`) : « PIKACHU » de 3e génération n'est pas un surnom.

@@ -1,0 +1,63 @@
+@using MonsutaPotaru.Services
+
+@* Rubans des Pokémon suivis (page « Statistiques », onglet « Défis ») : rubans gagnés en tout (ceux des souvenirs un par
+   un), moyenne par Pokémon, puis la moyenne de leurs complétions en barre et combien sont complets. Les Pokémon partis
+   comptent avec leurs derniers rubans connus, comme dans « Rubans ». *@
+<Block Title="Rubans" Count="@(Stats.Count > 0 ? Stats.Count.ToString() : null)">
+    @if (Stats.Count == 0)
+    {
+        <p class="text-muted mb-0">
+            Aucun Pokémon suivi pour l'instant.
+            @if (!Visitor)
+            {
+                <text>@(" ")Ajoutes-en un dans <a href="rubans">Rubans</a>.</text>
+            }
+        </p>
+    }
+    else
+    {
+        <p class="text-muted small">
+            @Tracked : chaque ruban réuni dans un souvenir compte (complétion sur @Ribbons.Total rubans).
+        </p>
+        <div class="stat-tiles">
+            <div class="card">
+                <div class="card-body">
+                    <div class="small text-muted">Rubans gagnés</div>
+                    <div class="stat-value">@Stats.Earned</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="small text-muted">Rubans par Pokémon</div>
+                    <div class="stat-value">@Stats.PerPokemon</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="small text-muted">Pokémon complets</div>
+                    <div class="stat-value">@Stats.Completion.Completed / @Stats.Count</div>
+                </div>
+            </div>
+        </div>
+        <div class="stat-bars mt-3">
+            <div class="stat-bar-label">Complétion moyenne</div>
+            <LivingDexProgress Owned="Stats.Completion.Tenths" Total="1000"
+                               ValueText="@($"{Stats.Completion.Percent}, moyenne de {Pokemon(Stats.Count)}")" />
+            <div class="stat-bar-count text-muted small">@Pokemon(Stats.Count)</div>
+        </div>
+    }
+</Block>
+
+@code {
+    [Parameter, EditorRequired] public RibbonStats Stats { get; set; } = default!;
+
+    /// <summary>Statistiques d'un autre joueur : « Ses », sans lien vers le suivi.</summary>
+    [Parameter] public bool Visitor { get; set; }
+
+    private static string Pokemon(int count) => $"{count} Pokémon";
+
+    /// <summary>« Tes 3 Pokémon suivis », « Ton Pokémon suivi » (« Ses », « Son » pour un visiteur).</summary>
+    private string Tracked => Stats.Count == 1
+        ? $"{(Visitor ? "Son" : "Ton")} Pokémon suivi"
+        : $"{(Visitor ? "Ses" : "Tes")} {Stats.Count} Pokémon suivis";
+}

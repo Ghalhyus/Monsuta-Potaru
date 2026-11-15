@@ -12,7 +12,8 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - **Ratés** (plus faisables dans la partie) : comptés, marqués « raté » ; le 100 % reste strict, même s'il devient
   impossible.
 - Pages publiques (`/joueurs/{pseudo}/completion`, case « Complétion (100 %) » de « Visibilité », `PublicPages.Completion`,
-  cochée pour tous par la migration `CompletionChallenge`). Pas dans les statistiques (pas demandé pour l'instant).
+  cochée pour tous par la migration `CompletionChallenge`). Dans les statistiques depuis le 2026-11-15 (onglet « Défis »,
+  voir `statistiques.md`).
 
 ## Vue générale : tri et création (2026-11-14, « les mêmes fonctionnalités que Living dex »)
 - **Tri** « Trier par » Génération / Complétion et ↑ / ↓, comme les living dex : `?tri=generation|completion`,
