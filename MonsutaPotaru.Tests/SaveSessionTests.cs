@@ -82,7 +82,7 @@ public class SaveSessionTests
 
         Assert.Null(session.GetSlot(0, 0));
         var deposit = Assert.Single(session.Deposits);
-        Assert.Equal(25, deposit.Pokemon.Species);
+        Assert.Equal(25, deposit.Pokemon!.Species);
 
         // La sauvegarde réécrite doit être relisible et sans le Pikachu.
         var reloaded = LoadedSession(session.Save!.Write().ToArray());

@@ -7,8 +7,9 @@ namespace MonsutaPotaru.Services;
 /// <summary>Ce qu'il faut pour afficher un Pokémon de la banque dans une grille.</summary>
 /// <param name="StoredSaveId">Renseigné pour un Pokémon d'une sauvegarde stockée (lecture seule).</param>
 /// <param name="Location">Place dans la sauvegarde stockée (« Équipe 1 », « Boîte 2, case 5 », « Pension 1 »).</param>
+/// <param name="IsMinecraft">Pokémon de Minecraft (Cobblemon) : ni GTS, ni rubans (voir <see cref="BankService.IsCobblemon"/>).</param>
 public sealed record BankListItem(int Id, ushort Species, string SpeciesName, string Nickname, byte Level, bool IsShiny, bool IsEgg, bool IsLegal, int? StoredSaveId,
-    string SpriteUrl, string? Location = null);
+    string SpriteUrl, string? Location = null, bool IsMinecraft = false);
 
 /// <summary>
 /// Filtre de « Ma collection » : tout, la banque seule, ou une sauvegarde stockée ; <paramref name="Criteria"/> ajoute les
@@ -112,7 +113,8 @@ public sealed class BankService(
     /// <summary>Case d'un Pokémon dans la grille (sans ses octets).</summary>
     private static readonly System.Linq.Expressions.Expression<Func<BankPokemon, BankListItem>> ListItem = p =>
         new BankListItem(p.Id, p.Species, p.SpeciesName, p.Nickname, p.Level, p.IsShiny, p.IsEgg, p.IsLegal, p.StoredSaveId,
-            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg), p.Location);
+            PokemonSprites.Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg), p.Location,
+            p.Extension == CobblemonPokemon.Extension);
 
     /// <summary>Talents présents dans la collection (hors œufs), pour la liste du filtre « Talent ».</summary>
     public async Task<List<int>> ListAbilitiesAsync(string ownerId)
@@ -248,10 +250,14 @@ public sealed class BankService(
     /// Pokémon de cette sauvegarde déjà ailleurs dans le compte (stockage interne, sauvegardes stockées) : son chargement
     /// dans « Transfert » est refusé.
     /// </summary>
-    public async Task<List<DuplicateCopy>> FindDuplicatesAsync(string ownerId, IEnumerable<PKM> pokemon)
+    public Task<List<DuplicateCopy>> FindDuplicatesAsync(string ownerId, IEnumerable<PKM> pokemon) =>
+        FindDuplicatesAsync(ownerId, pokemon.Select(PokemonFingerprint.Of));
+
+    /// <summary>Même chose par empreintes (<see cref="SaveSession.Fingerprints"/> : jeux et Minecraft).</summary>
+    public async Task<List<DuplicateCopy>> FindDuplicatesAsync(string ownerId, IEnumerable<string> fingerprints)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return await PokemonFingerprint.FindAsync(db, ownerId, pokemon.Select(PokemonFingerprint.Of));
+        return await PokemonFingerprint.FindAsync(db, ownerId, fingerprints);
     }
 
     /// <summary>Refus d'un dépôt : ce Pokémon est déjà dans le stockage interne (vieille copie de la sauvegarde ?).</summary>
@@ -262,8 +268,36 @@ public sealed class BankService(
     public static string AlreadyOnGtsMessage(string name) =>
         $"{name} est déjà sur la GTS (le même Pokémon, d'une vieille copie de la sauvegarde ?) : dépôt refusé.";
 
+    /// <summary>Le Pokémon des jeux ; null s'il est illisible, ou s'il vient de Minecraft (<see cref="IsCobblemon"/>).</summary>
     public static PKM? ToPkm(BankPokemon entry) =>
-        EntityFormat.GetFromBytes(entry.Data.ToArray(), (EntityContext)entry.Context);
+        IsCobblemon(entry) ? null : EntityFormat.GetFromBytes(entry.Data.ToArray(), (EntityContext)entry.Context);
+
+    /// <summary>
+    /// Pokémon de Minecraft (Cobblemon, All the Mons) : ses octets sont du NBT, pas un fichier PKHeX. Il ne va que dans
+    /// « Ma collection » et dans un monde Minecraft : ni GTS, ni living dex, ni rubans, ni parc.
+    /// </summary>
+    public static bool IsCobblemon(BankPokemon entry) => entry.Extension == CobblemonPokemon.Extension;
+
+    /// <summary>Le Pokémon de Minecraft enregistré ; null s'il vient d'un jeu ou s'il est illisible.</summary>
+    public static CobblemonPokemon? ToCobblemon(BankPokemon entry)
+    {
+        if (!IsCobblemon(entry))
+            return null;
+        try
+        {
+            return CobblemonPokemon.FromBytes(entry.Data);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Fiche d'un Pokémon du compte, quel que soit son format ; null s'il est illisible.</summary>
+    public static PokemonView? Describe(PokemonInfo info, BankPokemon entry) =>
+        ToCobblemon(entry) is { } mon ? info.Describe(mon, entry.OriginalTrainer)
+        : ToPkm(entry) is { } pk ? info.Describe(pk, entry.IsLegal)
+        : null;
 
     /// <summary>Octets du Pokémon au format des boîtes, déchiffrés (ce que garde <see cref="BankPokemon.Data"/>).</summary>
     public static byte[] StoredData(PKM pk)
@@ -304,25 +338,76 @@ public sealed class BankService(
     }
 
     /// <summary>
+    /// Ligne d'un Pokémon de Minecraft : le NBT intact, et ce qu'il faut pour l'afficher, le chercher et le filtrer comme
+    /// les autres (« Ma collection »). <paramref name="trainerName"/> : le dresseur affiché (le joueur ne figure que par
+    /// son UUID dans le fichier).
+    /// </summary>
+    public static BankPokemon CreateEntry(PokemonInfo info, CobblemonPokemon mon, string trainerName, string ownerId, DateTime now)
+    {
+        var view = info.Describe(mon, trainerName);
+        var ivs = mon.Ivs;
+        var (type1, type2) = mon.Species == 0 ? ((byte)0, (byte)0) : PokemonTraits.Types(mon.Species, mon.Form);
+        return new BankPokemon
+        {
+            OwnerId = ownerId,
+            Data = mon.ToBytes(),
+            Context = (byte)CobblemonPokemon.FormContext,
+            Extension = CobblemonPokemon.Extension,
+            Species = mon.Species,
+            Form = mon.Form,
+            SpeciesName = view.SpeciesName,
+            SortName = BankPokemon.SortKey(view.SpeciesName),
+            Nickname = view.Nickname,
+            Level = (byte)Math.Min(mon.Level, 255),
+            Gender = mon.Gender,
+            HeldItem = mon.HeldItem,
+            IsShiny = mon.IsShiny,
+            IsEgg = false,
+            IsLegal = true, // pas d'analyse de légalité pour Minecraft : ne pas le compter « illégal » dans les filtres
+            OriginalTrainer = trainerName,
+            OriginGame = CobblemonSave.GameName,
+            Fingerprint = mon.Fingerprint,
+            DepositedAt = now,
+            // Filtres de « Ma collection » (PokemonTraits.Fill pour les jeux)
+            Type1 = type1,
+            Type2 = type2,
+            Nature = mon.Nature ?? 0,
+            Ability = mon.Ability,
+            IvHp = ivs[0], IvAtk = ivs[1], IvDef = ivs[2], IvSpA = ivs[3], IvSpD = ivs[4], IvSpe = ivs[5],
+            FormKind = PokemonTraits.KindOf(mon.Species, mon.Form, CobblemonPokemon.FormContext),
+        };
+    }
+
+    /// <summary>
+    /// Dresseur affiché d'un Pokémon de Minecraft : son nom s'il est écrit (dresseur non joueur), le pseudo du compte
+    /// pour le joueur du monde, sinon « Joueur Minecraft ».
+    /// </summary>
+    public static string TrainerName(CobblemonPokemon mon, CobblemonSave world, string accountName) =>
+        mon.OriginalTrainerName
+        ?? (string.Equals(mon.OriginalTrainerId, world.PlayerId, StringComparison.OrdinalIgnoreCase) ? accountName : "Joueur Minecraft");
+
+    /// <summary>
     /// Enregistre en base les dépôts et retraits en attente, garde une copie de la sauvegarde
     /// avant/après, puis renvoie le fichier modifié à télécharger.
     /// </summary>
     public async Task<byte[]> CommitAsync(string ownerId, SaveSession session)
     {
-        var sav = session.Save ?? throw new InvalidOperationException("Aucune sauvegarde chargée.");
+        if (!session.IsLoaded)
+            throw new InvalidOperationException("Aucune sauvegarde chargée.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        // La sauvegarde a pu être stockée (depuis un autre onglet) après son chargement dans « Dépôt / Retrait ».
-        var key = SaveIdentity.Of(sav).Key;
-        if (await db.StoredSaves.AnyAsync(s => s.IdentityKey == key))
+        // La sauvegarde a pu être stockée (depuis un autre onglet) après son chargement dans « Dépôt / Retrait » (jeu ou
+        // monde Minecraft).
+        var key = session.IdentityKey;
+        if (key is not null && await db.StoredSaves.AnyAsync(s => s.IdentityKey == key))
             throw new InvalidOperationException("Cette sauvegarde est maintenant stockée sur le serveur : elle ne peut plus être utilisée dans « Dépôt / Retrait ».");
 
         // Un Pokémon déjà au stockage interne ne peut pas y entrer une seconde fois (vieille copie de la sauvegarde) : la
         // page refuse déjà une telle sauvegarde au chargement, ceci couvre un dépôt fait entre-temps depuis un autre onglet.
         // Vérifié avant les retraits, sinon retirer l'original et déposer sa copie le dupliquerait.
-        var deposited = session.Deposits.Select(d => PokemonFingerprint.Of(d.Pokemon)).ToList();
+        var deposited = session.Deposits.Select(d => d.Cobblemon?.Fingerprint ?? PokemonFingerprint.Of(d.Pokemon!)).ToList();
         var inStorage = await PokemonFingerprint.FindAsync(db, ownerId, deposited, internalOnly: true);
         if (inStorage.Count > 0)
         {
@@ -346,11 +431,15 @@ public sealed class BankService(
             throw new InvalidOperationException(CollectionCapacity.BankFullMessage(before, session.Deposits.Count - session.Withdrawals.Count));
 
         var now = DateTime.UtcNow;
+        var accountName = session.Minecraft is null ? ""
+            : await db.Users.Where(u => u.Id == ownerId).Select(u => u.UserName).FirstOrDefaultAsync() ?? "";
         foreach (var d in session.Deposits)
-            db.BankPokemon.Add(CreateEntry(info, d.Pokemon, ownerId, now));
+            db.BankPokemon.Add(d.Cobblemon is { } mon
+                ? CreateEntry(info, mon, TrainerName(mon, session.Minecraft!, accountName), ownerId, now)
+                : CreateEntry(info, d.Pokemon!, ownerId, now));
 
         await db.SaveChangesAsync();
-        var newData = sav.Write().ToArray();
+        var newData = session.Write();
         await WriteBackupsAsync(ownerId, session, newData);
         await tx.CommitAsync();
 

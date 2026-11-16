@@ -363,12 +363,17 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
     /// </summary>
     public static string? PickProblem(BankListItem item)
     {
+        if (item.IsMinecraft)
+            return MinecraftRefusal;
         if (item.IsEgg)
             return "Un œuf ne peut pas aller sur la GTS.";
         if (item.StoredSaveId is not null && !InPartyOrBox(item.Location))
             return $"Ce Pokémon n'est ni dans l'équipe ni dans les boîtes ({item.Location}) : il ne peut pas aller sur la GTS.";
         return null;
     }
+
+    /// <summary>Refus d'un Pokémon de Minecraft : il ne va que dans un monde All the Mons.</summary>
+    public const string MinecraftRefusal = "Un Pokémon de Minecraft ne peut pas aller sur la GTS : il ne retourne que dans un monde All the Mons.";
 
     /// <summary>Place de l'équipe (« Équipe 2 ») ou d'une boîte (« Boîte 3, case 12 », nom de boîte du joueur compris).</summary>
     private static bool InPartyOrBox(string? location) =>
@@ -623,7 +628,7 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
     }
 
     private static Task<List<OwnedRow>> OwnedRowsAsync(ApplicationDbContext db, string userId, List<ushort> species) =>
-        db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == userId && !p.IsEgg && species.Contains(p.Species))
+        db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == userId && !p.IsEgg && species.Contains(p.Species) && p.Extension != CobblemonPokemon.Extension)
             .Select(p => new OwnedRow(p.Id, p.Species, p.Level, p.Gender, p.IsShiny, p.IsLegal, p.IsEgg, p.StoredSaveId, p.Location, p.Context,
                 p.Context == (byte)EntityContext.Gen1 || p.Context == (byte)EntityContext.Gen2 ? p.Data : null))
             .ToListAsync();

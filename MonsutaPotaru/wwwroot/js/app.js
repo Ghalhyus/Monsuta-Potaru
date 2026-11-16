@@ -89,6 +89,62 @@ window.downloadFileFromStream = async (fileName, streamRef) => {
     URL.revokeObjectURL(url);
 };
 
+// Dossier d'un monde Minecraft choisi dans le navigateur (« Dépôt / Retrait », « Mes sauvegardes » : composant
+// WorldFolderPicker). Le navigateur donne à la page tous les fichiers du dossier choisi ; seuls ceux dont le site a
+// besoin sont ouverts et envoyés : level.dat, l'équipe et le PC (pokemon/...) et les statistiques du joueur. Les autres
+// ne sont jamais lus et leurs noms ne partent pas. Un dossier sans level.dat à sa racine (pas un monde : « saves »,
+// « .minecraft », un dossier personnel choisi par erreur) est refusé sans rien lire. Le serveur revérifie tout
+// (CobblemonSave.ZipFromFolder) : chemins, nombre, tailles.
+window.watchWorldFolder = (input, component) => {
+    const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+    const wanted = new RegExp(`^(level\\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{2}/${uuid}\\.dat(\\.old)?|stats/${uuid}\\.json)$`, "i");
+    const maxFiles = 32, maxFileBytes = 4 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024 - 65536;
+    let pending = null;
+
+    const onChange = async () => {
+        const files = Array.from(input.files ?? []);
+        input.value = ""; // la page oublie la sélection ; le même dossier peut être choisi de nouveau
+        pending = null;
+        if (files.length === 0) return;
+        const root = files[0].webkitRelativePath.split("/")[0];
+        const inside = f => f.webkitRelativePath.startsWith(root + "/") ? f.webkitRelativePath.slice(root.length + 1) : null;
+        if (!root || !files.some(f => inside(f) === "level.dat")) {
+            component.invokeMethodAsync("OnWorldRefused", "pas-un-monde");
+            return;
+        }
+        const chosen = files.filter(f => { const path = inside(f); return path !== null && wanted.test(path); });
+        const total = chosen.reduce((sum, f) => sum + f.size, 0);
+        if (chosen.length > maxFiles || chosen.some(f => f.size > maxFileBytes) || total > maxTotalBytes) {
+            component.invokeMethodAsync("OnWorldRefused", "trop-gros");
+            return;
+        }
+        const contents = await Promise.all(chosen.map(f => f.arrayBuffer()));
+        // « MPW1 », longueur de l'en-tête, en-tête JSON (chemins et tailles), puis les contenus à la suite.
+        const header = new TextEncoder().encode(JSON.stringify(chosen.map((f, i) => ({ n: inside(f), s: contents[i].byteLength }))));
+        const payload = new Uint8Array(8 + header.length + contents.reduce((sum, c) => sum + c.byteLength, 0));
+        payload.set(new TextEncoder().encode("MPW1"), 0);
+        new DataView(payload.buffer).setUint32(4, header.length, true);
+        payload.set(header, 8);
+        let offset = 8 + header.length;
+        for (const c of contents) {
+            payload.set(new Uint8Array(c), offset);
+            offset += c.byteLength;
+        }
+        pending = payload;
+        component.invokeMethodAsync("OnWorldChosen", root);
+    };
+    input.addEventListener("change", onChange);
+    return {
+        // Les fichiers préparés, une seule fois (ensuite oubliés).
+        take: () => {
+            const payload = pending ?? new Uint8Array(0);
+            pending = null;
+            return payload;
+        },
+        dispose: () => input.removeEventListener("change", onChange),
+    };
+};
+
 // Largeur de la fenêtre (« Ma collection ») : 0 pour une fenêtre étroite (téléphone), sinon 1 + le nombre de largeurs
 // dépassées, en pixels physiques (une fenêtre plein écran sur un 3440 × 1440 compte pour 3440, quelle que soit la
 // mise à l'échelle de Windows ou le zoom : les deux sont compensés par devicePixelRatio). Le composant est prévenu

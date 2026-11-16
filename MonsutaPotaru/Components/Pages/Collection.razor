@@ -174,12 +174,13 @@ else
                 else
                 {
                     <small class="text-muted">Déposé le @selected.DepositedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
-                    @if (!Visitor)
+                    @* Pokémon de Minecraft : pas de fichier à télécharger (il ne sort que vers un monde All the Mons). *@
+                    @if (CanDownload)
                     {
                         <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="DownloadPkm">Télécharger le fichier .@selected.Extension</button>
                     }
                 }
-                <button class="btn btn-secondary btn-sm @(selected.StoredSaveId is null && !Visitor ? "" : "ms-auto")" @onclick="Close">Fermer</button>
+                <button class="btn btn-secondary btn-sm @(CanDownload ? "" : "ms-auto")" @onclick="Close">Fermer</button>
             </div>
         </PokemonCard>
     </div>
@@ -555,10 +556,9 @@ else
     private async Task Open(BankListItem item)
     {
         var entry = await BankStore.GetAsync(userId, item.Id);
-        var pk = entry is null ? null : BankService.ToPkm(entry);
-        if (entry is null || pk is null) return;
+        if (entry is null || BankService.Describe(Info, entry) is not { } view) return;
         selected = entry;
-        selectedView = Info.Describe(pk, entry.IsLegal);
+        selectedView = view;
     }
 
     private void Close()
@@ -567,12 +567,14 @@ else
         selectedView = null;
     }
 
+    /// <summary>Fichier .pkX téléchargeable : ni pour un visiteur, ni d'une sauvegarde stockée, ni de Minecraft.</summary>
+    private bool CanDownload => !Visitor && selected is { StoredSaveId: null } && !BankService.IsCobblemon(selected);
+
     private async Task DownloadPkm()
     {
-        if (Visitor)
-            return; // pas de copie des Pokémon d'un autre joueur
-        if (selected is null || selected.StoredSaveId is not null) return; // lecture seule pour les sauvegardes stockées
-        await Download($"{selected.Species:000} - {selected.Nickname}.{selected.Extension}", selected.Data);
+        if (!CanDownload)
+            return; // pas de copie des Pokémon d'un autre joueur ; lecture seule pour les sauvegardes stockées
+        await Download($"{selected!.Species:000} - {selected.Nickname}.{selected.Extension}", selected.Data);
     }
 
     private async Task Download(string fileName, byte[] data)

@@ -130,7 +130,8 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
     /// </summary>
     public async Task<List<InternalTradeSave>> InternalSavesAsync(string userId)
     {
-        var saves = await storedSaves.ListAsync(userId);
+        // Pas les mondes Minecraft (génération 0) : ils ne s'échangent avec aucun jeu.
+        var saves = (await storedSaves.ListAsync(userId)).Where(s => s.Generation > 0).ToList();
         var families = await FamiliesAsync(saves.Select(s => s.Id));
         return [.. saves.Select(s => new InternalTradeSave(s,
             [.. saves.Where(o => o.Id != s.Id && CanTrade(families, s.Id, o.Id)).Select(o => o.Id)]))];

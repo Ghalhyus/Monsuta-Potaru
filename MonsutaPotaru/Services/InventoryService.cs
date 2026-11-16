@@ -175,7 +175,7 @@ public sealed class InventoryService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var saves = await db.StoredSaves.AsNoTracking()
-            .Where(s => s.OwnerId == ownerId)
+            .Where(s => s.OwnerId == ownerId && !s.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix)) // pas les mondes Minecraft
             .OrderBy(s => s.UploadedAt)
             .Select(s => new { s.Id, s.GameName, s.TrainerName, s.TrainerId, s.FileName, s.Data })
             .ToListAsync();
@@ -256,7 +256,7 @@ public sealed class InventoryService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var saves = await db.StoredSaves.AsNoTracking()
-            .Where(s => s.OwnerId == ownerId)
+            .Where(s => s.OwnerId == ownerId && !s.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix)) // pas les mondes Minecraft
             .OrderBy(s => s.UploadedAt)
             .Select(s => new { s.Id, s.GameName, s.TrainerName, s.TrainerId, s.FileName, s.Data })
             .ToListAsync();

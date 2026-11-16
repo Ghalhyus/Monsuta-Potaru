@@ -15,6 +15,9 @@ public sealed record StoredSaveInfo(
 {
     public string Label => $"{GameName} — {TrainerName}";
 
+    /// <summary>Monde Minecraft (All the Mons) : génération 0, le nom du monde à la place du dresseur.</summary>
+    public bool IsMinecraft => Generation == 0;
+
     /// <summary>« Noire — Ghal · noir.sav », pour une liste déroulante ou une infobulle (une seule ligne, sans mise en forme).</summary>
     public string LabelAndFile => $"{Label} · {FileName}";
 
@@ -101,6 +104,8 @@ public sealed class StoredSaveService(
 
     public async Task<StoreResult> AddAsync(string ownerId, string fileName, byte[] data)
     {
+        if (CobblemonSave.IsZip(data))
+            return await AddWorldAsync(ownerId, fileName, data);
         if (!TryRead(data, fileName, out var sav))
             return Invalid();
         var identity = SaveIdentity.Of(sav);
@@ -156,6 +161,8 @@ public sealed class StoredSaveService(
     /// </summary>
     public async Task<StoreResult> UpdateAsync(string ownerId, int saveId, string fileName, byte[] data, bool acceptOlder = false)
     {
+        if (CobblemonSave.IsZip(data))
+            return await UpdateWorldAsync(ownerId, saveId, fileName, data, acceptOlder);
         if (!TryRead(data, fileName, out var sav))
             return Invalid();
         var identity = SaveIdentity.Of(sav);
@@ -164,6 +171,8 @@ public sealed class StoredSaveService(
         var save = await db.StoredSaves.FirstOrDefaultAsync(s => s.Id == saveId && s.OwnerId == ownerId);
         if (save is null)
             return new(StoreStatus.NotFound, "Cette sauvegarde n'existe plus.");
+        if (IsWorld(save))
+            return new(StoreStatus.WrongTrainer, "Ce fichier n'est pas ce monde Minecraft : choisis le dossier du monde.");
         if (identity.Key != save.IdentityKey)
             return new(StoreStatus.WrongTrainer,
                 $"Ce fichier n'est pas la même partie : dresseur {identity.TrainerName} ({identity.TrainerId}) au lieu de {save.TrainerName} ({save.TrainerId}).");
@@ -229,7 +238,7 @@ public sealed class StoredSaveService(
             save.Version++;
             await db.SaveChangesAsync(); // jeton de concurrence : échoue si un retrait vient de modifier le fichier
         }
-        return (save.FileName, save.Data);
+        return (save.FileName, ForPlayer(save));
     }
 
     /// <summary>
@@ -323,7 +332,7 @@ public sealed class StoredSaveService(
             return null;
 
         await RemoveAsync(db, ownerId, save);
-        return (save.FileName, save.Data);
+        return (save.FileName, ForPlayer(save));
     }
 
     /// <summary>
@@ -448,8 +457,10 @@ public sealed class StoredSaveService(
 
     internal static bool TryRead(byte[] data, string fileName, out SaveFile sav)
     {
+        // Un monde Minecraft (zip) n'est jamais donné à PKHeX, qui pourrait prendre un zip de la bonne taille pour une
+        // sauvegarde : living dex, complétion, inventaire, échanges, GTS et combats l'ignorent tous ainsi.
         // PKHeX peut modifier le tableau : on lui passe une copie pour stocker le fichier d'origine intact.
-        if (SaveUtil.TryGetSaveFile(data.ToArray(), out var parsed, fileName))
+        if (!CobblemonSave.IsZip(data) && SaveUtil.TryGetSaveFile(data.ToArray(), out var parsed, fileName))
         {
             SaveVersion.Refine(parsed); // Vert Feuille, que PKHeX prend pour Rouge Feu
             sav = parsed;
@@ -529,6 +540,168 @@ public sealed class StoredSaveService(
         modification.DataHash = SaveModification.Hash(data);
         modification.ModifiedAt = now;
         describe(modification);
+    }
+
+    // ---------- Mondes Minecraft (All the Mons) ----------
+
+    /// <summary>Monde Minecraft stocké (identité « cobblemon:… ») : ni PKHeX, ni fonctions des jeux.</summary>
+    public static bool IsWorld(StoredSave save) => save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Ce que reçoit le joueur (« Télécharger », suppression) : pour un monde, seulement le dossier pokemon à décompresser
+    /// dans le monde (level.dat et stats restent ceux du jeu) ; pour un jeu, le fichier stocké.
+    /// </summary>
+    private static byte[] ForPlayer(StoredSave save) =>
+        IsWorld(save) && CobblemonSave.TryRead(save.Data, out _) is { } world ? world.Write() : save.Data;
+
+    /// <summary>Le monde envoyé, avec son identité (level.dat) et son temps de jeu (stats) ; sinon le refus.</summary>
+    private static CobblemonSave? ReadWorld(byte[] data, out StoreResult refusal)
+    {
+        var world = CobblemonSave.TryRead(data, out var error);
+        refusal = new(StoreStatus.Invalid,
+            world is null ? error : !world.HasLevel ? CobblemonSave.NoLevelMessage : CobblemonSave.NoStatsMessage);
+        return world is { HasLevel: true, PlayTimeSeconds: not null } ? world : null;
+    }
+
+    /// <summary>
+    /// Stocke un monde Minecraft : une fois sur tout le serveur (joueur + graine), sans Pokémon déjà ailleurs dans le compte,
+    /// dans la taille de la collection. Seuls ses fichiers utiles sont gardés (<see cref="CobblemonSave.Bundle"/>).
+    /// </summary>
+    private async Task<StoreResult> AddWorldAsync(string ownerId, string fileName, byte[] data)
+    {
+        if (ReadWorld(data, out var refusal) is not { } world)
+            return refusal;
+        var key = world.IdentityKey!;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        var holder = await db.StoredSaves.Where(s => s.IdentityKey == key)
+            .Select(s => new SaveHolder(s.OwnerId, s.FileName)).FirstOrDefaultAsync();
+        if (holder is not null)
+            return new(StoreStatus.AlreadyStored, AlreadyStoredMessage(holder, ownerId, "Utilise « Mettre à jour » pour le remplacer."));
+
+        var pokemon = world.AllWithLocation().ToList();
+        if (await WorldDuplicateRefusalAsync(db, ownerId, pokemon, exceptSaveId: null) is { } duplicate)
+            return duplicate;
+        var usage = await CollectionCapacity.GetUsageAsync(db, ownerId);
+        if (CollectionCapacity.Exceeds(usage, usage.Used + pokemon.Count))
+            return new(StoreStatus.CollectionFull, CollectionCapacity.SaveFullMessage(usage, pokemon.Count));
+
+        var now = DateTime.UtcNow;
+        var save = new StoredSave { OwnerId = ownerId, IdentityKey = key, UploadedAt = now };
+        FillWorld(save, world, fileName, now);
+        db.StoredSaves.Add(save);
+        await AddWorldPokemonAsync(db, save, world, pokemon, ownerId, now);
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException) // index unique : stocké au même moment par quelqu'un d'autre
+        {
+            return new(StoreStatus.AlreadyStored, OtherAccountMessage);
+        }
+        await tx.CommitAsync();
+
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : monde Minecraft stocké ({Count} Pokémon).", ownerId, save.PokemonCount);
+        return new(StoreStatus.Ok, $"Monde « {world.WorldName} » stocké : {save.PokemonCount} Pokémon ajoutés à ta collection.");
+    }
+
+    /// <summary>
+    /// Remplace un monde stocké par une version plus récente du même monde (même joueur, même graine). Moins de temps de
+    /// jeu : rien sans <paramref name="acceptOlder"/>, comme pour un jeu.
+    /// </summary>
+    private async Task<StoreResult> UpdateWorldAsync(string ownerId, int saveId, string fileName, byte[] data, bool acceptOlder)
+    {
+        if (ReadWorld(data, out var refusal) is not { } world)
+            return refusal;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var save = await db.StoredSaves.FirstOrDefaultAsync(s => s.Id == saveId && s.OwnerId == ownerId);
+        if (save is null)
+            return new(StoreStatus.NotFound, "Cette sauvegarde n'existe plus.");
+        if (world.IdentityKey != save.IdentityKey)
+            return new(StoreStatus.WrongTrainer, IsWorld(save)
+                ? $"Ce n'est pas le même monde (« {world.WorldName} » au lieu de « {save.TrainerName} », ou une autre graine, ou un autre joueur)."
+                : "Ce dossier est un monde Minecraft, pas cette partie.");
+        var pokemon = world.AllWithLocation().ToList();
+        if (await WorldDuplicateRefusalAsync(db, ownerId, pokemon, exceptSaveId: save.Id) is { } duplicate)
+            return duplicate;
+        var playTime = world.PlayTimeSeconds!.Value;
+        if (playTime < save.PlayTimeSeconds && !acceptOlder)
+            return new(StoreStatus.OlderPlayTime,
+                $"Ce monde a moins de temps de jeu que la version stockée ({SaveIdentity.FormatPlayTime(save.PlayTimeSeconds)} → {SaveIdentity.FormatPlayTime(playTime)}) : c'est peut-être une ancienne copie.",
+                save.PlayTimeSeconds, playTime);
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var usage = await CollectionCapacity.GetUsageAsync(db, ownerId);
+        if (CollectionCapacity.Exceeds(usage, usage.Used - save.PokemonCount + pokemon.Count))
+            return new(StoreStatus.CollectionFull, CollectionCapacity.SaveFullMessage(usage, pokemon.Count, save.PokemonCount));
+
+        await WriteBackupAsync(ownerId, save, "remplacee");
+        await db.BankPokemon.Where(p => p.StoredSaveId == save.Id).ExecuteDeleteAsync();
+        var now = DateTime.UtcNow;
+        FillWorld(save, world, fileName, now);
+        await AddWorldPokemonAsync(db, save, world, pokemon, ownerId, now);
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ConflictResult();
+        }
+        await tx.CommitAsync();
+
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : monde {Id} mis à jour ({Count} Pokémon).", ownerId, save.Id, save.PokemonCount);
+        return new(StoreStatus.Ok, $"Monde mis à jour : {save.PokemonCount} Pokémon.");
+    }
+
+    private async Task<StoreResult?> WorldDuplicateRefusalAsync(ApplicationDbContext db, string ownerId,
+        List<(CobblemonPokemon Pokemon, string Location)> pokemon, int? exceptSaveId)
+    {
+        var copies = await PokemonFingerprint.FindAsync(db, ownerId, pokemon.Select(p => p.Pokemon.Fingerprint), exceptSaveId);
+        if (PokemonFingerprint.RefusalMessage(copies, PokemonFingerprint.StoreAdvice) is not { } message)
+            return null;
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : monde refusé, {Count} Pokémon déjà dans le compte.", ownerId, copies.Count);
+        return new(StoreStatus.Duplicate, message);
+    }
+
+    /// <summary>
+    /// Un monde : « All the Mons — Kantalia » (le nom du monde à la place du dresseur), génération 0, sans numéro de
+    /// dresseur ; seuls ses fichiers utiles sont gardés.
+    /// </summary>
+    private static void FillWorld(StoredSave save, CobblemonSave world, string fileName, DateTime now)
+    {
+        save.FileName = fileName;
+        save.Data = world.Bundle();
+        save.GameName = CobblemonSave.GameName;
+        save.Generation = 0;
+        save.TrainerName = world.WorldName!;
+        save.TrainerId = "";
+        save.PlayTimeSeconds = world.PlayTimeSeconds!.Value;
+        save.UpdatedAt = now;
+        save.Version++;
+    }
+
+    private async Task AddWorldPokemonAsync(ApplicationDbContext db, StoredSave save, CobblemonSave world,
+        List<(CobblemonPokemon Pokemon, string Location)> pokemon, string ownerId, DateTime now)
+    {
+        var accountName = await db.Users.Where(u => u.Id == ownerId).Select(u => u.UserName).FirstOrDefaultAsync() ?? "";
+        int position = 0;
+        foreach (var (mon, location) in pokemon)
+        {
+            var entry = BankService.CreateEntry(info, mon, BankService.TrainerName(mon, world, accountName), ownerId, now);
+            entry.StoredSave = save;
+            entry.Location = location;
+            entry.Position = position++;
+            db.BankPokemon.Add(entry);
+        }
+        save.PokemonCount = position;
     }
 
     internal async Task WriteBackupAsync(string ownerId, StoredSave save, string suffix)

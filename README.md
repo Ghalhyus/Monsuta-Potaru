@@ -12,7 +12,8 @@ son nom, **PokeBank Sync**, et les clés de connexion leur nom technique « Poke
 - **Jeux testés** (vraies sauvegardes, `RealSavesTests` : voir plus bas) : Rouge, Bleu, Argent, Rouge Feu, Vert Feuille,
   Perle, HeartGold, SoulSilver, Noire, Noire 2, Y, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
   sauvegarde de la 9e génération (Écarlate / Violet), ni de Let's Go, Diamant Étincelant ou Légendes Arceus : PKHeX sait
-  les lire, à valider au cas par cas.
+  les lire, à valider au cas par cas. Minecraft : modpack All the Mons (Cobblemon 1.8.4, NeoForge 1.21.1), monde solo
+  (`all-the-mons.zip` : dossier `pokemon`, `level.dat` et `stats` ; `CobblemonTests`, `StoredWorldTests`).
 
 ## Lancer en local
 
@@ -97,6 +98,43 @@ Un retrait convertit le Pokémon au format du jeu si PKHeX le peut (PK4 → PK5)
 attaques ou objets absents du jeu, génération antérieure). La page grise d'avance les Pokémon du stockage interne
 incompatibles avec la sauvegarde chargée (`SaveSession.WithdrawalProblem`, les mêmes vérifications que `TryWithdraw`) :
 ni sélectionnables ni glissables, un clic donne la raison, « Tout sélectionner » et « Retirer les N » les sautent.
+
+### Minecraft (All the Mons, Cobblemon)
+
+`Services/Cobblemon/`, fiche `docs/claude/minecraft.md`. « Dépôt / Retrait » et « Mes sauvegardes » acceptent un monde
+Minecraft solo du modpack All the Mons (Cobblemon, format NBT, réglage par défaut) : l'équipe (« Équipe », 6 cases) puis
+les boîtes du PC (100 dans All the Mons, 30 cases).
+
+- **Fichiers lus** : le dossier `pokemon` (équipe, PC), `level.dat` (nom et graine du monde) et
+  `stats/<UUID du joueur>.json` (temps de jeu). Le joueur **choisit le dossier du monde** (`WorldFolderPicker`, script
+  `watchWorldFolder` d'`app.js`) ou envoie un zip de ces fichiers. `level.dat` est exigé partout, `stats` dans
+  « Mes sauvegardes » seulement. Seuls ces fichiers sont gardés (`CobblemonSave.Bundle`).
+- **Sécurité du choix de dossier** : le navigateur n'ouvre et n'envoie que ces fichiers (pas `InputFile`, qui enverrait
+  au serveur le nom de tous les fichiers du dossier) ; un dossier sans `level.dat` à sa racine est refusé sans rien lire ;
+  le serveur revérifie tout (`CobblemonSave.ZipFromFolder` : chemins exacts, 32 fichiers et 4 Mo par fichier au plus,
+  tailles annoncées) ; le nom du dossier, qui sert de nom de fichier, est réduit aux caractères sûrs
+  (`CobblemonSave.FolderFileName`). Les messages de refus du navigateur sont des codes fixes.
+- **Identité** : `cobblemon:<UUID du joueur>:<graine>` (`CobblemonSave.IdentityKey`), une fois sur tout le serveur. Un
+  monde stocké est refusé dans « Dépôt / Retrait » (chargement et validation), comme une sauvegarde de jeu.
+- **Mes sauvegardes** : « All the Mons — Kantalia » (nom du monde à la place du dresseur, génération 0, sans numéro de
+  dresseur) ; mise à jour par le même monde seulement, confirmation si moins de temps de jeu ; ses Pokémon comptent dans
+  la taille de la collection. « Télécharger » et la suppression rendent le dossier `pokemon` seul.
+- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; living dex, complétion, échanges, GTS et combats
+  l'ignorent donc ; l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes.
+
+- **Mondes séparés** : un Pokémon de Minecraft ne retourne que dans un monde Minecraft, un Pokémon des jeux ne va jamais
+  dans Minecraft (grisés dans un sens comme dans l'autre, `SaveSession.WithdrawalProblem`). Les Pokémon de Minecraft sont
+  dans « Ma collection » (origine « All the Mons », filtres et tris), mais ni sur la GTS, ni dans les rubans, le parc ou
+  le living dex global, et sans fichier à télécharger.
+- **Gardés intacts** : le Pokémon est enregistré en NBT tel que Cobblemon l'a écrit (`BankPokemon.Extension` =
+  `cobblemon`, `BankService.IsCobblemon`) et repart tel quel. Le zip rendu ne contient que le dossier `pokemon` (jamais
+  `level.dat` ni `stats`) ; les copies `.dat.old` de Cobblemon sont réécrites comme le `.dat` (sinon le jeu pourrait
+  relire l'ancienne version).
+- **Doublons** : empreinte `cobblemon:<UUID du Pokémon>` ; un zip dont un Pokémon est déjà dans le compte est refusé,
+  comme une sauvegarde de jeu.
+- **Refusés** : monde à plusieurs joueurs, format JSON, zip sans équipe, sans PC ou sans `level.dat`, plusieurs mondes
+  dans un zip. Un Pokémon dans un enclos (Pasture) est verrouillé (à reprendre dans le jeu).
+- Le joueur décompresse le zip rendu dans le dossier du monde, **Minecraft fermé** (sinon le jeu réécrit ses fichiers).
 
 ### Comptes
 
@@ -721,7 +759,11 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 
 | Fichier | Rôle |
 |---|---|
-| `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX) |
+| `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX, ou monde Minecraft) |
+| `MonsutaPotaru/Services/Cobblemon/Nbt.cs` | Lecture et écriture des fichiers NBT de Minecraft (gzip, UTF-8 « modifié » de Java), à l'octet près |
+| `MonsutaPotaru/Services/Cobblemon/CobblemonPokemon.cs` | Pokémon de Cobblemon : NBT gardé intact, lu pour l'affichage (identifiants de Showdown → numéros de PKHeX) |
+| `MonsutaPotaru/Services/Cobblemon/CobblemonSave.cs` | Monde All the Mons (zip ou dossier choisi) : équipe et PC du joueur, level.dat (identité), stats (temps de jeu), zip rendu (dossier `pokemon` seul), fichiers gardés, envoi du navigateur revérifié |
+| `MonsutaPotaru/Components/Shared/WorldFolderPicker.razor` | Bouton « choisir le dossier du monde » (« Dépôt / Retrait », « Mes sauvegardes ») : reçoit du navigateur les seuls fichiers utiles, les fait revérifier |
 | `MonsutaPotaru/Services/AdminService.cs` | Administration : rôles (donner, retirer, garde-fous), liste des comptes, code d'invitation (lecture, régénération), initialisation au démarrage (code, premier administrateur) |
 | `MonsutaPotaru/Services/DebugService.cs` | Mode debug d'un administrateur : comptes actifs en mémoire (`DebugMode`, coupé à la déconnexion), argent ajouté (montants fixes, journal), parc agrandi ou réduit gratuitement |
 | `MonsutaPotaru/Components/Pages/Admin.razor` | Page « Administration » : code d'invitation, comptes et rôles |
@@ -792,7 +834,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Dépôt / Retrait » (`/transfert`, rubrique « Mes Pokémon ») : boîtes, glisser-déposer, sélection multiple |
 | `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
-| `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
+| `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, dossier d'un monde Minecraft (tri des fichiers envoyés), largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
@@ -1040,6 +1082,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | Bande originale de *Pokémon HeartGold / SoulSilver* (GAME FREAK, 2009 ; Shota Kageyama, Junichi Masuda), pistes « Trade », « Evolution » et « Congratulations! Your Pokémon Evolved! », et « Battle! » (Rival, Champion, Frontier Brain, Gym Leader Kanto et Johto), fournies par l'utilisateur | Musiques de l'animation d'échange (`wwwroot/images/sons/` : `echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; musiques des combats rangées pour plus tard (`combat-*.mp3`) ; hors Git, jamais redistribuées avec le code | © Nintendo / GAME FREAK ; non libre |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
+| [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; aucun code ni aucune ressource repris | MPL-2.0 (le mod) |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
 | [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |

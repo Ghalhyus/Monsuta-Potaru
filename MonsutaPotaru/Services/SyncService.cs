@@ -266,7 +266,9 @@ public sealed class SyncService(
     {
         var infos = await storedSaves.ListAsync(caller.OwnerId);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var files = await db.StoredSaves.AsNoTracking().Where(s => s.OwnerId == caller.OwnerId)
+        // Pas les mondes Minecraft : ils n'ont rien à faire sur une console (absents de « files », sautés plus bas).
+        var files = await db.StoredSaves.AsNoTracking()
+            .Where(s => s.OwnerId == caller.OwnerId && !s.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix))
             .Select(s => new { s.Id, s.Data }).ToDictionaryAsync(s => s.Id, s => s.Data);
         var keys = (await db.SyncSaveLocations.AsNoTracking().Where(l => l.DeviceId == caller.DeviceId)
                 .Select(l => new { l.StoredSaveId, l.Key }).ToListAsync())
@@ -276,7 +278,7 @@ public sealed class SyncService(
         foreach (var info in infos)
         {
             if (!files.TryGetValue(info.Id, out var data))
-                continue; // supprimée entre les deux lectures
+                continue; // supprimée entre les deux lectures, ou monde Minecraft
             var (console, family) = StoredSaveService.TryRead(data, info.FileName, out var sav) ? DescribeForConsole(sav) : ("autre", "");
             entries.Add(new SyncSaveEntry(info.Id, info.GameName, info.TrainerName, info.TrainerId, info.FileName,
                 SaveModification.Hash(data), info.PlayTimeSeconds, info.ModifiedOnServer, console, family,

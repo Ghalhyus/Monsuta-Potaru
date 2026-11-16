@@ -1534,7 +1534,7 @@ public sealed class LivingDexService(
     private static async Task<List<GlobalLivingDex.Copy>> GlobalCopiesAsync(ApplicationDbContext db, string ownerId, bool shiny)
     {
         var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny)
+            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny && p.Extension != CobblemonPokemon.Extension)
             .OrderBy(p => p.DepositedAt).ThenBy(p => p.Id)
             .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, Data = GlobalDataSpecies.Contains(p.Species) ? p.Data : null })
             .ToListAsync();

@@ -129,6 +129,10 @@ public static partial class PokemonSprites
     public static string Url(PKM pk) =>
         Url(pk.Species, pk.Form, pk.Context, pk.Gender == 1, pk.HeldItem, pk.IsShiny, pk.IsEgg);
 
+    /// <summary>Image d'un Pokémon de Minecraft (Cobblemon) : celle de son espèce et de sa forme.</summary>
+    public static string Url(CobblemonPokemon mon) =>
+        Url(mon.Species, mon.Form, CobblemonPokemon.FormContext, mon.Gender == 1, mon.HeldItem, mon.IsShiny);
+
     /// <summary>Image d'un Pokémon enregistré (sexe et objet tenu inconnus tant que le démarrage ne les a pas remplis).</summary>
     public static string Url(Data.BankPokemon p) =>
         Url(p.Species, p.Form, (EntityContext)p.Context, p.Gender == 1, p.HeldItem ?? 0, p.IsShiny, p.IsEgg);

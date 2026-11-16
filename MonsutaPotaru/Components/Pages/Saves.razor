@@ -24,12 +24,20 @@
             <li>la sauvegarde est refusée dans « Dépôt / Retrait » tant qu'elle est stockée.</li>
         </ul>
         <p>Tous les jeux lus par PKHeX sont acceptés ; seuls Noir 2 / Blanc 2 ont été testés.</p>
+        <p>Minecraft (All the Mons, monde solo) :</p>
+        <ul>
+            <li>Minecraft fermé, « Ajouter un monde Minecraft », puis choisis le dossier du monde (dans « saves ») ;</li>
+            <li>seuls ses fichiers Pokémon, level.dat et son temps de jeu sont envoyés ;</li>
+            <li>un zip de ces fichiers marche aussi avec « Ajouter une sauvegarde ».</li>
+        </ul>
     </Help>
     <Actions>
         <label class="btn btn-primary mb-0 @(busy ? "disabled" : "")">
             + Ajouter une sauvegarde
             <InputFile @key="fileInputVersion" class="d-none" OnChange="AddSave" disabled="@busy" />
         </label>
+        <WorldFolderPicker Label="+ Ajouter un monde Minecraft" CssClass="btn btn-outline-primary mb-0" Disabled="@busy"
+                           OnChosen="AddWorld" OnError="e => Show(e, isError: true)" />
     </Actions>
 </PageHeader>
 
@@ -57,7 +65,11 @@ else
             <div class="list-group-item">
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <div>
-                        <strong>@s.Label</strong> <span class="small text-muted">(@s.TrainerId)</span>
+                        <strong>@s.Label</strong>
+                        @if (s.TrainerId != "")
+                        {
+                            <span class="small text-muted">(@s.TrainerId)</span>
+                        }
                         <div class="small text-muted">
                             @s.FileName · @s.PokemonCount Pokémon · @SaveIdentity.FormatPlayTime(s.PlayTimeSeconds) de jeu ·
                             mise à jour le @s.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
@@ -67,11 +79,20 @@ else
                         <a class="btn btn-sm btn-outline-secondary" href="collection?source=@s.Id">Voir ses Pokémon</a>
                         <button class="btn btn-sm btn-outline-secondary" @onclick="() => DownloadSave(s)" disabled="@busy">Télécharger</button>
                         @* Après une modification sur le serveur (argent, Pokéballs) : bloqué tant que la version modifiée n'a pas été téléchargée. *@
-                        <label class="btn btn-sm btn-outline-primary mb-0 @(busy || s.MustDownloadBeforeUpdate ? "disabled" : "")"
-                               title="@(s.MustDownloadBeforeUpdate ? "Télécharge d'abord la version modifiée sur le serveur" : null)">
-                            Mettre à jour
-                            <InputFile @key="fileInputVersion" class="d-none" OnChange="e => UpdateSave(s, e)" disabled="@(busy || s.MustDownloadBeforeUpdate)" />
-                        </label>
+                        @if (s.IsMinecraft)
+                        {
+                            @* Monde Minecraft : mis à jour par le dossier du monde. *@
+                            <WorldFolderPicker Label="Mettre à jour" CssClass="btn btn-sm btn-outline-primary mb-0" Disabled="@busy"
+                                               OnChosen="w => UpdateWorld(s, w)" OnError="e => Show(e, isError: true)" />
+                        }
+                        else
+                        {
+                            <label class="btn btn-sm btn-outline-primary mb-0 @(busy || s.MustDownloadBeforeUpdate ? "disabled" : "")"
+                                   title="@(s.MustDownloadBeforeUpdate ? "Télécharge d'abord la version modifiée sur le serveur" : null)">
+                                Mettre à jour
+                                <InputFile @key="fileInputVersion" class="d-none" OnChange="e => UpdateSave(s, e)" disabled="@(busy || s.MustDownloadBeforeUpdate)" />
+                            </label>
+                        }
                         <button class="btn btn-sm btn-outline-danger" @onclick="() => { confirmDeleteId = s.Id; deleteWithoutDownload = false; pendingUpdate = null; }" disabled="@busy">Supprimer</button>
                     </div>
                 </div>
@@ -104,8 +125,17 @@ else
                 @if (confirmDeleteId == s.Id && !deleteWithoutDownload)
                 {
                     <div class="alert alert-danger small mt-2 mb-0">
-                        La sauvegarde va être <strong>téléchargée sur ton appareil</strong>, puis retirée du serveur avec ses
-                        @s.PokemonCount Pokémon. Tu pourras ensuite l'utiliser dans « Dépôt / Retrait ».
+                        @if (s.IsMinecraft)
+                        {
+                            <text>Le dossier <code>pokemon</code> du monde va être <strong>téléchargé sur ton appareil</strong> (zip à
+                            décompresser dans le dossier du monde, Minecraft fermé), puis le monde sera retiré du serveur avec ses
+                            @s.PokemonCount Pokémon. Tu pourras ensuite l'utiliser dans « Dépôt / Retrait ».</text>
+                        }
+                        else
+                        {
+                            <text>La sauvegarde va être <strong>téléchargée sur ton appareil</strong>, puis retirée du serveur avec ses
+                            @s.PokemonCount Pokémon. Tu pourras ensuite l'utiliser dans « Dépôt / Retrait ».</text>
+                        }
                         @if (livingDexBySave.TryGetValue(s.Id, out var dexName))
                         {
                             <strong>Son living dex @dexName sera supprimé aussi.</strong>
@@ -189,6 +219,22 @@ else
             var result = await StoredSaves.AddAsync(userId, e.File.Name, await ReadFile(e));
             Show(result.Message, !result.Ok);
             if (result.Ok) await RefreshAsync();
+        });
+
+    /// <summary>Monde Minecraft choisi par son dossier (seuls ses fichiers utiles, déjà vérifiés).</summary>
+    private Task AddWorld(WorldFolderPicker.WorldFolder world) =>
+        RunBusy(async () =>
+        {
+            var result = await StoredSaves.AddAsync(userId, world.FileName, world.Zip);
+            Show(result.Message, !result.Ok);
+            if (result.Ok) await RefreshAsync();
+        });
+
+    private Task UpdateWorld(StoredSaveInfo save, WorldFolderPicker.WorldFolder world) =>
+        RunBusy(async () =>
+        {
+            confirmDeleteId = null;
+            await RunUpdate(save, world.FileName, world.Zip, acceptOlder: false);
         });
 
     private Task UpdateSave(StoredSaveInfo save, InputFileChangeEventArgs e) =>

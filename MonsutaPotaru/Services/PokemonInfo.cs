@@ -21,7 +21,11 @@ public sealed record PokemonView(
     string OriginGame,
     bool IsLegal,
     string Format,
-    string SpriteUrl);
+    string SpriteUrl)
+{
+    /// <summary>Légalité vérifiée par PKHeX : faux pour un Pokémon de Minecraft (ni « Légal » ni « Illégal » sur sa fiche).</summary>
+    public bool HasLegality { get; init; } = true;
+}
 
 /// <summary>Traduit un PKM de PKHeX en informations lisibles.</summary>
 public sealed partial class PokemonInfo
@@ -148,6 +152,41 @@ public sealed partial class PokemonInfo
             isLegal ?? IsLegal(pk),
             pk.Extension.ToUpperInvariant(),
             PokemonSprites.Url(pk));
+    }
+
+    /// <summary>
+    /// Fiche d'un Pokémon de Minecraft (Cobblemon) : noms français de PKHeX quand il les connaît, sinon l'identifiant du
+    /// mod (objet de Minecraft, espèce ou capacité ajoutée par un autre mod). <paramref name="trainerName"/> : le dresseur
+    /// affiché (voir <see cref="BankService.TrainerName"/>).
+    /// </summary>
+    public PokemonView Describe(CobblemonPokemon mon, string trainerName)
+    {
+        var speciesName = mon.Species == 0 ? CobblemonPokemon.ShortId(mon.SpeciesId) : SpeciesName.GetSpeciesName(mon.Species, French);
+        var heldItem = mon.HeldItemId is not { } itemId ? "—"
+            : mon.HeldItem > 0 ? Get(_items, mon.HeldItem)
+            : CobblemonPokemon.ShortId(itemId);
+        return new PokemonView(
+            mon.Species,
+            mon.Form,
+            speciesName,
+            mon.Nickname ?? speciesName,
+            mon.Level,
+            mon.IsShiny,
+            false,
+            mon.Gender switch { 0 => "♂", 1 => "♀", _ => "" },
+            mon.Nature is { } nature ? Get(_strings.natures, nature) : "?",
+            mon.Ability > 0 ? Get(_strings.abilitylist, mon.Ability) : CobblemonPokemon.ShortId(mon.Nbt.Compound("Ability")?.String("AbilityName") ?? "?"),
+            heldItem,
+            mon.Moves.Select(m => m.Move > 0 ? Get(_strings.movelist, m.Move) : CobblemonPokemon.ShortId(m.Id)).ToList(),
+            trainerName,
+            "",
+            CobblemonSave.GameName,
+            true,
+            "Cobblemon",
+            PokemonSprites.Url(mon))
+        {
+            HasLegality = false,
+        };
     }
 
     private static string Get(IReadOnlyList<string> list, int index, string fallback = "?") =>

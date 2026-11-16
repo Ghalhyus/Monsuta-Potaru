@@ -73,16 +73,19 @@ public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFact
         await using var db = await dbFactory.CreateDbContextAsync();
         var tracked = db.RibbonTrackers.Where(r => r.OwnerId == ownerId).Select(r => r.Fingerprint);
         var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.OwnerId == ownerId && (p.IsEgg || p.Fingerprint == null || p.Fingerprint == "" || tracked.Contains(p.Fingerprint)))
-            .Select(p => new { p.Id, p.IsEgg, p.Fingerprint, p.Nickname })
+            .Where(p => p.OwnerId == ownerId && (p.IsEgg || p.Fingerprint == null || p.Fingerprint == "" || tracked.Contains(p.Fingerprint)
+                || p.Extension == CobblemonPokemon.Extension))
+            .Select(p => new { p.Id, p.IsEgg, p.Fingerprint, p.Nickname, p.Extension })
             .ToListAsync();
         return rows.ToDictionary(p => p.Id, p =>
-            p.IsEgg ? EggRefusal
+            p.Extension == CobblemonPokemon.Extension ? MinecraftRefusal
+            : p.IsEgg ? EggRefusal
             : string.IsNullOrEmpty(p.Fingerprint) ? UnidentifiedRefusal
             : $"{p.Nickname} est déjà suivi.");
     }
 
     private const string EggRefusal = "Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.";
+    private const string MinecraftRefusal = "Les Pokémon de Minecraft n'ont pas de rubans.";
     private const string UnidentifiedRefusal = "Ce Pokémon ne peut pas être suivi : il n'a pas pu être identifié.";
 
     /// <summary>Ajoute ce Pokémon du compte au suivi (une fois : retrouvé par son empreinte).</summary>
@@ -93,6 +96,8 @@ public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFact
         var pokemon = await db.BankPokemon.AsNoTracking().FirstOrDefaultAsync(p => p.Id == bankId && p.OwnerId == ownerId);
         if (pokemon is null)
             return new(false, "Ce Pokémon n'est plus dans ta collection.");
+        if (BankService.IsCobblemon(pokemon))
+            return new(false, MinecraftRefusal);
         if (pokemon.IsEgg)
             return new(false, EggRefusal);
         if (string.IsNullOrEmpty(pokemon.Fingerprint))

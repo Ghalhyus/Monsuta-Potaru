@@ -130,7 +130,7 @@ public sealed class PokemonFingerprintTests : IDisposable
         Assert.Equal(1, (await bank.GetUsageAsync("sacha")).Used);
 
         // Sans la copie, l'Évoli passe.
-        Assert.True(session.UndoDeposit(session.Deposits.Single(d => d.Pokemon.Species == 25)));
+        Assert.True(session.UndoDeposit(session.Deposits.Single(d => d.Pokemon!.Species == 25)));
         await bank.CommitAsync("sacha", session);
         Assert.Equal(2, (await bank.GetUsageAsync("sacha")).Used);
     }

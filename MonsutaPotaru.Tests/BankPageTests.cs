@@ -217,6 +217,60 @@ public sealed class BankPageTests : PageTestContext
         await cut.Find(".dialog-backdrop").ClickAsync(new());
     }
 
+    [Fact]
+    public async Task MinecraftWorld_TeamAndPc_DepositThenWithdraw()
+    {
+        AddToBank("sacha", 25); // Pikachu d'un jeu : grisé dans un monde Minecraft
+        var cut = Render<Bank>();
+        cut.WaitForText("Choisir le dossier du monde");
+        await Upload(cut, new FakeBrowserFile("pokemon.zip", CobblemonTests.World(CobblemonTests.Mon("eevee", 1))));
+        cut.WaitForText("Sauvegarde chargée : monde Minecraft All the Mons.");
+        Assert.Contains("Monde Minecraft", cut.Text());
+        Assert.Equal(6, cut.Find(".box-grid").QuerySelectorAll(".slot").Length); // l'équipe
+        Assert.Contains("Équipe", cut.Find(".box-nav select").TextContent);
+        var locked = Assert.Single(cut.FindAll(".bank-zone .slot.locked"));
+        await locked.ClickAsync(new());
+        cut.WaitForText(SaveSession.GameToMinecraftRefusal);
+
+        // Fiche d'un Pokémon de l'équipe : pas de légalité (PKHeX n'en juge pas), le pseudo pour dresseur
+        await SaveSlots(cut)[0].ClickAsync(new());
+        cut.WaitForText("Déposer dans le stockage interne");
+        Assert.Contains("Feunnec · N.10 · Cobblemon", cut.Text());
+        Assert.DoesNotContain("Légal", cut.Text());
+        Assert.Contains("sacha", cut.Find(".pokemon-card").TextContent);
+
+        // Maj+clic de l'équipe (6 cases) à la première boîte (30 cases)
+        await cut.Find(".box-nav select").ChangeAsync(new() { Value = "1" });
+        Assert.Equal(30, cut.Find(".box-grid").QuerySelectorAll(".slot").Length);
+        await SaveSlots(cut)[0].ClickAsync(new MouseEventArgs { ShiftKey = true });
+        cut.WaitForText("2 Pokémon sélectionnés");
+        Assert.Contains("Équipe, case 1", cut.Text());
+        Assert.Contains("Boîte 1, case 1", cut.Text());
+        await cut.Click("Déposer les 2");
+        cut.WaitForText("2 dépôts ajoutés");
+        Assert.Contains("Dépôt : Feunnec N.10", cut.Text());
+        Assert.Contains("décompresse le zip téléchargé dans le dossier de ton monde", cut.Text());
+        await cut.Click("Valider et télécharger la sauvegarde");
+        cut.WaitForText("décompresse maintenant le zip");
+        Assert.Equal(3, (await Services.GetRequiredService<BankService>().ListAsync("sacha")).Count);
+
+        // Retour du Feunnec : dans le PC, sans fichier à télécharger
+        var feunnec = BankSlots(cut).First(s => s.GetAttribute("title")!.Contains("Feunnec"));
+        await feunnec.ClickAsync(new());
+        cut.WaitForText("Retirer vers la sauvegarde");
+        Assert.False(cut.HasButton("Télécharger le fichier"));
+        await cut.Click("Retirer vers la sauvegarde");
+        cut.WaitForText("Retrait ajouté aux modifications en attente (Boîte 1, case 1).");
+        Assert.Contains("Retrait : Feunnec → Boîte 1", cut.Text());
+
+        // Glissé de la banque dans l'équipe
+        await cut.Find(".box-nav select").ChangeAsync(new() { Value = "0" });
+        var evoli = BankSlots(cut).First(s => s.GetAttribute("title")!.Contains("Évoli"));
+        await evoli.TriggerEventAsync("ondragstart", new DragEventArgs());
+        await SaveSlots(cut)[2].TriggerEventAsync("ondrop", new DragEventArgs());
+        cut.WaitForText("Équipe, case 3");
+    }
+
     /// <summary>Fichier choisi dans le navigateur, lu depuis la mémoire (ou qui échoue à la lecture).</summary>
     internal sealed class FakeBrowserFile(string name, byte[] data, bool fail = false) : IBrowserFile
     {

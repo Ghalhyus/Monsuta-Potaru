@@ -13,6 +13,26 @@ public sealed class CollectionPageTests : PageTestContext
     private IReadOnlyList<AngleSharp.Dom.IElement> Slots(IRenderedComponent<Collection> cut) => cut.FindAll(".collection .slot");
 
     [Fact]
+    public async Task MinecraftPokemon_Card_WithoutFile()
+    {
+        using (var db = Db.NewContext())
+        {
+            db.BankPokemon.Add(BankService.CreateEntry(Services.GetRequiredService<PokemonInfo>(), CobblemonTests.Mon("eevee", 1),
+                "sacha", "sacha", DateTime.UtcNow));
+            db.SaveChanges();
+        }
+        var cut = Render<Collection>();
+        cut.WaitForAssertion(() => Assert.Single(Slots(cut)));
+        await Slots(cut)[0].ClickAsync(new());
+        cut.WaitForText("Fermer");
+        Assert.Contains("Évoli · N.10 · Cobblemon", cut.Text());
+        Assert.Contains(CobblemonSave.GameName, cut.Text());
+        Assert.DoesNotContain("Légal", cut.Text());
+        Assert.False(cut.HasButton("Télécharger le fichier"));
+        await cut.Click("Fermer");
+    }
+
+    [Fact]
     public void EmptyCollection_SaysSo()
     {
         var cut = Render<Collection>();

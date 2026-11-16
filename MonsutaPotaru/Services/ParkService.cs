@@ -430,7 +430,8 @@ public sealed class ParkService(IDbContextFactory<ApplicationDbContext> dbFactor
         $"{speciesName} ne nage pas : seuls les Pokémon qui nagent (type Eau) peuvent vivre {ParkLandscapes.Where(landscape)}.";
 
     private static IQueryable<BankPokemon> Eligible(ApplicationDbContext db, string ownerId) =>
-        db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == ownerId && !p.IsEgg && p.Species >= 1);
+        // Pas les Pokémon de Minecraft : le parc reste aux Pokémon des jeux.
+        db.BankPokemon.AsNoTracking().Where(p => p.OwnerId == ownerId && !p.IsEgg && p.Species >= 1 && p.Extension != CobblemonPokemon.Extension);
 
     /// <summary>Espèce de base de la famille d'évolution (celle qui sort de l'œuf) : Pikachu, Raichu → Pichu.</summary>
     public static int Family(ushort species) => PersonalTable.SV.GetFormEntry(species, 0).HatchSpecies;

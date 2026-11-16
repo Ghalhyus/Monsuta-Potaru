@@ -20,10 +20,15 @@ public sealed class RealSavesTests : IDisposable
 
     private static readonly string Folder = Path.Combine(AppContext.BaseDirectory, "Sauvegardes");
 
-    /// <summary>Noms des fichiers du dossier ; « » seul quand il n'y en a pas (xUnit refuse une liste vide).</summary>
+    /// <summary>
+    /// Noms des sauvegardes de jeu du dossier ; « » seul quand il n'y en a pas (xUnit refuse une liste vide). Sans les zips
+    /// des mondes Minecraft (<c>all-the-mons.zip</c>), testés par <see cref="CobblemonTests"/>.
+    /// </summary>
     public static TheoryData<string> Files()
     {
-        var files = Directory.Exists(Folder) ? Directory.GetFiles(Folder).Select(Path.GetFileName).OfType<string>().Order().ToList() : [];
+        var files = Directory.Exists(Folder)
+            ? Directory.GetFiles(Folder).Select(Path.GetFileName).OfType<string>().Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).Order().ToList()
+            : [];
         return new TheoryData<string>(files.Count > 0 ? files : [""]);
     }
 
