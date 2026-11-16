@@ -119,8 +119,9 @@ les boîtes du PC (100 dans All the Mons, 30 cases).
 - **Mes sauvegardes** : « All the Mons — Kantalia » (nom du monde à la place du dresseur, génération 0, sans numéro de
   dresseur) ; mise à jour par le même monde seulement, confirmation si moins de temps de jeu ; ses Pokémon comptent dans
   la taille de la collection. « Télécharger » et la suppression rendent le dossier `pokemon` seul.
-- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; living dex, complétion, échanges, GTS et combats
-  l'ignorent donc ; l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes.
+- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; complétion, échanges, GTS et combats l'ignorent
+  donc ; l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes. Le living dex n'en a qu'un : All the Mons
+  (voir « Living dex »).
 
 - **Mondes séparés** : un Pokémon de Minecraft ne retourne que dans un monde Minecraft, un Pokémon des jeux ne va jamais
   dans Minecraft (grisés dans un sens comme dans l'autre, `SaveSession.WithdrawalProblem`). Les Pokémon de Minecraft sont
@@ -593,6 +594,17 @@ jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md
   `GlobalLivingDex.ShinyLocked` (National 1 000, Complet 1 244, Ultime 1 508).
 - Images : `outils/images.py livingdex` (sprites PokéAPI, jaquettes Bulbagarden Archives) ; sans elles, l'image de la
   collection (`LivingDexGames.Fallback`).
+- **All the Mons** (`LivingDexGame.AllTheMons`, `Services/Cobblemon/AllTheMonsLivingDex.cs`) : un par compte, sur un
+  monde Minecraft stocké (génération 0), qui ne sert à aucun autre living dex ; compte l'équipe et le PC du monde,
+  **chromatiques compris** (pas encore de living dex chromatique) ; modes et règles du global (National, Complet, Ultime,
+  exemplaire de plus pour les Méga et Gigamax), cases adaptées au modpack : sans ce que Cobblemon n'a pas (Pichu Troizépi,
+  Dominants, Partenaires de Let's Go, capes de Papilord, motifs de Lépidonille et Pérégrain, Arceus Légende, Fragilady
+  Reine) ; avec, en Complet et Ultime, toutes les Méga de Légendes Z-A (celles de PKHeX), Stari Patrickyu, Floette
+  Éternelle, Piglich et Creepyon (espèces du modpack, n° 9901 et 9902, aussi en National) ; en Ultime, les coupes de
+  Couafarel et trois motifs de Prismillon de Cobblemon. National 1 027, Complet 1 335, Ultime 1 593. Forme d'un Pokémon :
+  `CobblemonPokemon.FormKey` (nom anglais de PKHeX, ou identifiant de Cobblemon). Jaquette et images propres au modpack
+  versionnées dans `wwwroot/minecraft/` (rendus des modèles du mod : `outils/rendu-cobblemon.py`). Tables relevées dans
+  les fichiers du modpack : à revoir à sa mise à jour (`docs/claude/living-dex.md`).
 
 ### Rubans
 
@@ -875,6 +887,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `outils/completion_gen9.py` | Génère `Gen9CompletionData.cs` (Écarlate / Violet, DLC compris) d'après la liste de drapeaux de FlagsEditorEX (objets au sol, dresseurs et leur zone, cadeaux, recettes des CT, drapeaux et variables de l'histoire, badges) et la check-list de l'utilisateur (Pokédex, CT, légendaires) ; ordre des lieux et classes des dresseurs écrits à la main |
 | `outils/completion_gen7.py`, `completion_gen7_ordre.json` | Génèrent `Gen7CompletionData.cs` (Soleil à Ultra-Lune, Let's Go) d'après les listes de drapeaux de FlagsEditorEX (objets au sol, cachés, cadeaux de Let's Go, rencontres, drapeaux de l'histoire), les lieux des cellules Zygarde de PKHeX et les check-lists de l'utilisateur (CT, cristaux Z, légendaires, Scanner des Îles, Experts) ; ordre des lieux écrit à la main |
 | `outils/completion_gen4.py`, `outils/completion_gen4_extract.py`, `completion_gen4_lieux.json`, `completion_gen4_ordre.json` | Génèrent `Gen4CompletionData.cs` d'après pokeplatinum et pokeheartgold (constantes, cartes JSON, scripts) et pokediamond (fichiers binaires du jeu : événements des cartes, scripts compilés) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsLivingDex.cs` | Living dex All the Mons : cases du global adaptées au modpack (Méga de Légendes Z-A, formes et espèces du modpack), exemplaires d'un monde stocké |
+| `MonsutaPotaru/wwwroot/minecraft/` | Jaquette du living dex All the Mons (logo du modpack) et images des espèces et formes propres au modpack (`pokemon/`, rendus de `outils/rendu-cobblemon.py`), versionnées |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
 | `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection (`CollectionPicker`) |
 | `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
@@ -914,9 +928,11 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `outils/generer-montagne.py` | Génère les cartes de la montagne (`Montagne_1-1.tmx` à `Montagne_1-4.tmx`) : vallée, rivière et pont, massifs à flancs de pierre sur deux étages, sapins, rochers, nids, calques « Sommets » et « Survol » |
 | `outils/generer-grotte.py` | Génère les cartes de la grotte (`Grotte_1-1.tmx` à `Grotte_1-4.tmx`) : caverne, piliers de roche, lacs souterrains, cristaux, stalagmites, torches et leurs lumières |
 | `outils/parc_carte.py` | Moteur commun des générateurs (forêt, plage, volcan, désert, océan, grotte, montagne, donjon) : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` (couleur de fond, calque « Lumières ») et aperçus |
+| `outils/rendu-cobblemon.py` | Rendu des modèles 3D du modpack All the Mons (Piglich, Creepyon, Stari Patrickyu, coupes de Couafarel et motifs de Prismillon de Cobblemon) en PNG pour le living dex All the Mons, depuis une instance installée (Python seul) |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
 | `deploy/sons-serveur.cmd` (`sons-serveur.ps1`) | Envoie les musiques (`images/sons/*.mp3` : animation d'échange, combats) dans les images du serveur, par SSH |
+| `MonsutaPotaru.Tests/AllTheMonsLivingDexTests.cs` | Living dex All the Mons : cases de chaque mode (Méga de Légendes Z-A, formes et espèces du modpack, ce que Cobblemon n'a pas), images versionnées, formes de Cobblemon lues comme celles de PKHeX, création sur un monde seulement, comptage de l'équipe et du PC |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
@@ -1082,7 +1098,8 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | Bande originale de *Pokémon HeartGold / SoulSilver* (GAME FREAK, 2009 ; Shota Kageyama, Junichi Masuda), pistes « Trade », « Evolution » et « Congratulations! Your Pokémon Evolved! », et « Battle! » (Rival, Champion, Frontier Brain, Gym Leader Kanto et Johto), fournies par l'utilisateur | Musiques de l'animation d'échange (`wwwroot/images/sons/` : `echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; musiques des combats rangées pour plus tard (`combat-*.mp3`) ; hors Git, jamais redistribuées avec le code | © Nintendo / GAME FREAK ; non libre |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
-| [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; aucun code ni aucune ressource repris | MPL-2.0 (le mod) |
+| [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; formes, traits et noms des formes de chaque espèce (`data/cobblemon/species`), repris dans `CobblemonPokemon` et `AllTheMonsLivingDex` ; modèles et textures des coupes de Couafarel et des motifs de Prismillon propres à Cobblemon, rendus en images par `outils/rendu-cobblemon.py` (`wwwroot/minecraft/pokemon/`) | MPL-2.0 (le mod) ; modèles : CC BY-NC 3.0 (fichiers `license` des modèles) |
+| [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) (modpack 2.1.0, mod `allthemons` de LobsterJonn), [Complete Cobblemon Collection](https://www.curseforge.com/minecraft/mc-mods/complete-cobblemon-collection) (Xcavalier), [Cobblemon: Mega Showdown](https://www.curseforge.com/minecraft/mc-mods/cobblemon-mega-showdown) et zamega (Yajat Kaul, Navas) | Logo du modpack, jaquette du living dex All the Mons (`wwwroot/minecraft/all-the-mons.png`, fourni par l'utilisateur) ; espèces et formes du modpack (Piglich, Creepyon, Stari Patrickyu ; espèces rendues disponibles ; Méga) relevées dans les mods pour `AllTheMonsLivingDex` ; modèles et textures de Piglich, Creepyon (texture du Creeper de Minecraft) et Patrickyu rendus en images (`wwwroot/minecraft/pokemon/`) | All Rights Reserved (`allthemons`, Complete Cobblemon Collection), Mega Showdown License v2.1 ; Minecraft © Mojang ; usage de fan, non commercial |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
 | [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |

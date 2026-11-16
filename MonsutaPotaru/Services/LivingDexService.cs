@@ -661,6 +661,7 @@ public static class LivingDexGames
     {
         LivingDexGame.Global => GlobalLivingDex.Game,
         LivingDexGame.GlobalShiny => GlobalLivingDex.ShinyGame,
+        LivingDexGame.AllTheMons => AllTheMonsLivingDex.Game,
         _ => All.Single(g => g.Game == game),
     };
 
@@ -1205,7 +1206,7 @@ public static class LivingDexGames
     /// </summary>
     public static IReadOnlyList<LivingDexMode> Modes(LivingDexGameInfo game)
     {
-        if (GlobalLivingDex.IsGlobal(game.Game))
+        if (GlobalLivingDex.IsGlobal(game.Game) || AllTheMonsLivingDex.Is(game.Game))
             return GlobalLivingDex.Modes;
         if (game.Shiny)
             return [Modes(Get(game.Game))[0]];
@@ -1434,11 +1435,17 @@ public sealed class LivingDexService(
         var saves = await db.StoredSaves.AsNoTracking()
             .Where(s => s.OwnerId == ownerId && s.Generation <= 9 && !linked.Contains(s.Id))
             .OrderBy(s => s.UploadedAt)
-            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data })
+            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data, s.Generation })
             .ToListAsync();
         var candidates = new List<LivingDexCandidate>();
         foreach (var s in saves)
         {
+            if (s.Generation == 0) // monde Minecraft : living dex All the Mons, pas de chromatique pour l'instant
+            {
+                if (!shiny && !taken.Contains(LivingDexGame.AllTheMons))
+                    candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", [LivingDexGame.AllTheMons]));
+                continue;
+            }
             if (!StoredSaveService.TryRead(s.Data, s.FileName, out var sav))
                 continue;
             var games = LivingDexGames.For(sav).Where(g => !shiny || LivingDexGames.HasShiny(LivingDexGames.Get(g))).Except(taken).ToList();
@@ -1453,14 +1460,18 @@ public sealed class LivingDexService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var save = await db.StoredSaves.AsNoTracking().Where(s => s.Id == saveId && s.OwnerId == ownerId)
-            .Select(s => new { s.FileName, s.Data }).FirstOrDefaultAsync();
+            .Select(s => new { s.FileName, s.Data, s.IdentityKey }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
+        if (GlobalLivingDex.IsGlobal(game))
+            return new(false, "Le living dex global n'a pas de sauvegarde.");
         var gameName = LivingDexGames.Get(game).Name;
         if (shiny && !LivingDexGames.HasShiny(LivingDexGames.Get(game)))
-            return new(false, $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.");
-        if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
-            return new(false, $"Cette sauvegarde n'est pas une partie de {gameName}.");
+            return new(false, AllTheMonsLivingDex.Is(game) ? $"Pas encore de living dex chromatique {gameName}."
+                : $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.");
+        var world = save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+        if (AllTheMonsLivingDex.Is(game) ? !world : world || !StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
+            return new(false, AllTheMonsLivingDex.Is(game) ? $"Cette sauvegarde n'est pas un monde {gameName}." : $"Cette sauvegarde n'est pas une partie de {gameName}.");
         var name = LivingDexGames.Get(game, shiny).Name;
         if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game && d.Shiny == shiny))
             return new(false, $"Tu as déjà un living dex {name} : supprime-le pour en créer un autre.");
@@ -1549,6 +1560,52 @@ public sealed class LivingDexService(
     }
 
     /// <summary>
+    /// Pokémon d'un monde Minecraft (équipe, puis PC ; chromatiques compris) pour le living dex All the Mons, et leur place
+    /// (« Équipe 1 », « Boîte 3, case 12 »). Leur NBT est relu : formes propres à Cobblemon, décoration, facteur Gigamax.
+    /// </summary>
+    private static async Task<(List<GlobalLivingDex.Copy> Copies, Dictionary<int, string?> Locations)> WorldCopiesAsync(
+        ApplicationDbContext db, int saveId)
+    {
+        var rows = await db.BankPokemon.AsNoTracking()
+            .Where(p => p.StoredSaveId == saveId && !p.IsEgg && p.Extension == CobblemonPokemon.Extension)
+            .OrderBy(p => p.Position)
+            .Select(p => new { p.Id, p.Data, p.Location })
+            .ToListAsync();
+        var copies = new List<GlobalLivingDex.Copy>(rows.Count);
+        foreach (var p in rows)
+        {
+            CobblemonPokemon mon;
+            try
+            {
+                mon = CobblemonPokemon.FromBytes(p.Data);
+            }
+            catch (InvalidDataException)
+            {
+                continue; // NBT illisible : déjà refusé à l'envoi, ne bloque pas la page
+            }
+            if (mon.DexNumber != 0)
+                copies.Add(AllTheMonsLivingDex.Copy(p.Id, mon));
+        }
+        return (copies, rows.ToDictionary(p => p.Id, p => p.Location));
+    }
+
+    /// <summary>Cases du living dex All the Mons dans un mode, avec leur exemplaire (règles du global : <see cref="GlobalLivingDex.Assign"/>).</summary>
+    private static List<LivingDexEntry> WorldEntries(IReadOnlyList<GlobalLivingDex.Copy> copies, Dictionary<int, string?> locations,
+        LivingDexMode mode)
+    {
+        var slots = AllTheMonsLivingDex.Slots(mode);
+        var assigned = GlobalLivingDex.Assign(slots, copies, mode);
+        return slots.Select((slot, i) =>
+        {
+            var sprite = GlobalLivingDex.Sprite(slot);
+            var fallback = slot.Image is null || slot.Species > GlobalLivingDex.MaxSpecies ? sprite
+                : PokemonSprites.Url(slot.Species, 0, slot.Context, female: false, heldItem: 0, shiny: false);
+            return new LivingDexEntry(slot.Species, slot.Species, slot.Form, slot.Name, sprite, assigned[i]?.Id,
+                assigned[i] is { } copy ? locations.GetValueOrDefault(copy.Id) : null, fallback, GlobalLivingDex.Note(slot, assigned[i] is not null));
+        }).ToList();
+    }
+
+    /// <summary>
     /// Cases d'un mode avec le Pokémon de la sauvegarde qui remplit chacune : le même comptage partout (page, vue générale).
     /// Les cases Méga (<see cref="LivingDexSlot.MegaItem"/>, <see cref="LivingDexSlot.MegaMove"/>) prennent d'abord leurs
     /// exemplaires, que les autres cases ne reprennent pas : il faut un exemplaire de plus par Méga-Évolution. En Let's Go
@@ -1564,6 +1621,11 @@ public sealed class LivingDexService(
     private static async Task<Dictionary<LivingDexMode, List<LivingDexEntry>>> EntriesAsync(ApplicationDbContext db,
         LivingDexGameInfo game, int saveId, IReadOnlyList<LivingDexMode> modes)
     {
+        if (AllTheMonsLivingDex.Is(game.Game))
+        {
+            var (copies, locations) = await WorldCopiesAsync(db, saveId);
+            return modes.ToDictionary(m => m, m => WorldEntries(copies, locations, m));
+        }
         var owned = await OwnedAsync(db, saveId, game.Shiny);
         IReadOnlySet<int>? bag = null; // le sac n'est lu que si un mode en a besoin
         var result = new Dictionary<LivingDexMode, List<LivingDexEntry>>();

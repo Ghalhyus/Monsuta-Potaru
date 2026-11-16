@@ -58,10 +58,42 @@ README : « Living dex ». Jeux et modes : `LivingDexGames` (`Services/LivingDex
 - Complet = les cases Complet des jeux ; Ultime = en plus tout ce que les tables de PKHeX donnent par jeu, moins `Excluded`.
   Voulu : toutes les formes, même au même aspect et de couleur (pas les chromatiques), mâle / femelle, Spinda seul ; pas
   les formes de combat sans objet tenu ; pas Légendes Z-A.
-- Nouveau jeu : son Complet entre tout seul dans le global ; ajouter sa table à `GlobalLivingDex.Games` pour l'Ultime.
+- Nouveau jeu : son Complet entre tout seul dans le global (et dans All the Mons) ; ajouter sa table à
+  `GlobalLivingDex.Games` pour l'Ultime.
 - Chromatique (`GlobalShiny`) : les mêmes cases moins `ShinyLocked` (liste validée par l'utilisateur, d'après Bulbapedia ;
   Dominants retirés aussi), seulement les chromatiques. Image : Charme Chroma. Forme ou espèce jamais distribuée en
   chromatique : l'ajouter à `ShinyLocked`.
+
+## Living dex All the Mons (2026-11-16)
+- `LivingDexGame.AllTheMons` (50 : après les jeux), `Services/Cobblemon/AllTheMonsLivingDex.cs` ; `LivingDexGameInfo`
+  de génération 0 (pas de chromatique : `HasShiny` faux ; groupe « Minecraft (1 modpack) » du `GamePicker`, après les
+  générations). Sur un monde stocké (`IdentityKey` en `cobblemon:`), un par compte (index existant, pas de migration) ;
+  `CreateAsync` refuse un monde pour un jeu et une sauvegarde de jeu pour All the Mons.
+- Choix de l'utilisateur : cases du global **adaptées au modpack** ; équipe et PC du monde ; **chromatiques comptés** ;
+  Patrickyu et Floette Éternelle en Complet et Ultime ; Méga de Légendes Z-A en Complet et Ultime ; Piglich et Creepyon
+  dans les trois modes, à la fin. Proposé par nous puis validé (2026-11-16) : en Ultime seulement, les 9 coupes de
+  Couafarel des jeux (exclues du global car elles ne tiennent pas en boîte : dans Cobblemon, si) et les 6 de Cobblemon,
+  les motifs Inferno, Void, Forsaken de Prismillon ; noms français de ces formes traduits par nous.
+- Comptage : `GlobalLivingDex.Assign` sur `AllTheMonsLivingDex.Copy` (NBT relu : `FormKey`, sexe, objet tenu,
+  `GmaxFactor`, décoration de Charmilly, Draco-Ascension). `Copy.Key` remplace le numéro de forme ; `Copy.Base` (forme
+  par défaut) remplit la case de la forme 0 quel que soit son nom dans le jeu de la case (`IsBaseSlot`).
+  `GlobalSlot.BaseFormKey` : forme imposée à l'exemplaire de plus d'une Méga (Mistigrix ♀ « F », Floette « Eternal »,
+  Magearna « Original », Nigirigon). `GlobalSlot.Image` : image versionnée (`wwwroot/minecraft/pokemon/`).
+- Méga : toutes celles de la table de Légendes Z-A de PKHeX (`PersonalTable.ZA`, `FormInfo.IsMegaForm`), que le modpack a
+  toutes (Mega Showdown et zamega, vérifié le 2026-11-16) ; image par la forme (`Context` Gen9a, `GlobalLivingDex.Sprite`)
+  car `PokemonSprites.MegaForm` ne retrouve pas les nouvelles Méga par leur gemme (`FormInfo.HasMegaForm` les ignore).
+  Méga-Zygarde n'a pas d'image (celle de Zygarde).
+- Relevé des tables : instance CurseForge « All the Mons - ATMons » (2.1.0), fichiers `data/cobblemon/species*` de
+  Cobblemon 1.8.4, modccc (rend les légendaires disponibles), mega_showdown, zamega, allthemons. Méthode : lister les
+  formes non de combat de chaque espèce (mods fusionnés) et vérifier que chacune trouve sa case et que chaque case a une
+  forme (programme jetable sur `CobblemonPokemon.FormKeyOf` et `GlobalLivingDex.Assign`). Restes connus : Météno de base
+  (sans trait), Meloetta Chant (forme de combat ailleurs) sans case.
+- Images : `outils/rendu-cobblemon.py <instance>` (modèles Bedrock rendus en Python seul, rotations comme Blockbench :
+  x et y inversés, ordre ZYX ; vue de trois quarts à 225°). La texture de Creepyon est celle du Creeper de Minecraft
+  (`Install/versions/1.21.1/1.21.1.jar`).
+- Remarqué au passage dans le global (non corrigé, à signaler) : `GlobalLivingDex.ShinyLocked` retire `FormKey == "Large"`
+  (Dominants), ce qui retire aussi Pitrouille / Banshitrouye taille Maxi du global chromatique ; l'Ultime garde Fragilady
+  « Lady » (forme Reine de Légendes Arceus) alors que les formes Roi (« Lord ») sont exclues.
 
 ## Living dex chromatique d'un jeu (2026-11-08)
 - Colonne `LivingDex.Shiny` (migration `ShinyLivingDex`, index unique OwnerId + Game + Shiny ; le `Down` supprime les

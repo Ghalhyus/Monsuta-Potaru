@@ -1,6 +1,7 @@
 @using MonsutaPotaru.Data
 @using MonsutaPotaru.Services
-@* Choix d'un jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération, repliées au départ ;
+@* Choix d'un jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération (génération 0 :
+   les modpacks Minecraft, après les jeux), repliées au départ ;
    le titre d'une génération (« ▸ 4e génération (5 jeux) ») la déplie ou la replie ; repliée, celle du jeu choisi le montre
    encore. Un jeu déjà pris est grisé et ne se choisit pas. Les générations dépliées restent tant que le composant est
    affiché (le formulaire de création refermé puis rouvert : toutes repliées). *@
@@ -21,7 +22,7 @@
     <div class="mb-2">
         <button type="button" class="livingdex-generation-toggle" aria-expanded="@(open ? "true" : "false")"
                 @onclick="() => ToggleGeneration(number)">
-            <span class="chevron" aria-hidden="true">▸</span>@(number == 1 ? "1re" : $"{number}e") génération (@generation.Count() jeux)
+            <span class="chevron" aria-hidden="true">▸</span>@GroupTitle(number, generation.Count())
         </button>
     </div>
     @if (shownGames.Count > 0)
@@ -68,6 +69,14 @@
             <LivingDexCover Game="info" />
             <span>@info.Name@(isTaken ? $" {TakenSuffix}" : "")</span>
         </label>
+    };
+
+    /// <summary>« 4e génération (5 jeux) » ; génération 0 : les modpacks Minecraft (« Minecraft (1 modpack) »).</summary>
+    private static string GroupTitle(byte generation, int count) => generation switch
+    {
+        0 => $"Minecraft ({count} modpack{(count > 1 ? "s" : "")})",
+        1 => $"1re génération ({count} jeux)",
+        _ => $"{generation}e génération ({count} jeux)",
     };
 
     private void ToggleGeneration(byte generation)

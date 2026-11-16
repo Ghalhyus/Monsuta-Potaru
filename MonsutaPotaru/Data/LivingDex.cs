@@ -40,6 +40,11 @@ public enum LivingDexGame
     LegendsArceus = 35,
     Scarlet = 36,
     Violet = 37,
+    /// <summary>
+    /// Living dex All the Mons : un monde Minecraft stocké (modpack All the Mons, Cobblemon), compté dans son équipe et
+    /// son PC (<see cref="Services.AllTheMonsLivingDex"/>). Après les jeux dans l'ordre des jeux.
+    /// </summary>
+    AllTheMons = 50,
     /// <summary>Living dex global : sans jeu ni sauvegarde, compté sur le stockage interne (<see cref="Services.GlobalLivingDex"/>).</summary>
     Global = 100,
     /// <summary>Living dex global chromatique : le même, avec les seuls chromatiques du stockage interne.</summary>

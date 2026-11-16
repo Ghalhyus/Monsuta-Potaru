@@ -25,6 +25,20 @@ README : « Minecraft (All the Mons, Cobblemon) ». Code : `MonsutaPotaru/Servic
   (`CobblemonPokemon.FormContext`). Inconnu de PKHeX (objet de Minecraft, espèce d'un autre mod) : 0, et l'identifiant
   affiché (`ShortId`).
 
+## Formes (living dex All the Mons)
+- `FormId` = `formOnlyShowdownId` de Cobblemon : nom de la forme en minuscules, sans ce qui n'est pas `[a-z0-9]`
+  (« Rock-Star » → « rockstar », « 10%-C » → « 10c ») ; Zarbi « ! » et « ? » ont donc un identifiant vide : la lettre est
+  dans le trait `character` (`Features`, `{"cobblemon:feature_id": "character", "character": "!"}`).
+- `CobblemonPokemon.FormKey` : nom anglais de PKHeX cherché de la 9e à la 6e génération (Pikachu Cosplayeur : 6e ;
+  Floette Éternelle : Légendes Z-A), après `FormAliases` (noms que Cobblemon écrit autrement : Bargantua « Blue-Striped »,
+  Genesect « Douse », Amphinobi « Bond » = forme 1 « Ash » de PKHeX, Météno « Red » = « C-Red », Necrozma « Dusk-Mane »,
+  Famignol « Four », Ogerpon « *-Tera »). Météno « Meteor » : noyau par le trait `core_color` ; formes « -Bias »
+  (« Alola-Bias » : bébé ordinaire qui évoluera en forme régionale) = forme normale. Une forme propre à Cobblemon garde
+  son identifiant (« matcha », « patrickyu »). `Form` (numéro de 9e génération, images de la collection) suit les mêmes
+  alias, sauf Météno sous carapace (image de la carapace).
+- `Sweet` (trait `decoration`, ordre de PKHeX), `CanGigantamax` (`GmaxFactor`), `DexNumber` (Piglich 9901, Creepyon
+  9902 : `Species` reste 0, PKHeX ne les connaît pas).
+
 ## Zip ou dossier
 - `CobblemonSave.TryRead(zip)` : les fichiers de l'équipe et du PC sont cherchés sous `<racine>/pokemon/…` (racine
   vide, ou le dossier du monde : « Kantalia/… », `\` de Windows acceptés) ; `level.dat` et `stats/<joueur>.json` sous
@@ -50,7 +64,7 @@ README : « Minecraft (All the Mons, Cobblemon) ». Code : `MonsutaPotaru/Servic
   Pas de migration : la marque est `Extension = "cobblemon"`, `Context` = Gen9 (noms des formes pour les images).
 - `BankService.ToPkm` rend null pour eux : tout code qui lit les octets avec PKHeX les ignore. Écartés explicitement
   (requêtes) : GTS (`PickProblem`, `OwnedRowsAsync`), rubans (`UnavailableAsync`, `AddAsync`), parc (`Eligible`), living
-  dex global (`GlobalCopiesAsync`). Un nouveau service qui parcourt `BankPokemon` doit en faire autant.
+  dex global (`GlobalCopiesAsync`). Le living dex All the Mons, lui, ne lit qu'eux (`WorldCopiesAsync`). Un nouveau service qui parcourt `BankPokemon` doit en faire autant.
 - Dresseur affiché : `PokemonOriginalTrainerName`, sinon le pseudo du compte si l'UUID est celui du joueur du monde,
   sinon « Joueur Minecraft » (`BankService.TrainerName`).
 - Pages de `SaveSession` : 0 = équipe, puis les boîtes ; un retrait sans case choisie commence au PC

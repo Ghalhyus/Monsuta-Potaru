@@ -22,7 +22,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Combats (Showdown) | `docs/claude/combats.md` |
 | Images des Pokémon et des objets, `outils/images.py`, `PokemonSprites` | `docs/claude/images.md` |
 | Parc | `docs/claude/parc.md` |
-| Living dex (par jeu, global, chromatique) | `docs/claude/living-dex.md` |
+| Living dex (par jeu, global, chromatique, All the Mons) | `docs/claude/living-dex.md` |
 | Rubans : liste des rubans comptés, suivi d'un Pokémon par empreinte, souvenirs | `docs/claude/rubans.md` |
 | Complétion (100 %) : tables de la 1re à la 9e génération générées d'après pret (pokered, pokecrystal, pokeemerald, binaires de pokediamond…), pokebw2, la ROM de Noire et FlagsEditorEX, conditions, ratés | `docs/claude/completion.md` ; écarts avec les check-lists : `docs/claude/completion-ecarts.md` |
 | Statistiques : argent, moyennes des living dex, rubans et complétions, échanges et combats, sur le profil | `docs/claude/statistiques.md` |

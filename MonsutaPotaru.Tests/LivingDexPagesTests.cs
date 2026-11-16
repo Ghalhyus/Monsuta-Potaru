@@ -158,7 +158,7 @@ public sealed class LivingDexPagesTests : PageTestContext
         cut.WaitForText("Aucun living dex normal : crée-en un");
         Navigation.NavigateTo("livingdex?filtre=normaux&mode=ultime");
         cut = Render<LivingDexes>();
-        cut.WaitForText("Seuls les living dex globaux ont le mode Ultime");
+        cut.WaitForText("Seuls les living dex globaux et All the Mons ont le mode Ultime");
 
         await Dexes.DeleteAsync("sacha", (await Dexes.ListAsync("sacha")).Single().Id);
         AddToBank("sacha", 25);
@@ -313,5 +313,52 @@ public sealed class LivingDexPagesTests : PageTestContext
         hidden.WaitForAssertion(() => Assert.DoesNotContain("living dex", hidden.Text()));
         var hiddenPage = Render<LivingDexPage>(p => p.Add(x => x.Id, id).Add(x => x.Pseudo, "pierre"));
         hiddenPage.WaitForAssertion(() => Assert.DoesNotContain("Living dex", hiddenPage.Text()));
+    }
+
+    [Fact]
+    public async Task List_CreatesTheAllTheMonsLivingDex_OnAStoredWorld()
+    {
+        var stored = await Db.StoredSaves().AddAsync("sacha", "Kantalia.zip", CobblemonTests.World(CobblemonTests.Mon("piglich", 1)));
+        Assert.True(stored.Ok, stored.Message);
+        var cut = Render<LivingDexes>();
+        await cut.Click("+ Créer un living dex");
+
+        // Le groupe « Minecraft », après les générations ; pas parmi les chromatiques
+        var minecraft = cut.FindAll(".livingdex-generation-toggle").Last();
+        Assert.Equal("▸Minecraft (1 modpack)", minecraft.TextContent.Trim());
+        await minecraft.ClickAsync(new());
+        var radio = cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!;
+        Assert.Equal("minecraft/all-the-mons.png", cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons"))
+            .QuerySelector("img")!.GetAttribute("src"));
+        await radio.ChangeAsync(new() { Value = true });
+        cut.WaitForText("Il compte l'équipe et le PC d'un de tes mondes Minecraft stockés");
+        cut.WaitForAssertion(() => Assert.Contains("Kantalia", cut.Find("#dexSave").TextContent));
+        await cut.Click("Créer");
+        Assert.Contains("livingdex/", Navigation.Uri);
+
+        // Sa page : la sauvegarde, les modes du global, Piglich possédé avec son image
+        var id = (await Dexes.ListAsync("sacha")).Single().Id;
+        var page = Render<LivingDexPage>(p => p.Add(x => x.Id, id));
+        page.WaitForText("Sauvegarde : Kantalia · Kantalia.zip");
+        Assert.True(page.HasButton("Complet") && page.HasButton("Ultime"));
+        Assert.Contains(page.FindAll(".livingdex-slot img"), img => img.GetAttribute("src") == "minecraft/pokemon/piglich.png");
+
+        // Plus de monde libre : le jeu est grisé, rien à choisir
+        var list = Render<LivingDexes>();
+        await list.Click("+ Créer un living dex");
+        await list.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        Assert.Contains("(déjà créé)", list.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).TextContent);
+        await list.Click("Chromatique");
+        Assert.DoesNotContain(list.FindAll(".livingdex-generation-toggle"), t => t.TextContent.Contains("Minecraft"));
+    }
+
+    [Fact]
+    public async Task List_AllTheMons_WithoutAWorld_SaysSo()
+    {
+        var cut = Render<LivingDexes>();
+        await cut.Click("+ Créer un living dex");
+        await cut.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
+        cut.WaitForText("Aucun monde All the Mons disponible : stockes-en un dans");
     }
 }

@@ -71,7 +71,7 @@ else
             </div>
             <div class="form-label">Jeu</div>
             <GamePicker Ungrouped="[shinyKind ? GlobalLivingDex.ShinyGame : GlobalLivingDex.Game]"
-                        Games="LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g)).Select(g => LivingDexGames.Get(g.Game, shinyKind))"
+                        Games="CreatableGames"
                         Selected="game" OnChosen="GameChosen" IsTaken="IsTaken" Name="dexGame"
                         TakenTitle="Tu as déjà ce living dex" TakenSuffix="(déjà créé)" />
             @if (game is { } globalGame && GlobalLivingDex.IsGlobal(globalGame))
@@ -86,6 +86,14 @@ else
             }
             else if (game is { } chosenGame)
             {
+                @if (AllTheMonsLivingDex.Is(chosenGame))
+                {
+                    <p class="small text-muted mb-3">
+                        Il compte l'équipe et le PC d'un de tes mondes Minecraft stockés, chromatiques compris. Modes National,
+                        Complet et Ultime, comme le living dex global, avec ce que le modpack ajoute (Méga de Légendes Z-A,
+                        Piglich, Creepyon...).
+                    </p>
+                }
                 @if (shinyKind)
                 {
                     <p class="small text-muted mb-3">
@@ -97,7 +105,8 @@ else
                 @if (Saves().Count == 0)
                 {
                     <p class="text-muted mb-3">
-                        Aucune sauvegarde de @LivingDexGames.Get(chosenGame).Name disponible : stockes-en une dans
+                        @(AllTheMonsLivingDex.Is(chosenGame) ? $"Aucun monde {LivingDexGames.Get(chosenGame).Name} disponible : stockes-en un dans"
+                            : $"Aucune sauvegarde de {LivingDexGames.Get(chosenGame).Name} disponible : stockes-en une dans")
                         <a href="sauvegardes">« Mes sauvegardes »</a> (une sauvegarde qui a déjà son living dex ne compte pas).
                     </p>
                 }
@@ -252,6 +261,11 @@ else
     private string? message;
     private bool messageIsError;
 
+    /// <summary>Jeux proposés à la création : ceux du type choisi (normal ou chromatique), puis All the Mons (normal seulement).</summary>
+    private IEnumerable<LivingDexGameInfo> CreatableGames =>
+        LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g)).Select(g => LivingDexGames.Get(g.Game, shinyKind))
+            .Concat(shinyKind ? [] : [AllTheMonsLivingDex.Game]);
+
     /// <summary>Sauvegardes qui peuvent recevoir le living dex du jeu choisi.</summary>
     private List<LivingDexCandidate> Saves() => game is { } g ? candidates.Where(c => c.Games.Contains(g)).ToList() : [];
 
@@ -294,7 +308,8 @@ else
         {
             var create = Visitor ? "." : " : crée-en un avec « + Créer un living dex ».";
             if (mode == LivingDexMode.Ultimate)
-                return kind == LivingDexKind.Shiny ? $"Seul le living dex global chromatique a le mode Ultime{create}" : $"Seuls les living dex globaux ont le mode Ultime{create}";
+                return kind == LivingDexKind.Shiny ? $"Seul le living dex global chromatique a le mode Ultime{create}"
+                    : $"Seuls les living dex globaux et All the Mons ont le mode Ultime{create}";
             if (kind != LivingDexKind.Shiny && taken.Any(g => LivingDexGames.RegionalOnly(LivingDexGames.Get(g))))
                 return "Les living dex de 1re génération n'ont que le mode Régional : choisis « Régional » pour les voir.";
             return kind == LivingDexKind.Shiny ? $"Aucun living dex chromatique{create}" : $"Aucun living dex normal{create}";

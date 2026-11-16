@@ -19,9 +19,14 @@ namespace MonsutaPotaru.Services;
 /// </param>
 /// <param name="Move">Méga-Rayquaza : un Rayquaza de plus qui connaît Draco-Ascension.</param>
 /// <param name="Gigamax">Remplie par un exemplaire de plus qui a le facteur Gigamax.</param>
+/// <param name="BaseFormKey">
+/// Case à exemplaire de plus : forme qu'il doit avoir (Méga-Mistigrix ♀ : une femelle, « F » ; Méga-Floette : Floette
+/// Éternelle) ; null : n'importe laquelle.
+/// </param>
+/// <param name="Image">Image propre à la case (espèces et formes de Minecraft), à la place de celle de la collection.</param>
 public sealed record GlobalSlot(ushort Species, byte Form, EntityContext Context, string FormKey, string Name, bool AnyForm = false,
     IReadOnlyList<string>? AnyOfKeys = null, byte? Gender = null, byte? Sweet = null, ushort HeldItem = 0, ushort Move = 0,
-    bool Gigamax = false)
+    bool Gigamax = false, string? BaseFormKey = null, string? Image = null)
 {
     /// <summary>Case qui demande un exemplaire de plus que celui de l'espèce (Méga, Gigamax...).</summary>
     public bool ExtraCopy => HeldItem != 0 || Move != 0 || Gigamax;
@@ -159,13 +164,13 @@ public static class GlobalLivingDex
         return form < names.Length ? names[form] : null;
     }
 
-    private static string FrenchForm(ushort species, byte form, EntityContext context)
+    internal static string FrenchForm(ushort species, byte form, EntityContext context)
     {
         var names = FormConverter.GetFormList(species, French.types, French.forms, GameInfo.GenderSymbolUnicode, context);
         return form < names.Length ? names[form] : $"{form}";
     }
 
-    private static string SpeciesName(ushort species) => French.specieslist[species];
+    internal static string SpeciesName(ushort species) => French.specieslist[species];
 
     private static readonly Lazy<IReadOnlyList<GlobalSlot>> NationalSlots = new(() =>
         Enumerable.Range(1, MaxSpecies).Select(n => (ushort)n)
@@ -173,7 +178,7 @@ public static class GlobalLivingDex
             .ToList());
 
     /// <summary>Clé d'une case : l'espèce, son genre de case (forme, Méga, Gigamax), la forme.</summary>
-    private static (ushort, int, string) Key(GlobalSlot s) => (s.Species, SlotKind(s), s.AnyOfKeys is null ? s.FormKey : "*");
+    internal static (ushort, int, string) Key(GlobalSlot s) => (s.Species, SlotKind(s), s.AnyOfKeys is null ? s.FormKey : "*");
 
     /// <summary>Genre de case : 0 forme, 1 Méga (ou forme due à un objet), 2 Gigamax.</summary>
     private static int SlotKind(GlobalSlot s)
@@ -326,7 +331,7 @@ public static class GlobalLivingDex
     /// Nom d'une forme qui n'est pas dans le Complet : « Pikachu Rockeur », « Pikachu (casquette Originale) », « Prismillon
     /// (motif Banquise) », « Arceus (type Feu) », « Rattatac Dominant », « Mistigrix ♀ »...
     /// </summary>
-    private static string UltimateName(ushort species, byte form, EntityContext context, string key)
+    internal static string UltimateName(ushort species, byte form, EntityContext context, string key)
     {
         var name = SpeciesName(species);
         var french = FrenchForm(species, form, context);
@@ -357,7 +362,12 @@ public static class GlobalLivingDex
     /// <summary>Image d'une case : celle de la collection (forme, femelle, Méga par la gemme, Gigamax, décoration de Charmilly).</summary>
     public static string Sprite(GlobalSlot slot, bool shiny = false) => slot switch
     {
+        { Image: { } image } => image,
         { Gigamax: true } => PokemonSprites.GigamaxUrl(slot.Species, slot.Form, slot.Context, shiny),
+        // Méga de Légendes Z-A (living dex All the Mons) : la forme elle-même (PokemonSprites ne retrouve pas toutes les
+        // nouvelles Méga par leur gemme).
+        { HeldItem: not 0, Context: EntityContext.Gen9a } =>
+            PokemonSprites.Url(slot.Species, slot.Form, slot.Context, female: false, heldItem: 0, shiny),
         { HeldItem: not 0 } when HeldBattleForms.ContainsKey((slot.Species, slot.Form)) =>
             PokemonSprites.Url(slot.Species, slot.Form, slot.Context, female: false, heldItem: 0, shiny),
         { HeldItem: not 0 } => PokemonSprites.Url(slot.Species, 0, slot.Context, female: false, heldItem: slot.HeldItem, shiny),
@@ -378,10 +388,19 @@ public static class GlobalLivingDex
         return FormKey(species, form, context);
     }
 
-    /// <summary>Pokémon du stockage interne, vu par le living dex global.</summary>
+    /// <summary>Même règle pour une clé de forme déjà connue (Pokémon de Minecraft) : Zygarde avec Rassemblement compte pour son pourcentage.</summary>
+    public static string CompleteKey(ushort species, string key) =>
+        species == Zygarde && key.EndsWith("-C", StringComparison.Ordinal) ? key[..^2] : key;
+
+    /// <summary>Pokémon du stockage interne, vu par le living dex global (ou d'un monde Minecraft, living dex All the Mons).</summary>
     /// <param name="Sweet">Décoration (Charmilly), sinon null.</param>
+    /// <param name="Key">
+    /// Clé de forme déjà connue (Pokémon de Minecraft, <see cref="CobblemonPokemon.FormKey"/>) ; null : tirée de
+    /// <paramref name="Form"/> dans <paramref name="Context"/>.
+    /// </param>
+    /// <param name="Base">Forme par défaut de l'espèce (Minecraft) : remplit aussi la case de la forme par défaut, quel que soit son nom.</param>
     public sealed record Copy(int Id, ushort Species, byte Form, EntityContext Context, byte? Gender, int HeldItem, byte? Sweet,
-        bool CanGigantamax, bool KnowsDragonAscent);
+        bool CanGigantamax, bool KnowsDragonAscent, string? Key = null, bool Base = false);
 
     /// <summary>
     /// Exemplaire de chaque case, chacun ne servant qu'une fois : d'abord les cases qui demandent un exemplaire de plus
@@ -391,8 +410,13 @@ public static class GlobalLivingDex
     {
         var result = new Copy?[slots.Count];
         var used = new HashSet<int>();
-        var keys = copies.ToDictionary(c => c.Id, c => mode == LivingDexMode.Complete
-            ? CompleteKey(c.Species, c.Form, c.Context) : FormKey(c.Species, c.Form, c.Context));
+        var keys = copies.ToDictionary(c => c.Id, c => (c.Key, mode) switch
+        {
+            ({ } key, LivingDexMode.Complete) => CompleteKey(c.Species, key),
+            ({ } key, _) => key,
+            (_, LivingDexMode.Complete) => CompleteKey(c.Species, c.Form, c.Context),
+            _ => FormKey(c.Species, c.Form, c.Context),
+        });
         var assignment = new Assignment(slots, result, used, copies.GroupBy(c => c.Species).ToDictionary(g => g.Key, g => g.ToList()));
         assignment.Pass(s => s.ExtraCopy, (s, c) => FillsExtra(s, c, keys[c.Id]));
         assignment.Pass(s => !s.ExtraCopy && !s.AnyForm, (s, c) => FillsExact(s, c, keys[c.Id]));
@@ -424,14 +448,23 @@ public static class GlobalLivingDex
     private static bool FillsExtra(GlobalSlot s, Copy c, string key)
     {
         if (s.Gigamax)
-            return c.CanGigantamax && (s.AnyForm || key == s.FormKey);
-        return s.Move != 0 ? c.KnowsDragonAscent : c.HeldItem == s.HeldItem;
+            return c.CanGigantamax && (s.AnyForm || key == s.FormKey || c.Base && IsBaseSlot(s));
+        if (s.Move != 0)
+            return c.KnowsDragonAscent;
+        return c.HeldItem == s.HeldItem && (s.BaseFormKey is null || key == s.BaseFormKey);
     }
 
     /// <summary>Case d'une forme exacte : la forme (ou l'une des formes), le sexe et la décoration demandés.</summary>
     private static bool FillsExact(GlobalSlot s, Copy c, string key) =>
-        (s.AnyOfKeys?.Contains(key) ?? key == s.FormKey)
+        (s.AnyOfKeys?.Contains(key) ?? (key == s.FormKey || c.Base && IsBaseSlot(s)))
         && (s.Gender is null || c.Gender == s.Gender) && (s.Sweet is null || c.Sweet == s.Sweet);
+
+    /// <summary>
+    /// Case de la forme par défaut de l'espèce, sous le nom que lui donne son jeu (Papilord « Plant » en 4e génération) : un
+    /// Pokémon de Minecraft de forme « normal » la remplit. Pas une forme propre à Minecraft (Stari Patrickyu, forme 0
+    /// faute de numéro chez PKHeX).
+    /// </summary>
+    private static bool IsBaseSlot(GlobalSlot s) => s.Form == 0 && s.FormKey == FormKey(s.Species, 0, s.Context);
 
     /// <summary>Infobulle d'une case à exemplaire de plus : « avec Dracaufite X » ; manquante, « il faut un Dracaufeu de plus avec... ».</summary>
     public static string? Note(GlobalSlot slot, bool filled)
@@ -439,7 +472,21 @@ public static class GlobalLivingDex
         if (!slot.ExtraCopy)
             return null;
         var condition = ExtraCondition(slot);
-        return filled ? condition : $"il faut un {SpeciesName(slot.Species)} de plus {condition}";
+        var species = slot.BaseFormKey is null ? SpeciesName(slot.Species) : BaseName(slot);
+        return filled ? condition : $"il faut un {species} de plus {condition}";
+    }
+
+    /// <summary>« Mistigrix femelle », « Floette Éternelle », « Magearna Couleur du Passé » : l'exemplaire de plus d'une Méga à forme imposée.</summary>
+    private static string BaseName(GlobalSlot slot)
+    {
+        var name = SpeciesName(slot.Species);
+        if (slot.BaseFormKey is "F")
+            return $"{name} femelle";
+        if (slot.BaseFormKey is "M")
+            return $"{name} mâle";
+        var names = FormConverter.GetFormList(slot.Species, English.types, English.forms, GameInfo.GenderSymbolASCII, slot.Context);
+        var form = Array.IndexOf(names, slot.BaseFormKey);
+        return form < 0 ? name : $"{name} ({FrenchForm(slot.Species, (byte)form, slot.Context)})";
     }
 
     /// <summary>« avec le facteur Gigamax », « qui connaît Draco-Ascension », « avec Dracaufite X ».</summary>
