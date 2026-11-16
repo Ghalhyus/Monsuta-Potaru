@@ -13,14 +13,20 @@ public static class Gen3Completion
 {
     private static readonly string[] Items = CompletionLabels.French.GetItemStrings(EntityContext.Gen3, GameVersion.E);
 
-    /// <summary>Étapes de la partie, dans l'ordre : histoire, Pokédex (les 386), dresseurs, objets, rencontres, quêtes.</summary>
+    /// <summary>
+    /// Étapes de la partie, dans l'ordre : histoire, Pokédex (les 386), dresseurs, objets, rencontres, quêtes (à la fin,
+    /// les rubans de Hoenn : <see cref="CompletionRibbons"/> ; aucun à Kanto).
+    /// </summary>
     public static List<CompletionStep> Steps(SAV3 sav, LivingDexGame game) =>
-        CompletionGames.Steps(game switch
-        {
-            LivingDexGame.Emerald => Gen3CompletionData.Emerald,
-            LivingDexGame.FireRed or LivingDexGame.LeafGreen => Gen3CompletionData.FireRedLeafGreen,
-            _ => Gen3CompletionData.RubySapphire,
-        }, new CompletionFlags(sav), 386, Label);
+        CompletionGames.Steps(Rows(game), new CompletionFlags(sav), 386, Label);
+
+    /// <summary>Lignes de la partie : la table du jeu, puis ses rubans.</summary>
+    public static IReadOnlyList<CompletionRow> Rows(LivingDexGame game) => game switch
+    {
+        LivingDexGame.Emerald => [.. Gen3CompletionData.Emerald, .. CompletionRibbons.Hoenn(emerald: true)],
+        LivingDexGame.FireRed or LivingDexGame.LeafGreen => Gen3CompletionData.FireRedLeafGreen,
+        _ => [.. Gen3CompletionData.RubySapphire, .. CompletionRibbons.Hoenn(emerald: false)],
+    };
 
     /// <summary>Texte d'une étape : le sien, sinon l'équipe du dresseur, l'objet (une CT avec sa capacité) ou le Pokémon.</summary>
     public static string Label(CompletionRow row) =>

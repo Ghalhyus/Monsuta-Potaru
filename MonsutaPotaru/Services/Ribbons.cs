@@ -311,6 +311,14 @@ public static class Ribbons
 
     private static int Count(params bool[] ribbons) => ribbons.Count(r => r);
 
+    /// <summary>
+    /// Ce Pokémon a-t-il ce ruban ? Un ruban simple (clé de <see cref="All"/>) ou un de ceux que les souvenirs réunissent
+    /// (clé de <see cref="ContestParts"/> ou <see cref="BattleParts"/> : « G3CoolSuper », « Winning », « Ability »).
+    /// Sert à la complétion (rubans de 3e et 4e génération dans les quêtes annexes).
+    /// </summary>
+    public static bool Holds(PKM pk, string key) =>
+        ContestParts.Any(p => p.Key == key) || BattleParts.Any(p => p.Key == key) ? HasPart(pk, key) : Has(pk, key);
+
     /// <summary>Le Pokémon a-t-il ce ruban (hors souvenirs) ? Un format qui ne connaît pas le ruban répond non.</summary>
     private static bool Has(PKM pk, string key) => key switch
     {

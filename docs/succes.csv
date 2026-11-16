@@ -1,0 +1,117 @@
+﻿Identifiant;Rubrique;Nom;Description (affichée au joueur);Condition exacte;Palier;Points;Récompense (₽);Secret;Données utilisées
+COMPTE-01;Compte;Premier pas;Crée ton compte et choisis ton pseudo.;Compte avec un pseudo (pas une adresse en guise de UserName).;Bronze;10;1 000;Non;AccountService.HasPseudo
+COMPTE-02;Compte;Changement de décor;Choisis un autre thème que celui de départ.;Theme non nul et différent du thème par défaut.;Bronze;10;1 000;Non;ApplicationUser.Theme
+COMPTE-03;Compte;Chacun ses habitudes;Règle au moins un tri par défaut dans « Préférences ».;SortPreferences non vide.;Bronze;10;1 000;Non;ApplicationUser.SortPreferences
+COMPTE-04;Compte;Vitrine ouverte;Rends ton profil visible par tout le monde, avec toutes ses pages.;Audience = Tout le monde et PublicPages = toutes les pages.;Bronze;10;1 000;Non;ApplicationUser.Audience / PublicPages
+SAV-01;Sauvegardes;Partie à l'abri;Stocke ta première sauvegarde.;Au moins 1 sauvegarde stockée.;Bronze;10;1 000;Non;StoredSaves
+SAV-02;Sauvegardes;Archiviste;Stocke 5 sauvegardes.;Au moins 5 sauvegardes stockées.;Argent;25;5 000;Non;StoredSaves
+SAV-03;Sauvegardes;Bibliothécaire;Stocke 15 sauvegardes.;Au moins 15 sauvegardes stockées.;Or;50;15 000;Non;StoredSaves
+SAV-04;Sauvegardes;Voyageur des époques;Stocke des sauvegardes de 5 générations différentes.;Au moins 5 valeurs distinctes de Generation parmi les sauvegardes stockées.;Argent;25;5 000;Non;StoredSaves.Generation
+SAV-05;Sauvegardes;Machine à remonter le temps;Stocke une sauvegarde de chaque génération, de la 1re à la 9e.;Les 9 générations présentes parmi les sauvegardes stockées.;Platine;100;50 000;Non;StoredSaves.Generation
+SAV-06;Sauvegardes;Partie au long cours;Stocke une sauvegarde de plus de 100 heures de jeu.;Une sauvegarde stockée avec PlayTimeSeconds ≥ 360 000.;Argent;25;5 000;Non;StoredSaves.PlayTimeSeconds
+SAV-07;Sauvegardes;Vie de dresseur;Cumule 1 000 heures de jeu dans tes sauvegardes stockées.;Somme de PlayTimeSeconds ≥ 3 600 000.;Or;50;15 000;Non;StoredSaves.PlayTimeSeconds
+SAV-08;Sauvegardes;Connexion portable;Lie ta 3DS à ton compte.;Au moins 1 console liée (non retirée).;Bronze;10;1 000;Non;SyncDevices
+SAV-09;Sauvegardes;Synchro parfaite;Envoie une sauvegarde depuis ta 3DS.;Au moins 1 emplacement de console noté après un envoi réussi.;Bronze;10;1 000;Non;SyncSaveLocations
+SAV-10;Sauvegardes;Aller-retour;Récupère sur ta 3DS une sauvegarde modifiée sur le site.;Téléchargement par la console d'une sauvegarde marquée modifiée sur le serveur.;Argent;25;5 000;Non;À tracer : téléchargement par l'API 3DS (GET /api/sync/sauvegardes/{id}) après une SaveModification
+DEP-01;Mes Pokémon;Mise en banque;Dépose ton premier Pokémon dans le stockage interne.;Au moins 1 Pokémon au stockage interne (StoredSaveId nul).;Bronze;10;1 000;Non;BankPokemon
+DEP-02;Mes Pokémon;Retour au bercail;Retire un Pokémon du stockage interne vers une de tes parties.;Au moins 1 retrait validé dans « Dépôt / Retrait ».;Bronze;10;1 000;Non;À tracer : retraits validés (aucune table aujourd'hui)
+DEP-03;Mes Pokémon;Bond dans le temps;Envoie un Pokémon dans un jeu d'une génération plus récente que la sienne.;Retrait validé avec conversion de format (ex. PK4 vers PK5).;Argent;25;5 000;Non;À tracer : retraits validés avec format d'origine et format d'arrivée
+DEP-04;Mes Pokémon;Grand déménagement;Dépose 30 Pokémon en une seule validation.;Une validation de « Dépôt / Retrait » avec au moins 30 dépôts.;Argent;25;5 000;Non;À tracer : nombre de dépôts par validation
+COL-01;Ma collection;Petite équipe;Réunis 10 Pokémon dans ta collection.;Au moins 10 Pokémon (stockage interne + sauvegardes stockées, hors œufs).;Bronze;10;1 000;Non;BankPokemon
+COL-02;Ma collection;Belle collection;Réunis 100 Pokémon dans ta collection.;Au moins 100 Pokémon hors œufs.;Bronze;10;2 000;Non;BankPokemon
+COL-03;Ma collection;Collection respectable;Réunis 250 Pokémon dans ta collection.;Au moins 250 Pokémon hors œufs.;Argent;25;5 000;Non;BankPokemon
+COL-04;Ma collection;Réserve naturelle;Réunis 500 Pokémon dans ta collection.;Au moins 500 Pokémon hors œufs.;Or;50;15 000;Non;BankPokemon
+COL-05;Ma collection;Mille et un Pokémon;Réunis 1 000 Pokémon dans ta collection.;Au moins 1 000 Pokémon hors œufs.;Platine;100;50 000;Non;BankPokemon
+COL-06;Ma collection;Ça brille !;Obtiens ton premier Pokémon chromatique.;Au moins 1 Pokémon avec IsShiny.;Bronze;10;2 000;Non;BankPokemon.IsShiny
+COL-07;Ma collection;Collection scintillante;Réunis 25 Pokémon chromatiques.;Au moins 25 Pokémon chromatiques.;Or;50;15 000;Non;BankPokemon.IsShiny
+COL-08;Ma collection;Chasseur d'étoiles;Réunis 100 Pokémon chromatiques.;Au moins 100 Pokémon chromatiques.;Platine;100;50 000;Non;BankPokemon.IsShiny
+COL-09;Ma collection;Arc-en-ciel;Possède au moins un Pokémon de chacun des 18 types.;Les 18 types présents parmi Type1 / Type2 (hors œufs).;Argent;25;5 000;Non;BankPokemon.Type1 / Type2
+COL-10;Ma collection;Tour du monde;Possède un Pokémon de chaque génération, de la 1re à la 9e.;Les 9 générations présentes, d'après le numéro de Pokédex (même règle que le filtre « Génération »).;Argent;25;5 000;Non;BankPokemon.Species
+COL-11;Ma collection;Parfait sur le papier;Possède un Pokémon aux six IV parfaits.;Un Pokémon avec 31 dans ses 6 IV (échelle actuelle).;Or;50;15 000;Non;BankPokemon.Iv*
+COL-12;Ma collection;Toutes les humeurs;Réunis des Pokémon des 25 natures.;Les 25 natures présentes (hors œufs).;Argent;25;5 000;Non;BankPokemon.Nature
+COL-13;Ma collection;Méga-ambition;Possède un Pokémon qui tient sa Méga-Gemme (ou son orbe).;Au moins 1 Pokémon avec MegaReady.;Argent;25;5 000;Non;BankPokemon.MegaReady
+COL-14;Ma collection;Petits noms;Donne un surnom à 10 Pokémon de ta collection.;Au moins 10 Pokémon dont le surnom diffère du nom de l'espèce.;Bronze;10;1 000;Non;BankPokemon.Nickname / SpeciesName
+COL-15;Ma collection;Au sommet;Possède un Pokémon au niveau 100.;Au moins 1 Pokémon de niveau 100.;Argent;25;5 000;Non;BankPokemon.Level
+COL-16;Ma collection;Escouade d'élite;Possède 6 Pokémon au niveau 100.;Au moins 6 Pokémon de niveau 100.;Or;50;15 000;Non;BankPokemon.Level
+COL-17;Ma collection;Œuf surprise;Garde un œuf dans ta collection.;Au moins 1 Pokémon avec IsEgg.;Bronze;10;1 000;Non;BankPokemon.IsEgg
+COL-18;Ma collection;Fan absolu;Réunis 50 exemplaires de la même espèce.;Une espèce avec au moins 50 Pokémon (le plus gros dossier du mode compact).;Argent;25;5 000;Oui;BankPokemon.Species (BankService.GetGroupsAsync)
+COL-19;Ma collection;Alphabet complet;Réunis les 28 formes de Zarbi.;Les 28 formes de Zarbi (espèce 201) présentes.;Or;50;15 000;Oui;BankPokemon.Species / Form
+COL-20;Ma collection;Légendes vivantes;Réunis 10 Pokémon légendaires différents.;Au moins 10 espèces légendaires ou fabuleuses distinctes (liste de PKHeX).;Or;50;15 000;Non;BankPokemon.Species + liste des légendaires de PKHeX
+COL-21;Ma collection;Trésor fabuleux;Possède un Pokémon fabuleux.;Au moins 1 espèce fabuleuse (Mew, Celebi, Jirachi…, liste de PKHeX).;Argent;25;5 000;Non;BankPokemon.Species + liste des fabuleux de PKHeX
+COL-22;Ma collection;Plus de place;Agrandis ta collection une première fois.;Au moins 1 achat d'emplacements.;Bronze;10;1 000;Non;WalletOperations (BuyCollectionSlots)
+COL-23;Ma collection;Entrepôt géant;Porte la taille de ta collection à 2 000 places.;CollectionLimit ≥ 2 000.;Or;50;15 000;Non;ApplicationUser.CollectionLimit
+EI-01;Mes Pokémon;Échange en famille;Fais un échange interne entre deux de tes parties.;Au moins 1 échange interne validé.;Bronze;10;1 000;Non;À tracer : échanges internes (TradeService.ExecuteInternalAsync, pas dans TradeRecords)
+EI-02;Mes Pokémon;Évolution par câble;Fais évoluer un Pokémon en l'échangeant.;Un échange (interne ou entre amis) où un Pokémon évolue.;Argent;25;5 000;Non;TradeRecords.FirstGaveEvolvedTo / SecondGaveEvolvedTo (+ à tracer pour l'échange interne)
+EI-03;Mes Pokémon;Time Capsule;Échange un Pokémon entre la 1re et la 2e génération.;Un échange (interne ou entre amis) entre une partie de 1re génération et une de 2e.;Argent;25;5 000;Non;À tracer : générations des deux sauvegardes de l'échange
+PARC-01;Parc;Ouverture du parc;Installe ton premier Pokémon dans un parc.;Au moins 1 Pokémon dans un parc.;Bronze;10;1 000;Non;ParkMembers
+PARC-02;Parc;Affiche complet;Remplis les 20 places d'un parc.;Un parc avec au moins 20 Pokémon.;Bronze;10;2 000;Non;ParkMembers
+PARC-03;Parc;Travaux d'agrandissement;Agrandis un parc.;Un parc avec Expansions ≥ 1.;Bronze;10;2 000;Non;Parks.Expansions
+PARC-04;Parc;Domaine immense;Agrandis un parc au maximum (80 places).;Un parc avec Expansions = 3.;Argent;25;5 000;Non;Parks.Expansions
+PARC-05;Parc;Nouveaux horizons;Achète un deuxième paysage.;Au moins 2 parcs.;Bronze;10;2 000;Non;Parks
+PARC-06;Parc;Tour des paysages;Possède les 8 paysages : Forêt, Plage, Volcan, Désert, Océan, Grotte, Montagne et Donjon.;8 parcs.;Or;50;15 000;Non;Parks
+PARC-07;Parc;Gardien du refuge;Agrandis tes 8 parcs au maximum.;8 parcs avec Expansions = 3.;Platine;100;50 000;Non;Parks.Expansions
+PARC-08;Parc;Peuplement;Installe 100 Pokémon dans tes parcs.;Au moins 100 lignes dans ParkMembers.;Argent;25;5 000;Non;ParkMembers
+PARC-09;Parc;Tout le monde est content;Fais vivre 10 Pokémon heureux dans un même parc, sans aucun malheureux.;Un parc d'au moins 10 Pokémon, tous heureux selon leur habitat.;Argent;25;5 000;Non;ParkHabitats.MoodOf
+PARC-10;Parc;Grand bleu;Installe 20 Pokémon dans l'Océan.;Le parc Océan avec au moins 20 Pokémon.;Argent;25;5 000;Non;ParkMembers + Parks.Landscape
+PARC-11;Parc;Avis de tempête;Énerve un Pokémon jusqu'à ce qu'il boude sous son nuage d'orage.;Un Pokémon qui atteint « malheureux » par le malus « attaqué ».;Bronze;10;0;Oui;ParkMembers.MalusLevels
+INV-01;Inventaire;Premier pécule;Retire de l'argent d'une de tes sauvegardes.;Au moins 1 retrait d'argent.;Bronze;10;1 000;Non;WalletOperations (WithdrawFromSave)
+INV-02;Inventaire;Petite fortune;Aie 100 000 ₽ dans ton porte-monnaie.;Wallet.Money ≥ 100 000.;Argent;25;5 000;Non;Wallets.Money
+INV-03;Inventaire;Millionnaire;Dépose 1 000 000 ₽ au total.;Argent déposé (solde + argent dépensé) ≥ 1 000 000.;Or;50;15 000;Non;StatisticsService (argent déposé)
+INV-04;Inventaire;Grand dépensier;Dépense 100 000 ₽ sur le site.;Argent dépensé ≥ 100 000.;Argent;25;5 000;Non;StatisticsService (argent dépensé)
+INV-05;Inventaire;Banque d'objets;Range ton premier objet dans le stockage.;Au moins 1 retrait d'objets d'une sauvegarde.;Bronze;10;1 000;Non;WalletOperations (WithdrawItemsFromSave)
+INV-06;Inventaire;Livraison;Dépose des objets du stockage dans une de tes parties.;Au moins 1 dépôt d'objets dans une sauvegarde.;Bronze;10;1 000;Non;WalletOperations (DepositItemsToSave)
+INV-07;Inventaire;Transfert direct;Fais passer des objets d'une sauvegarde à une autre.;Au moins 1 transfert d'inventaire validé.;Bronze;10;1 000;Non;WalletOperations (TransferItemsBetweenSaves)
+INV-08;Inventaire;Collection de Balls;Range 10 sortes de Poké Balls différentes dans le stockage.;Au moins 10 objets distincts de la catégorie Poké Balls au stockage interne.;Argent;25;5 000;Non;OwnedItems + SaveBag.BallItems
+INV-09;Inventaire;L'ultime Ball;Garde une Master Ball dans le stockage.;Au moins 1 Master Ball au stockage interne.;Argent;25;5 000;Non;OwnedItems
+INV-10;Inventaire;Herboriste;Range 30 baies différentes dans le stockage.;Au moins 30 baies distinctes au stockage interne.;Or;50;15 000;Non;OwnedItems + SaveBag.BerryItems
+INV-11;Inventaire;Trousse de secours;Range 10 médicaments différents dans le stockage.;Au moins 10 médicaments distincts au stockage interne.;Bronze;10;2 000;Non;OwnedItems + SaveBag.MedicineItems
+INV-12;Inventaire;Encyclopédie des capacités;Range 50 CT ou DT différentes dans le stockage.;Au moins 50 capacités distinctes parmi les CT / DT du stockage interne.;Or;50;15 000;Non;OwnedItems (CT et DT par capacité)
+INV-13;Inventaire;Entrepôt plein à craquer;Range 1 000 objets dans le stockage.;Somme des quantités au stockage interne ≥ 1 000.;Argent;25;5 000;Non;OwnedItems
+LD-01;Défis;Premier living dex;Commence ton premier living dex.;Au moins 1 living dex.;Bronze;10;1 000;Non;LivingDexes
+LD-02;Défis;Living dex complet;Complète un living dex à 100 %.;Un living dex à 100 % dans au moins un de ses modes.;Or;50;15 000;Non;LivingDexService.ProgressAsync
+LD-03;Défis;Le dex sans compromis;Complète un living dex en mode Complet, chaque forme comprise.;Un living dex à 100 % en mode Complet.;Platine;100;50 000;Non;LivingDexService.ProgressAsync
+LD-04;Défis;Collectionneur de régions;Complète 5 living dex.;Au moins 5 living dex à 100 % dans un de leurs modes.;Platine;100;50 000;Non;LivingDexService.ProgressAsync
+LD-05;Défis;Tout ce qui brille;Complète le living dex chromatique d'un jeu.;Un living dex chromatique d'un jeu à 100 %.;Platine;100;50 000;Non;LivingDexes.Shiny + ProgressAsync
+LD-06;Défis;À mi-chemin;Remplis la moitié du living dex global en National.;Global National ≥ 513 cases sur 1 025.;Argent;25;5 000;Non;GlobalLivingDex
+LD-07;Défis;Pokédex national vivant;Complète le living dex global en National.;Global National 1 025 / 1 025.;Or;50;25 000;Non;GlobalLivingDex
+LD-08;Défis;Toutes les formes;Complète le living dex global en mode Complet.;Global Complet 1 283 / 1 283.;Platine;100;50 000;Non;GlobalLivingDex
+LD-09;Défis;Ultime;Complète le living dex global en mode Ultime.;Global Ultime 1 578 / 1 578.;Platine;100;100 000;Non;GlobalLivingDex
+LD-10;Défis;Constellation;Complète le living dex global chromatique en National.;Global chromatique National 1 000 / 1 000.;Platine;100;100 000;Oui;GlobalLivingDex (GlobalShiny)
+LD-11;Défis;Bonne moyenne;Atteins 50 % de moyenne sur l'ensemble de tes living dex.;Moyenne des living dex normaux (onglet « Défis » des statistiques) ≥ 50 %.;Argent;25;5 000;Non;StatisticsService (living dex)
+RUB-01;Défis;Sous surveillance;Suis les rubans d'un de tes Pokémon.;Au moins 1 suivi de rubans.;Bronze;10;1 000;Non;RibbonTrackers
+RUB-02;Défis;Première décoration;Fais gagner 10 rubans à un Pokémon suivi.;Un suivi avec au moins 10 rubans sur 88.;Bronze;10;2 000;Non;Ribbons.Total / RibbonState.Earned
+RUB-03;Défis;Poitrine bien garnie;Fais gagner 44 rubans à un Pokémon suivi.;Un suivi avec au moins 44 rubans sur 88.;Argent;25;5 000;Non;Ribbons.Total / RibbonState.Earned
+RUB-04;Défis;Maître des rubans;Fais gagner les 88 rubans à un Pokémon.;Un suivi à 88 / 88.;Platine;100;50 000;Non;Ribbons.Total / RibbonState.Earned
+RUB-05;Défis;Star des concours;Obtiens le Souvenir Concours doré (40 rubans de concours).;Un suivi avec Souvenir Concours à 40 / 40.;Or;50;15 000;Non;Ribbons.MemoryCounts
+RUB-06;Défis;Vétéran des combats;Obtiens le Souvenir Combat doré (8 rubans de combat).;Un suivi avec Souvenir Combat à 8 / 8.;Or;50;15 000;Non;Ribbons.MemoryCounts
+RUB-07;Défis;Défilé de champions;Fais gagner les 88 rubans à 3 Pokémon différents.;Au moins 3 suivis à 88 / 88.;Platine;100;100 000;Oui;Ribbons.Total / RibbonState.Earned
+COMP-01;Défis;Le défi commence;Lance la complétion d'une de tes parties.;Au moins 1 complétion.;Bronze;10;1 000;Non;Completions
+COMP-02;Défis;Maître de la Ligue;Termine la section Histoire d'un jeu.;Une complétion avec la section Histoire à 100 %.;Argent;25;5 000;Non;CompletionService (section Histoire)
+COMP-03;Défis;Pokédex rempli;Termine la section Pokédex d'un jeu.;Une complétion avec la section Pokédex à 100 %.;Or;50;15 000;Non;CompletionService (section Pokédex)
+COMP-04;Défis;Aucun dresseur oublié;Termine la section Dresseurs d'un jeu.;Une complétion avec la section Dresseurs à 100 %.;Or;50;15 000;Non;CompletionService (section Dresseurs)
+COMP-05;Défis;Fouineur;Termine la section Objets d'un jeu.;Une complétion avec la section Objets à 100 %.;Or;50;15 000;Non;CompletionService (section Objets)
+COMP-06;Défis;Rencontres du destin;Termine la section Rencontres uniques d'un jeu.;Une complétion avec la section Rencontres uniques à 100 %.;Argent;25;5 000;Non;CompletionService (section Rencontres uniques)
+COMP-07;Défis;Touche-à-tout;Termine la section Quêtes annexes d'un jeu.;Une complétion avec la section Quêtes annexes à 100 %.;Or;50;15 000;Non;CompletionService (section Quêtes annexes)
+COMP-08;Défis;100 %;Termine un jeu à 100 %.;Une complétion à 100 %.;Platine;100;50 000;Non;CompletionService
+COMP-09;Défis;Perfectionniste;Termine 5 jeux à 100 %.;Au moins 5 complétions à 100 %.;Platine;100;100 000;Non;CompletionService
+COMP-10;Défis;Toutes les générations;Termine à 100 % un jeu de chaque génération, de la 1re à la 9e.;Une complétion à 100 % dans chacune des 9 générations.;Platine;100;200 000;Oui;CompletionService
+COMP-11;Défis;Trop tard !;Laisse filer une étape pour de bon.;Une complétion avec au moins une étape marquée « raté ».;Bronze;10;0;Oui;CompletionService (étapes ratées)
+MJ-01;Multijoueurs;Premier ami;Ajoute ton premier ami.;Au moins 1 amitié.;Bronze;10;1 000;Non;Friendships
+MJ-02;Multijoueurs;Bande d'amis;Aie 5 amis.;Au moins 5 amitiés.;Argent;25;5 000;Non;Friendships
+MJ-03;Multijoueurs;Populaire;Aie 20 amis.;Au moins 20 amitiés.;Or;50;15 000;Non;Friendships
+MJ-04;Multijoueurs;Premier échange;Échange un Pokémon avec un ami.;Au moins 1 échange entre amis.;Bronze;10;1 000;Non;TradeRecords
+MJ-05;Multijoueurs;Commerçant;Fais 10 échanges avec tes amis.;Au moins 10 échanges entre amis.;Argent;25;5 000;Non;TradeRecords
+MJ-06;Multijoueurs;Grand marchand;Fais 50 échanges avec tes amis.;Au moins 50 échanges entre amis.;Or;50;15 000;Non;TradeRecords
+MJ-07;Multijoueurs;Réseau d'échanges;Échange avec 5 amis différents.;Au moins 5 partenaires distincts dans TradeRecords.;Argent;25;5 000;Non;TradeRecords.FirstId / SecondId
+MJ-08;Multijoueurs;Premier combat;Affronte un ami en combat.;Au moins 1 combat terminé.;Bronze;10;1 000;Non;BattleRecords
+MJ-09;Multijoueurs;Première victoire;Gagne un combat contre un ami.;Au moins 1 combat avec WinnerId = le joueur.;Bronze;10;2 000;Non;BattleRecords.WinnerId
+MJ-10;Multijoueurs;Combattant aguerri;Gagne 10 combats.;Au moins 10 victoires.;Argent;25;5 000;Non;BattleRecords.WinnerId
+MJ-11;Multijoueurs;Champion;Gagne 50 combats.;Au moins 50 victoires.;Or;50;15 000;Non;BattleRecords.WinnerId
+MJ-12;Multijoueurs;Invaincu;Gagne 5 combats d'affilée.;5 victoires consécutives (par date) sans défaite ni nul entre elles.;Or;50;15 000;Non;BattleRecords (At, WinnerId)
+MJ-13;Multijoueurs;Rival de toujours;Affronte 10 fois le même ami.;Au moins 10 combats contre le même adversaire.;Argent;25;5 000;Non;BattleRecords.FirstId / SecondId
+MJ-14;Multijoueurs;Égalité parfaite;Termine un combat sur un match nul.;Un combat terminé avec WinnerId nul.;Argent;25;5 000;Oui;BattleRecords.WinnerId
+MJ-15;Multijoueurs;Retraite stratégique;Abandonne un combat.;Un combat perdu par abandon.;Bronze;10;0;Oui;À tracer : cause de la fin du combat (abandon, temps écoulé, K.O.)
+MJ-16;Multijoueurs;Curieux;Visite le profil d'un autre joueur.;Au moins 1 visite de /joueurs/{pseudo} d'un autre compte.;Bronze;10;1 000;Non;À tracer : visites de profils
+META-01;Succès;Chasseur de succès;Débloque 10 succès.;Au moins 10 succès débloqués.;Bronze;10;2 000;Non;À créer : table des succès débloqués
+META-02;Succès;Collectionneur de succès;Débloque 50 succès.;Au moins 50 succès débloqués.;Or;50;15 000;Non;À créer : table des succès débloqués
+META-03;Succès;Monsuta Potaru à 100 %;Débloque tous les autres succès.;Tous les succès débloqués, sauf celui-ci.;Platine;100;0;Oui;À créer : table des succès débloqués

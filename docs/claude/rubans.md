@@ -42,6 +42,8 @@ README : « Rubans ». Rubans comptés : `Services/Ribbons.cs` ; suivi : `Servic
   son nom chez PKHeX (réflexion sur `Ribbon` + clé) ; à partir de la 6e (`IRibbonSetMemory6`), seulement le compteur :
   `Owned` null (« Inconnu ») sauf à 0 (tous manquants) ou au complet (tous obtenus), et la fenêtre le dit.
 - Façons de les obtenir : réécrites d'après Pokébip (ne pas recopier son texte).
+- `Ribbons.Holds(pk, clé)` : un ruban simple ou un de ceux des souvenirs, sur ce Pokémon. Sert à la **complétion** de 3e
+  et 4e génération (étapes « Obtenir le Ruban … », condition `RB:clé` : voir `completion.md`, « Rubans »).
 
 ## Suivi (`RibbonService`)
 - Retrouvé par `BankPokemon.Fingerprint` (index unique compte + empreinte) : les lignes d'une sauvegarde stockée sont
