@@ -15,7 +15,7 @@ public static class Gen4Completion
 
     /// <summary>
     /// Étapes de la partie, dans l'ordre : histoire, Pokédex (les 493), dresseurs, objets, rencontres, quêtes (à la fin,
-    /// les rubans : <see cref="CompletionRibbons"/>).
+    /// les rubans : <see cref="CompletionRibbons"/> ; en HG / SS, puis le PokéAthlon : <see cref="CompletionPokeathlon"/>).
     /// </summary>
     public static List<CompletionStep> Steps(SAV4 sav, LivingDexGame game) =>
         CompletionGames.Steps(Rows(game), new CompletionFlags(sav), 493, Label);
@@ -25,7 +25,8 @@ public static class Gen4Completion
     {
         LivingDexGame.Platinum => [.. Gen4CompletionData.Platinum, .. CompletionRibbons.Sinnoh(platinum: true, heartGold: false)],
         LivingDexGame.HeartGold or LivingDexGame.SoulSilver =>
-            [.. Gen4CompletionData.HeartGoldSoulSilver, .. CompletionRibbons.Sinnoh(platinum: false, heartGold: true)],
+            [.. Gen4CompletionData.HeartGoldSoulSilver, .. CompletionRibbons.Sinnoh(platinum: false, heartGold: true),
+                .. CompletionPokeathlon.Rows()],
         _ => [.. Gen4CompletionData.DiamondPearl, .. CompletionRibbons.Sinnoh(platinum: false, heartGold: false)],
     };
 

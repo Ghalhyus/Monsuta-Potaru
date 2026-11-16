@@ -201,4 +201,112 @@ public sealed class CompletionGen4Tests : IDisposable
         Assert.False(Done("Obtenir le Ruban Aptitude Méga"));
         Assert.False(Done("Obtenir le Ruban Effort (510 EV)"));
     }
+
+    private static List<CompletionRow> Pokeathlon(LivingDexGame game) =>
+        [.. Gen4Completion.Rows(game).Where(r => r.Done.StartsWith("PA:", StringComparison.Ordinal))];
+
+    [Fact]
+    public void Pokeathlon_77StepsInHeartGoldSoulSilverOnly()
+    {
+        // 5 parcours, 10 + 13 + 12 + 10 trophées et objets des quatre salles, 27 Cartes Mémo
+        var rows = Pokeathlon(LivingDexGame.SoulSilver);
+        Assert.Equal(77, rows.Count);
+        Assert.Equal([5, 10, 13, 12, 10, 27], new[] { "parcours", "Salle de la Coopération", "Salle de la Confiance",
+            "Salle du Potentiel", "Salle de l'Amitié", "Cartes Mémo" }.Select(d => rows.Count(r => r.Detail == d)));
+        Assert.All(rows, r => Assert.Equal((CompletionSection.Quests, "Dôme Pokéathlon"), (r.Section, r.Zone)));
+        Assert.Equal(rows.Count, rows.Select(r => r.Label).Distinct().Count());
+        Assert.Equal(rows.Count, rows.Select(r => r.Done).Distinct().Count());
+        Assert.Contains(rows, r => r.Label == "Trophée : 4 500 points au total");
+        Assert.Contains(rows, r => r.Label == "Obtenir la Carte Mémo 27");
+        // Les dernières quêtes d'HG / SS ; ni Diamant, ni Perle, ni Platine
+        Assert.Equal(rows, Gen4Completion.Rows(LivingDexGame.HeartGold).TakeLast(77));
+        Assert.Empty(Pokeathlon(LivingDexGame.Diamond));
+        Assert.Empty(Pokeathlon(LivingDexGame.Platinum));
+    }
+
+    [Fact]
+    public void Pokeathlon_InMemory_MedalsScoresCountersRecordsAndCards()
+    {
+        var sav = new SAV4HGSS();
+        bool Done(string label) => Gen4Completion.Steps(sav, LivingDexGame.HeartGold).Single(s => s.Label == label).Done;
+        var labels = Pokeathlon(LivingDexGame.HeartGold).Select(r => r.Label).ToHashSet();
+        int DoneCount() => Gen4Completion.Steps(sav, LivingDexGame.HeartGold).Count(s => s.Done && labels.Contains(s.Label));
+        // Une sauvegarde vierge (zéros partout, records compris) : rien de fait, pas même le Cours'Obstacles « en 0 s »
+        Assert.Equal(0, DoneCount());
+
+        var athlon = sav.Pokeathlon;
+        athlon.Medals.AwardMedal(25, 0b00001); // Pikachu : Vitesse
+        athlon.Medals.AwardMedal(152, PokeathlonMedalManager4.MaxMedalBits); // Germignon : les 5
+        Assert.True(Done("Gagner le parcours Vitesse"));
+        Assert.True(Done("Gagner le parcours Saut"));
+        Assert.True(Done("Trophée : un Pokémon aux 5 médailles"));
+        Assert.False(Done("Trophée : 2 Pokémon aux 5 médailles"));
+
+        var speed = athlon.GetCourseRecord(PokeathlonStat4.Speed);
+        speed.ScoreMax = 430;
+        Assert.True(Done("Trophée : parcours Vitesse à 420 points"));
+        Assert.False(Done("Trophée : parcours Vitesse à 450 points"));
+        Assert.False(Done("Trophée : parcours Force à 420 points"));
+
+        var counters = athlon.GlobalCounters;
+        counters.Dashed = 5000;
+        counters.Switched = 199;
+        for (var e = PokeathlonEvent4.HurdleDash; e < PokeathlonEvent4.Count; e++)
+            counters[e] = e == PokeathlonEvent4.GoalRoll ? 49u : 50u;
+        Assert.True(Done("Chaussures : 5 000 sprints"));
+        Assert.False(Done("Drapeau : 200 changements de Pokémon"));
+        Assert.False(Done("Poké Ball : 50 premières places dans chaque épreuve")); // Balle au But : 49
+        counters[PokeathlonEvent4.GoalRoll] = 50;
+        Assert.True(Done("Poké Ball : 50 premières places dans chaque épreuve"));
+
+        // Records : Cours'Obstacles en images (2 400 = 80 s), plus bas c'est mieux ; les autres, plus haut
+        static void SetRecord(Pokeathlon4 athlon, PokeathlonEvent4 e, ushort value)
+        {
+            var data = athlon.GetEventSelf(e);
+            data.Attempts = 1;
+            var best = data.GetRecord(0);
+            best.Record = value;
+            for (var i = 1; i < PokeathlonEventData4.MaxRecord; i++)
+            {
+                var other = data.GetRecord(i);
+                other.Record = ushort.MaxValue;
+            }
+        }
+        SetRecord(athlon, PokeathlonEvent4.HurdleDash, 2500);
+        SetRecord(athlon, PokeathlonEvent4.BlockSmash, 130);
+        Assert.False(Done("Trophée : Cours'Obstacles en 80 s ou moins"));
+        Assert.True(Done("Trophée : Casse Roc 130 rocs"));
+        SetRecord(athlon, PokeathlonEvent4.HurdleDash, 2400);
+        Assert.True(Done("Trophée : Cours'Obstacles en 80 s ou moins"));
+
+        athlon.FlagsDataCard = 0b101; // Cartes Mémo 01 et 03
+        Assert.True(Done("Obtenir la Carte Mémo 01"));
+        Assert.False(Done("Obtenir la Carte Mémo 02"));
+        Assert.True(Done("Obtenir la Carte Mémo 03"));
+
+        // Amitié : le total (meilleurs scores des parcours et des épreuves, médailles) passe 3 000
+        Assert.False(Done("Trophée : 3 000 points au total"));
+        for (var c = PokeathlonStat4.Speed; c < PokeathlonStat4.Count; c++)
+        {
+            var course = athlon.GetCourseRecord(c);
+            course.ScoreMax = 600;
+        }
+        Assert.True(Done("Trophée : 3 000 points au total"));
+        Assert.False(Done("Trophée : 3 100 points au total"));
+    }
+
+    [Fact]
+    public async Task RealHeartGold_PokeathlonSpeedCourseWon()
+    {
+        Assert.True((await _saves.AddAsync("sacha", "heartgold.sav", Real("heartgold.sav"))).Ok);
+        var candidate = Assert.Single(await _completions.ListCandidatesAsync("sacha"));
+        Assert.Equal([LivingDexGame.HeartGold], candidate.Games);
+        var view = (await _completions.GetAsync("sacha",
+            (await _completions.CreateAsync("sacha", candidate.SaveId, LivingDexGame.HeartGold)).Id!.Value))!;
+        var labels = Pokeathlon(LivingDexGame.HeartGold).Select(r => r.Label).ToHashSet();
+        var athlon = view.Steps.Where(s => s.Section == CompletionSection.Quests && labels.Contains(s.Label)).ToList();
+        Assert.Equal(77, athlon.Count);
+        // Une partie gagnée au parcours Vitesse (386 points ; Cours'Obstacles en 100,6 s, Course de Relais à 14,2 tours)
+        Assert.Equal(["Gagner le parcours Vitesse"], athlon.Where(s => s.Done).Select(s => s.Label));
+    }
 }

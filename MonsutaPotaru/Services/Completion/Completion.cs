@@ -29,7 +29,8 @@ public enum CompletionState { Missing, Done, Missed }
 /// amitié de Pikachu au maximum (1re génération) ; en 4e génération (<see cref="Gen4CompletionData"/>, par
 /// outils/completion_gen4.py) « B:n » badge n (HeartGold / SoulSilver : 0 à 7 Johto, 8 à 15 Kanto), « N » Pokédex National,
 /// « W:n:v » variable de script n (0x4000 retiré) arrivée à v au moins, « Z:n » forme n de Zarbi au Pokédex (A à Z, puis
-/// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin) ; en 5e génération
+/// ! et ?), « M:espèce:forme » forme vue au Pokédex (Motisma, Giratina, Shaymin), « PA:… » PokéAthlon d'HG / SS
+/// (<see cref="CompletionPokeathlon"/>) ; en 5e génération
 /// (<see cref="Gen5CompletionData"/>, par outils/completion_gen5.py) « K:n » objet n dans le sac, « SB:champ:v » Métro de
 /// Combat (mode Super ouvert, meilleure série), « PW:n » tournoi n du PWT remporté, « MD:n » médaille n obtenue, « PR:n »
 /// parure n du Music-Hall possédée ; en 6e génération (<see cref="Gen6CompletionData"/>, par outils/completion_gen6.py)
@@ -367,6 +368,7 @@ internal sealed class CompletionFlags(SaveFile sav)
             "Z" => ((SAV4)sav).Dex.GetUnownForm(byte.Parse(parts[1])),
             "M" => ((SAV4)sav).Dex.GetForms(ushort.Parse(parts[1])).Contains(byte.Parse(parts[2])),
             "RB" => pokemon.Value.Any(p => Ribbons.Holds(p, parts[1])),
+            "PA" => CompletionPokeathlon.Test(sav, parts),
             "K" => HasItem(int.Parse(parts[1])),
             "H" => HasItem(int.Parse(parts[1])) || IsHeld(int.Parse(parts[1])),
             "ST" => SuperTraining().GetTime1(int.Parse(parts[1])) > 0,
