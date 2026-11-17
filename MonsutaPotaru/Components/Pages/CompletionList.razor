@@ -14,7 +14,8 @@
 <PageTitle>@PageName</PageTitle>
 
 @* Complétions du compte : une carte par partie suivie (jaquette, sauvegarde, progression globale et par section), et la
-   création d'une nouvelle sur une sauvegarde stockée (1re à 9e génération pour l'instant ; pas encore Légendes Z-A). *@
+   création d'une nouvelle sur une sauvegarde stockée (1re à 9e génération pour l'instant ; pas encore Légendes Z-A) ou
+   sur un monde Minecraft stocké (All the Mons : quêtes et succès du modpack). *@
 
 @* Complétions d'un autre joueur (Multijoueurs, /joueurs/{pseudo}/completion) : consultation seule, sans création ni noms
    de fichiers. *@
@@ -44,6 +45,7 @@ else
                 <li>Sections : <strong>histoire, Pokédex, dresseurs, objets, rencontres uniques</strong> (et quêtes annexes à partir de la 2e génération).</li>
                 <li>Chaque section compte <strong>autant</strong> dans le total, même si elle est plus longue.</li>
                 <li>Pour l'instant : de Rouge / Bleu à Écarlate / Violet (1re à 9e génération, sans Légendes Z-A).</li>
+                <li><strong>All the Mons</strong> (Minecraft) : toutes les <strong>quêtes</strong> du livre de quêtes et tous les <strong>succès</strong> ; là, chaque quête et chaque succès compte autant dans le total.</li>
                 <li>À partir de la <strong>7e génération</strong>, le suivi est <strong>incomplet</strong> : certaines étapes du jeu ne sont pas encore comptées (pas de dresseurs en 7e et 8e génération).</li>
             </ul>
         </Help>
@@ -72,7 +74,14 @@ else
                         TakenTitle="Tu as déjà cette complétion" TakenSuffix="(déjà créée)" />
             @if (game is { } chosenGame)
             {
-                @if (Saves().Count == 0)
+                @if (Saves().Count == 0 && AllTheMonsLivingDex.Is(chosenGame))
+                {
+                    <p class="text-muted mb-3">
+                        Aucun monde All the Mons disponible : stocke le dossier de ton monde dans
+                        <a href="sauvegardes">« Mes sauvegardes »</a> (un monde qui a déjà sa complétion ne compte pas).
+                    </p>
+                }
+                else if (Saves().Count == 0)
                 {
                     <p class="text-muted mb-3">
                         Aucune sauvegarde de @LivingDexGames.Get(chosenGame).Name disponible : stockes-en une dans
@@ -143,7 +152,7 @@ else
                     <strong>@c.Game.Name</strong>
                     <div class="small text-muted">@(Visitor ? c.PublicSaveLabel : c.SaveLabel)</div>
                     <LivingDexProgress Owned="c.Progress.Tenths" Total="1000" Class="mt-2"
-                                       ValueText="@($"{c.Progress.Percent}, moyenne des sections")" />
+                                       ValueText="@($"{c.Progress.Percent}, {c.Progress.Basis}")" />
                     <div class="small mt-1 completion-card-sections">
                         @foreach (var s in c.Progress.Sections)
                         {

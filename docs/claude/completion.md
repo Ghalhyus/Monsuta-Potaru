@@ -591,6 +591,50 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   drapeaux absents ; pas reconnue par `SaveUtil` une fois écrite : **pas de vérification dans le navigateur** au-delà de
   la liste des jeux. Testé en mémoire (`CompletionGen9Tests`) ; aucune vraie sauvegarde.
 
+## All the Mons (Minecraft, 2026-11-16)
+- `Services/Cobblemon/AllTheMonsCompletion.cs`, tables `AllTheMonsCompletionData.cs` générées :
+  `python outils/completion_allthemons.py "<instance All the Mons>" MonsutaPotaru/Services/Cobblemon/AllTheMonsCompletionData.cs`
+  (instance CurseForge, `Install` de CurseForge à côté pour le jar de Minecraft 1.21.1 et sa traduction française, dans
+  `assets/objects` d'après l'index ; Node.js pour le script kubejs). Lecture du monde : `minecraft.md`.
+- Choix de l'utilisateur : **toutes les quêtes** (optionnelles, chapitres « WIP » et Créatif compris) ; **tous les
+  succès affichés, cachés compris** ; **deux sections (Quêtes, Succès) mais chaque étape pèse autant**
+  (`CompletionProgress.ByStep` : global = étapes faites / étapes, aussi pour le tri et la moyenne générale des
+  statistiques ; à ne pas « corriger » en moyenne des sections) ; **titres seulement** (quêtes « Tous droits réservés »
+  d'All the Mods, dépôt public), français s'il existe, sinon anglais.
+- Écartées par nous (signalé à l'utilisateur) : les 60 **notes de licence** d'All the Mods, une par chapitre (invisibles,
+  optionnelles, seulement des cases à cocher : visibles en mode édition seulement, jamais faisables). Les 6 vraies quêtes
+  secrètes (invisibles jusqu'à être faites : trident d'Allthemodium, « But why? »…) restent.
+- Quêtes (`config/ftbquests/quests`, SNBT) : chapitres triés comme le livre (sans groupe d'abord, puis
+  `chapter_groups.snbt`, puis `order_index`) ; quêtes d'un chapitre par position (y puis x). Titres : `quest.<id>.title`
+  des fichiers `lang/fr_fr(.snbt|/…)` puis `en_us` (fusionnés par ftbquestslangsplitter) ; sans titre, comme le jeu,
+  celui de la première tâche (`task.<id>.title`, sinon nom de l'objet ×quantité, du monstre, du succès, de la
+  structure…). Codes `&6` retirés. Progression : `completed` du fichier de l'équipe (identifiants de quêtes, tâches et
+  chapitres faits, avec la date).
+- Succès : `data/<mod>/advancement(s)/**.json` du jar de Minecraft, des 394 jars (jars imbriqués compris), des
+  datapacks, `global_packs` et `kubejs/data` (le dernier chargé gagne), plus ceux créés par
+  `kubejs/server_scripts/modpack/advancements.js` (`ServerEvents.generateData` : script exécuté par Node avec
+  `Utils.newMap`, `Java.loadClass`… simulés ; 26 succès « Pika Star »). Compté s'il a un `display`, remonte à une
+  racine qui en a un (les 24 450 recettes, sous `minecraft:recipes/root` sans écran, tombent) et ses
+  `neoforge:conditions` sont remplies (`mod_loaded` d'après les `mods.toml` ; condition inconnue = remplie : 5 succès de
+  Gateways écartés). Onglets : ceux de Minecraft dans l'ordre du jeu, puis par titre ; dans un onglet, l'arbre en
+  profondeur. Progression : `"done": true`.
+- Relevé du 2026-11-16 (All the Mons 2.1.0) : 71 chapitres, 4 656 quêtes ; 50 onglets, 1 735 succès (929 titres en
+  français). Monde de test Kantalia : 62 quêtes, 34 succès, 1,5 %.
+- Pages : sections `ModpackQuests` (« Quêtes », adresse sans `section`, la première) et `Advancements` (`?section=succes`) ;
+  `CompletionSections.FromSlug` prend les sections de la complétion (sa première par défaut, plus l'histoire). Étape
+  cachée pas faite : « Quête cachée » / « Succès caché ». Monde sans ces fichiers : `CompletionService.NoProgressNotice`
+  (pas pour un visiteur). 4 656 étapes s'affichent en 0,2 s (vérifié). Statistiques : les deux sections n'apparaissent
+  que si une complétion les a, nommées « (All the Mons) ».
+- Corrigé au passage : `ListCandidatesAsync` ne proposait aucune sauvegarde de 9e génération (`Generation <= 8`).
+- **Lisibilité (2026-11-17, choix de l'utilisateur ; essai sur All the Mons avant les autres complétions)** :
+  `CompletionPage.Folded` (jeu All the Mons) range chaque section en chapitres (`Zone`) repliables, **tous repliés** à
+  l'ouverture : ligne = bouton (▸ / ▾, `aria-expanded`), « fait / total », barre ; chapitres ouverts dans l'adresse
+  (`?ouverts=` : rangs des chapitres de la section dans l'ordre, sans filtre ; vidé au changement de section). Le filtre
+  retire les chapitres sans étape à montrer ; l'avancement reste celui de tout le chapitre. Bouton **Liste / Grille**
+  (`SortPreferences.CompletionView`, voir `comptes.md`) : grille = `.completion-grid` de `.completion-tile` (`app.css`).
+  « Intro » (Circuit Dresseur) n'a plus de quête une fois sa note de licence écartée : pas de ligne (70 chapitres).
+  Pour l'étendre aux jeux : enlever la condition de `Folded` (le Pokédex garde sa grille d'images).
+
 ## Reste à faire (toutes générations)
 - **Oublis et écarts avec les check-lists** : `completion-ecarts.md` (CS et CT offertes absentes en 4e et 5e génération,
   Meneurs de la Zone de Combat de Platine, Conseil 4 et Ruines Tanoby de Rouge Feu / Vert Feuille, Pokémon fixes

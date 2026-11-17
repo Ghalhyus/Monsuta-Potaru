@@ -13,7 +13,8 @@ son nom, **PokeBank Sync**, et les clés de connexion leur nom technique « Poke
   Perle, HeartGold, SoulSilver, Noire, Noire 2, Y, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
   sauvegarde de la 9e génération (Écarlate / Violet), ni de Let's Go, Diamant Étincelant ou Légendes Arceus : PKHeX sait
   les lire, à valider au cas par cas. Minecraft : modpack All the Mons (Cobblemon 1.8.4, NeoForge 1.21.1), monde solo
-  (`all-the-mons.zip` : dossier `pokemon`, `level.dat` et `stats` ; `CobblemonTests`, `StoredWorldTests`).
+  (`all-the-mons.zip` : dossier `pokemon`, `level.dat`, `stats`, `advancements` et `ftbquests` ; `CobblemonTests`,
+  `StoredWorldTests`, `AllTheMonsCompletionTests`).
 
 ## Lancer en local
 
@@ -105,10 +106,13 @@ ni sélectionnables ni glissables, un clic donne la raison, « Tout sélectionne
 Minecraft solo du modpack All the Mons (Cobblemon, format NBT, réglage par défaut) : l'équipe (« Équipe », 6 cases) puis
 les boîtes du PC (100 dans All the Mons, 30 cases).
 
-- **Fichiers lus** : le dossier `pokemon` (équipe, PC), `level.dat` (nom et graine du monde) et
-  `stats/<UUID du joueur>.json` (temps de jeu). Le joueur **choisit le dossier du monde** (`WorldFolderPicker`, script
+- **Fichiers lus** : le dossier `pokemon` (équipe, PC), `level.dat` (nom et graine du monde),
+  `stats/<UUID du joueur>.json` (temps de jeu), et pour la complétion `advancements/<UUID du joueur>.json` (succès) et
+  `ftbquests/<UUID de l'équipe>.snbt` (livre de quêtes : l'équipe FTB du joueur, ou le groupe dont il est membre d'après
+  `ftbteams/party/<UUID>.snbt`). Le joueur **choisit le dossier du monde** (`WorldFolderPicker`, script
   `watchWorldFolder` d'`app.js`) ou envoie un zip de ces fichiers. `level.dat` est exigé partout, `stats` dans
-  « Mes sauvegardes » seulement. Seuls ces fichiers sont gardés (`CobblemonSave.Bundle`).
+  « Mes sauvegardes » seulement ; succès et quêtes sont facultatifs (un monde sans eux a sa complétion à 0 %, avec un
+  conseil). Seuls ces fichiers sont gardés (`CobblemonSave.Bundle`), ceux des autres équipes FTB sont écartés.
 - **Sécurité du choix de dossier** : le navigateur n'ouvre et n'envoie que ces fichiers (pas `InputFile`, qui enverrait
   au serveur le nom de tous les fichiers du dossier) ; un dossier sans `level.dat` à sa racine est refusé sans rien lire ;
   le serveur revérifie tout (`CobblemonSave.ZipFromFolder` : chemins exacts, 32 fichiers et 4 Mo par fichier au plus,
@@ -119,9 +123,9 @@ les boîtes du PC (100 dans All the Mons, 30 cases).
 - **Mes sauvegardes** : « All the Mons — Kantalia » (nom du monde à la place du dresseur, génération 0, sans numéro de
   dresseur) ; mise à jour par le même monde seulement, confirmation si moins de temps de jeu ; ses Pokémon comptent dans
   la taille de la collection. « Télécharger » et la suppression rendent le dossier `pokemon` seul.
-- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; complétion, échanges, GTS et combats l'ignorent
-  donc ; l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes. Le living dex n'en a qu'un : All the Mons
-  (voir « Living dex »).
+- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; échanges, GTS et combats l'ignorent donc ;
+  l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes. Le living dex et la complétion n'en ont qu'un :
+  All the Mons (voir « Living dex » et « Complétion (100 %) »).
 
 - **Mondes séparés** : un Pokémon de Minecraft ne retourne que dans un monde Minecraft, un Pokémon des jeux ne va jamais
   dans Minecraft (grisés dans un sens comme dans l'autre, `SaveSession.WithdrawalProblem`). Les Pokémon de Minecraft sont
@@ -297,7 +301,9 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - Formulaire et adresse lus par les mêmes fonctions (`SiteSorts.*FromQuery`) : une valeur inconnue donne le tri d'origine.
 - La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"empile"` ou `"cote"` ;
   absente : hybride) et leur **mode agrandi** (`"combatAgrandi":true`), voir « Combats », dans leur propre formulaire :
-  enregistrer ou rétablir les tris ne les change pas, et inversement.
+  enregistrer ou rétablir les tris ne les change pas, et inversement. De même pour l'**affichage des étapes d'une
+  complétion** (`"completionVue":"grille"` ; absent : liste), aussi choisi par le bouton « Liste / Grille » de la page,
+  qui l'enregistre dans le compte qui regarde (voir « Complétion (100 %) »).
 
 ### Thèmes
 
@@ -730,6 +736,21 @@ textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs` à `
   (`Shared/GamePicker.razor`).
 - Page : `?section=pokedex|dresseurs|objets|rencontres|quetes` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
   groupées par lieu dans l'ordre de l'aventure ; Pokédex et Zarbi en sprites du jeu, comme le living dex.
+- **All the Mons** (`LivingDexGame.AllTheMons`, `Services/Cobblemon/AllTheMonsCompletion.cs`, tables
+  `AllTheMonsCompletionData.cs` générées par `outils/completion_allthemons.py` sur une instance du modpack) : sur un monde
+  Minecraft stocké, une par compte. Deux sections : **Quêtes** (`?section=` vide ; tout le livre de quêtes de FTB Quests,
+  optionnelles et chapitres « WIP » compris, 4 656 quêtes ; sans les 60 notes « Tous droits réservés » d'All the Mods,
+  invisibles hors du mode édition) et **Succès** (`?section=succes` ; les 1 735 succès affichés dans l'écran des progrès,
+  cachés compris : Minecraft, mods, et ceux du script kubejs du modpack ; pas les recettes). **Chaque étape pèse autant**
+  (choix de l'utilisateur : `CompletionProgress.ByStep`, le global est le total des étapes faites sur le total, pas la
+  moyenne des sections ; idem pour le tri et les statistiques). Étapes rangées par chapitre (« Cobblemon — Evolution ») et
+  par onglet ; quête ou succès caché pas encore fait : « Quête cachée » / « Succès caché ». **Titres seulement**, jamais
+  les descriptions (licence du modpack), en français quand le modpack ou le mod les traduit, sinon en anglais. Tables
+  relevées sur All the Mons 2.1.0 : une quête ou un succès ajouté par une mise à jour est ignoré jusqu'au prochain relevé.
+  **Lisibilité** (essai sur All the Mons avant les autres complétions) : chaque chapitre (onglet) est une ligne repliée
+  au départ, avec son avancement et sa barre ; un clic la déplie (`?ouverts=0,5`, rangs des chapitres de la section,
+  vidé au changement de section) ; un chapitre sans étape à montrer avec le filtre disparaît. Étapes en **liste** ou en
+  **grille** de cases (vertes si faites), réglage du compte qui regarde (« Préférences »), chez soi comme chez les autres.
 
 ### Statistiques
 
@@ -774,7 +795,11 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX, ou monde Minecraft) |
 | `MonsutaPotaru/Services/Cobblemon/Nbt.cs` | Lecture et écriture des fichiers NBT de Minecraft (gzip, UTF-8 « modifié » de Java), à l'octet près |
 | `MonsutaPotaru/Services/Cobblemon/CobblemonPokemon.cs` | Pokémon de Cobblemon : NBT gardé intact, lu pour l'affichage (identifiants de Showdown → numéros de PKHeX) |
-| `MonsutaPotaru/Services/Cobblemon/CobblemonSave.cs` | Monde All the Mons (zip ou dossier choisi) : équipe et PC du joueur, level.dat (identité), stats (temps de jeu), zip rendu (dossier `pokemon` seul), fichiers gardés, envoi du navigateur revérifié |
+| `MonsutaPotaru/Services/Cobblemon/CobblemonSave.cs` | Monde All the Mons (zip ou dossier choisi) : équipe et PC du joueur, level.dat (identité), stats (temps de jeu), succès et quêtes de l'équipe FTB (complétion), zip rendu (dossier `pokemon` seul), fichiers gardés, envoi du navigateur revérifié |
+| `MonsutaPotaru/Services/Cobblemon/Snbt.cs` | Lecture du SNBT (NBT en texte) des fichiers de FTB Quests et FTB Teams |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsCompletion.cs` | Complétion All the Mons : quêtes faites (progression FTB de l'équipe) et succès obtenus, lus dans un monde stocké |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsCompletionData.cs` | Généré par `outils/completion_allthemons.py` : chapitres, quêtes, onglets et succès du modpack (identifiants et titres) |
+| `outils/completion_allthemons.py` | Génère `AllTheMonsCompletionData.cs` d'après une instance All the Mons installée (quêtes de `config/ftbquests`, succès des jars des mods, de Minecraft et du script kubejs, exécuté par Node.js avec des fonctions simulées ; traductions fr_fr puis en_us) |
 | `MonsutaPotaru/Components/Shared/WorldFolderPicker.razor` | Bouton « choisir le dossier du monde » (« Dépôt / Retrait », « Mes sauvegardes ») : reçoit du navigateur les seuls fichiers utiles, les fait revérifier |
 | `MonsutaPotaru/Services/AdminService.cs` | Administration : rôles (donner, retirer, garde-fous), liste des comptes, code d'invitation (lecture, régénération), initialisation au démarrage (code, premier administrateur) |
 | `MonsutaPotaru/Services/DebugService.cs` | Mode debug d'un administrateur : comptes actifs en mémoire (`DebugMode`, coupé à la déconnexion), argent ajouté (montants fixes, journal), parc agrandi ou réduit gratuitement |
@@ -933,6 +958,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
 | `deploy/sons-serveur.cmd` (`sons-serveur.ps1`) | Envoie les musiques (`images/sons/*.mp3` : animation d'échange, combats) dans les images du serveur, par SSH |
 | `MonsutaPotaru.Tests/AllTheMonsLivingDexTests.cs` | Living dex All the Mons : cases de chaque mode (Méga de Légendes Z-A, formes et espèces du modpack, ce que Cobblemon n'a pas), images versionnées, formes de Cobblemon lues comme celles de PKHeX, création sur un monde seulement, comptage de l'équipe et du PC |
+| `MonsutaPotaru.Tests/AllTheMonsCompletionTests.cs` | Complétion All the Mons : tables du modpack, lecteur SNBT, succès et quêtes gardés (équipe ou groupe FTB), étapes lues dans le vrai monde, poids par étape, service ; pages dans `CompletionPagesTests` |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
@@ -1100,6 +1126,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; formes, traits et noms des formes de chaque espèce (`data/cobblemon/species`), repris dans `CobblemonPokemon` et `AllTheMonsLivingDex` ; modèles et textures des coupes de Couafarel et des motifs de Prismillon propres à Cobblemon, rendus en images par `outils/rendu-cobblemon.py` (`wwwroot/minecraft/pokemon/`) | MPL-2.0 (le mod) ; modèles : CC BY-NC 3.0 (fichiers `license` des modèles) |
 | [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) (modpack 2.1.0, mod `allthemons` de LobsterJonn), [Complete Cobblemon Collection](https://www.curseforge.com/minecraft/mc-mods/complete-cobblemon-collection) (Xcavalier), [Cobblemon: Mega Showdown](https://www.curseforge.com/minecraft/mc-mods/cobblemon-mega-showdown) et zamega (Yajat Kaul, Navas) | Logo du modpack, jaquette du living dex All the Mons (`wwwroot/minecraft/all-the-mons.png`, fourni par l'utilisateur) ; espèces et formes du modpack (Piglich, Creepyon, Stari Patrickyu ; espèces rendues disponibles ; Méga) relevées dans les mods pour `AllTheMonsLivingDex` ; modèles et textures de Piglich, Creepyon (texture du Creeper de Minecraft) et Patrickyu rendus en images (`wwwroot/minecraft/pokemon/`) | All Rights Reserved (`allthemons`, Complete Cobblemon Collection), Mega Showdown License v2.1 ; Minecraft © Mojang ; usage de fan, non commercial |
+| Livre de quêtes d'All the Mons ([All the Mods Team](https://www.curseforge.com/minecraft/modpacks/all-the-mons), FTB Quests) et succès (advancements) de Minecraft et des mods du modpack | Identifiants et **titres seulement** (jamais les descriptions) des quêtes et des succès, relevés par `outils/completion_allthemons.py` dans `AllTheMonsCompletionData.cs` pour la complétion All the Mons | Quêtes : All Rights Reserved (All the Mods Team) ; succès : licences de chaque mod, Minecraft © Mojang ; usage de fan, non commercial |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
 | [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |

@@ -53,7 +53,11 @@
     [Parameter] public bool Visitor { get; set; }
 
     private IEnumerable<(string, LivingDexAverage)> Rows =>
-        [("Générale", Stats.General), .. Stats.Sections.Select(s => (CompletionSections.Name(s.Section), s.Average))];
+        [("Générale", Stats.General), .. Stats.Sections.Select(s => (Label(s.Section), s.Average))];
+
+    /// <summary>Nom de la section ; celles d'All the Mons disent d'où elles viennent (« Quêtes » seul se confondrait avec les quêtes annexes).</summary>
+    private static string Label(CompletionSection section) =>
+        CompletionSections.IsModpack(section) ? $"{CompletionSections.Name(section)} (All the Mons)" : CompletionSections.Name(section);
 
     private static string Completions(int count) => count == 1 ? "1 complétion" : $"{count} complétions";
 }

@@ -155,7 +155,8 @@ public sealed class StatisticsServiceTests : IDisposable
         Assert.Equal(3, stats.Count);
         // Rouge : (1/2 + 1 + 0 + 1/3 + 2/3) / 5 = 50 % ; Argent : (5 + 1/3) / 6 = 88,8… % ; l'illisible : 0 %, pas complète.
         Assert.Equal(new LivingDexAverage(3, 0, 462), stats.General); // (1/2 + 8/9 + 0) / 3 = 46,2 %
-        Assert.Equal(CompletionSections.All, stats.Sections.Select(s => s.Section));
+        // Les sections d'All the Mons n'apparaissent pas tant qu'aucune complétion ne les a
+        Assert.Equal(CompletionSections.All.Where(s => !CompletionSections.IsModpack(s)), stats.Sections.Select(s => s.Section));
         var sections = stats.Sections.ToDictionary(s => s.Section, s => s.Average);
         Assert.Equal(new LivingDexAverage(2, 1, 750), sections[CompletionSection.Story]); // 1/2 et 1
         Assert.Equal(new LivingDexAverage(2, 2, 1_000), sections[CompletionSection.Pokedex]);

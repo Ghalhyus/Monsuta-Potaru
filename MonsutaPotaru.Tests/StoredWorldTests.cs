@@ -153,12 +153,13 @@ public sealed class StoredWorldTests : IDisposable
         Assert.True((await _saves.AddAsync("sacha", "noir2.sav", SaveSessionTests.CreateBw2Save())).Ok);
         var world = await StoreWorld();
 
-        // Living dex : seulement celui d'All the Mons ; complétion : pas proposé
+        // Living dex et complétion : seulement ceux d'All the Mons
         var dexes = new LivingDexService(_db.Factory, NullLogger<LivingDexService>.Instance);
         Assert.Equal([LivingDexGame.AllTheMons], (await dexes.ListCandidatesAsync("sacha")).Single(c => c.SaveId == world.Id).Games);
         Assert.False((await dexes.CreateAsync("sacha", world.Id, LivingDexGame.Global)).Ok);
         var completions = new CompletionService(_db.Factory, NullLogger<CompletionService>.Instance);
-        Assert.DoesNotContain(await completions.ListCandidatesAsync("sacha"), c => c.SaveId == world.Id);
+        Assert.Equal([LivingDexGame.AllTheMons], (await completions.ListCandidatesAsync("sacha")).Single(c => c.SaveId == world.Id).Games);
+        Assert.False((await completions.CreateAsync("sacha", world.Id, LivingDexGame.Black2)).Ok);
 
         // Inventaire : ni argent ni objets à lire
         var inventory = _db.Inventory();

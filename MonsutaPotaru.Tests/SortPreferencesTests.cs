@@ -90,6 +90,30 @@ public sealed class SortPreferencesTests : IDisposable
     }
 
     [Fact]
+    public void Json_KeepsTheCompletionView_OnlyWhenGrid()
+    {
+        var grid = new SortPreferences { CompletionView = CompletionStepsView.Grid };
+        Assert.Equal("""{"completionVue":"grille"}""", grid.ToJson());
+        Assert.Equal(CompletionStepsView.Grid, SortPreferences.FromJson(grid.ToJson()).CompletionView);
+        Assert.Null(new SortPreferences { CompletionView = CompletionStepsView.List }.ToJson()); // la liste : réglage d'origine
+        Assert.Equal(CompletionStepsView.List, SortPreferences.FromJson("""{"completionVue":"pirate"}""").CompletionView);
+        Assert.Equal(["Liste", "Grille"], SiteSorts.CompletionViewChoices.Select(c => c.Label));
+    }
+
+    [Fact]
+    public async Task Service_SavesTheCompletionView_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { Battle = BattleLayout.SideBySide })).Ok);
+        var saved = await service.SetCompletionViewAsync("sacha", CompletionStepsView.Grid);
+        Assert.Equal((true, "Affichage des étapes de complétion enregistré."), (saved.Ok, saved.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal((CompletionStepsView.Grid, BattleLayout.SideBySide), (read.CompletionView, read.Battle));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetCompletionViewAsync("disparu", CompletionStepsView.Grid)).Message);
+    }
+
+    [Fact]
     public async Task Service_SavesTheEnlargedScreens_WithoutTouchingTheRest()
     {
         var service = new PreferencesService(_db.Factory);

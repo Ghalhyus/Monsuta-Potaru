@@ -114,7 +114,7 @@ public sealed class CompletionGen9Tests
         var empty = CompletionGames.Steps(sav, LivingDexGame.Scarlet)!;
         Assert.Equal(0, CompletionProgress.Of(empty).Tenths);
         Assert.Equal(692, empty.Count(s => s.Section == CompletionSection.Pokedex));
-        Assert.Equal(CompletionSections.All, CompletionProgress.Of(empty).Sections.Select(s => s.Section));
+        Assert.Equal(CompletionSections.All.Where(s => !CompletionSections.IsModpack(s)), CompletionProgress.Of(empty).Sections.Select(s => s.Section));
 
         var rows = Gen9CompletionData.Scarlet;
         var item = rows.First(r => r.Done.StartsWith("FI:", StringComparison.Ordinal));

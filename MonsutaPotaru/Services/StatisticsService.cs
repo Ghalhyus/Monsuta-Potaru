@@ -124,11 +124,14 @@ public sealed class StatisticsService(IDbContextFactory<ApplicationDbContext> db
     /// </summary>
     public static CompletionStats Summarize(IReadOnlyList<CompletionProgress> progress) => new(
         Mean([.. progress.Select(p => (p.AverageFraction(), p.Sections.Count > 0 && p.Complete))]),
-        [.. CompletionSections.All.Select(section =>
-        {
-            var inSection = progress.SelectMany(p => p.Sections).Where(s => s.Section == section).ToList();
-            return (section, Mean([.. inSection.Select(s => (Fraction(s.Done, s.Total), s.Done == s.Total))]));
-        })]);
+        [.. CompletionSections.All
+            // Quêtes et succès d'All the Mons : seulement si une complétion les a (sinon une ligne vide pour chaque joueur).
+            .Where(section => !CompletionSections.IsModpack(section) || progress.Any(p => p.Sections.Any(s => s.Section == section)))
+            .Select(section =>
+            {
+                var inSection = progress.SelectMany(p => p.Sections).Where(s => s.Section == section).ToList();
+                return (section, Mean([.. inSection.Select(s => (Fraction(s.Done, s.Total), s.Done == s.Total))]));
+            })]);
 
     private static (BigInteger Numerator, BigInteger Denominator) Fraction(int done, int total) =>
         total > 0 ? (done, total) : (0, 1);

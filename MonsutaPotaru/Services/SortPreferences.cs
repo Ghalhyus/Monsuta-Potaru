@@ -30,6 +30,12 @@ public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bo
 /// </summary>
 public enum BattleLayout { Stacked, SideBySide, Hybrid }
 
+/// <summary>
+/// Affichage des étapes d'une complétion : une par ligne (par défaut), ou en grille de cases. Pour l'instant sur la
+/// complétion All the Mons seulement (essai avant de l'étendre aux autres complétions).
+/// </summary>
+public enum CompletionStepsView { List, Grid }
+
 /// <summary>Valeurs « tri » et « ordre » d'une adresse (« ?tri=nom&amp;ordre=desc ») ; null : absente.</summary>
 public readonly record struct SortQuery(string? Tri, string? Ordre)
 {
@@ -109,6 +115,19 @@ public static class SiteSorts
     public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
 
     public static string Slug(BattleLayout layout) => BattleLayoutChoices.First(c => c.Layout == layout).Slug;
+
+    /// <summary>Affichages des étapes d'une complétion : nom dans les préférences et le formulaire, libellé.</summary>
+    public static readonly IReadOnlyList<(CompletionStepsView View, string Slug, string Label)> CompletionViewChoices =
+    [
+        (CompletionStepsView.List, "liste", "Liste"),
+        (CompletionStepsView.Grid, "grille", "Grille"),
+    ];
+
+    public static string Slug(CompletionStepsView view) => CompletionViewChoices.First(c => c.View == view).Slug;
+
+    /// <summary>Affichage lu dans les préférences ou le formulaire ; absent ou inconnu (trafiqué) : la liste.</summary>
+    public static CompletionStepsView CompletionViewFrom(string? slug) =>
+        CompletionViewChoices.FirstOrDefault(c => c.Slug == slug, (View: CompletionStepsView.List, Slug: "", Label: "")).View;
 
     /// <summary>Disposition des écrans d'un combat quand le compte n'en a pas choisi : hybride.</summary>
     public const BattleLayout DefaultBattleLayout = BattleLayout.Hybrid;
@@ -192,8 +211,9 @@ public static class SiteSorts
 /// Tris par défaut d'un compte (« Mon compte » → « Préférences ») : un par onglet de l'inventaire, celui de « Ma
 /// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
 /// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
-/// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
-/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true}</c>.
+/// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>), et l'affichage des étapes d'une complétion
+/// (<see cref="CompletionView"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille"}</c>.
 /// </summary>
 public sealed record SortPreferences
 {
@@ -209,6 +229,9 @@ public sealed record SortPreferences
 
     /// <summary>Écrans de combat agrandis (bouton « Agrandir » de la page du combat) : toute la place du contenu de la page.</summary>
     public bool BattleEnlarged { get; init; }
+
+    /// <summary>Étapes d'une complétion en liste ou en grille (bouton de la page, ou « Préférences »).</summary>
+    public CompletionStepsView CompletionView { get; init; }
 
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
 
@@ -227,6 +250,7 @@ public sealed record SortPreferences
         public StoredSort? Rubans { get; set; }
         public string? Combat { get; set; }
         public bool? CombatAgrandi { get; set; }
+        public string? CompletionVue { get; set; }
     }
 
     private sealed class StoredSort
@@ -251,9 +275,10 @@ public sealed record SortPreferences
             Rubans = Ribbons == default ? null : StoredSort.From(SiteSorts.RibbonQuery(Ribbons)),
             Combat = Battle == SiteSorts.DefaultBattleLayout ? null : SiteSorts.Slug(Battle),
             CombatAgrandi = BattleEnlarged ? true : null,
+            CompletionVue = CompletionView == CompletionStepsView.List ? null : SiteSorts.Slug(CompletionView),
         };
         return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
-            && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null
+            && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null && stored.CompletionVue is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -288,11 +313,15 @@ public sealed record SortPreferences
             Ribbons = stored.Rubans is { } r ? SiteSorts.RibbonFromQuery(r.ToQuery()) ?? default : default,
             Battle = SiteSorts.BattleLayoutFrom(stored.Combat),
             BattleEnlarged = stored.CombatAgrandi == true,
+            CompletionView = SiteSorts.CompletionViewFrom(stored.CompletionVue),
         };
     }
 }
 
-/// <summary>Lecture et enregistrement des préférences d'un compte : les tris par défaut et la disposition des écrans d'un combat.</summary>
+/// <summary>
+/// Lecture et enregistrement des préférences d'un compte : les tris par défaut, la disposition des écrans d'un combat et
+/// l'affichage des étapes d'une complétion.
+/// </summary>
 public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
     /// <summary>Tris par défaut du compte ; les tris d'origine sans compte (ou compte supprimé).</summary>
@@ -325,6 +354,13 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
     {
         var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout, BattleEnlarged = enlarged });
         return result.Ok ? new(true, "Écrans de combat enregistrés.") : result;
+    }
+
+    /// <summary>Étapes d'une complétion en liste ou en grille, choisi sur la page ou dans les préférences ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetCompletionViewAsync(string userId, CompletionStepsView view)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { CompletionView = view });
+        return result.Ok ? new(true, "Affichage des étapes de complétion enregistré.") : result;
     }
 
     /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>

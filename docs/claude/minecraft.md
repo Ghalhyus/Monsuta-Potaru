@@ -42,8 +42,14 @@ README : « Minecraft (All the Mons, Cobblemon) ». Code : `MonsutaPotaru/Servic
 ## Zip ou dossier
 - `CobblemonSave.TryRead(zip)` : les fichiers de l'équipe et du PC sont cherchés sous `<racine>/pokemon/…` (racine
   vide, ou le dossier du monde : « Kantalia/… », `\` de Windows acceptés) ; `level.dat` et `stats/<joueur>.json` sous
-  la même racine. Tout le reste est ignoré et n'est pas gardé (`Bundle` : pokemon, level.dat, stats, chemins depuis le
-  monde). Zip piégé : 20 000 entrées, 64 Mo décompressés au plus, taille annoncée vérifiée (`CopyAtMost`).
+  la même racine. Tout le reste est ignoré et n'est pas gardé (`Bundle` : pokemon, level.dat, stats, succès, quêtes,
+  chemins depuis le monde).
+- Complétion All the Mons (2026-11-16, voir `completion.md`) : aussi `advancements/<joueur>.json` et les fichiers des
+  équipes FTB, `ftbquests/<équipe>.snbt` et `ftbteams/party/<groupe>.snbt` (`KeepPlayerTeam` : seulement la progression
+  du joueur et, s'il est membre d'un groupe, rang `owner` / `officer` / `member` dans `ranks`, le groupe et sa
+  progression, prise en priorité : `CobblemonSave.Quests`). Facultatifs (`HasProgress`). SNBT lu par `Snbt.cs`
+  (ensembles, listes, tableaux typés `[I; …]`, suffixes `L b s d f`, clés entre guillemets ou non, profondeur 64 ; null si
+  illisible). `ftbteams/player/…` n'est jamais envoyé (rien d'utile). Zip piégé : 20 000 entrées, 64 Mo décompressés au plus, taille annoncée vérifiée (`CopyAtMost`).
 - `Write()` : le zip rendu au joueur, seulement `pokemon/…` (avec les `.dat.old`). `level.dat` et `stats` ne sont jamais
   rendus : le joueur a pu rejouer, ses fichiers seraient remplacés par une vieille copie.
 - **Dossier choisi** : `<input type="file" webkitdirectory>` (pas `InputFile` : Blazor enverrait au serveur le nom et la
@@ -86,7 +92,8 @@ README : « Minecraft (All the Mons, Cobblemon) ». Code : `MonsutaPotaru/Servic
 
 ## Tests
 - `MonsutaPotaru.Tests/Sauvegardes/all-the-mons.zip` : vrai monde (Kantalia) : `pokemon` (un Feunnec dans l'équipe,
-  PC vide, pris à 18 h 33), `level.dat` et `stats` (pris à 19 h 02 : 29 598 ticks). `RealSavesTests` ignore les `.zip`.
+  PC vide, pris à 18 h 33), `level.dat` et `stats` (pris à 19 h 02 : 29 598 ticks), `advancements` et `ftbquests` (pris
+  à 21 h 13 : 62 quêtes, 34 succès ; `AllTheMonsCompletionTests`). `RealSavesTests` ignore les `.zip`.
   `CobblemonTests.Mon(espèce, n, modification)` fabrique d'autres Pokémon (UUID propre à `n`) ; `World(...)` les met
   dans la première boîte (paquet complet) ; `WorldVariant(graine, temps de jeu, sans level.dat, sans stats)` ;
   `InWorld(zip rendu)` refait ce que fait le joueur (décompresser dans le monde) ; `FolderPayload` / `RealFolderPayload`

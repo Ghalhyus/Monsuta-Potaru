@@ -219,6 +219,18 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         var (_, tampered) = await Submit(browser, "/Account/Manage/Preferences", "battle", new Dictionary<string, string> { ["combat"] = "pirate" });
         Assert.Equal("hybride", Parser.ParseDocument(tampered).QuerySelector("select[name=combat] option[selected]")?.GetAttribute("value"));
 
+        // Préférences : étapes d'une complétion en liste ou en grille, leur propre formulaire (« Revenir aux tris d'origine »
+        // n'y touche pas ; une valeur trafiquée donne la liste)
+        Assert.Equal("liste", Parser.ParseDocument(tampered).QuerySelector("select[name=completionVue] option[selected]")?.GetAttribute("value"));
+        var (_, grid) = await Submit(browser, "/Account/Manage/Preferences", "completion-view", new Dictionary<string, string> { ["completionVue"] = "grille" });
+        var gridPage = Parser.ParseDocument(grid);
+        Assert.Contains("Affichage des étapes de complétion enregistré.", gridPage.QuerySelector(".alert")?.TextContent ?? grid);
+        Assert.Equal("grille", gridPage.QuerySelector("select[name=completionVue] option[selected]")?.GetAttribute("value"));
+        var (_, gridKept) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
+        Assert.Equal("grille", Parser.ParseDocument(gridKept).QuerySelector("select[name=completionVue] option[selected]")?.GetAttribute("value"));
+        var (_, gridTampered) = await Submit(browser, "/Account/Manage/Preferences", "completion-view", new Dictionary<string, string> { ["completionVue"] = "pirate" });
+        Assert.Equal("liste", Parser.ParseDocument(gridTampered).QuerySelector("select[name=completionVue] option[selected]")?.GetAttribute("value"));
+
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>
         {

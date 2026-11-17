@@ -11,7 +11,10 @@ namespace MonsutaPotaru.Services;
 /// (<c>pokemon/playerpartystore/xx/&lt;uuid&gt;.dat</c>) et le PC (<c>pokemon/pcstore/xx/&lt;uuid&gt;.dat</c>) du joueur, en
 /// NBT compressé (réglage <c>storageFormat: nbt</c> de Cobblemon, celui par défaut), <c>level.dat</c> (nom et graine du
 /// monde : son identité) et <c>stats/&lt;uuid&gt;.json</c> (temps de jeu). Ils arrivent dans un zip, ou choisis dans le
-/// dossier du monde par le navigateur (<see cref="ZipFromFolder"/>, qui n'envoie que ceux-là).
+/// dossier du monde par le navigateur (<see cref="ZipFromFolder"/>, qui n'envoie que ceux-là). Pour la complétion
+/// All the Mons, aussi les succès du joueur (<c>advancements/&lt;uuid&gt;.json</c>) et sa progression dans le livre de
+/// quêtes (<c>ftbquests/&lt;équipe&gt;.snbt</c> : son équipe FTB, la sienne, ou le groupe dont il est membre, décrit dans
+/// <c>ftbteams/party/&lt;équipe&gt;.snbt</c>).
 /// <para>
 /// Seuls ces fichiers sont gardés (<see cref="Bundle"/>, ce que stocke « Mes sauvegardes ») ; le joueur ne reçoit que le
 /// dossier <c>pokemon</c> (<see cref="Write"/>) : <c>level.dat</c> et <c>stats</c> ne sont jamais réécrits.
@@ -34,7 +37,7 @@ public sealed partial class CobblemonSave
     private const long MaxUncompressed = 64L * 1024 * 1024;
     private const int MaxKeptFileBytes = 4 * 1024 * 1024;
 
-    /// <summary>Fichiers venus du dossier choisi dans le navigateur : au plus ce nombre (un monde solo en a 4 ou 5).</summary>
+    /// <summary>Fichiers venus du dossier choisi dans le navigateur : au plus ce nombre (un monde solo en a 6 ou 7).</summary>
     public const int MaxFolderFiles = 32;
 
     public const string NoLevelMessage =
@@ -69,6 +72,24 @@ public sealed partial class CobblemonSave
     /// même monde est reconnu d'un envoi à l'autre. Null sans level.dat.
     /// </summary>
     public string? IdentityKey => HasLevel ? $"{IdentityPrefix}{PlayerId}:{Seed}" : null;
+
+    /// <summary>Le zip avait les succès du joueur et sa progression dans le livre de quêtes (complétion All the Mons).</summary>
+    public bool HasProgress => Advancements is not null && Quests is not null;
+
+    /// <summary>Succès du joueur (<c>advancements/&lt;uuid&gt;.json</c>), ou null.</summary>
+    public byte[]? Advancements => File($"advancements/{PlayerId}.json");
+
+    /// <summary>
+    /// Progression de l'équipe FTB du joueur dans le livre de quêtes (<c>ftbquests/&lt;équipe&gt;.snbt</c>) : celle du
+    /// groupe dont il est membre s'il en a rejoint un, sinon la sienne (même UUID que lui) ; null sans le fichier.
+    /// </summary>
+    public byte[]? Quests => (PartyId is { } party ? File($"ftbquests/{party}.snbt") : null) ?? File($"ftbquests/{PlayerId}.snbt");
+
+    /// <summary>Groupe FTB (« party ») dont le joueur est membre, d'après <c>ftbteams/party</c> ; null s'il n'en a pas.</summary>
+    public string? PartyId { get; }
+
+    private byte[]? File(string path) =>
+        _files.FirstOrDefault(f => f.Key.Equals(path, StringComparison.OrdinalIgnoreCase)).Value;
 
     public int BoxCount => _boxes.Length;
     public int PageCount => 1 + _boxes.Length;
@@ -117,6 +138,7 @@ public sealed partial class CobblemonSave
         WorldName = worldName;
         Seed = seed;
         PlayTimeSeconds = playTime;
+        PartyId = PartyOf(files, playerId);
 
         var slotCount = (int)Math.Clamp(party.Integer("SlotCount") ?? 6, 1, 64);
         _partySlots = Enumerable.Range(0, slotCount).Select(i => Read(party, $"Slot{i}")).ToArray();
@@ -142,9 +164,13 @@ public sealed partial class CobblemonSave
     private static partial Regex StoreFile();
 
     /// <summary>Chemins acceptés depuis le dossier du monde (dossier choisi dans le navigateur) : rien d'autre ne passe.</summary>
-    [GeneratedRegex($@"^(level\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{{2}}/{Uuid}\.dat(\.old)?|stats/{Uuid}\.json)$",
+    [GeneratedRegex($@"^(level\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{{2}}/{Uuid}\.dat(\.old)?|stats/{Uuid}\.json|advancements/{Uuid}\.json|ftbquests/{Uuid}\.snbt|ftbteams/party/{Uuid}\.snbt)$",
         RegexOptions.IgnoreCase)]
     private static partial Regex FolderFile();
+
+    /// <summary>Fichiers des équipes FTB : progression dans le livre de quêtes, groupes (« party »).</summary>
+    [GeneratedRegex($@"^(?<kind>ftbquests|ftbteams/party)/(?<team>{Uuid})\.snbt$", RegexOptions.IgnoreCase)]
+    private static partial Regex TeamFile();
 
     /// <summary>Lit le zip ; null avec un message prêt à afficher s'il ne convient pas.</summary>
     public static CobblemonSave? TryRead(byte[] zip, out string error)
@@ -215,7 +241,9 @@ public sealed partial class CobblemonSave
             var relative = name[root.Length..];
             var keep = stores.Any(s => s.Name == name && !s.Json && s.Player == player)
                 || relative == "level.dat"
-                || relative.Equals($"stats/{player}.json", StringComparison.OrdinalIgnoreCase);
+                || relative.Equals($"stats/{player}.json", StringComparison.OrdinalIgnoreCase)
+                || relative.Equals($"advancements/{player}.json", StringComparison.OrdinalIgnoreCase)
+                || TeamFile().IsMatch(relative); // triés plus bas : seulement l'équipe du joueur
             if (!keep)
                 continue;
             if (data.Length > MaxKeptFileBytes)
@@ -225,6 +253,7 @@ public sealed partial class CobblemonSave
             }
             files[relative] = data;
         }
+        KeepPlayerTeam(files, player);
 
         try
         {
@@ -270,6 +299,45 @@ public sealed partial class CobblemonSave
             error = $"Fichier de Cobblemon illisible : {e.Message}";
             return null;
         }
+    }
+
+    /// <summary>
+    /// Ne garde, des fichiers des équipes FTB, que ceux du joueur : sa propre progression, et le groupe dont il est
+    /// membre avec la progression de ce groupe (un monde solo n'en a souvent qu'un : celle du joueur).
+    /// </summary>
+    private static void KeepPlayerTeam(Dictionary<string, byte[]> files, string player)
+    {
+        var party = PartyOf(files, player);
+        foreach (var key in files.Keys.ToList())
+        {
+            var match = TeamFile().Match(key);
+            if (!match.Success)
+                continue;
+            var team = match.Groups["team"].Value;
+            var isQuests = match.Groups["kind"].Value.Equals("ftbquests", StringComparison.OrdinalIgnoreCase);
+            var mine = team.Equals(party, StringComparison.OrdinalIgnoreCase)
+                || isQuests && team.Equals(player, StringComparison.OrdinalIgnoreCase);
+            if (!mine)
+                files.Remove(key);
+        }
+    }
+
+    /// <summary>Rangs des membres d'un groupe FTB (un allié ou un invité n'en fait pas partie).</summary>
+    private static readonly string[] MemberRanks = ["owner", "officer", "member"];
+
+    /// <summary>Groupe FTB (fichiers <c>ftbteams/party</c>) dont le joueur est membre ; null s'il n'en a pas.</summary>
+    private static string? PartyOf(Dictionary<string, byte[]> files, string player)
+    {
+        foreach (var (key, data) in files.OrderBy(f => f.Key, StringComparer.Ordinal))
+        {
+            var match = TeamFile().Match(key);
+            if (!match.Success || !match.Groups["kind"].Value.Equals("ftbteams/party", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (Snbt.TryParseCompound(data)?.GetValueOrDefault("ranks") is Dictionary<string, object?> ranks
+                && ranks.Any(r => r.Key.Equals(player, StringComparison.OrdinalIgnoreCase) && r.Value is string rank && MemberRanks.Contains(rank)))
+                return match.Groups["team"].Value.ToLowerInvariant();
+        }
+        return null;
     }
 
     /// <summary>Temps de jeu (secondes) lu dans les statistiques du joueur : <c>minecraft:play_time</c>, en ticks (20 par seconde).</summary>
@@ -321,7 +389,7 @@ public sealed partial class CobblemonSave
         return ToZip(_files.Where(f => f.Key.StartsWith("pokemon/", StringComparison.Ordinal)), party, pc);
     }
 
-    /// <summary>Tous les fichiers gardés (pokemon, level.dat, stats), équipe et PC à jour : ce que stocke « Mes sauvegardes ».</summary>
+    /// <summary>Tous les fichiers gardés (pokemon, level.dat, stats, succès, quêtes), équipe et PC à jour : ce que stocke « Mes sauvegardes ».</summary>
     public byte[] Bundle()
     {
         var (party, pc) = WriteStores();
@@ -351,7 +419,7 @@ public sealed partial class CobblemonSave
     /// Les fichiers envoyés par le navigateur depuis le dossier du monde (<c>wwwroot/js/app.js</c>, <c>worldFolder</c>),
     /// remis en zip. Format : « MPW1 », longueur de l'en-tête (4 octets, petit-boutiste), en-tête JSON
     /// <c>[{"n": chemin, "s": taille}]</c>, puis les contenus à la suite. Le navigateur ne doit envoyer que level.dat, le
-    /// dossier pokemon et les statistiques ; tout est revérifié ici (une page trafiquée peut envoyer n'importe quoi) :
+    /// dossier pokemon, les statistiques, les succès et les fichiers des équipes FTB ; tout est revérifié ici (une page trafiquée peut envoyer n'importe quoi) :
     /// chemins exacts, nombre et tailles, longueur totale. Null avec un message sinon.
     /// </summary>
     public static byte[]? ZipFromFolder(byte[] payload, out string error)

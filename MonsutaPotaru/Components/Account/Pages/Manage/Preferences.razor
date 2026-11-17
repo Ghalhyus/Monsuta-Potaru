@@ -9,7 +9,8 @@
 
 <PageTitle>Préférences</PageTitle>
 
-@* Deux réglages, chacun son bloc et son formulaire : les tris par défaut, puis la disposition des écrans d'un combat.
+@* Trois réglages, chacun son bloc et son formulaire : les tris par défaut, la disposition des écrans d'un combat, puis
+   l'affichage des étapes d'une complétion.
    Tris par défaut de l'inventaire (un par onglet), de « Ma collection » et des vues générales des living dex, des complétions et des rubans : appliqués
    quand l'adresse ne précise pas de tri, chez soi comme chez les autres joueurs. Rendu statique : un formulaire envoyé au
    serveur, des listes HTML simples (name="tri-…" / "ordre-…"), relues avec les règles de l'adresse (SiteSorts). *@
@@ -95,6 +96,34 @@
     </form>
 </Block>
 
+@* Étapes d'une complétion en liste ou en grille : leur propre formulaire. Le même choix se fait sur la page d'une
+   complétion (bouton « Liste / Grille ») ; pour l'instant, seule la complétion All the Mons s'en sert. *@
+<Block Title="Complétion : affichage des étapes">
+    <p>
+        Choisis comment s'affichent les étapes d'une complétion : une par ligne, ou en grille de cases (plus d'étapes à
+        l'écran).<br/>
+        Tu peux aussi changer d'affichage sur la page d'une complétion. Pour l'instant, seule la complétion All the Mons en
+        profite.
+    </p>
+    <form method="post" @formname="completion-view" @onsubmit="OnCompletionViewSubmitAsync">
+        <AntiforgeryToken />
+        <div class="row g-2 align-items-center mb-2">
+            <label class="col-sm-4 col-xl-2 col-form-label col-form-label-sm" for="completion-vue">Étapes</label>
+            <div class="col-sm-4 col-xl-2">
+                <select id="completion-vue" name="completionVue" class="form-select form-select-sm">
+                    @foreach (var (view, slug, text) in SiteSorts.CompletionViewChoices)
+                    {
+                        <option value="@slug" selected="@(view == saved.CompletionView)">@text</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+    </form>
+</Block>
+
 @code {
     private const string CollectionKey = "collection", LivingDexKey = "livingdex", CompletionKey = "completion", RibbonKey = "rubans";
 
@@ -157,11 +186,14 @@
         if (user is null)
             return; // compte supprimé : page redirigée
         // Valeurs du formulaire relues comme une adresse : une valeur inconnue (trafiquée) donne le tri d'origine.
-        // Les écrans du combat ont leur propre formulaire : gardés tels quels.
-        var sorts = Action == "reset" ? SortPreferences.Default with { Battle = saved.Battle, BattleEnlarged = saved.BattleEnlarged } : new SortPreferences
+        // Les écrans du combat et l'affichage des complétions ont leur propre formulaire : gardés tels quels.
+        var sorts = Action == "reset"
+            ? SortPreferences.Default with { Battle = saved.Battle, BattleEnlarged = saved.BattleEnlarged, CompletionView = saved.CompletionView }
+            : new SortPreferences
         {
             Battle = saved.Battle,
             BattleEnlarged = saved.BattleEnlarged,
+            CompletionView = saved.CompletionView,
             Inventory = SiteSorts.InventoryTabs.ToDictionary(t => t.Key, t => SiteSorts.ItemFromQuery(Posted(t.Value)) ?? default),
             Collection = SiteSorts.CollectionFromQuery(Posted(CollectionKey)) ?? default,
             LivingDex = SiteSorts.LivingDexFromQuery(Posted(LivingDexKey)) ?? default,
@@ -185,6 +217,21 @@
         var form = HttpContext.Request.Form;
         var result = await PreferenceStore.SetBattleScreensAsync(user.Id, SiteSorts.BattleLayoutFrom(form["combat"].FirstOrDefault()),
             form["agrandi"].FirstOrDefault() == "oui");
+        if (!result.Ok)
+        {
+            message = AccountService.AsError(result.Message);
+            return;
+        }
+        RedirectManager.RedirectToCurrentPageWithStatus(result.Message, HttpContext);
+    }
+
+    /// <summary>Étapes d'une complétion en liste ou en grille ; une valeur inconnue (trafiquée) donne la liste.</summary>
+    private async Task OnCompletionViewSubmitAsync()
+    {
+        if (user is null)
+            return; // compte supprimé : page redirigée
+        var result = await PreferenceStore.SetCompletionViewAsync(user.Id,
+            SiteSorts.CompletionViewFrom(HttpContext.Request.Form["completionVue"].FirstOrDefault()));
         if (!result.Ok)
         {
             message = AccountService.AsError(result.Message);

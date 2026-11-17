@@ -4,8 +4,12 @@ using PKHeX.Core;
 
 namespace MonsutaPotaru.Services;
 
-/// <summary>Section d'une complétion : chacune pèse autant dans le pourcentage global, quel que soit son nombre d'étapes.</summary>
-public enum CompletionSection { Story, Pokedex, Trainers, Items, Encounters, Quests }
+/// <summary>
+/// Section d'une complétion : dans un jeu, chacune pèse autant dans le pourcentage global, quel que soit son nombre
+/// d'étapes. Les deux dernières sont celles d'All the Mons (livre de quêtes de FTB Quests, succès de Minecraft et des
+/// mods), où chaque étape pèse autant (<see cref="CompletionProgress.ByStep"/>).
+/// </summary>
+public enum CompletionSection { Story, Pokedex, Trainers, Items, Encounters, Quests, ModpackQuests, Advancements }
 
 /// <summary>Tri des cartes de la vue générale.</summary>
 public enum CompletionSort
@@ -80,22 +84,29 @@ public sealed record CompletionSectionProgress(CompletionSection Section, int Do
 
 /// <summary>
 /// Progression d'une complétion : chaque section du jeu compte pour la même part (le Pokédex et ses 151 ou 251 Pokémon
-/// n'écrasent pas l'histoire) ; le pourcentage global est la moyenne des pourcentages des sections.
+/// n'écrasent pas l'histoire) ; le pourcentage global est la moyenne des pourcentages des sections. Avec
+/// <paramref name="ByStep"/> (All the Mons, choix de l'utilisateur), chaque étape pèse autant : le global est le total
+/// des étapes faites sur le total des étapes, les sections ne servent qu'à les ranger.
 /// </summary>
-public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress> Sections)
+public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress> Sections, bool ByStep = false)
 {
     /// <summary>Pourcentage global en dixièmes, arrondi vers le bas : 1 000 seulement quand tout est fait.</summary>
     public int Tenths
     {
         get
         {
-            var counted = Sections.Where(s => s.Total > 0).ToList();
-            if (counted.Count == 0)
-                return 0;
-            var average = counted.Average(s => (decimal)s.Done / s.Total);
-            return (int)Math.Floor(average * 1000);
+            var (numerator, denominator) = AverageFraction();
+            return (int)(numerator * 1000 / denominator);
         }
     }
+
+    /// <summary>Ce que mesure le global, pour les lecteurs d'écran et les barres (« 57,3 %, moyenne des sections »).</summary>
+    public string Basis => ByStep ? "toutes étapes confondues" : "moyenne des sections";
+
+    /// <summary>Phrase sous le total, sur la page d'une complétion.</summary>
+    public string Weighting => ByStep
+        ? "Chaque étape compte autant dans le total, quelle que soit sa section."
+        : $"Chaque section compte pour {Share} du total.";
 
     /// <summary>
     /// Compare deux moyennes exactement, en fractions (sans l'arrondi de <see cref="Tenths"/> ni celui d'un nombre décimal) :
@@ -109,14 +120,17 @@ public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress>
     }
 
     /// <summary>
-    /// Moyenne des sections comptées, en fraction : Σ fait / total, divisée par leur nombre (0 / 1 sans section). Sert au
-    /// tri et aux statistiques (moyenne exacte de plusieurs complétions).
+    /// Moyenne des sections comptées, en fraction : Σ fait / total, divisée par leur nombre (0 / 1 sans section) ; avec
+    /// <see cref="ByStep"/>, toutes les étapes faites sur toutes les étapes. Sert au tri et aux statistiques (moyenne
+    /// exacte de plusieurs complétions).
     /// </summary>
     public (BigInteger Numerator, BigInteger Denominator) AverageFraction()
     {
         var counted = Sections.Where(s => s.Total > 0).ToList();
         if (counted.Count == 0)
             return (0, 1);
+        if (ByStep)
+            return (counted.Sum(s => s.Done), counted.Sum(s => s.Total));
         BigInteger numerator = 0, denominator = 1;
         foreach (var s in counted)
         {
@@ -143,8 +157,11 @@ public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress>
         _ => $"1/{Sections.Count}",
     };
 
-    /// <summary>Sections que le jeu a (la 1re génération n'a pas de quêtes annexes), dans l'ordre de la page.</summary>
-    public static CompletionProgress Of(IEnumerable<CompletionStep> steps)
+    /// <summary>
+    /// Sections que le jeu a (la 1re génération n'a pas de quêtes annexes), dans l'ordre de la page ; chaque étape pèse
+    /// autant avec <paramref name="byStep"/>.
+    /// </summary>
+    public static CompletionProgress Of(IEnumerable<CompletionStep> steps, bool byStep = false)
     {
         var list = steps.ToList();
         return new([.. CompletionSections.All.Where(section => list.Any(s => s.Section == section)).Select(section =>
@@ -152,7 +169,7 @@ public sealed record CompletionProgress(IReadOnlyList<CompletionSectionProgress>
             var inSection = list.Where(s => s.Section == section).ToList();
             return new CompletionSectionProgress(section, inSection.Count(s => s.Done),
                 inSection.Count(s => s.State == CompletionState.Missed), inSection.Count);
-        })]);
+        })], byStep);
     }
 }
 
@@ -162,8 +179,12 @@ public static class CompletionSections
     public static readonly IReadOnlyList<CompletionSection> All =
     [
         CompletionSection.Story, CompletionSection.Pokedex, CompletionSection.Trainers, CompletionSection.Items,
-        CompletionSection.Encounters, CompletionSection.Quests,
+        CompletionSection.Encounters, CompletionSection.Quests, CompletionSection.ModpackQuests, CompletionSection.Advancements,
     ];
+
+    /// <summary>Sections propres à All the Mons : absentes des statistiques tant qu'aucune complétion ne les a.</summary>
+    public static bool IsModpack(CompletionSection section) =>
+        section is CompletionSection.ModpackQuests or CompletionSection.Advancements;
 
     public static string Name(CompletionSection section) => section switch
     {
@@ -172,6 +193,8 @@ public static class CompletionSections
         CompletionSection.Trainers => "Dresseurs",
         CompletionSection.Items => "Objets",
         CompletionSection.Encounters => "Rencontres uniques",
+        CompletionSection.ModpackQuests => "Quêtes",
+        CompletionSection.Advancements => "Succès",
         _ => "Quêtes annexes",
     };
 
@@ -183,11 +206,14 @@ public static class CompletionSections
         CompletionSection.Trainers => "dresseurs",
         CompletionSection.Items => "objets",
         CompletionSection.Encounters => "rencontres",
+        CompletionSection.ModpackQuests => "livre-de-quetes",
+        CompletionSection.Advancements => "succes",
         _ => "quetes",
     };
 
-    public static CompletionSection FromSlug(string? slug) =>
-        All.FirstOrDefault(s => Slug(s) == slug?.ToLowerInvariant(), CompletionSection.Story);
+    /// <summary>Section de l'adresse, si la complétion l'a ; sinon sa première (l'histoire dans un jeu).</summary>
+    public static CompletionSection FromSlug(string? slug, IReadOnlyList<CompletionSection> sections) =>
+        sections.FirstOrDefault(s => Slug(s) == slug?.ToLowerInvariant(), sections.Count > 0 ? sections[0] : CompletionSection.Story);
 }
 
 /// <summary>
@@ -197,7 +223,8 @@ public static class CompletionSections
 /// SoulSilver (<see cref="Gen4Completion"/>), Noir, Blanc, Noir 2 et Blanc 2 (<see cref="Gen5Completion"/>), X, Y, Rubis Oméga
 /// et Saphir Alpha (<see cref="Gen6Completion"/>), Soleil, Lune, Ultra-Soleil, Ultra-Lune et Let's Go
 /// (<see cref="Gen7Completion"/>), Épée, Bouclier, Diamant Étincelant, Perle Scintillante et Légendes Arceus
-/// (<see cref="Gen8Completion"/>), Écarlate et Violet (<see cref="Gen9Completion"/>), toutes les langues.
+/// (<see cref="Gen8Completion"/>), Écarlate et Violet (<see cref="Gen9Completion"/>), toutes les langues ; le modpack All
+/// the Mons (<see cref="AllTheMonsCompletion"/>, sur un monde Minecraft stocké).
 /// </summary>
 public static class CompletionGames
 {
@@ -211,7 +238,7 @@ public static class CompletionGames
         LivingDexGame.Sun, LivingDexGame.Moon, LivingDexGame.UltraSun, LivingDexGame.UltraMoon,
         LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee,
         LivingDexGame.Sword, LivingDexGame.Shield, LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl,
-        LivingDexGame.LegendsArceus, LivingDexGame.Scarlet, LivingDexGame.Violet,
+        LivingDexGame.LegendsArceus, LivingDexGame.Scarlet, LivingDexGame.Violet, LivingDexGame.AllTheMons,
     ];
 
     /// <summary>

@@ -380,6 +380,34 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .completion-card-sections { display: flex; flex-wrap: wrap; gap: .1rem .6rem; }
 .completion-dex { grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); }
 
+/* Complétion All the Mons : chapitres repliables (titre, avancement, barre), étapes en liste ou en grille de cases. */
+.completion-chapter-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; padding: .35rem 0;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+.completion-chapter-toggle {
+    flex: 1 1 16rem; display: flex; align-items: center; gap: .5rem; padding: 0; border: 0; background: none;
+    color: inherit; font-weight: 600; text-align: left;
+}
+.completion-chapter-toggle:hover { color: var(--bs-primary); }
+.completion-chapter-arrow { flex: none; width: 1rem; }
+.completion-chapter-count { flex: none; min-width: 5.5rem; text-align: right; }
+.completion-chapter-bar { flex: 0 1 14rem; min-width: 8rem; }
+.completion-chapter-body { padding: .5rem 0 1rem 1.5rem; }
+.completion-grid {
+    list-style: none; padding: 0; margin: 0; display: grid; gap: .4rem;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+.completion-tile {
+    display: flex; align-items: flex-start; gap: .35rem; min-height: 3.25rem; padding: .4rem .5rem;
+    border: 1px solid var(--bs-border-color); border-radius: .4rem; font-size: .875rem; line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.completion-tile .completion-mark { flex: none; font-weight: 700; }
+.completion-tile.done { background: var(--bs-success-bg-subtle); border-color: var(--bs-success-border-subtle); }
+.completion-tile.done .completion-mark { color: var(--bs-success); }
+.completion-tile.missing { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+
 /* Rubans : cartes des Pokémon suivis (celles des living dex ; le choix du Pokémon à suivre est CollectionPicker), et rubans d'un suivi par famille
    (images de PKHeX agrandies sans flou ; un ruban manquant en gris pâle). */
 .ribbon-sprite { image-rendering: pixelated; }

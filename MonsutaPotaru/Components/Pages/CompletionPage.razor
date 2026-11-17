@@ -9,11 +9,14 @@
 @inject CompletionService Completions
 @inject NavigationManager Navigation
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
 <PageTitle>@(Visitor && playerChecked && player is null ? "Joueur introuvable" : view is null ? "Complétion" : $"Complétion de {view.Game.Name}")</PageTitle>
 
-@* Une complétion : la progression globale (moyenne des sections), un bouton par section avec sa barre, puis les étapes de
-   la section choisie, groupées par lieu dans l'ordre de l'aventure (le Pokédex en images, comme un living dex). *@
+@* Une complétion : la progression globale (moyenne des sections ; All the Mons : toutes les étapes, chacune autant), un
+   bouton par section avec sa barre, puis les étapes de la section choisie, groupées par lieu dans l'ordre de l'aventure
+   (le Pokédex en images, comme un living dex ; All the Mons : par chapitre du livre de quêtes, par onglet des succès,
+   repliés au départ, et étapes en liste ou en grille de cases au choix : essai avant de l'étendre aux autres complétions). *@
 
 @* Complétion d'un autre joueur (Multijoueurs) : consultation seule, sans suppression ni nom de fichier. *@
 @if (Visitor && player is null)
@@ -42,9 +45,9 @@ else if (view is not null)
             <div class="d-flex align-items-center gap-2">
                 <strong>Total</strong>
                 <LivingDexProgress Owned="view.Progress.Tenths" Total="1000" Class="flex-grow-1"
-                                   ValueText="@($"{view.Progress.Percent}, moyenne des sections")" />
+                                   ValueText="@($"{view.Progress.Percent}, {view.Progress.Basis}")" />
             </div>
-            <div class="small text-muted mt-1">Chaque section compte pour @view.Progress.Share du total.</div>
+            <div class="small text-muted mt-1">@view.Progress.Weighting</div>
             @if (!Visitor)
             {
                 @* Sous le titre, comme toutes les actions du site (jamais poussée à droite). *@
@@ -63,6 +66,10 @@ else if (view is not null)
         </div>
     }
 
+    @if (view.Notice is not null && !Visitor)
+    {
+        <p class="text-danger">@view.Notice</p>
+    }
     @if (view.Steps.Count == 0)
     {
         <p class="text-danger">La sauvegarde de cette complétion ne se lit plus : envoie-en une nouvelle version dans « Mes sauvegardes ».</p>
@@ -98,6 +105,18 @@ else if (view is not null)
                 </button>
             }
         </div>
+        @if (Folded)
+        {
+            @* Liste ou grille : réglage du compte qui regarde (« Préférences »), enregistré à chaque clic. *@
+            <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Affichage des étapes">
+                @foreach (var (v, _, label) in SiteSorts.CompletionViewChoices)
+                {
+                    var value = v;
+                    <button type="button" class="btn @(stepsView == value ? "btn-primary" : "btn-outline-primary")"
+                            aria-pressed="@(stepsView == value ? "true" : "false")" @onclick="() => SetStepsView(value)">@label</button>
+                }
+            </div>
+        }
     </div>
 
     var shown = SectionSteps.Where(Shown).ToList();
@@ -120,6 +139,59 @@ else if (view is not null)
             }
         </div>
     }
+    else if (Folded)
+    {
+        @* Un chapitre (un onglet pour les succès) par ligne, replié au départ : titre, avancement, barre ; un clic le
+           déplie (gardé dans l'adresse : ?ouverts=0,5). Un chapitre sans étape à montrer avec ce filtre disparaît. *@
+        <div class="completion-chapters">
+            @foreach (var chapter in Chapters)
+            {
+                var visible = chapter.Steps.Where(Shown).ToList();
+                if (visible.Count == 0)
+                    continue;
+                var index = chapter.Index;
+                var open = openChapters.Contains(index);
+                var done = chapter.Steps.Count(s => s.Done);
+                <div class="completion-chapter @(open ? "open" : "")">
+                    <div class="completion-chapter-head">
+                        <button type="button" class="completion-chapter-toggle" aria-expanded="@(open ? "true" : "false")"
+                                @onclick="() => ToggleChapter(index)">
+                            <span class="completion-chapter-arrow" aria-hidden="true">@(open ? "▾" : "▸")</span>
+                            <span>@chapter.Zone</span>
+                        </button>
+                        <span class="completion-chapter-count small text-muted">@done / @chapter.Steps.Count</span>
+                        <LivingDexProgress Owned="done" Total="chapter.Steps.Count" Class="completion-chapter-bar" />
+                    </div>
+                    @if (open)
+                    {
+                        <div class="completion-chapter-body">
+                            @if (stepsView == CompletionStepsView.Grid)
+                            {
+                                <ul class="completion-grid">
+                                    @foreach (var step in visible)
+                                    {
+                                        <li class="completion-tile @StateClass(step)" title="@step.Label">
+                                            <span class="completion-mark" aria-hidden="true">@Mark(step)</span>
+                                            <span><span class="visually-hidden">@StateText(step) : </span>@step.Label</span>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <ul class="completion-steps">
+                                    @foreach (var step in visible)
+                                    {
+                                        @StepItem(step)
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
     else
     {
         @foreach (var zone in shown.GroupBy(s => s.Zone))
@@ -128,6 +200,17 @@ else if (view is not null)
             <ul class="completion-steps">
                 @foreach (var step in zone)
                 {
+                    @StepItem(step)
+                }
+            </ul>
+        }
+    }
+}
+
+@code {
+    /// <summary>Une étape en liste : coche, image (Pokémon), texte, précision, badge « raté ».</summary>
+    private RenderFragment StepItem(CompletionStep step) => __builder =>
+    {
                     <li class="completion-step @StateClass(step)">
                         <span class="completion-mark" aria-hidden="true">@Mark(step)</span>
                         @if (step.Species != 0)
@@ -146,13 +229,8 @@ else if (view is not null)
                             }
                         </span>
                     </li>
-                }
-            </ul>
-        }
-    }
-}
+    };
 
-@code {
     [Parameter] public int Id { get; set; }
 
     /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/completion/{id}) : sa complétion, en lecture seule.</summary>
@@ -160,6 +238,7 @@ else if (view is not null)
 
     [SupplyParameterFromQuery(Name = "section")] private string? SectionFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "filtre")] private string? FilterFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "ouverts")] private string? OpenFromQuery { get; set; }
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private bool Visitor => Pseudo is not null;
@@ -171,6 +250,19 @@ else if (view is not null)
     private CompletionSection section;
     private Filter filter;
     private bool confirmDelete;
+    private HashSet<int> openChapters = [];
+    private CompletionStepsView? stepsView; // réglage du compte qui regarde ; null : pas encore lu
+    private string viewerId = "";
+
+    /// <summary>
+    /// Étapes rangées par chapitre repliable (All the Mons pour l'instant : des milliers d'étapes) ; ailleurs, tous les
+    /// lieux s'affichent dépliés.
+    /// </summary>
+    private bool Folded => view is not null && AllTheMonsLivingDex.Is(view.Game.Game);
+
+    /// <summary>Chapitres de la section dans leur ordre, avec leur rang (celui de l'adresse « ?ouverts= »).</summary>
+    private List<(int Index, string Zone, List<CompletionStep> Steps)> Chapters =>
+        [.. SectionSteps.GroupBy(s => s.Zone).Select((g, i) => (i, g.Key, g.ToList()))];
 
     /// <summary>Étapes affichées : toutes, celles qui manquent (ratées comprises) ou celles qui sont faites.</summary>
     private enum Filter { All, Missing, Done }
@@ -242,13 +334,45 @@ else if (view is not null)
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         view = await Completions.GetAsync(userId, Id);
         notFound = view is null;
-        section = CompletionSections.FromSlug(SectionFromQuery);
+        section = CompletionSections.FromSlug(SectionFromQuery, Sections);
+        openChapters = [.. (OpenFromQuery ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(n => int.TryParse(n, out var i) ? i : -1).Where(i => i >= 0)];
+        // Le réglage est celui du joueur connecté, même chez un autre joueur : sa façon de lire une page.
+        if (stepsView is null)
+        {
+            viewerId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            stepsView = (await Preferences.SortsAsync(viewerId)).CompletionView;
+        }
         filter = FilterSlugs.FirstOrDefault(f => f.Value == FilterFromQuery) is { Value: not null } found ? found.Key : Filter.All;
     }
 
-    /// <summary>Section choisie, gardée dans l'adresse (« Histoire », la première, n'y est pas écrite).</summary>
+    /// <summary>Sections de cette complétion, dans l'ordre de la page.</summary>
+    private List<CompletionSection> Sections => view?.Progress.Sections.Select(s => s.Section).ToList() ?? [];
+
+    /// <summary>Section choisie, gardée dans l'adresse (la première, « Histoire » dans un jeu, n'y est pas écrite).</summary>
     private void SetSection(CompletionSection value) =>
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("section", value == CompletionSection.Story ? null : CompletionSections.Slug(value)), replace: true);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["section"] = Sections.Count > 0 && value == Sections[0] ? null : CompletionSections.Slug(value),
+            ["ouverts"] = null, // les chapitres ouverts sont ceux d'une section
+        }), replace: true);
+
+    /// <summary>Déplie ou replie un chapitre ; les chapitres ouverts sont gardés dans l'adresse.</summary>
+    private void ToggleChapter(int index)
+    {
+        var open = new SortedSet<int>(openChapters);
+        if (!open.Remove(index))
+            open.Add(index);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("ouverts", open.Count == 0 ? null : string.Join(",", open)), replace: true);
+    }
+
+    /// <summary>Liste ou grille : appliqué tout de suite, enregistré dans le compte qui regarde.</summary>
+    private async Task SetStepsView(CompletionStepsView value)
+    {
+        stepsView = value;
+        if (viewerId.Length > 0)
+            await Preferences.SetCompletionViewAsync(viewerId, value);
+    }
 
     private void SetFilter(Filter value) =>
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", FilterSlugs.GetValueOrDefault(value)), replace: true);

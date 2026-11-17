@@ -10,8 +10,9 @@ namespace MonsutaPotaru.Services;
 public sealed record CompletionSummary(int Id, LivingDexGameInfo Game, string SaveLabel, string PublicSaveLabel, CompletionProgress Progress);
 
 /// <summary>Une complétion et toutes ses étapes, lues dans la sauvegarde.</summary>
+/// <param name="Notice">Avertissement à afficher (monde stocké sans ses quêtes ni ses succès), ou null.</param>
 public sealed record CompletionView(int Id, LivingDexGameInfo Game, string SaveLabel, string PublicSaveLabel,
-    IReadOnlyList<CompletionStep> Steps, CompletionProgress Progress);
+    IReadOnlyList<CompletionStep> Steps, CompletionProgress Progress, string? Notice = null);
 
 /// <summary>Sauvegarde stockée qui peut recevoir une complétion, et ses jeux possibles (Rouge ou Bleu : au choix).</summary>
 public sealed record CompletionCandidate(int SaveId, string Label, IReadOnlyList<LivingDexGame> Games);
@@ -21,8 +22,8 @@ public sealed record CompletionResult(bool Ok, string Message, int? Id = null);
 /// <summary>
 /// Complétions d'un compte (« Défis » → « Complétion (100 %) ») : une partie stockée suivie vers le 100 %, lue à chaque
 /// affichage dans la sauvegarde liée (elle suit donc chaque mise à jour, site ou 3DS). Une par jeu et par compte ; une
-/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). Pour l'instant : de la 1re à la 8e génération
-/// (<see cref="CompletionGames"/>).
+/// sauvegarde pour une seule complétion (elle peut aussi avoir son living dex). De la 1re à la 9e génération, et All the
+/// Mons sur un monde Minecraft stocké (<see cref="CompletionGames"/>).
 /// </summary>
 public sealed class CompletionService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
@@ -37,9 +38,9 @@ public sealed class CompletionService(
             .ToListAsync();
         return [.. rows.OrderBy(c => c.Game).Select(c =>
         {
-            var steps = Steps(c.Game, c.Data, c.FileName);
+            var (steps, _) = Steps(c.Game, c.Data, c.FileName);
             return new CompletionSummary(c.Id, LivingDexGames.Get(c.Game), SaveLabel(c.TrainerName, c.FileName), c.TrainerName,
-                CompletionProgress.Of(steps));
+                CompletionProgress.Of(steps, AllTheMonsLivingDex.Is(c.Game)));
         })];
     }
 
@@ -52,14 +53,27 @@ public sealed class CompletionService(
             .FirstOrDefaultAsync();
         if (c is null)
             return null;
-        var steps = Steps(c.Game, c.Data, c.FileName);
+        var (steps, notice) = Steps(c.Game, c.Data, c.FileName);
         return new(c.Id, LivingDexGames.Get(c.Game), SaveLabel(c.TrainerName, c.FileName), c.TrainerName, steps,
-            CompletionProgress.Of(steps));
+            CompletionProgress.Of(steps, AllTheMonsLivingDex.Is(c.Game)), notice);
     }
 
-    /// <summary>Étapes lues dans la sauvegarde ; aucune si elle ne se lit plus (elle ne compte alors pour rien).</summary>
-    private static List<CompletionStep> Steps(LivingDexGame game, byte[] data, string fileName) =>
-        StoredSaveService.TryRead(data, fileName, out var sav) ? CompletionGames.Steps(sav, game) ?? [] : [];
+    /// <summary>Monde envoyé avant la complétion All the Mons (ou sans ces dossiers dans le zip) : rien ne peut être compté.</summary>
+    public const string NoProgressNotice =
+        "Ce monde a été envoyé sans ses quêtes ni ses succès : renvoie-le dans « Mes sauvegardes » (le dossier du monde, ou un zip avec ses dossiers « advancements » et « ftbquests »).";
+
+    /// <summary>
+    /// Étapes lues dans la sauvegarde ou le monde ; aucune si elle ne se lit plus (elle ne compte alors pour rien). Un monde
+    /// sans ses quêtes ni ses succès a toutes ses étapes à faire, avec un avertissement.
+    /// </summary>
+    private static (List<CompletionStep> Steps, string? Notice) Steps(LivingDexGame game, byte[] data, string fileName)
+    {
+        if (AllTheMonsLivingDex.Is(game))
+            return CobblemonSave.IsZip(data) && CobblemonSave.TryRead(data, out _) is { } world
+                ? (AllTheMonsCompletion.Steps(world), world.HasProgress ? null : NoProgressNotice)
+                : ([], null);
+        return (StoredSaveService.TryRead(data, fileName, out var sav) ? CompletionGames.Steps(sav, game) ?? [] : [], null);
+    }
 
     /// <summary>Jeux qui ont déjà leur complétion sur ce compte (grisés à la création).</summary>
     public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId)
@@ -69,8 +83,9 @@ public sealed class CompletionService(
     }
 
     /// <summary>
-    /// Sauvegardes stockées qui peuvent recevoir une complétion : de la 1re à la 8e génération (sans les versions japonaises
-    /// et coréennes des deux premières), pas encore liées à une complétion, avec un jeu libre.
+    /// Sauvegardes stockées qui peuvent recevoir une complétion : de la 1re à la 9e génération (sans les versions japonaises
+    /// et coréennes des deux premières) et les mondes Minecraft (All the Mons), pas encore liées à une complétion, avec un
+    /// jeu libre.
     /// </summary>
     public async Task<List<CompletionCandidate>> ListCandidatesAsync(string ownerId)
     {
@@ -78,13 +93,19 @@ public sealed class CompletionService(
         var taken = await db.Completions.Where(c => c.OwnerId == ownerId).Select(c => c.Game).ToListAsync();
         var linked = db.Completions.Select(c => c.StoredSaveId);
         var saves = await db.StoredSaves.AsNoTracking()
-            .Where(s => s.OwnerId == ownerId && s.Generation <= 8 && !linked.Contains(s.Id))
+            .Where(s => s.OwnerId == ownerId && s.Generation <= 9 && !linked.Contains(s.Id))
             .OrderBy(s => s.UploadedAt)
-            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data })
+            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data, s.IdentityKey })
             .ToListAsync();
         var candidates = new List<CompletionCandidate>();
         foreach (var s in saves)
         {
+            if (s.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal)) // monde Minecraft
+            {
+                if (!taken.Contains(LivingDexGame.AllTheMons))
+                    candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", [LivingDexGame.AllTheMons]));
+                continue;
+            }
             if (!StoredSaveService.TryRead(s.Data, s.FileName, out var sav))
                 continue;
             var games = CompletionGames.For(sav).Except(taken).ToList();
@@ -102,10 +123,17 @@ public sealed class CompletionService(
         var gameName = LivingDexGames.Get(game).Name;
         await using var db = await dbFactory.CreateDbContextAsync();
         var save = await db.StoredSaves.AsNoTracking().Where(s => s.Id == saveId && s.OwnerId == ownerId)
-            .Select(s => new { s.FileName, s.Data }).FirstOrDefaultAsync();
+            .Select(s => new { s.FileName, s.Data, s.IdentityKey }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !CompletionGames.For(sav).Contains(game))
+        // Un monde Minecraft pour All the Mons, une sauvegarde de jeu pour les jeux (le navigateur peut envoyer l'un pour l'autre).
+        var world = save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+        if (AllTheMonsLivingDex.Is(game) || world)
+        {
+            if (AllTheMonsLivingDex.Is(game) != world)
+                return new(false, world ? $"Ce monde Minecraft n'est pas une partie de {gameName}." : $"Cette sauvegarde n'est pas un monde {gameName}.");
+        }
+        else if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !CompletionGames.For(sav).Contains(game))
             return new(false, sav is SAV1 { Japanese: true } or SAV2 { Japanese: true } or SAV2 { Korean: true }
                 ? "Les sauvegardes japonaises et coréennes n'ont pas encore de complétion."
                 : $"Cette sauvegarde n'est pas une partie de {gameName}.");

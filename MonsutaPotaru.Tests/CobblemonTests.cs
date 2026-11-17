@@ -128,7 +128,7 @@ public sealed class CobblemonTests : IDisposable
     [Fact]
     public void Nbt_RoundTrip_IsByteExact()
     {
-        foreach (var (name, data) in Unzip(RealZip()).Where(f => !f.Key.StartsWith("stats/")))
+        foreach (var (name, data) in Unzip(RealZip()).Where(f => f.Key.Contains(".dat"))) // pas les statistiques, succès et quêtes (JSON, SNBT)
         {
             var plain = Gunzip(data);
             var root = Nbt.Read(data);

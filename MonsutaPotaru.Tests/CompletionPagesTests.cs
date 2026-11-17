@@ -36,13 +36,14 @@ public sealed class CompletionPagesTests : PageTestContext
         await cut.Click("Annuler");
         await cut.Click("+ Ajouter une sauvegarde");
 
-        // Générations repliées au départ (9, de Rouge à Écarlate / Violet : 37 jeux), dépliées une à une par leur titre
+        // Générations repliées au départ (9, de Rouge à Écarlate / Violet : 37 jeux, puis Minecraft : All the Mons),
+        // dépliées une à une par leur titre
         Assert.Empty(cut.FindAll("input[name=completionGame]"));
-        Assert.Equal(9, cut.FindAll(".livingdex-generation-toggle").Count);
+        Assert.Equal(10, cut.FindAll(".livingdex-generation-toggle").Count);
         Assert.Equal("▸1re génération (3 jeux)", cut.FindAll(".livingdex-generation-toggle")[0].TextContent.Trim());
-        foreach (var toggle in Enumerable.Range(0, 9))
+        foreach (var toggle in Enumerable.Range(0, 10))
             await cut.FindAll(".livingdex-generation-toggle")[toggle].ClickAsync(new());
-        Assert.Equal(37, cut.FindAll("input[name=completionGame]").Count);
+        Assert.Equal(38, cut.FindAll("input[name=completionGame]").Count);
 
         // Jaune : pas de sauvegarde ; Rouge : la sauvegarde proposée d'office
         await cut.FindAll("input[name=completionGame]")[2].ChangeAsync(new() { Value = true });
@@ -51,7 +52,7 @@ public sealed class CompletionPagesTests : PageTestContext
         cut.WaitForAssertion(() => Assert.Contains("rouge.sav", cut.Find("#completionSave").TextContent));
         // Repliée, la 1re génération montre encore le jeu choisi
         await cut.FindAll(".livingdex-generation-toggle")[0].ClickAsync(new());
-        Assert.Equal(35, cut.FindAll("input[name=completionGame]").Count);
+        Assert.Equal(36, cut.FindAll("input[name=completionGame]").Count);
         Assert.Equal("false", cut.FindAll(".livingdex-generation-toggle")[0].GetAttribute("aria-expanded"));
         await cut.Find("#completionSave").ChangeAsync(new() { Value = "0" });
         Assert.True(cut.Button("Créer").HasAttribute("disabled"));
@@ -260,6 +261,143 @@ public sealed class CompletionPagesTests : PageTestContext
             CompletionGames.Sort(cards, CompletionSort.Completion, true).Select(c => c.Game.Game));
         Assert.Equal([LivingDexGame.Y, LivingDexGame.Gold, LivingDexGame.Red],
             CompletionGames.Sort(cards, CompletionSort.Generation, true).Select(c => c.Game.Game));
+    }
+
+    [Fact]
+    public async Task AllTheMons_CreatedOnAStoredWorld_QuestsAndAdvancements()
+    {
+        var stored = await Db.StoredSaves().AddAsync("sacha", "Kantalia.zip", CobblemonTests.World());
+        Assert.True(stored.Ok, stored.Message);
+        var cut = Render<CompletionList>();
+        await cut.Click("+ Ajouter une sauvegarde");
+        // Le groupe « Minecraft », après les générations
+        var minecraft = cut.FindAll(".livingdex-generation-toggle").Last();
+        Assert.Equal("▸Minecraft (1 modpack)", minecraft.TextContent.Trim());
+        await minecraft.ClickAsync(new());
+        await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
+        cut.WaitForAssertion(() => Assert.Contains("Kantalia", cut.Find("#completionSave").TextContent));
+        await cut.Click("Créer");
+        Assert.Contains("completion/", Navigation.Uri);
+
+        // La carte : le global compte chaque étape
+        var list = Render<CompletionList>();
+        list.WaitForText("1,5 %");
+        Assert.Contains("Quêtes 1,3 %", list.Text());
+        Assert.Contains("Succès 1,9 %", list.Text());
+        Assert.Equal("1,5 %, toutes étapes confondues", list.Find(".livingdex-card [role=progressbar]").GetAttribute("aria-valuetext"));
+
+        // La page : deux sections, les quêtes d'abord, par chapitre
+        var id = (await Completions.ListAsync("sacha")).Single().Id;
+        var page = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        page.WaitForText("Sauvegarde : Kantalia · Kantalia.zip");
+        Assert.Contains("Chaque étape compte autant dans le total, quelle que soit sa section.", page.Text());
+        Assert.Equal(["Quêtes", "Succès"], page.FindAll(".completion-section strong").Select(s => s.TextContent));
+        Assert.Contains("62 / 4656", page.Find(".completion-section").TextContent);
+        // Les chapitres, repliés : titre, avancement, barre ; aucune étape affichée
+        Assert.Equal(70, page.FindAll(".completion-chapter").Count); // 71 chapitres, « Intro » n'avait que sa note de licence
+        Assert.Empty(page.FindAll(".completion-step, .completion-tile"));
+        var welcome = page.FindAll(".completion-chapter-head")[0];
+        Assert.Equal("Bienvenue", welcome.QuerySelector(".completion-chapter-toggle")!.TextContent.Replace("▸", "").Trim());
+        Assert.Equal("1 / 5", welcome.QuerySelector(".completion-chapter-count")!.TextContent);
+        Assert.Equal("false", welcome.QuerySelector("button")!.GetAttribute("aria-expanded"));
+        Assert.Contains(page.FindAll(".completion-chapter-toggle"), b => b.TextContent.Contains("Cobblemon — Evolution"));
+
+        // Un clic déplie (gardé dans l'adresse), un autre replie
+        await page.FindAll(".completion-chapter-toggle")[0].ClickAsync(new());
+        Assert.Contains("ouverts=0", Navigation.Uri);
+        Navigation.NavigateTo($"completion/{id}?ouverts=0,10");
+        var open = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        open.WaitForText("Bienvenue dans All The Mods 10!");
+        Assert.Equal(AllTheMonsCompletionData.Quests.Count(q => q.Chapter is 0 or 10), open.FindAll(".completion-step").Count); // Bienvenue et Cobblemon — Evolution
+        Assert.Equal("true", open.Find(".completion-chapter-toggle").GetAttribute("aria-expanded"));
+        await open.FindAll(".completion-chapter-toggle")[0].ClickAsync(new());
+        Assert.Contains("ouverts=10", Navigation.Uri);
+        Assert.DoesNotContain("ouverts=0", Navigation.Uri);
+
+        // Changer de section replie tout
+        await open.Click("Succès");
+        Assert.Contains("section=succes", Navigation.Uri);
+        Assert.DoesNotContain("ouverts=", Navigation.Uri);
+        await open.Click("Quêtes");
+        Assert.DoesNotContain("section=", Navigation.Uri);
+
+        // Filtre : seuls les chapitres qui ont des étapes à montrer ; une quête cachée pas faite garde son secret
+        Navigation.NavigateTo($"completion/{id}?section=succes&filtre=faits&ouverts=0");
+        var advancements = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        advancements.WaitForText("L'âge de pierre");
+        Assert.Equal(5, advancements.FindAll(".completion-step.done").Count); // Minecraft : 5 succès sur 17
+        Assert.True(advancements.FindAll(".completion-chapter").Count < 50);
+        Assert.DoesNotContain("Bienvenue dans All The Mods 10!", advancements.Text());
+        Navigation.NavigateTo($"completion/{id}?ouverts=5"); // Allthemodium : le trident secret
+        var secret = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        secret.WaitForText(AllTheMonsCompletion.HiddenQuest);
+        Assert.DoesNotContain("Allthemodium Alloy Trident", secret.Text());
+    }
+
+    [Fact]
+    public async Task AllTheMons_ListOrGrid_KeptInTheViewersPreferences()
+    {
+        Assert.True((await Db.StoredSaves().AddAsync("ondine", "Kantalia.zip", CobblemonTests.World())).Ok);
+        var saveId = (await Db.StoredSaves().ListAsync("ondine")).Single().Id;
+        var id = (await Completions.CreateAsync("ondine", saveId, LivingDexGame.AllTheMons)).Id!.Value;
+        var preferences = Services.GetRequiredService<PreferencesService>();
+
+        // Chez un autre joueur : le réglage est celui du joueur connecté (sacha), liste au départ
+        Navigation.NavigateTo($"joueurs/ondine/completion/{id}?ouverts=0");
+        var page = Render<CompletionPage>(p => p.Add(x => x.Id, id).Add(x => x.Pseudo, "ondine"));
+        page.WaitForText("Bienvenue dans All The Mods 10!");
+        Assert.Equal("true", page.Button("Liste").GetAttribute("aria-pressed"));
+        Assert.Empty(page.FindAll(".completion-grid"));
+
+        // Grille : des cases, faites ou à faire ; enregistrée dans le compte de sacha, pas dans celui d'ondine
+        await page.Click("Grille");
+        Assert.Equal(5, page.FindAll(".completion-grid .completion-tile").Count);
+        Assert.Single(page.FindAll(".completion-tile.done"));
+        Assert.Equal("true", page.Button("Grille").GetAttribute("aria-pressed"));
+        Assert.Equal(CompletionStepsView.Grid, (await preferences.SortsAsync("sacha")).CompletionView);
+        Assert.Equal(CompletionStepsView.List, (await preferences.SortsAsync("ondine")).CompletionView);
+        var again = Render<CompletionPage>(p => p.Add(x => x.Id, id).Add(x => x.Pseudo, "ondine"));
+        again.WaitForAssertion(() => Assert.NotEmpty(again.FindAll(".completion-tile")));
+
+        await again.Click("Liste");
+        Assert.Equal(CompletionStepsView.List, (await preferences.SortsAsync("sacha")).CompletionView);
+        Assert.Empty(again.FindAll(".completion-tile"));
+
+        // Les autres complétions n'ont ni chapitres repliés ni bouton Liste / Grille (pour l'instant)
+        var red = await RedCompletion();
+        var game = Render<CompletionPage>(p => p.Add(x => x.Id, red));
+        game.WaitForText("Badge Prisme (Érika)");
+        Assert.False(game.HasButton("Grille"));
+        Assert.Empty(game.FindAll(".completion-chapter"));
+    }
+
+    [Fact]
+    public async Task AllTheMons_WorldWithoutProgress_SaysToSendItAgain()
+    {
+        var files = CobblemonTests.Unzip(CobblemonTests.RealZip());
+        files.Remove($"advancements/{CobblemonTests.Player}.json");
+        files.Remove($"ftbquests/{CobblemonTests.Player}.snbt");
+        Assert.True((await Db.StoredSaves().AddAsync("sacha", "Kantalia.zip", CobblemonTests.Zip([.. files.Select(f => (f.Key, f.Value))]))).Ok);
+        var saveId = (await Db.StoredSaves().ListAsync("sacha")).Single().Id;
+        var id = (await Completions.CreateAsync("sacha", saveId, LivingDexGame.AllTheMons)).Id!.Value;
+
+        var page = Render<CompletionPage>(p => p.Add(x => x.Id, id));
+        page.WaitForText(CompletionService.NoProgressNotice);
+        Assert.Contains("0,0 %", page.Text());
+        // Sur sa page publique (ce que voient les autres), pas ce conseil : ils ne peuvent rien y faire
+        var visitor = Render<CompletionPage>(p => p.Add(x => x.Id, id).Add(x => x.Pseudo, "sacha"));
+        visitor.WaitForText("Sauvegarde : Kantalia");
+        Assert.DoesNotContain(CompletionService.NoProgressNotice, visitor.Text());
+    }
+
+    [Fact]
+    public async Task AllTheMons_WithoutAWorld_SaysSo()
+    {
+        var cut = Render<CompletionList>();
+        await cut.Click("+ Ajouter une sauvegarde");
+        await cut.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
+        cut.WaitForText("Aucun monde All the Mons disponible : stocke le dossier de ton monde dans");
     }
 
     [Fact]

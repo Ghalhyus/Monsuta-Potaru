@@ -109,6 +109,14 @@ README : « Comptes », « Administration », « Thèmes ».
   `SetBattleEnlargedAsync` (boutons de la page « Combat ») ; chacune relit les tris et ne change que ce qu'elle reçoit.
   Interface du combat : `docs/claude/combats.md`.
 
+## Préférences : affichage des étapes d'une complétion (2026-11-17)
+- Même colonne JSON (`"completionVue":"grille"` ; absent ou inconnu : liste), `SortPreferences.CompletionView`
+  (`CompletionStepsView`), noms `SiteSorts.CompletionViewChoices` / `CompletionViewFrom`. Son propre bloc et son propre
+  formulaire (`@formname="completion-view"`, liste `completionVue`) ; « Revenir aux tris d'origine » le garde.
+- Écriture : `PreferencesService.SetCompletionViewAsync`, appelée aussi par le bouton « Liste / Grille » de la page d'une
+  complétion (réglage du joueur connecté, même chez un autre joueur ; rien pour un compte absent). Pour l'instant seule la
+  complétion All the Mons s'en sert (essai demandé par l'utilisateur avant de l'étendre).
+
 ## Tests
 - `AccountServiceTests` monte Identity comme `Program.cs` (`AccountService.ConfigureIdentity`) sur la base de test.
 - Les comptes de `TestDatabase` sont créés sans Identity (pas d'adresse) : n'y appeler aucune méthode qui les revalide.

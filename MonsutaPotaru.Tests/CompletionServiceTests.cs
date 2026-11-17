@@ -121,13 +121,14 @@ public sealed class CompletionServiceTests : IDisposable
         var all = CompletionSections.All.SelectMany(s => Enumerable.Range(0, 3).Select(_ => Step(s, true))).ToList();
         Assert.Equal(("100,0 %", true), (CompletionProgress.Of(all).Percent, CompletionProgress.Of(all).Complete));
         all[0] = Step(CompletionSection.Story, false);
-        Assert.Equal("94,4 %", CompletionProgress.Of(all).Percent); // (5 + 2/3) / 6
+        Assert.Equal("95,8 %", CompletionProgress.Of(all).Percent); // (7 + 2/3) / 8 : les six sections des jeux et les deux d'All the Mons
         Assert.Equal(0, CompletionProgress.Of([]).Tenths);
 
         Assert.Equal("Rencontres uniques", CompletionSections.Name(CompletionSection.Encounters));
-        Assert.Equal(CompletionSection.Trainers, CompletionSections.FromSlug("DRESSEURS"));
-        Assert.Equal(CompletionSection.Story, CompletionSections.FromSlug("inconnue"));
-        Assert.Equal(["histoire", "pokedex", "dresseurs", "objets", "rencontres", "quetes"], CompletionSections.All.Select(CompletionSections.Slug));
+        Assert.Equal(CompletionSection.Trainers, CompletionSections.FromSlug("DRESSEURS", CompletionSections.All));
+        Assert.Equal(CompletionSection.Story, CompletionSections.FromSlug("inconnue", CompletionSections.All));
+        Assert.Equal(["histoire", "pokedex", "dresseurs", "objets", "rencontres", "quetes", "livre-de-quetes", "succes"],
+            CompletionSections.All.Select(CompletionSections.Slug));
         Assert.Equal("Quêtes annexes", CompletionSections.Name(CompletionSection.Quests));
         Assert.Equal(5, progress.Sections.Count); // pas de quêtes dans ces étapes : pas de section vide
         Assert.Equal("un cinquième", progress.Share);
