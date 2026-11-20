@@ -387,8 +387,8 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   ces jeux (`ORAS_MEGA` du générateur).
 
 ## Soleil / Lune / Ultra-Soleil / Ultra-Lune / Let's Go (2026-11-13)
-- Choix de l'utilisateur : les trois paires de jeux ; **pas encore de dresseurs** (il faut les ROM ; voir « Reste à
-  faire ») ;
+- Choix de l'utilisateur : les trois paires de jeux ; **dresseurs des routes** (2026-11-19) **et combats lancés par un
+  script** (2026-11-20 ; voir « Dresseurs » ; pas Let's Go) ;
   **cristaux Z dans « Objets »**, à leur lieu, par possession (ceux des épreuves comptent déjà dans l'histoire, pas en
   double) ; quêtes : **Arbre de Combat**, **Zygarde** (Boîte, Cœurs, chaque Cellule), **Scanner des Îles** (déconseillé :
   seule trace, le Pokédex ; voulu quand même), **Experts et Coachs de Let's Go** (Coachs : aucune trace trouvée, laissés
@@ -399,8 +399,9 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
   `Gen7CompletionData.cs` à la main (14 lignes) faute des check-lists pour relancer le générateur, modifié pour donner le
   même résultat. Check-lists : `Completion_Pokemon_Soleil_Lune.csv`, `_UltraSoleil_UltraLune.csv`,
   `_LetsGo_Pikachu_Evoli.csv`.
-- `Gen7CompletionData.cs` : `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs`
-  (contenu de `<dossier>` : docstring du script). Six tables (Sun, Moon, UltraSun, UltraMoon, LetsGoPikachu,
+- `Gen7CompletionData.cs` : `python outils/completion_gen7.py <dossier> <ROM de Soleil> <ROM de Lune> <ROM d'Ultra-Soleil> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs`
+  (contenu de `<dossier>` : docstring du script ; ROM : `C:\Users\ghalh\Documents\FanGame\Jeux\3DS\Pokemon Sun (USA)…3ds`,
+  `Pokemon Moon (USA)…`, `Pokemon Ultra Sun (USA)…`, déchiffrées ; environ 3 minutes). Six tables (Sun, Moon, UltraSun, UltraMoon, LetsGoPikachu,
   LetsGoEevee). `completion_gen7_ordre.json` : **tous** les lieux dans l'ordre de l'aventure, écrits à la main (un lieu
   absent arrête le script) ; les quêtes sont groupées par activité (« Arbre de Combat », « Zygarde », « Scanner des Îles »,
   « Experts Pokémon », « Après la Ligue »), le lieu dans la précision.
@@ -435,6 +436,12 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
 - Vérifié sur `ultra-soleil.sav` (début d'Akala : 13,1 %, aucun raté, 80 objets tous à Mele-Mele et au début d'Akala) dans
   le navigateur ; Soleil, Lune, Ultra-Lune et Let's Go seulement en mémoire.
 
+### Dresseurs (2026-11-19, 2026-11-20)
+- Dresseurs des routes (180 en Soleil / Lune, 239 en Ultra) et combats lancés par un script (81 et 140 lignes, depuis le
+  2026-11-20 ; hors combats déjà dans l'histoire ; « Lieu inconnu » sans lieu ; variantes en une ligne) ; Ultra-Lune =
+  Ultra-Soleil (vérifié sur sa ROM) ; pas Let's Go. Lus dans les ROM par `outils/completion_gen7_rom.py`. **Tout le détail
+  pour reprendre** (état, ROM, formats, code du jeu, méthodes, impasses, pistes) : `completion-gen7-dresseurs.md`.
+
 ### Reprendre sur un autre PC (7e génération)
 - **Régénérer la table** : rien du `<dossier>` n'est dans le dépôt. Le recréer (un dossier temporaire) avec :
   - `flags_gen7sm_en.txt`, `flags_gen7usum_en.txt`, `flags_gen7blgpe_en.txt` :
@@ -449,10 +456,11 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
     `suivi_completion_pokemon_soleil_lune.csv`, `Completion_Pokemon_UltraSoleil_UltraLune.csv` →
     `suivi_completion_pokemon_ultra_soleil_ultra_lune.csv`, `Completion_Pokemon_LetsGo_Pikachu_Evoli.csv` →
     `suivi_completion_pokemon_lets_go.csv`.
-  - Puis `python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs` : la table
-    régénérée doit être identique à celle du dépôt (`git diff` vide) ; sortie attendue : Sun / Moon `Story 28, Items 408,
-    Encounters 25, Quests 134`, Ultra `30, 482, 58, 140`, Let's Go `17, 331, 29, 158` (comptes repris par
-    `CompletionGen7Tests`).
+  - les ROM déchiffrées de Soleil, Lune et Ultra-Soleil (voir plus haut).
+  - Puis `python outils/completion_gen7.py <dossier> <ROM de Soleil> <ROM de Lune> <ROM d'Ultra-Soleil> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs` : la table
+    régénérée doit être identique à celle du dépôt (`git diff` vide) ; sortie attendue : Sun / Moon `Story 28,
+    Trainers 261, Items 408, Encounters 25, Quests 134`, Ultra `30, 379, 482, 58, 140`, Let's Go `17, —, 331, 29, 158`
+    (comptes repris par `CompletionGen7Tests`).
 - **Explorer une sauvegarde** : un petit projet console dans un dossier temporaire, avec le paquet `PKHeX.Core` de la
   même version que `MonsutaPotaru.csproj` (26.10.18) ; `SaveUtil.GetSaveFile(octets)`, puis lister
   `EventWork.GetEventFlag(n)` levés (SAV7) ou `EventWork.GetFlag(n)` (SAV7b) avec les noms de FlagsEditorEX (colonne 7),
@@ -651,65 +659,9 @@ entrerait en conflit avec le service injecté) et `CompletionPage.razor`.
    docstring de `outils/completion_gen6.py` ; check-lists : « Check-lists de l'utilisateur »).
 
 ### 7e génération (au 2026-11-13)
-1. **Dresseurs** (**en pause**, choix de l'utilisateur, 2026-11-13 : lieux non reliés ; ne pas proposer la couverture partielle de Soleil / Lune sans lui redemander) avec les ROM, comme la 6e (`outils/completion_gen6_rom.py` : RomFS, GARC, zones, scripts AMX, textes ;
-   la méthode y est décrite). Soleil, Lune et Ultra-Soleil **déchiffrés** sont déjà dans
-   `C:\Users\ghalh\Documents\FanGame\Jeux\3DS\` (vérifié le 2026-11-13 : en-têtes NCCH sans chiffrement) ; Let's Go :
-   seulement `…\Jeux\Switch\Pokémon Let’s Go, Eevee!.nsp`, **chiffré** (il faut les clés de sa console) : à
-   l'utilisateur d'en extraire la RomFS (pas de dresseurs de Let's Go d'ici là, son choix du 2026-11-13). Les scripts
-   d'exploration de cette session (lecture des aires, désassemblage AMX, `casetbl`) n'ont pas été gardés : les refaire
-   avec `completion_gen6_rom.py` (`RomFS`, `garc`, `lz11`, `amx`, `texts`). Les numéros des archives et les hachages des natives changent sûrement : les
-   retrouver comme en 6e (textes : chercher une classe connue ; natives : corréler avec des numéros connus).
-   **Trouvé le 2026-11-13** (avec `completion_gen6_rom.py`, qui lit déjà ces RomFS) :
-   - dresseurs : Soleil / Lune `a/1/0/5` (données, 485 de 20 octets : classe à l'octet 0) et `a/1/0/6` (équipes,
-     32 octets par Pokémon : niveau u16 au décalage 14, espèce u16 au 16) ; Ultra `a/1/0/6` (653) et `a/1/0/7` ; classes
-     `a/1/0/4` / `a/1/0/5` ; textes français `a/0/3/3` (Soleil / Lune : fichier 105 les noms, 106 les classes ; Ultra :
-     110 et 111 ; même chiffrement qu'en 6e) ;
-   - **drapeau = base + numéro** : Soleil / Lune 0x81C (183 descriptions de FlagsEditorEX sur 268 tombent juste ; les
-     autres, `FE_SUB…_TR…`, sont des combats à part), Ultra 0xBDC (`TR_FLAG_000`) ;
-   - lieux : aires dans `a/0/8/2` (2 761 membres, 11 par aire : `ED`, `BG`, `TR`, `AS`, `aa`, `AE`, `ZS`, `ZI`, `EA`,
-     `AC`…) ; `ED` = conteneur d'événements par zone (`EP`, `EM`, `EB`, `ES`, `EA`, `ET`, `EG`, `EI`, `FS`, `PR`, chacun
-     un conteneur d'un bloc ; conteneurs de l'aire : u16 magie, u16 nombre, u32 décalages, alignés sur 0x80) ;
-   - **impasses** : les valeurs 3004, 3008… des `ED` sont des décalages internes (toutes multiples de 4), pas des
-     dresseurs ; `TR` est un bloc de même taille partout (terrain ?) ; aucune native des scripts de zones (`ZS`, 284
-     scripts AMX par aire, compressés comme en 6e) ne reçoit de numéro de dresseur en argument constant (corrélation avec
-     les 234 numéros sûrs : 12 au mieux, pour 0x133daa6a / 0x13413496, les mêmes natives de drapeaux qu'en 6e) ;
-   - **à poursuivre** : `EM` = personnages, enregistrements de longueur variable selon le type (u32 nombre, puis pour le
-     type 1 : 30 mots — type, x, y, z flottants, rotation, identifiant 6xx, modèle, script local du type 30096, deux
-     décalages vers des données en fin de bloc ; le type 3 est plus court) : y chercher le numéro du dresseur (sans doute
-     dans les données pointées) ; puis la zone d'un `ED` et son lieu (en-têtes de zones : `a/0/1/2`, `a/0/1/4` à `a/0/1/9`
-     examinés sans résultat net) ; scripts AMX communs dans `a/0/9/2` (500) et `a/0/8/4`.
-   - **combats lancés par les scripts de zones** (`ZS`) : par une fonction locale qui atteint la native `0x6393be9a`
-     (premier argument = numéro du dresseur) : 115 dresseurs en Soleil, 126 en Ultra-Soleil (rival, Capitaines, Team
-     Skull, Prof. Samia…), ~63 recoupent les lieux de FlagsEditorEX. Les dresseurs des routes n'y sont pas : sans doute
-     lancés par le moteur à partir des personnages (`EM`), numéro pas encore trouvé ;
-   - **personnages des aires** (`EM`, enregistrements de type 1, 120 octets : u32 type, x, y, z, rotation, puis mot 9
-     drapeau d'apparition, 11 numéro local, 12 « genre » (9 = 390 personnages en Soleil, presque autant que les 391
-     dresseurs nommés : sans doute les dresseurs), 13 modèle, 14 numéro du cas dans le script de l'aire, 28 / 29
-     décalages vers deux blocs de 28 octets (trajets, flottants)). Le script `ZS` de l'aire n'a qu'une fonction publique
-     qui aiguille par `casetbl` (AMX : nombre, défaut, puis paires valeur / saut relatif) ; ex. aire 11, cas 13 et 15 :
-     appel d'une fonction à 5 arguments (37 ou 35, 1, 0, 7, 1) = numéro du dresseur en premier, qui délègue à une autre
-     (profondeur > 3 : penser à suivre les appels loin) ;
-   - les 500 scripts de `a/0/9/2` (759 en Ultra) ont bien plus de numéros de dresseurs en premier argument d'appels
-     locaux (312 constantes, 142 connues) : scripts par zone ? Mais la forme d'appel (5 arguments, 1, 0, 7, 1) n'en
-     couvre que 39, et la native la plus atteinte (0xb13a389) est générique (480 valeurs) : filtre à trouver ;
-   - **lieu d'une zone : toujours inconnu** (aucune table de ~500 / 961 entrées avec un numéro de lieu ; `a/0/1/7` =
-     éclairage, `a/0/1/3` = rencontres) ; voter par les dresseurs situés par FlagsEditorEX donne des scripts à plusieurs
-     lieux (`a/0/9/2` 0 : Routes 1, 2, 3) : inutilisable tel quel.
-   - **couverture possible sans décoder les zones** (2026-11-13) : Soleil 391 dresseurs nommés, 218 situés par
-     FlagsEditorEX, 269 en ajoutant ceux des scripts situés par les autres dresseurs de la même aire ; Ultra : 519 nommés,
-     **7** situés par FlagsEditorEX seulement (inutilisable sans les zones).
-   - La table régénérée avec les check-lists du Drive est identique à celle du dépôt.
-   Pistes :
-   - données des dresseurs (équipes, classes, noms : GARC de trdata / trpoke sur 3DS, d'après pk3DS ; fichiers de la
-     RomFS de Let's Go, format à trouver) et textes des classes et des noms ;
-   - **drapeau = base + numéro du dresseur ?** En Ultra, `TR_FLAG_001` = 0x0BDD : vérifier sur les 52 `TR_FLAG_n` levés
-     de `ultra-soleil.sav` (les dresseurs de Mele-Mele et du début d'Akala) ; en Soleil / Lune les drapeaux ont des noms
-     `FE_SUB…_TR…` et 252 ont un lieu ; en Let's Go, 613 drapeaux de dresseurs à partir de 0x8B6 ;
-   - **lieu** : FlagsEditorEX quand il le donne, sinon les données des zones de la ROM (personnages de chaque zone et leur
-     script) ; c'est la partie difficile (scripts compilés) ;
-   - **Coachs de Let's Go** : une classe de dresseur à part ; si leur drapeau suit leur numéro, les trouver par la ROM ;
-   - ensuite : section Dresseurs dans `CompletionGen7Tests` (comptes des tables), retirer « pas encore de dresseurs en 7e
-     génération » de `CompletionList.razor` et du README, docstring du générateur, cette fiche.
+1. **Dresseurs** : ceux des routes faits le 2026-11-19 ; restent les combats lancés par un script (à ne pas reprendre
+   sans l'accord de l'utilisateur), Let's Go (RomFS à extraire par l'utilisateur) ; Ultra-Lune vérifiée sur sa ROM (mêmes dresseurs qu'Ultra-Soleil) :
+   `completion-gen7-dresseurs.md`.
 2. **Sauvegardes** de Soleil / Lune et de Let's Go à demander (à ranger dans `MonsutaPotaru.Tests/Sauvegardes/` :
    `soleil.sav`, `lune.sav`, `lets-go-pikachu.sav`… ; `RealSavesTests`, ligne « Jeux testés » du README, chapitre « Jeux
    pris en charge » du guide ; un test `Real…` comme `RealUltraSun_ProgressReadInItsFlags`). Y vérifier : titres des

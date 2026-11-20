@@ -2,7 +2,11 @@
 Génère MonsutaPotaru/Services/Completion/Gen7CompletionData.cs : Soleil, Lune, Ultra-Soleil, Ultra-Lune et Let's Go,
 Pikachu / Évoli.
 
-    python outils/completion_gen7.py <dossier> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs
+    python outils/completion_gen7.py <dossier> <ROM de Soleil> <ROM de Lune> <ROM d'Ultra-Soleil> MonsutaPotaru/Services/Completion/Gen7CompletionData.cs
+
+Les ROM (.3ds déchiffrés, ou dossiers de RomFS extraite) donnent les dresseurs des routes : outils/completion_gen7_rom.py.
+Ultra-Lune reprend les dresseurs d'Ultra-Soleil (vérifié sur la ROM d'Ultra-Lune le 2026-11-20 : les mêmes). Pas de dresseurs
+pour Let's Go (sa RomFS n'est pas extraite).
 
 <dossier> contient :
 - flags_gen7sm_en.txt, flags_gen7usum_en.txt et flags_gen7blgpe_en.txt : listes de FlagsEditorEX
@@ -21,13 +25,16 @@ Pikachu / Évoli.
 
 Pas de désassemblage pour la 3DS ni pour la Switch : comme en 6e génération, histoire, rencontres et quêtes sont choisies
 ici d'après les check-lists, avec les drapeaux nommés de FlagsEditorEX et les objets rares du sac (cristaux Z des
-épreuves). Pas encore de dresseurs (il faut les ROM : équipes, noms, lieux).
+épreuves). Dresseurs : ceux des routes seulement (les combats lancés par un script n'ont pas de lieu sûr).
 """
 import csv
 import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from completion_gen7_rom import GAMES, read_trainers  # noqa: E402
 
 MAX_ITEM = {'sm': 959, 'usum': 959, 'gg': 1057}
 # Cristaux Z rangés dans le sac (le jeu donne au Pokémon une copie : le numéro « tenu », 776 et suivants)
@@ -586,7 +593,7 @@ def cell_place(c, loc):
 def build(c, version, order, cur):
     rows = []
 
-    def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, give=0, form=0, sort=0):
+    def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, give=0, form=0, sort=0, team=None):
         if section == 'Quests':
             rank = 0  # groupées par activité, dans l'ordre de la liste
         elif zone not in order:
@@ -595,13 +602,15 @@ def build(c, version, order, cur):
         else:
             rank = order.index(zone)
         rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                         species=species, count=count, give=give, form=form, sort=(rank, zone, sort)))
+                         species=species, count=count, give=give, form=form, team=team, sort=(rank, zone, sort)))
 
-    S, I, U, Q = 'Story', 'Items', 'Encounters', 'Quests'
+    S, D, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     story_items = set()
     for i, (zone, det, label, cond) in enumerate(cur['story']):
         add(S, zone, det, cond, label, sort=i)
         story_items.update(int(a[2:]) for a in re.split(r'[|+]', cond) if a.startswith('K:'))
+    for zone, cond, team, n, label in cur.get('trainers', []):
+        add(D, zone, None, cond, label, team=team, sort=n)
 
     # ---------- Objets : au sol, cachés, cadeaux décrits (Let's Go) ----------
     seen = set()
@@ -660,7 +669,7 @@ def build(c, version, order, cur):
     for i, (zone, det, label, cond) in enumerate(cur['quests']):
         add(Q, zone, det, cond, label, sort=i)
 
-    section_order = {s: n for n, s in enumerate((S, I, U, Q))}
+    section_order = {s: n for n, s in enumerate((S, D, I, U, Q))}
     rows.sort(key=lambda r: (section_order[r['section']],) + ((r['sort'][2],) if r['section'] in (S, U, Q) else r['sort']))
     return rows
 
@@ -790,6 +799,8 @@ def emit(games, out):
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
+            if r.get('team'):
+                n.append(f'Team: {cs(r["team"])}')
             for key, field in (('item', 'Item'), ('tm', 'Tm'), ('count', 'Count'), ('species', 'Species'), ('form', 'Form'),
                                ('give', 'Give')):
                 if r[key]:
@@ -802,12 +813,58 @@ def emit(games, out):
         fh.write('﻿' + '\n'.join(lines) + '\n')
 
 
+# Combats lancés par un script déjà comptés dans l'histoire : classes des Grandes Épreuves, épreuves et Ligue, et combats
+# précis (numéro → nom attendu) : le dernier combat de la Ligue, Guzma au Manoir Chelou, Elsa-Mina au Paradis Æther.
+STORY_CLASSES = {'Doyen', 'Doyenne', 'Capitaine', 'Conseil 4'}
+STORY_TRAINERS = {
+    'sm': {129: 'Euphorbe', 413: 'Euphorbe', 414: 'Euphorbe', 235: 'Guzma', 131: 'Elsa-Mina'},
+    'usum': {494: 'Tili', 495: 'Tili', 496: 'Tili', 235: 'Guzma', 131: 'Elsa-Mina'},
+}
+UNKNOWN_PLACE = 'Lieu inconnu'
+
+
+def trainer_rows(root, rom, flags, kind, order):
+    """
+    Dresseurs d'une ROM (completion_gen7_rom) : (lieu français, condition, équipe, numéro, texte). Dresseurs des routes,
+    puis combats lancés par un script (hors histoire) : au premier de leurs lieux dans l'ordre du jeu, ou « Lieu
+    inconnu » ; les variantes d'un combat (selon le Pokémon de départ) forment une seule ligne (« l'un ou l'autre »).
+    """
+    places = [p.replace('’', "'") for p in lines_of(os.path.join(root, 'text_sm_00000_fr.txt'))]
+    for n, name in STORY_TRAINERS[kind].items():
+        if rom[n]['name'] != name or not rom[n]['script']:
+            raise SystemExit(f"Dresseur {n} : {rom[n]['name']} au lieu de {name} (STORY_TRAINERS, {kind})")
+    out = [(places[t['places'][0]], f'E:{flags + n}', ','.join(f'{s}:{lv}' for s, lv in t['team']), n, None)
+           for n, t in sorted(rom.items()) if t['places'] and t['team']]
+    groups = {}
+    for n, t in sorted(rom.items()):
+        if t['script'] and not t['places'] and t['team'] and t['cls'] not in STORY_CLASSES and n not in STORY_TRAINERS[kind]:
+            groups.setdefault(t['script']['group'], []).append(n)
+    for first, members in sorted(groups.items()):
+        names = {places[p] for n in members for p in rom[n]['script']['places']}
+        known = sorted(names, key=lambda p: order.index(p) if p in order else len(order))
+        t = rom[members[0]]
+        label = None
+        if len(members) > 1:  # variantes : trois selon le Pokémon de départ, deux selon la version (Team Rainbow Rocket)
+            who = t['name'] if t['cls'] in ('Dresseur', 'Dresseuse') else f"{t['cls']} {t['name']}"
+            why = {3: 'ton premier Pokémon', 2: 'la version'}.get(len(members), 'ta partie')
+            label = f'{who} (équipe selon {why})'
+        out.append((known[0] if known else UNKNOWN_PLACE, '|'.join(f'E:{flags + n}' for n in members),
+                    ','.join(f'{s}:{lv}' for s, lv in t['team']), first, label))
+    return out
+
+
 if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
-    root, out = sys.argv[1:3]
+    if len(sys.argv) != 6:
+        raise SystemExit(__doc__)
+    root, rom_sun, rom_moon, rom_ultra, out = sys.argv[1:6]
     here = os.path.dirname(os.path.abspath(__file__))
     order = json.load(open(os.path.join(here, 'completion_gen7_ordre.json'), encoding='utf-8'))
     cells = zygarde_cells(root)
+    ultra = read_trainers(rom_ultra, 'usum')
+    roms = {'Sun': (read_trainers(rom_sun, 'sm'), GAMES['sm']['flags'], 'sm'),
+            'Moon': (read_trainers(rom_moon, 'sm'), GAMES['sm']['flags'], 'sm'),
+            'UltraSun': (ultra, GAMES['usum']['flags'], 'usum'), 'UltraMoon': (ultra, GAMES['usum']['flags'], 'usum')}
     games = []
     for key, csv_file, versions in (
             ('sm', 'suivi_completion_pokemon_soleil_lune.csv',
@@ -838,6 +895,8 @@ if __name__ == '__main__':
                 cur = dict(story=gg_story(c, version), encounters=gg_encounters(c, version), z=[], mega=GG_MEGA,
                            machines=machines, quests=masters(c, rows))
                 dex = 'les 151 de Kanto, Meltan et Melmetal'
+            if name in roms:
+                cur['trainers'] = trainer_rows(root, *roms[name], order[key])
             games.append((name, doc, dex, build(c, version, order[key], cur)))
     if UNKNOWN:
         raise SystemExit('À traduire (ITEM_FIXES, PLACE_EN, SUBPLACES) : ' + ', '.join(sorted(UNKNOWN)))

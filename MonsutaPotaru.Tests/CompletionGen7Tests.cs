@@ -8,8 +8,8 @@ namespace MonsutaPotaru.Tests;
 /// <summary>
 /// Complétion de la 7e génération : tables de Soleil / Lune, d'Ultra-Soleil / Ultra-Lune et de Let's Go (générées
 /// d'après les listes de drapeaux de FlagsEditorEX et les check-lists de l'utilisateur), Pokédex national (Let's Go :
-/// Kanto, Meltan et Melmetal) ; lecture de la vraie sauvegarde d'Ultra-Soleil ; Soleil et Let's Go en mémoire. Pas encore
-/// de dresseurs.
+/// Kanto, Meltan et Melmetal), dresseurs (lus dans les ROM ; pas pour Let's Go) ; lecture de la vraie
+/// sauvegarde d'Ultra-Soleil ; Soleil et Let's Go en mémoire.
 /// </summary>
 public sealed class CompletionGen7Tests : IDisposable
 {
@@ -33,20 +33,33 @@ public sealed class CompletionGen7Tests : IDisposable
     private static CompletionRow[] Table(string game) => (CompletionRow[])typeof(Gen7CompletionData).GetField(game)!.GetValue(null)!;
 
     [Theory]
-    [InlineData("Sun", 28, 408, 25, 134, 100, 4000)]
-    [InlineData("Moon", 28, 408, 25, 134, 100, 4000)]
-    [InlineData("UltraSun", 30, 482, 58, 140, 100, 4960)]
-    [InlineData("UltraMoon", 30, 482, 58, 140, 100, 4960)]
-    [InlineData("LetsGoPikachu", 17, 331, 29, 158, 60, 4096)]
-    [InlineData("LetsGoEevee", 17, 331, 29, 158, 60, 4096)]
-    public void Tables_FiveSections_AndConditionsInsideTheSave(string game, int story, int items, int encounters, int quests,
-        int machines, int flags)
+    [InlineData("Sun", 28, 261, 408, 25, 134, 100, 4000, 0x81C)]
+    [InlineData("Moon", 28, 261, 408, 25, 134, 100, 4000, 0x81C)]
+    [InlineData("UltraSun", 30, 379, 482, 58, 140, 100, 4960, 0xBDC)]
+    [InlineData("UltraMoon", 30, 379, 482, 58, 140, 100, 4960, 0xBDC)]
+    [InlineData("LetsGoPikachu", 17, 0, 331, 29, 158, 60, 4096, 0)]
+    [InlineData("LetsGoEevee", 17, 0, 331, 29, 158, 60, 4096, 0)]
+    public void Tables_Sections_AndConditionsInsideTheSave(string game, int story, int trainers, int items, int encounters,
+        int quests, int machines, int flags, int trainerFlags)
     {
         var rows = Table(game);
-        Assert.DoesNotContain(rows, r => r.Section is CompletionSection.Pokedex or CompletionSection.Trainers);
-        Assert.Equal([story, items, encounters, quests],
-            new[] { CompletionSection.Story, CompletionSection.Items, CompletionSection.Encounters, CompletionSection.Quests }
-                .Select(s => rows.Count(r => r.Section == s)));
+        Assert.DoesNotContain(rows, r => r.Section == CompletionSection.Pokedex);
+        Assert.Equal([story, trainers, items, encounters, quests],
+            new[] { CompletionSection.Story, CompletionSection.Trainers, CompletionSection.Items, CompletionSection.Encounters,
+                CompletionSection.Quests }.Select(s => rows.Count(r => r.Section == s)));
+        // Dresseurs : un drapeau chacun (base + numéro du dresseur ; plusieurs pour les variantes d'un combat lancé par un
+        // script, selon le Pokémon de départ), une équipe, chaque lieu en un seul bloc, « Lieu inconnu » à la fin
+        var fought = rows.Where(r => r.Section == CompletionSection.Trainers).ToList();
+        Assert.All(fought, r => Assert.All(Events(r.Done), e => Assert.InRange(e, trainerFlags + 1, trainerFlags + 700)));
+        Assert.All(fought.Where(r => r.Done.Contains('|')), r => Assert.Matches(@" \(équipe selon (ton premier Pokémon|la version|ta partie)\)$", r.Label!));
+        var trainerFlagsUsed = fought.SelectMany(r => Events(r.Done)).ToList();
+        Assert.Equal(trainerFlagsUsed.Count, trainerFlagsUsed.Distinct().Count());
+        if (fought.Any(r => r.Zone == "Lieu inconnu"))
+            Assert.Equal("Lieu inconnu", fought[^1].Zone);
+        Assert.All(fought, r => Assert.False(string.IsNullOrEmpty(r.Team)));
+        Assert.Equal(fought.Count, fought.Select(r => r.Done).Distinct().Count());
+        var places = fought.Select(r => r.Zone).Where((z, i) => i == 0 || fought[i - 1].Zone != z).ToList();
+        Assert.Equal(places.Count, places.Distinct().Count());
         foreach (var atom in rows.Select(r => r.Done).SelectMany(c => c.Split('|', '+')))
         {
             var parts = atom.Split(':');
@@ -123,7 +136,7 @@ public sealed class CompletionGen7Tests : IDisposable
         Assert.Equal([LivingDexGame.Sun], CompletionGames.For(sav));
         var empty = Gen7Completion.Steps(sav, LivingDexGame.Sun);
         var progress = CompletionProgress.Of(empty);
-        Assert.Equal((5, 0), (progress.Sections.Count, progress.Tenths));
+        Assert.Equal((6, 0), (progress.Sections.Count, progress.Tenths));
         Assert.Equal(802, empty.Count(s => s.Section == CompletionSection.Pokedex));
         Assert.Equal("#802 Marshadow", empty.Last(s => s.Section == CompletionSection.Pokedex).Label);
 
@@ -135,8 +148,12 @@ public sealed class CompletionGen7Tests : IDisposable
         sav.BattleTree.SetTreeStreak(20, 1, super: false, max: true);
         sav.EventWork.SetZygardeCell(2, 2); // cellule n° 3 ramassée
         sav.EventWork.SetZygardeCell(3, 1); // n° 4 seulement visible
+        var trainer = rows.First(r => r.Section == CompletionSection.Trainers && r.Zone == "Route 1");
+        sav.EventWork.SetEventFlag(Events(trainer.Done).First(), true);
 
         var steps = Gen7Completion.Steps(sav, LivingDexGame.Sun);
+        Assert.Equal(1, steps.Count(s => s.Section == CompletionSection.Trainers && s.Done));
+        Assert.Equal("Route 1", steps.Single(s => s.Section == CompletionSection.Trainers && s.Done).Zone);
         Assert.True(steps.Single(s => s.Label == "Épreuve d'Althéo").Done);
         Assert.False(steps.Single(s => s.Label == "Épreuve de Néphie").Done);
         Assert.True(steps.Single(s => s.Label == "Grande Épreuve d'Akala (Alyxia)").Done); // par le tampon
@@ -200,6 +217,15 @@ public sealed class CompletionGen7Tests : IDisposable
         Assert.DoesNotContain(view.Steps, s => s.Done && s.Section == CompletionSection.Items
             && (s.Zone.Contains("Poni", StringComparison.Ordinal) || s.Zone == "Village Flottant"));
         Assert.Equal(68, view.Steps.Count(s => s.Done && s.Section == CompletionSection.Pokedex));
+        // 52 drapeaux de dresseurs levés : 25 dresseurs des routes et 15 combats lancés par un script (Tili, élèves de
+        // l'École de Dresseurs, Team Skull, Dexio…), tous à Mele-Mele ou au début d'Akala (le premier combat contre Tili :
+        // lieu inconnu) ; restent Pectorius et Althéo (dans l'histoire), et 10 combats introuvables dans la ROM
+        var beaten = view.Steps.Where(s => s.Done && s.Section == CompletionSection.Trainers).ToList();
+        Assert.Equal(40, beaten.Count);
+        Assert.Subset(new HashSet<string> { "Route 1", "Route 2", "Route 3", "Cimetière d'Ekaeka", "Route 4", "Ranch Ohana",
+                "Plage Big Wave", "Grotte Verdoyante", "Ekaeka", "Ho'ohale", "Ohana", "Grotte Verlamer", "Lieu inconnu" },
+            beaten.Select(s => s.Zone).ToHashSet());
+        Assert.Contains(beaten, s => s.Label == "Tili (équipe selon ton premier Pokémon)" && s.Zone == "Lieu inconnu");
         Assert.DoesNotContain(view.Steps, s => s.State == CompletionState.Missed);
         Assert.InRange(view.Progress.Tenths, 1, 999);
     }

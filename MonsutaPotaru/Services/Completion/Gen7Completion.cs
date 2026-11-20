@@ -9,7 +9,9 @@ namespace MonsutaPotaru.Services;
 /// <see cref="Gen7CompletionData"/>, reprises des listes de drapeaux de FlagsEditorEX et des check-lists de l'utilisateur
 /// (pas de désassemblage pour la 3DS ni la Switch), lues dans la sauvegarde par PKHeX (toutes les langues). Pokédex
 /// national (802, 807) ; Let's Go : les 151 de Kanto, Meltan et Melmetal. Arbre de Combat, Zygarde, Scanner des Îles et
-/// Experts de Let's Go dans les quêtes annexes. Pas encore de dresseurs : il faut les ROM des jeux.
+/// Experts de Let's Go dans les quêtes annexes. Dresseurs de Soleil à Ultra-Lune, lus dans les ROM
+/// (outils/completion_gen7_rom.py) : ceux des routes et les combats lancés par un script (hors histoire ; « Lieu inconnu »
+/// sans lieu), pas Let's Go.
 /// </summary>
 public static partial class Gen7Completion
 {

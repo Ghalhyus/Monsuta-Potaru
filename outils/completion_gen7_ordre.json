@@ -45,6 +45,7 @@
   "Observatoire",
   "Route 11",
   "Route 12",
+  "Plage d'Ula-Ula",
   "Mont Ardent",
   "Route 13",
   "Bradley Prix",
@@ -69,6 +70,7 @@
   "Grand Canyon de Poni",
   "Autel du Soleil",
   "Autel de la Lune",
+  "Ultra-Abysses",
   "Mont Lanakila",
   "Ligue Pokémon",
   "Caldeira Toutofon",
@@ -79,7 +81,8 @@
   "Chemin du Défi",
   "Arbre de Combat",
   "Caverne Coda",
-  "Alola"
+  "Alola",
+  "Lieu inconnu"
  ],
  "usum": [
   "Route 1",
@@ -172,12 +175,14 @@
   "Arbre de Combat",
   "Caverne Coda",
   "Ultra-Centrale",
+  "Ultra-Forêt",
   "Ultra-Brèche rouge",
   "Ultra-Brèche jaune",
   "Ultra-Brèche verte",
   "Ultra-Brèche bleue",
   "Ultra-Brèche blanche",
-  "Alola"
+  "Alola",
+  "Lieu inconnu"
  ],
  "gg": [
   "Bourg Palette",
