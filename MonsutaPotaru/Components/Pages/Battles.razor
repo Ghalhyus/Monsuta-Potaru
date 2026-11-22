@@ -238,9 +238,23 @@
                                                 @(snapshot?.Outcome switch { BattleOutcome.Won => "Victoire !", BattleOutcome.Lost => "Défaite…", _ => "Match nul" })
                                             </div>
                                         }
+                                        @* Recommencer : même ami, mêmes sauvegardes ; ou sa proposition, à accepter ici *@
+                                        @if (Hub.RematchOffer(s, userId) is { } offer)
+                                        {
+                                            <div class="battle-rematch-offer">@offer.First.Pseudo te propose de recommencer.</div>
+                                        }
                                         <div class="battle-after">
+                                            @if (Hub.RematchOffer(s, userId) is { } received)
+                                            {
+                                                <button type="button" class="btn btn-primary battle-rematch-accept" disabled="@Playing" @onclick="() => Accept(received)">Accepter</button>
+                                                <button type="button" class="btn btn-outline-secondary battle-rematch-refuse" @onclick="() => Hub.Leave(received, userId)">Refuser</button>
+                                            }
+                                            else if (s.Accepted)
+                                            {
+                                                <button type="button" class="btn btn-primary battle-rematch" disabled="@(busy || Playing)" @onclick="Rematch">Recommencer avec @other.Pseudo</button>
+                                            }
                                             <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
-                                            <button type="button" class="btn btn-primary" @onclick="NewBattle">Nouveau combat</button>
+                                            <button type="button" class="btn @(s.Accepted ? "btn-outline-primary" : "btn-primary")" @onclick="NewBattle">Nouveau combat</button>
                                         </div>
                                     </div>
                                 }
@@ -494,7 +508,7 @@ else
                     var r = request;
                     <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
                         <span>
-                            <strong>@r.First.Pseudo</strong> te propose un combat : sa sauvegarde « @r.First.SaveLabel » contre ta sauvegarde « @r.Second.SaveLabel ».
+                            <strong>@r.First.Pseudo</strong> te propose @(r.RematchOf is null ? "un combat" : "de recommencer votre combat") : sa sauvegarde « @r.First.SaveLabel » contre ta sauvegarde « @r.Second.SaveLabel ».
                             <span class="d-block small text-muted">Jusqu'à @r.ExpiresAt.ToLocalTime().ToString("HH:mm").</span>
                         </span>
                         <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Accept(r)">Accepter</button>
@@ -736,8 +750,46 @@ else
             messageIsError = true;
             return;
         }
+        Reset(); // revanche acceptée depuis l'écran de fin : on quitte le combat fini
         message = null;
         await Join(request);
+    }
+
+    /// <summary>« Recommencer avec … » : même ami, mêmes sauvegardes, même format (amitié et paire revérifiées) ; équipes à rechoisir.</summary>
+    private async Task Rematch()
+    {
+        if (session is not { IsOver: true, Accepted: true } s)
+            return;
+        busy = true;
+        try
+        {
+            var me = s.Me(userId);
+            var other = s.Other(userId);
+            // Les sauvegardes ont pu être supprimées, l'amitié retirée : la paire est relue sur le serveur
+            var pair = (await BattleStore.SavePairsAsync(userId, other.UserId)).FirstOrDefault(p => p.Mine.Id == me.SaveId && p.Theirs.Id == other.SaveId);
+            if (pair is null)
+            {
+                message = "Ces deux sauvegardes ne peuvent plus combattre ensemble (sauvegarde supprimée, ami retiré…) : propose un nouveau combat.";
+                messageIsError = true;
+                return;
+            }
+            var (created, text) = Hub.Rematch(s, new BattleParty(userId, pseudo, pair.Mine.Id, pair.Mine.Label),
+                new BattleParty(other.UserId, other.Pseudo, pair.Theirs.Id, pair.Theirs.Label), pair.Format);
+            if (created is null)
+            {
+                message = text;
+                messageIsError = true;
+                return;
+            }
+            Reset();
+            message = text.Length == 0 ? null : text; // vide : sa proposition croisait la mienne, c'est parti
+            messageIsError = false;
+            await Join(created);
+        }
+        finally
+        {
+            busy = false;
+        }
     }
 
     private void Toggle(BattleCandidate candidate)
@@ -835,6 +887,13 @@ else
 
     private void NewBattle()
     {
+        Reset();
+        message = null;
+    }
+
+    /// <summary>Oublie le combat affiché (fini), avant d'en commencer un autre.</summary>
+    private void Reset()
+    {
         if (session is not null)
             session.Changed -= OnSessionChanged;
         session = null;
@@ -844,7 +903,8 @@ else
         played = 0;
         shownScene = null;
         shownText = null;
-        message = null;
+        menu = Menu.Main;
+        sprites = BattleSprites.None;
     }
 
     // ---------- Affichage ----------

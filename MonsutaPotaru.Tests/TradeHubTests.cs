@@ -130,4 +130,89 @@ public sealed class TradeHubTests : IDisposable
         _hub.Cancel(declined!, "ondine"); // refuser une demande reçue
         Assert.Equal("Ondine a refusé la demande d'échange.", declined!.Notice);
     }
+
+    private TradeSession Finished()
+    {
+        var session = Started();
+        _hub.Choose(session, "sacha", Pokemon(120));
+        _hub.Choose(session, "ondine", Pokemon(64));
+        _hub.Confirm(session, "sacha", true);
+        _hub.Confirm(session, "ondine", true);
+        _hub.Complete(session, new TradeOutcome(true, "reçu Kadabra", "reçu Stari"));
+        return session;
+    }
+
+    [Fact]
+    public void Rematch_IsAnOfferToTheSameFriend_SeenOnTheirEndScreen()
+    {
+        var previous = Finished();
+        var changed = new List<string>();
+        _hub.RequestsChanged += changed.Add;
+
+        // Ondine propose : c'est elle qui demande (First), avec les mêmes sauvegardes
+        var (rematch, message) = _hub.Rematch(previous, Ondine, Sacha);
+        Assert.NotNull(rematch);
+        Assert.Equal("Demande envoyée à Sacha : en attente de sa réponse.", message);
+        Assert.Equal(previous.Id, rematch.RematchOf);
+        Assert.Equal(Ondine, rematch.First);
+        Assert.Equal(TradeStage.Requested, rematch.Stage);
+        Assert.Equal(["sacha"], changed);
+        Assert.Same(rematch, _hub.RematchOffer(previous, "sacha")); // sur l'écran de fin de Sacha
+        Assert.Null(_hub.RematchOffer(previous, "ondine")); // pas chez celle qui propose
+        Assert.Same(rematch, Assert.Single(_hub.Incoming("sacha"))); // et dans ses demandes reçues, s'il est parti
+
+        Assert.Null(_hub.Accept(rematch, "sacha"));
+        Assert.Equal(TradeStage.Choosing, rematch.Stage);
+        Assert.Null(_hub.RematchOffer(previous, "sacha"));
+    }
+
+    [Fact]
+    public void Rematch_BothAtOnce_TheSecondAcceptsTheFirst()
+    {
+        var previous = Finished();
+        var (first, _) = _hub.Rematch(previous, Sacha, Ondine);
+        var (second, message) = _hub.Rematch(previous, Ondine, Sacha);
+        Assert.Same(first, second);
+        Assert.Equal("", message);
+        Assert.Equal(TradeStage.Choosing, first!.Stage);
+        Assert.Same(first, _hub.Active("ondine"));
+    }
+
+    [Fact]
+    public void Rematch_OnlyAfterAnAcceptedTradeThatIsOver()
+    {
+        var running = Started();
+        Assert.Null(_hub.Rematch(running, Sacha, Ondine).Session); // pas fini
+        _hub.Cancel(running, "ondine"); // annulé en cours de route : on peut recommencer
+        Assert.True(running.Accepted);
+        Assert.NotNull(_hub.Rematch(running, Sacha, Ondine).Session);
+        _hub.Cancel(_hub.Active("sacha")!, "sacha");
+
+        var (refused, _) = _hub.Request(Sacha, Ondine);
+        _hub.Cancel(refused!, "ondine");
+        Assert.False(refused!.Accepted);
+        var (none, message) = _hub.Rematch(refused, Sacha, Ondine); // demande refusée : on ne relance pas
+        Assert.Null(none);
+        Assert.Contains("ne peut pas être recommencé", message);
+
+        var previous = Finished();
+        Assert.Null(_hub.Rematch(previous, Pierre, Ondine).Session); // Pierre n'y était pas
+        Assert.Null(_hub.Rematch(previous, Sacha, Pierre).Session); // pas avec un autre
+    }
+
+    [Fact]
+    public void Rematch_RefusedOrBusy_SaysWhy()
+    {
+        var previous = Finished();
+        var (rematch, _) = _hub.Rematch(previous, Sacha, Ondine);
+        _hub.Cancel(rematch!, "ondine");
+        Assert.Equal("Ondine a refusé la demande d'échange.", rematch!.Notice);
+        Assert.Null(_hub.RematchOffer(previous, "ondine"));
+
+        var (other, _) = _hub.Request(Pierre, Ondine);
+        _hub.Accept(other!, "ondine");
+        var (none, message) = _hub.Rematch(previous, Sacha, Ondine);
+        Assert.Null(none);
+        Assert.Equal("Ondine est déjà en train d'échanger : réessaie plus tard.", message);
+    }
 }

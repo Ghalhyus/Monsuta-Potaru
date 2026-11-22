@@ -11,7 +11,10 @@ public class ChessRecord
     public int Id { get; set; }
     public DateTime At { get; set; }
 
-    /// <summary>L'hôte (celui qui a invité), qui joue les blancs.</summary>
+    /// <summary>
+    /// Celui qui joue les blancs : l'hôte (celui qui a invité), ou, pour une revanche, celui qui avait les noirs (un invité
+    /// sans compte peut donc être ici aussi).
+    /// </summary>
     public string WhiteId { get; set; } = "";
     public string BlackId { get; set; } = "";
 

@@ -46,6 +46,11 @@ README : « Combats ».
   signal `SavedChanges` de son contexte (`SignalingFactory`) au lieu d'interroger la base : `TestDatabase` n'a qu'une
   connexion SQLite, que deux fils ne doivent jamais utiliser en même temps (échecs au hasard en CI, « SQLite Error 5:
   'not an error' » dans `CreateFunction`, le 2026-11-01).
+- **Recommencer** (règles communes : `docs/claude/multijoueurs.md`) : dans `.battle-end` (écran du bas), le bouton
+  « Recommencer avec … », ou la proposition de l'autre (`.battle-rematch-offer`, Accepter / Refuser). Mesuré à 2293×850
+  avec une alerte : tient dans l'écran du bas en empilé (le plus serré : 3 px de marge), côte à côte et hybride (colonne).
+  `.battle-end` est en `position: absolute` : `--dessus` ne change pas. Test de page rapide : combat annulé pendant le
+  choix des équipes (accepté, donc on peut recommencer), sans lancer le combat.
 
 ## Interface (deux écrans, façon 4e génération)
 - Tout est dessiné en CSS (`app.css`, « Combats ») d'après des captures d'écran fournies par l'utilisateur (carte

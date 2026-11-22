@@ -42,6 +42,24 @@ README : « Multijoueurs », « Échanges ».
 - Mécanique commune : `PrepareAsync` (relecture, empreintes, œufs, conversion, évolution sur des copies) puis
   `WriteAsync` (transaction, copies, trace anti-copie ; ligne `TradeRecords` pour les amis seulement).
 
+## Recommencer (échange entre amis, combat, échecs ; demandé le 2026-11-22)
+- But de l'utilisateur : ne pas renvoyer une demande pour refaire la même chose avec le même joueur. Choix de
+  l'utilisateur : la proposition s'affiche **sur l'écran de fin de l'autre** (Accepter / Refuser, sans passer par la
+  liste ; s'il a quitté la page, c'est une demande ordinaire : pastille du menu, « Demandes reçues », 10 minutes) ;
+  bouton seulement après une activité **acceptée** (finie, abandonnée ou annulée en cours de route), jamais après une
+  demande refusée ou expirée ; **tout est à rechoisir** (Pokémon de l'échange, équipes) ; échecs : **couleurs
+  inversées**, invité sans compte compris.
+- Hubs : `Rematch(précédente, …)` crée une demande ordinaire marquée `RematchOf` (id de la précédente) ; `Accepted`
+  (posé par `Accept`, et `JoinPublic` aux échecs) dit si l'on peut recommencer ; `RematchOffer(précédente, joueur)` trouve
+  la proposition reçue (affichée sur l'écran de fin, relue à chaque `RequestsChanged`). Si l'autre a déjà proposé,
+  `Rematch` **accepte** sa demande (message vide) : deux clics croisés ne font pas deux demandes.
+- Échange et combat : la page relit la paire par `SavePairsAsync` (amitié, sauvegardes encore là ; libellés à jour) avant
+  `Rematch`, qui revérifie que les deux joueurs sont ceux de la précédente. Celui qui propose devient `First`.
+- Pages : `Reset()` (comme « Nouvel échange » / « Nouveau combat », sans effacer le message) avant de rejoindre la
+  nouvelle session ; sinon l'étape affichée (`shownStage`) ou les Pokémon de l'équipe (`candidates`, `team`) restaient
+  ceux de l'activité finie. Bouton grisé pendant les animations (`Playing`, `animating`).
+- Textes des listes : « te propose de recommencer votre échange / combat », « t'invite à recommencer votre partie ».
+
 ## Animation d'échange (`Shared/TradeAnimation.razor`, `wwwroot/js/echange.js`, `Services/TradeShow.cs`)
 - Choix de l'utilisateur (2026-11-15) : à chaque échange (entre amis, interne, GTS), façon 4e génération ; entre amis,
   chacun voit ce qu'il reçoit (pas l'évolution du Pokémon donné) ; échange interne : les deux évolutions (reçu, puis

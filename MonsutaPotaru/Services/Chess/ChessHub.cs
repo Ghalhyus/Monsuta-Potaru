@@ -19,13 +19,66 @@ public static class ChessTiming
 
     /// <summary>Marche d'une case.</summary>
     public static readonly TimeSpan WalkPerSquare = TimeSpan.FromMilliseconds(350);
-    /// <summary>Attaque et blessure, puis le Pokémon mangé qui rejoint les K.O.</summary>
+    /// <summary>Attaque et blessure (la marche du Pokémon mangé vers les K.O. est comptée à part).</summary>
     public static readonly TimeSpan Strike = TimeSpan.FromMilliseconds(1600);
     /// <summary>Marge (le réseau, la page qui lance l'animation).</summary>
     public static readonly TimeSpan Margin = TimeSpan.FromSeconds(1);
 
-    public static TimeSpan Playback(ChessStep step) =>
-        WalkPerSquare * step.Squares + (step.CapturedId is null ? TimeSpan.Zero : Strike) + Margin;
+    /// <summary>
+    /// Durée de l'animation d'un coup : la marche de la pièce, l'attaque, la marche du Pokémon mangé jusqu'aux K.O., et
+    /// l'échange du pion au bout avec le Pokémon K.O. qui revient (les deux marchent en même temps : la plus longue).
+    /// </summary>
+    public static TimeSpan Playback(ChessStep step)
+    {
+        var after = step.After;
+        double squares = step.Squares;
+        if (step.CapturedId is { } victim && KoPlace(after, victim) is var (color, index) && index >= 0)
+            squares += KoWalkSquares(step.CapturedSquare, color, index);
+        if (step.RevivedId is not null && KoPlace(after, step.UnitId) is var (side, pawnIndex) && pawnIndex >= 0)
+        {
+            // Le revenu part de sa place d'avant le coup, inconnue ici : la plus longue des places possibles (il y en a
+            // autant qu'après le coup, le pion ayant pris la sienne)
+            var count = (side == ChessColor.White ? after.WhiteKo : after.BlackKo).Count;
+            squares += Math.Max(KoWalkSquares(step.Move.To, side, pawnIndex),
+                Enumerable.Range(0, count).Max(i => KoWalkSquares(step.Move.To, side, i)));
+        }
+        return WalkPerSquare * squares + (step.CapturedId is null ? TimeSpan.Zero : Strike) + Margin;
+    }
+
+    /// <summary>Camp et place d'un Pokémon chez les K.O. (place -1 : il n'y est pas, le roi mangé par exemple).</summary>
+    private static (ChessColor Color, int Index) KoPlace(ChessPosition position, int id) =>
+        position.WhiteKo.Contains(id) ? (ChessColor.White, position.WhiteKo.ToList().IndexOf(id))
+            : (ChessColor.Black, position.BlackKo.ToList().IndexOf(id));
+
+    // Géométrie du plateau, en pixels : la même que wwwroot/js/echecs.js (cases de 32, cadre de 10, espace de 8, panneaux
+    // de deux colonnes de huit places)
+    private const int Sq = 32, Border = 10, Gap = 8, KoRows = 8, KoCols = 2;
+    private const int Panel = KoCols * Sq, Frame = 8 * Sq + 2 * Border, Width = Panel + Gap + Frame + Gap + Panel, BoardX = Panel + Gap;
+
+    /// <summary>
+    /// Cases parcourues par un Pokémon qui va de cette case à cette place des K.O. de son camp, du côté du joueur qui a
+    /// la plus longue marche (le plateau est retourné pour les noirs : la place n'est pas à la même hauteur).
+    /// </summary>
+    public static double KoWalkSquares(int square, ChessColor color, int index) =>
+        Math.Max(KoRoutePixels(square, index, flip: false, mine: color == ChessColor.White),
+            KoRoutePixels(square, index, flip: true, mine: color == ChessColor.Black)) / Sq;
+
+    /// <summary>
+    /// Longueur du chemin de koRoute (echecs.js) : demi-case vers la ligne entre deux rangées, cette ligne jusqu'à
+    /// l'espace entre le plateau et le panneau, cet espace jusqu'à la ligne voisine de la place, puis la place.
+    /// </summary>
+    internal static double KoRoutePixels(int square, int index, bool flip, bool mine)
+    {
+        int rank = square >> 3, file = square & 7;
+        int col = flip ? 7 - file : file, row = flip ? rank : 7 - rank;
+        int slotRow = index % KoRows, slotCol = index / KoRows % KoCols;
+        double startX = BoardX + Border + col * Sq + Sq / 2.0;
+        double slotX = (mine ? Width - Panel : 0) + slotCol * Sq + Sq / 2.0;
+        double gapX = mine ? BoardX + Frame + Gap / 2.0 : Panel + Gap / 2.0;
+        int line1 = slotRow >= row ? row + 1 : row;
+        int line2 = slotRow > row ? slotRow : slotRow < row ? slotRow + 1 : line1;
+        return Sq / 2.0 + Math.Abs(gapX - startX) + Math.Abs(line2 - line1) * Sq + Math.Abs(slotX - gapX) + Sq / 2.0;
+    }
 
     /// <summary>« 30 s », « 2 min ».</summary>
     public static string Label(int seconds) => seconds < 60 ? $"{seconds} s" : $"{seconds / 60} min";
@@ -33,7 +86,8 @@ public static class ChessTiming
 
 /// <summary>
 /// Une partie (<see cref="ChessHub"/>) : l'hôte (<see cref="Host"/>, qui a invité un ami ou créé une partie publique) joue
-/// les blancs, son adversaire (<see cref="Guest"/>) les noirs. Une partie publique (<see cref="Code"/>) n'a pas encore
+/// les blancs, son adversaire (<see cref="Guest"/>) les noirs ; pour une revanche, les couleurs s'inversent : celui qui
+/// invite (<see cref="Inviter"/>) peut alors être l'adversaire. Une partie publique (<see cref="Code"/>) n'a pas encore
 /// d'adversaire tant que personne n'a saisi son code. Les deux pages s'abonnent à <see cref="Changed"/> et lisent la partie
 /// par les méthodes de la session (verrou : l'autre joueur et le minuteur la changent sur d'autres fils).
 /// </summary>
@@ -52,6 +106,17 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
     public int MoveSeconds { get; } = moveSeconds;
     public DateTime CreatedAt { get; } = createdAt;
     public DateTime ExpiresAt => CreatedAt + ChessHub.RequestLifetime;
+    /// <summary>Partie finie dont celle-ci est la revanche (« Recommencer »), null pour une invitation ordinaire.</summary>
+    public Guid? RematchOf { get; internal init; }
+    /// <summary>Revanche proposée par celui qui avait les blancs : il prend les noirs (<see cref="Guest"/>) et c'est lui qui invite.</summary>
+    internal bool InvitedByGuest { get; init; }
+    /// <summary>Celui qui a invité (ou créé la partie publique) : l'hôte, sauf pour une revanche proposée par les anciens blancs.</summary>
+    public ChessParty Inviter => InvitedByGuest ? Guest : Host;
+    /// <summary>Celui qui reçoit l'invitation.</summary>
+    public ChessParty Invitee => InvitedByGuest ? Host : Guest;
+    public bool IsInviter(string userId) => Inviter.UserId == userId;
+    /// <summary>L'invitation a été acceptée (ou le code saisi) : une fois la partie finie (ou annulée en cours de route), on peut la recommencer.</summary>
+    public bool Accepted { get; internal set; }
 
     public ChessStage Stage { get; internal set; }
     /// <summary>Dernier événement à montrer aux deux (refus, annulation, abandon, temps écoulé).</summary>
@@ -93,7 +158,7 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
             var game = Game;
             var color = ColorOf(userId);
             return new ChessSnapshot(Stage, game?.Steps.Count ?? 0, game?.Turn, game is not null && !game.IsOver && game.Turn == color,
-                game?.BonusSquare, Deadline, game?.Winner, game?.End ?? ChessEnd.None, game?.Position(), Notice);
+                game?.BonusSquare, Deadline, game?.Winner, game?.End ?? ChessEnd.None, game?.Position(), Notice, game?.CanPass ?? false);
         }
     }
 
@@ -127,10 +192,13 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
     internal void Notify() => Changed?.Invoke();
 }
 
-/// <summary>Ce qu'une page montre d'une partie, à un instant (copie : la partie change sur un autre fil).</summary>
+/// <summary>
+/// Ce qu'une page montre d'une partie, à un instant (copie : la partie change sur un autre fil). <see cref="CanPass"/> :
+/// le tour bonus en cours peut être passé (pas quand le roi de celui qui rejoue est en échec).
+/// </summary>
 public sealed record ChessSnapshot(
     ChessStage Stage, int StepCount, ChessColor? Turn, bool MyTurn, int? BonusSquare, DateTime? Deadline, ChessColor? Winner,
-    ChessEnd End, ChessPosition? Position, string? Notice);
+    ChessEnd End, ChessPosition? Position, string? Notice, bool CanPass);
 
 /// <summary>Ce que peut faire la pièce choisie : ses cases, les pièces qu'elle ne peut pas manger, ses échanges avec un K.O.</summary>
 public sealed record ChessOptions(IReadOnlyList<ChessTarget> Targets, IReadOnlyList<ChessBlocked> Blocked, IReadOnlyList<int> Swaps)
@@ -190,14 +258,14 @@ public sealed class ChessHub : IDisposable
     public ChessSession? Active(string userId)
     {
         lock (gate)
-            return sessions.FirstOrDefault(s => !s.IsOver && s.Involves(userId) && (s.Stage != ChessStage.Requested || s.IsHost(userId)));
+            return sessions.FirstOrDefault(s => !s.IsOver && s.Involves(userId) && (s.Stage != ChessStage.Requested || s.IsInviter(userId)));
     }
 
     /// <summary>Invitations reçues, en attente de réponse.</summary>
     public List<ChessSession> Incoming(string userId)
     {
         lock (gate)
-            return sessions.Where(s => s.Stage == ChessStage.Requested && s.Guest.UserId == userId).ToList();
+            return sessions.Where(s => s.Stage == ChessStage.Requested && s.Invitee.UserId == userId).ToList();
     }
 
     /// <summary>Identifiant d'un invité sans compte, tiré par le serveur pour la durée de sa page.</summary>
@@ -225,7 +293,7 @@ public sealed class ChessHub : IDisposable
     }
 
     private bool Busy(string userId) =>
-        sessions.Any(s => !s.IsOver && s.Involves(userId) && (s.Stage != ChessStage.Requested || s.IsHost(userId)));
+        sessions.Any(s => !s.IsOver && s.Involves(userId) && (s.Stage != ChessStage.Requested || s.IsInviter(userId)));
 
     /// <summary>
     /// Invite un ami (l'appelant a vérifié l'amitié : la page ne propose que ses amis). Le temps par coup vient du
@@ -250,6 +318,54 @@ public sealed class ChessHub : IDisposable
         RequestsChanged?.Invoke(guest.UserId);
         return (session, $"Invitation envoyée à {guest.Pseudo} : en attente de sa réponse.");
     }
+
+    /// <summary>
+    /// « Recommencer » : invite l'adversaire d'une partie acceptée puis finie ou annulée (ami, joueur d'une partie publique,
+    /// invité sans compte), au même temps par coup ; les couleurs s'inversent (les noirs prennent les blancs) et les équipes
+    /// se choisissent de nouveau. Si l'adversaire a déjà proposé de recommencer celle-ci, son invitation est acceptée à la
+    /// place (message vide).
+    /// </summary>
+    public (ChessSession? Session, string Message) Rematch(ChessSession previous, string userId)
+    {
+        ChessSession? offer;
+        ChessSession session;
+        var other = previous.Other(userId);
+        lock (gate)
+        {
+            if (!previous.IsOver || !previous.Accepted || !previous.Involves(userId) || other.UserId.Length == 0)
+                return (null, "Cette partie ne peut pas être recommencée : crée une nouvelle partie.");
+            offer = OfferLocked(previous, userId);
+            if (offer is null)
+            {
+                if (Busy(userId))
+                    return (null, "Tu as déjà une partie en cours.");
+                if (sessions.Any(s => !s.IsOver && s.Stage != ChessStage.Requested && s.Involves(other.UserId)))
+                    return (null, $"{other.Pseudo} est déjà en train de jouer : réessaie plus tard.");
+                session = new ChessSession(previous.Guest, previous.Host, previous.MoveSeconds, Now)
+                {
+                    RematchOf = previous.Id,
+                    InvitedByGuest = previous.IsHost(userId),
+                };
+                sessions.Add(session);
+            }
+            else
+                session = offer;
+        }
+        if (offer is not null)
+            return Accept(offer, userId) is { } error ? (null, error) : (offer, "");
+        RequestsChanged?.Invoke(other.UserId);
+        return (session, $"Invitation envoyée à {other.Pseudo} : en attente de sa réponse.");
+    }
+
+    /// <summary>Proposition de l'adversaire de recommencer cette partie finie, adressée à ce joueur et pas encore acceptée.</summary>
+    public ChessSession? RematchOffer(ChessSession previous, string userId)
+    {
+        lock (gate)
+            return OfferLocked(previous, userId);
+    }
+
+    private ChessSession? OfferLocked(ChessSession previous, string userId) =>
+        sessions.FirstOrDefault(s => s.Stage == ChessStage.Requested && s.RematchOf == previous.Id && s.Invitee.UserId == userId);
 
     /// <summary>
     /// Crée une partie publique : un code de <see cref="CodeLength"/> caractères, à donner à l'adversaire (avec ou sans
@@ -297,6 +413,7 @@ public sealed class ChessHub : IDisposable
             {
                 found.Guest = player;
                 found.Stage = ChessStage.TeamChoice;
+                found.Accepted = true;
                 found.Notice = null;
             }
         }
@@ -309,11 +426,12 @@ public sealed class ChessHub : IDisposable
     {
         lock (gate)
         {
-            if (session.Stage != ChessStage.Requested || session.Guest.UserId != userId)
+            if (session.Stage != ChessStage.Requested || session.Invitee.UserId != userId)
                 return "Cette invitation n'est plus valable.";
             if (Busy(userId))
                 return "Tu as déjà une partie en cours.";
             session.Stage = ChessStage.TeamChoice;
+            session.Accepted = true;
             session.Notice = null;
         }
         session.Notify();
@@ -443,13 +561,13 @@ public sealed class ChessHub : IDisposable
         {
             if (session.IsOver || !session.Involves(userId))
                 return;
-            var refused = session.Stage == ChessStage.Requested && !session.IsHost(userId);
+            var refused = session.Stage == ChessStage.Requested && !session.IsInviter(userId);
             session.Stage = ChessStage.Cancelled;
             session.Notice = reason ?? (refused ? $"{session.Me(userId).Pseudo} a refusé la partie." : $"{session.Me(userId).Pseudo} a annulé la partie.");
             sessions.Remove(session);
         }
         session.Notify();
-        RequestsChanged?.Invoke(session.Guest.UserId);
+        RequestsChanged?.Invoke(session.Invitee.UserId);
     }
 
     /// <summary>Chaque seconde : invitations expirées, et joueur qui n'a pas joué à temps (défaite).</summary>
@@ -466,7 +584,7 @@ public sealed class ChessHub : IDisposable
                 s.Stage = ChessStage.Cancelled;
                 s.Notice = s.IsPublic
                     ? "Personne n'a rejoint la partie à temps : le code a expiré."
-                    : $"{s.Guest.Pseudo} n'a pas répondu à temps : l'invitation a expiré.";
+                    : $"{s.Invitee.Pseudo} n'a pas répondu à temps : l'invitation a expiré.";
                 sessions.Remove(s);
             }
             foreach (var s in sessions.Where(s => s.Stage == ChessStage.Playing))
@@ -481,7 +599,7 @@ public sealed class ChessHub : IDisposable
         foreach (var s in expired)
         {
             s.Notify();
-            RequestsChanged?.Invoke(s.Guest.UserId);
+            RequestsChanged?.Invoke(s.Invitee.UserId);
         }
         foreach (var (s, userId) in late)
             ForceLoss(s, userId, ChessEnd.Timeout, $"Temps écoulé ! {s.Me(userId).Pseudo} n'a pas joué à temps et perd la partie.");

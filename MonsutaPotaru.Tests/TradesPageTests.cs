@@ -116,6 +116,73 @@ public sealed class TradesPageTests : PageTestContext
         await DisposeComponentsAsync();
     }
 
+    /// <summary>Un échange fait jusqu'au bout, les deux pages sur l'écran de fin.</summary>
+    private async Task<(IRenderedComponent<Trades> Sacha, IRenderedComponent<Trades> Ondine)> Traded()
+    {
+        var (sacha, ondine) = await Requested();
+        await ondine.Click("Accepter");
+        sacha.WaitForText("Pokémon de ondine que ta sauvegarde peut recevoir");
+        ondine.WaitForText("Pokémon de sacha que ta sauvegarde peut recevoir");
+        await sacha.Find(".trade-candidate").ClickAsync(new());
+        ondine.WaitForAssertion(() => Assert.DoesNotContain("n'a pas encore choisi", ondine.Text()));
+        await ondine.Find(".trade-candidate").ClickAsync(new());
+        sacha.WaitForText("Valider l'échange");
+        await sacha.Click("Valider l'échange");
+        ondine.WaitForText("sacha a validé.");
+        await ondine.Click("Valider l'échange");
+        sacha.WaitForAssertion(() => Assert.True(sacha.HasButton("Recommencer avec ondine")), TimeSpan.FromSeconds(10));
+        ondine.WaitForAssertion(() => Assert.True(ondine.HasButton("Recommencer avec sacha")));
+        return (sacha, ondine);
+    }
+
+    [Fact]
+    public async Task Rematch_IsAcceptedFromTheEndScreen_SameSaves()
+    {
+        var (sacha, ondine) = await Traded();
+        var saves = ondine.Find("p.small.text-muted").TextContent; // « Ta sauvegarde : … · Sa sauvegarde : … »
+        await sacha.Click("Recommencer avec ondine");
+        sacha.WaitForText("En attente de la réponse de ondine");
+        Assert.Contains("Demande envoyée à ondine", sacha.Text());
+
+        // Ondine, toujours sur son écran de fin : la proposition s'y affiche, sans passer par la liste
+        ondine.WaitForAssertion(() => Assert.Contains("sacha te propose de recommencer l'échange", ondine.Find(".trade-rematch-offer").TextContent));
+        Assert.False(ondine.HasButton("Recommencer avec sacha")); // accepter revient au même
+        await ondine.Find(".trade-rematch-accept").ClickAsync(new());
+        sacha.WaitForText("Pokémon de ondine que ta sauvegarde peut recevoir");
+        ondine.WaitForText("Pokémon de sacha que ta sauvegarde peut recevoir");
+        Assert.Equal(saves, ondine.Find("p.small.text-muted").TextContent); // les mêmes sauvegardes
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Rematch_Refused_ThenNotOfferedAgain()
+    {
+        var (sacha, ondine) = await Traded();
+        await ondine.Click("Recommencer avec sacha");
+        sacha.WaitForAssertion(() => Assert.Single(sacha.FindAll(".trade-rematch-offer")));
+        await sacha.Find(".trade-rematch-refuse").ClickAsync(new());
+        ondine.WaitForText("sacha a refusé la demande d'échange.");
+        Assert.False(ondine.HasButton("Recommencer avec sacha")); // une demande refusée ne se relance pas
+        sacha.WaitForAssertion(() => Assert.Empty(sacha.FindAll(".trade-rematch-offer")));
+        Assert.True(sacha.HasButton("Recommencer avec ondine")); // lui peut encore proposer
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Rematch_AfterTheyAreNoLongerFriends_SaysSo()
+    {
+        var (sacha, ondine) = await Traded();
+        await using (var context = Db.NewContext())
+        {
+            context.Friendships.RemoveRange(context.Friendships);
+            await context.SaveChangesAsync();
+        }
+        await sacha.Click("Recommencer avec ondine");
+        sacha.WaitForText("ne peuvent plus échanger ensemble");
+        Assert.Empty(ondine.FindAll(".trade-rematch-offer"));
+        await DisposeComponentsAsync();
+    }
+
     [Fact]
     public async Task WithoutFriend_OrMatchingSave_SaysSo()
     {

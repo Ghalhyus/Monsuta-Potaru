@@ -178,9 +178,28 @@ else
                             }
                             @if (s.IsOver)
                             {
+                                @* Recommencer : même adversaire, même temps par coup, couleurs inversées ; ou sa proposition, à accepter ici *@
+                                var offer = Hub.RematchOffer(s, userId);
+                                @if (offer is not null)
+                                {
+                                    <div class="alert alert-info chess-rematch-offer mt-3 mb-0">
+                                        <p class="mb-2">
+                                            <strong>@offer.Inviter.Pseudo</strong> te propose de recommencer (@ChessTiming.Label(offer.MoveSeconds) par coup).
+                                            Tu jouerais les @(offer.ColorOf(userId) == ChessColor.White ? "blancs" : "noirs").
+                                        </p>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button type="button" class="btn btn-sm btn-primary chess-rematch-accept" disabled="@animating" @onclick="() => AcceptRematch(offer)">Accepter</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary chess-rematch-refuse" @onclick="() => Hub.Leave(offer, userId)">Refuser</button>
+                                        </div>
+                                    </div>
+                                }
                                 <div class="chess-after mt-3">
+                                    @if (offer is null && s.Accepted)
+                                    {
+                                        <button type="button" class="btn btn-primary chess-rematch" disabled="@(busy || animating)" @onclick="Rematch">Recommencer avec @other.Pseudo</button>
+                                    }
                                     <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
-                                    <button type="button" class="btn btn-primary" @onclick="NewGame">Nouvelle partie</button>
+                                    <button type="button" class="btn @(s.Accepted ? "btn-outline-primary" : "btn-primary")" @onclick="NewGame">Nouvelle partie</button>
                                 </div>
                             }
                         </div>
@@ -267,7 +286,7 @@ else
                     var r = request;
                     <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
                         <span>
-                            <strong>@r.Host.Pseudo</strong> t'invite à une partie d'échecs Pokémon (@ChessTiming.Label(r.MoveSeconds) par coup). Tu jouerais les noirs.
+                            <strong>@r.Inviter.Pseudo</strong> t'invite à @(r.RematchOf is null ? "une partie" : "recommencer votre partie") d'échecs Pokémon (@ChessTiming.Label(r.MoveSeconds) par coup). Tu jouerais les @(r.ColorOf(userId) == ChessColor.White ? "blancs" : "noirs").
                             <span class="d-block small text-muted">Jusqu'à @r.ExpiresAt.ToLocalTime().ToString("HH:mm").</span>
                         </span>
                         <button type="button" class="btn btn-sm btn-primary" @onclick="() => Accept(r)">Accepter</button>
@@ -377,7 +396,7 @@ else
     /// <summary>À ce joueur de jouer, animations finies.</summary>
     private bool CanAct => !animating && snapshot is { Stage: ChessStage.Playing, MyTurn: true } && played >= snapshot.StepCount;
 
-    private bool CanPass => CanAct && snapshot?.BonusSquare is not null;
+    private bool CanPass => CanAct && snapshot is { BonusSquare: not null, CanPass: true };
 
     private int? SecondsLeft => snapshot?.Deadline is { } deadline && session is not null
         ? Math.Clamp((int)Math.Ceiling((deadline - DateTime.UtcNow).TotalSeconds), 0, session.MoveSeconds)
@@ -428,31 +447,37 @@ else
             || snapshot.Stage is ChessStage.Requested or ChessStage.TeamChoice || (snapshot.Stage == ChessStage.Cancelled && snapshot.Position is null))
             return;
         boardStarting = true; // d'autres rendus arrivent pendant le chargement des sprites : un seul plateau
+        var current = true;
         try
         {
-            await StartBoard();
+            current = await StartBoard();
         }
         finally
         {
             boardStarting = false;
         }
+        if (!current)
+            StateHasChanged(); // plateau d'une ancienne partie abandonné : celui de la nouvelle naîtra au rendu suivant
     }
 
-    private async Task StartBoard()
+    /// <summary>Crée le plateau de la partie affichée ; faux si la partie a changé entre-temps (rien n'est gardé).</summary>
+    private async Task<bool> StartBoard()
     {
-        if (session is null)
-            return;
+        if (session is not { } started)
+            return true;
         selfRef ??= DotNetObjectReference.Create(this);
         module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/echecs.js");
+        if (session != started)
+            return false;
         units = session.Units();
         var start = session.Snapshot(userId); // position et nombre de coups lus ensemble : les coups d'après seront animés
         if (start.Position is null)
-            return;
+            return true;
         played = start.StepCount;
         lastStep = session.Steps(Math.Max(0, played - 1)).LastOrDefault();
         lastText = lastStep?.Text;
         var mine = session.ColorOf(userId);
-        board = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
+        var created = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
         {
             flip = mine == ChessColor.Black,
             units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.Mon.DonjonFolder, name = u.Mon.Name }),
@@ -464,10 +489,27 @@ else
                 strike = ChessTiming.Strike.TotalMilliseconds,
             },
         });
+        if (session != started)
+        {
+            // La partie a changé pendant le chargement des sprites (finie tout de suite, puis « Recommencer » ou « Nouvelle
+            // partie ») : ce plateau est celui de l'ancienne, il ne doit ni rester ni remettre son état dans la page
+            try
+            {
+                await created.InvokeVoidAsync("dispose");
+                await created.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // onglet fermé
+            }
+            return false;
+        }
+        board = created;
         snapshot = start;
         await Highlight();
         _ = PlayAsync();
         StateHasChanged();
+        return true;
     }
 
     /// <summary>Anime les nouveaux coups un à un sur le plateau, puis rend la main.</summary>
@@ -620,6 +662,39 @@ else
         }
         message = null;
         Join(request);
+    }
+
+    // ---------- Recommencer ----------
+
+    /// <summary>Accepte, depuis l'écran de fin, la proposition de l'adversaire de recommencer.</summary>
+    private async Task AcceptRematch(ChessSession offer)
+    {
+        if (Hub.Accept(offer, userId) is { } error)
+        {
+            message = error;
+            messageIsError = true;
+            return;
+        }
+        await NewGame(); // quitte la partie finie (plateau compris)
+        Join(offer);
+    }
+
+    /// <summary>« Recommencer avec … » : même adversaire (même un invité sans compte), même temps par coup, couleurs inversées.</summary>
+    private async Task Rematch()
+    {
+        if (session is not { IsOver: true, Accepted: true } s)
+            return;
+        var (created, text) = Hub.Rematch(s, userId);
+        if (created is null)
+        {
+            message = text;
+            messageIsError = true;
+            return;
+        }
+        await NewGame();
+        message = text.Length == 0 ? null : text; // vide : sa proposition croisait la mienne, c'est parti
+        messageIsError = false;
+        Join(created);
     }
 
     private void ChooseTeam(ChessTeam team)
@@ -850,6 +925,7 @@ else
 
     private async Task NewGame()
     {
+        DeclineGuestOffers();
         if (session is not null)
             session.Changed -= OnSessionChanged;
         session = null;
@@ -863,6 +939,18 @@ else
         showHelp = false;
         ClearSelection();
         await DisposeBoard();
+    }
+
+    /// <summary>
+    /// Sans compte, une proposition de recommencer ne se voit que sur l'écran de fin (pas de liste d'invitations) : quand il
+    /// le quitte, elle est refusée plutôt que d'attendre son expiration.
+    /// </summary>
+    private void DeclineGuestOffers()
+    {
+        if (signedIn)
+            return;
+        foreach (var offer in Hub.Incoming(userId))
+            Hub.Leave(offer, userId, $"{pseudo} a quitté la page.");
     }
 
     private async Task DisposeBoard()
@@ -923,7 +1011,9 @@ else
         if (!snapshot.MyTurn)
             return $"Au tour de {session.Other(userId).Pseudo}…";
         if (snapshot.BonusSquare is { } bonus && session.At(bonus) is { } unit)
-            return $"Super efficace ! {unit.Mon.Name} rejoue : choisis sa case, ou passe.";
+            return snapshot.CanPass
+                ? $"Super efficace ! {unit.Mon.Name} rejoue : choisis sa case, ou passe."
+                : $"Super efficace ! {unit.Mon.Name} rejoue : ton roi est en échec, choisis une case qui le met à l'abri.";
         return lastStep is { Check: true } && lastStep.Color != session.ColorOf(userId) ? "À toi de jouer : ton roi est en échec !" : "À toi de jouer.";
     }
 
@@ -969,6 +1059,7 @@ else
             <li>Sinon, échec et mat comme aux échecs : un roi n'est en échec que si une pièce adverse peut vraiment le manger.</li>
             <li>Un pion au bout du plateau prend la place d'un Pokémon K.O. de son équipe (pas d'un pion). Sans K.O., il attend.</li>
             <li>Celui qui invite (ou qui crée la partie publique) joue les blancs. Passé le temps par coup, ou en quittant la page, on perd.</li>
+            <li>À la fin, « Recommencer » propose une autre partie au même adversaire, au même temps par coup : les couleurs s'inversent.</li>
         </ul>
     };
 
@@ -1108,6 +1199,7 @@ else
     {
         clock?.Dispose();
         Hub.RequestsChanged -= OnRequestsChanged;
+        DeclineGuestOffers();
         if (session is not null)
         {
             session.Changed -= OnSessionChanged;

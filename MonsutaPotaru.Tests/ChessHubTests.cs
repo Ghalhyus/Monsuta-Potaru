@@ -228,6 +228,108 @@ public sealed class ChessHubTests : IDisposable
         Assert.Null(_hub.Active("sacha"));
     }
 
+    [Fact]
+    public void Rematch_ColorsSwap_WhoeverProposes()
+    {
+        var previous = Playing(seconds: 300);
+        _hub.Forfeit(previous, "ondine");
+        var requests = new List<string>();
+        _hub.RequestsChanged += requests.Add;
+
+        // Sacha avait les blancs et propose : il invite, mais Ondine prend les blancs (l'hôte)
+        var (rematch, message) = _hub.Rematch(previous, "sacha");
+        Assert.NotNull(rematch);
+        Assert.Equal("Invitation envoyée à Ondine : en attente de sa réponse.", message);
+        Assert.Equal((previous.Id, 300, false), (rematch.RematchOf, rematch.MoveSeconds, rematch.IsPublic));
+        Assert.Equal((Ondine, Sacha), (rematch.Host, rematch.Guest));
+        Assert.Equal((Sacha, Ondine), (rematch.Inviter, rematch.Invitee));
+        Assert.Equal((ChessColor.White, ChessColor.Black), (rematch.ColorOf("ondine"), rematch.ColorOf("sacha")));
+        Assert.Equal(["ondine"], requests);
+        Assert.Same(rematch, _hub.Active("sacha")); // celui qui invite l'attend
+        Assert.Null(_hub.Active("ondine"));
+        Assert.Same(rematch, _hub.Incoming("ondine").Single());
+        Assert.Same(rematch, _hub.RematchOffer(previous, "ondine"));
+        Assert.Null(_hub.RematchOffer(previous, "sacha"));
+        Assert.Equal("Cette invitation n'est plus valable.", _hub.Accept(rematch, "sacha")); // pas la sienne à accepter
+
+        Assert.Null(_hub.Accept(rematch, "ondine"));
+        Assert.Equal(ChessStage.TeamChoice, rematch.Stage);
+        Assert.Null(rematch.TeamOf("sacha")); // équipes à rechoisir
+        Assert.Null(_hub.ChooseTeam(rematch, "sacha", "psy"));
+        Assert.Null(_hub.ChooseTeam(rematch, "ondine", "feu"));
+        Assert.Equal("Ce n'est pas à toi de jouer.", _hub.Play(rematch, "sacha", Move("e7", "e5")));
+        Assert.Null(_hub.Play(rematch, "ondine", Move("e2", "e4"))); // les blancs commencent : Ondine
+
+        // Revanche de la revanche, proposée par Ondine (les blancs) : Sacha reprend les blancs
+        _hub.Forfeit(rematch, "sacha");
+        var (third, _) = _hub.Rematch(rematch, "ondine");
+        Assert.Equal((Sacha, Ondine, Ondine), (third!.Host, third.Guest, third.Inviter));
+    }
+
+    [Fact]
+    public void Rematch_RefusedExpiredOrCrossed()
+    {
+        var previous = Playing();
+        _hub.Forfeit(previous, "sacha");
+
+        // Ondine avait les noirs : elle invite et prend les blancs
+        var (rematch, _) = _hub.Rematch(previous, "ondine");
+        Assert.Equal((Ondine, Ondine), (rematch!.Host, rematch.Inviter));
+        _hub.Leave(rematch, "sacha");
+        Assert.Equal((ChessStage.Cancelled, "Sacha a refusé la partie."), (rematch.Stage, rematch.Notice));
+        Assert.Null(_hub.Rematch(rematch, "ondine").Session); // une invitation refusée ne se relance pas
+
+        var (late, _) = _hub.Rematch(previous, "sacha");
+        _time.Now += ChessHub.RequestLifetime;
+        _hub.Tick();
+        Assert.Equal("Ondine n'a pas répondu à temps : l'invitation a expiré.", late!.Notice);
+
+        // Les deux cliquent : la seconde demande accepte la première
+        var (first, _) = _hub.Rematch(previous, "sacha");
+        var (second, message) = _hub.Rematch(previous, "ondine");
+        Assert.Same(first, second);
+        Assert.Equal("", message);
+        Assert.Equal(ChessStage.TeamChoice, first!.Stage);
+    }
+
+    [Fact]
+    public void Rematch_OnlyAfterAnAcceptedGame_EvenAgainstAGuest()
+    {
+        var playing = Playing();
+        Assert.Contains("ne peut pas être recommencée", _hub.Rematch(playing, "sacha").Message); // pas finie
+        Assert.Null(_hub.Rematch(playing, "pierre").Session);
+        _hub.Forfeit(playing, "sacha");
+        Assert.Null(_hub.Rematch(playing, "pierre").Session); // il n'y jouait pas
+
+        var (refused, _) = _hub.Request(Sacha, Ondine, 60);
+        _hub.Leave(refused!, "ondine");
+        Assert.Null(_hub.Rematch(refused!, "sacha").Session);
+
+        var (waiting, _) = _hub.CreatePublic(Sacha, 60);
+        _hub.Leave(waiting!, "sacha"); // personne n'avait rejoint
+        Assert.Null(_hub.Rematch(waiting!, "sacha").Session);
+
+        // Partie publique contre un invité sans compte : revanche possible, l'invité prend les blancs
+        var guestId = ChessHub.NewGuestId();
+        var open = _hub.CreatePublic(Sacha, 120).Session!;
+        Assert.Null(_hub.JoinPublic(open.Code, new ChessParty(guestId, "Léo (invité)")).Error);
+        _hub.Leave(open, guestId); // parti pendant le choix des équipes
+        var (rematch, message) = _hub.Rematch(open, "sacha");
+        Assert.Equal("Invitation envoyée à Léo (invité) : en attente de sa réponse.", message);
+        Assert.Equal((guestId, ChessColor.White), (rematch!.Host.UserId, rematch.ColorOf(guestId)));
+        Assert.Same(rematch, _hub.RematchOffer(open, guestId));
+        _hub.Leave(rematch, guestId, "Léo (invité) a quitté la page.");
+        Assert.Equal("Léo (invité) a quitté la page.", rematch.Notice);
+
+        // L'adversaire joue déjà avec un autre
+        var previous = Playing();
+        _hub.Forfeit(previous, "ondine");
+        _hub.Accept(_hub.Request(Pierre, Ondine, 60).Session!, "ondine");
+        var (none, busy) = _hub.Rematch(previous, "sacha");
+        Assert.Null(none);
+        Assert.Equal("Ondine est déjà en train de jouer : réessaie plus tard.", busy);
+    }
+
     [Theory]
     [InlineData("Léo", "Léo (invité)")]
     [InlineData("  Marie   Ève ", "Marie Ève (invité)")]

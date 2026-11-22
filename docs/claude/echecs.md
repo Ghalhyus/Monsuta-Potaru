@@ -80,6 +80,15 @@ Pokémon au repos).
   n'est pas « menacée » en soi. Ainsi Kaorine (Sol) n'empêche pas le roque de Dracaufeu (Vol).
 - Coups permis : candidats (marche + types), puis `Legal` (son roi pas mangeable après le coup, `Simulate`), sauf un coup
   qui mange le roi (toujours permis : la partie est gagnée).
+- **Prise super efficace qui met son roi en échec** (bug signalé par l'utilisateur le 2026-11-22 : le roi Gallame ne
+  pouvait pas manger Démolosse sur une case tenue par une tour, alors qu'il rejouait aussitôt) : hors tour bonus, `Legal`
+  la permet si le tour bonus a au moins un coup permis (roi à l'abri, ou roi adverse mangé). `BonusCanSave` pose le
+  plateau d'après le coup dans `board` (avec `BonusSquare`, sans prise en passant) le temps d'appeler `MovesFrom`, puis
+  le remet : la partie est toujours lue sous le verrou de la session. Pendant ce tour bonus, **pas de passe**
+  (`CanPass`, aussi dans `ChessSnapshot` : la page cache « Passer » et dit « ton roi est en échec, choisis une case qui
+  le met à l'abri ») ; le récit ajoute « Il doit mettre son roi à l'abri. ». Vaut pour toute pièce (une prise qui
+  découvre son roi et peut le recouvrir en rejouant), pas seulement le roi. Une prise neutre reste interdite. Le mat en
+  tient compte (une telle prise peut être la seule parade).
 - Pion au bout : à l'arrivée, un coup **par Pokémon K.O. revivable** (`Revive`) ; sans K.O., le coup simple (il attend).
   Plus tard : `ChessMove(case, case, id)` (`IsSwap`). Le pion part chez les K.O. de son camp.
 - Tour bonus : `BonusSquare` (case de la pièce qui rejoue, ou du Pokémon revenu à sa place) ; abandonné tout de suite si
@@ -94,7 +103,44 @@ Pokémon au repos).
 - Calqué sur `BattleHub` : verrou du hub puis celui de la session (`Gate`), jamais l'inverse ; pages abonnées à
   `ChessSession.Changed`, lecture par `Snapshot`, `Steps`, `Options`, `At`, `Units` (copies sous verrou).
 - Délai : `Deadline` = maintenant + durée des animations du coup (`ChessTiming.Playback` : 350 ms par case, 1,6 s pour
-  une prise, 1 s de marge) + temps par coup. echecs.js reçoit les mêmes durées (`timing`).
+  l'attaque et la blessure, la marche du K.O. jusqu'à sa place, 1 s de marge) + temps par coup. echecs.js reçoit les
+  mêmes durées (`timing`).
+
+## Recommencer (demandé le 2026-11-22 ; règles communes : `docs/claude/multijoueurs.md`)
+- **Couleurs inversées** : `Rematch` crée `ChessSession(ancien Guest, ancien Host)` ; l'hôte reste **les blancs**
+  (`ColorOf`, `Player`, `ChessRecord.WhiteId` inchangés), mais celui qui invite peut être l'adversaire
+  (`InvitedByGuest`, `Inviter` / `Invitee`). Tout ce qui parle de la demande (`Active`, `Busy`, `Incoming`, `Accept`,
+  refus dans `Leave`, expiration de `Tick`, `RequestsChanged`) passe par `Inviter` / `Invitee`, jamais par `Host` /
+  `Guest`. Un invité sans compte peut donc jouer les blancs (sans clé étrangère : rien à changer aux statistiques).
+- Partie publique : la revanche est une invitation directe (pas de code) ; une partie publique que personne n'a
+  rejointe n'est pas `Accepted`.
+- Invité sans compte : il n'a pas de liste d'invitations ; quand il quitte l'écran de fin (« Nouvelle partie », page
+  fermée : `DeclineGuestOffers`), les propositions qui lui sont adressées sont refusées (« Léo (invité) a quitté la page. »).
+- **Piège trouvé dans le navigateur** : une partie finie pendant le chargement de son plateau (abandon tout de suite),
+  puis « Recommencer » : `create` (echecs.js) revenait après coup et `StartBoard` gardait ce plateau de l'ancienne partie
+  (rattaché à un élément disparu) et son `Snapshot` (« À toi de jouer » chez les noirs) ; plus de plateau pour la
+  nouvelle. `StartBoard` compare la session avant et après chaque `await` : l'ancien plateau est fermé (`dispose`) et
+  `OnAfterRenderAsync` redemande un rendu. bUnit ne sait pas retarder un appel qui rend un `IJSObjectReference` : pas de
+  test automatique, vérifié dans le navigateur (abandon 0,3 s après le choix des équipes).
+
+## Marche des K.O. (demandée le 2026-11-22)
+- Avant : le Pokémon mangé s'effaçait et réapparaissait endormi chez les K.O. Maintenant il **marche** jusqu'à sa place
+  (`koRoute`, `toKo` dans echecs.js), puis s'endort. Choix de l'utilisateur : **entre les cases** (demi-case vers la
+  ligne entre deux rangées, du côté de sa place ; cette ligne jusqu'à l'espace de 8 px entre le plateau et le panneau ;
+  cet espace jusqu'à la ligne voisine de sa place ; sa place : il ne passe sur aucun Pokémon), le mangeur **avance en
+  même temps** (une demi-case de marche après le départ du K.O.), **vitesse d'une pièce** (350 ms par case).
+- Proposés par moi : le roi mangé s'efface toujours (pas de place chez les K.O., la partie est finie) ; le pion au bout
+  et le Pokémon qui revient prennent le même chemin (le revenu à l'envers, depuis sa place dans la position d'avant).
+- **Temps du coup** : `ChessTiming.KoRoutePixels` refait le calcul de `koRoute` (mêmes constantes de géométrie : à
+  changer des deux côtés). Les K.O. blancs sont à droite pour les blancs, à gauche pour les noirs, et le plateau est
+  retourné : la longueur horizontale est la même vue des deux côtés, pas la verticale ; `KoWalkSquares` prend la plus
+  longue. Pour le Pokémon qui revient, sa place d'avant le coup n'est pas dans `ChessStep` : la plus longue des places
+  possibles. `ChessStep.Squares` ne compte plus l'échange (avant : 4 cases forfaitaires). Test :
+  `ChessGameTests.Playback_CountsTheWalkToTheKnockedOut` (306 px pour d4 → première place, 498 px pour b8 vu des noirs).
+- Jusqu'à ~17 cases de marche (≈ 6 s) dans le pire cas : `MAX_PLAY` passé de 10 à 15 s.
+- Essai dans le navigateur : copier le canvas dans un `requestAnimationFrame` (après le rendu de Phaser ; avec un
+  `setTimeout`, la copie du WebGL est vide) ; panneau du navigateur **affiché** (`show_pane` « preview ») : masqué, ~1
+  image/s et la marche ne tient pas dans `MAX_PLAY`.
 - Quitter la page (ou la recharger) pendant la partie = défaite (`Dispose` → `Leave`), comme les combats.
 
 ## Fenêtre « Aide » (demandée le 2026-11-22)

@@ -220,6 +220,34 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("À toi de jouer.");
     }
 
+    [Fact]
+    public async Task BonusTurn_WithTheKingInCheck_CannotBePassed()
+    {
+        // Partie lancée par le hub, puis posée sur une position : Gallame (roi Combat) peut manger Démolosse (Ténèbres) en
+        // e5, où Boumata (tour Dragon, a5) le mangerait ; il rejoue et doit s'en aller
+        var hub = Services.GetRequiredService<ChessHub>();
+        var session = hub.Request(new ChessParty("sacha", "sacha"), new ChessParty("ondine", "ondine"), 120).Session!;
+        Assert.Null(hub.Accept(session, "ondine"));
+        Assert.Null(hub.ChooseTeam(session, "sacha", "psy"));
+        Assert.Null(hub.ChooseTeam(session, "ondine", "feu"));
+        var position = ChessGame.FromPosition(ChessTeams.Find("psy")!, ChessTeams.Find("feu")!, ChessColor.White,
+            [(ChessColor.White, ChessPiece.King, Sq("e4")), (ChessColor.Black, ChessPiece.Knight, Sq("e5")),
+             (ChessColor.Black, ChessPiece.Rook, Sq("a5")), (ChessColor.Black, ChessPiece.King, Sq("h8"))]);
+        // ChessSession.Game est interne : posé par réflexion (aucun accès des tests aux internes du site)
+        typeof(ChessSession).GetField("Game", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(session, position);
+        var sacha = Render<Chess>();
+        sacha.WaitForText("À toi de jouer.");
+
+        await Click(sacha, "e4");
+        await Click(sacha, "e5");
+        sacha.WaitForText("ton roi est en échec, choisis une case qui le met à l'abri.");
+        Assert.False(sacha.HasButton("Passer"));
+        await Click(sacha, "e6");
+        sacha.WaitForText("Au tour de ondine");
+        await DisposeComponentsAsync();
+    }
+
     /// <summary>Case permise marquée sur le plateau vers <paramref name="square"/>, dans le dernier « highlight » qui en a.</summary>
     private object? LastMarkedMove(int square) => JSInterop.Invocations.Where(i => i.Identifier == "highlight")
         .Select(i => i.Arguments[0]!.GetType().GetProperty("moves")!.GetValue(i.Arguments[0]) as System.Collections.IEnumerable)
@@ -273,6 +301,100 @@ public sealed class ChessPageTests : PageTestContext
 
     /// <summary>Un autre code que celui-ci (même longueur, mêmes caractères permis).</summary>
     private static string OtherCode(string code) => (code[0] == 'A' ? "B" : "A") + code[1..];
+
+    /// <summary>Les deux choisissent leur équipe (Psy pour le premier, Feu pour le second) : la partie commence.</summary>
+    private static async Task ChooseTeams(IRenderedComponent<Chess> first, IRenderedComponent<Chess> second)
+    {
+        first.WaitForText("Choisis ton équipe");
+        second.WaitForText("Choisis ton équipe");
+        await first.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        second.WaitForAssertion(() => Assert.Contains("taken", second.FindAll(".chess-team")[0].ClassName));
+        await second.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        first.WaitForAssertion(() => Assert.NotNull(first.Find(".chess-board")));
+        second.WaitForAssertion(() => Assert.NotNull(second.Find(".chess-board")));
+    }
+
+    [Fact]
+    public async Task Rematch_BetweenFriends_ColorsSwap()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        await ChooseTeams(sacha, ondine);
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
+        await ondine.Click("Abandonner");
+        sacha.WaitForText("Victoire ! (abandon)");
+        ondine.WaitForText("Défaite… (abandon)");
+
+        // Sacha (les blancs) propose ; Ondine le voit sur son écran de fin, avec la couleur qu'elle aurait
+        await sacha.Click("Recommencer avec ondine");
+        sacha.WaitForText("En attente de la réponse de ondine");
+        Assert.Contains("Tu joues les noirs · 5 min par coup", sacha.Text());
+        ondine.WaitForAssertion(() => Assert.Contains("sacha te propose de recommencer (5 min par coup). Tu jouerais les blancs.",
+            PageTestExtensions.Normalize(ondine.Find(".chess-rematch-offer").TextContent)));
+        Assert.False(ondine.HasButton("Recommencer avec sacha"));
+        Assert.True(Services.GetRequiredService<ChessHub>().Incoming("ondine").Single().RematchOf is not null);
+
+        await ondine.Find(".chess-rematch-accept").ClickAsync(new());
+        await ChooseTeams(ondine, sacha); // équipes rechoisies
+        ondine.WaitForText("Tu joues les blancs · 5 min par coup");
+        ondine.WaitForText("À toi de jouer.");
+        sacha.WaitForText("Au tour de ondine");
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Rematch_Refused_IsNotOfferedAgain()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        ondine.WaitForText("Choisis ton équipe");
+        await sacha.Click("Annuler la partie"); // annulée en cours de route : on peut quand même recommencer
+        ondine.WaitForText("sacha a annulé la partie.");
+        await ondine.Click("Recommencer avec sacha");
+        ondine.WaitForText("Invitation envoyée à sacha");
+
+        // Sacha rouvre la page (autre onglet) : l'invitation l'attend dans la liste, où il la refuse
+        var again = Render<Chess>();
+        again.WaitForText("t'invite à recommencer votre partie d'échecs Pokémon (5 min par coup). Tu jouerais les noirs."); // Ondine prend les blancs
+        await again.Click("Refuser");
+        again.WaitForAssertion(() => Assert.DoesNotContain("t'invite", again.Text()));
+        ondine.WaitForText("sacha a refusé la partie.");
+        Assert.False(ondine.HasButton("Recommencer avec sacha")); // une invitation refusée ne se relance pas
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Rematch_AgainstAGuestWithoutAccount()
+    {
+        var sacha = Render<Chess>();
+        var code = await CreatePublic(sacha);
+        var guest = RenderAnonymous<Chess>();
+        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
+        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = code });
+        await guest.Click("Rejoindre");
+        await ChooseTeams(sacha, guest);
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
+        await sacha.Click("Abandonner");
+        guest.WaitForText("Victoire ! (abandon)");
+
+        // L'invité propose : il prend les blancs ; Sacha accepte depuis son écran de fin
+        await guest.Click("Recommencer avec sacha");
+        guest.WaitForText("Tu joues les blancs · 2 min par coup");
+        sacha.WaitForAssertion(() => Assert.Contains("Léo (invité) te propose de recommencer", sacha.Find(".chess-rematch-offer").TextContent));
+        await sacha.Find(".chess-rematch-accept").ClickAsync(new());
+        await ChooseTeams(guest, sacha);
+        guest.WaitForText("À toi de jouer.");
+
+        // Fin de la revanche ; Sacha propose encore, mais l'invité quitte l'écran de fin : sa proposition est refusée
+        await guest.Click("Abandonner");
+        sacha.WaitForText("Victoire ! (abandon)");
+        await sacha.Click("Recommencer avec Léo (invité)");
+        guest.WaitForAssertion(() => Assert.Single(guest.FindAll(".chess-rematch-offer")));
+        await guest.Click("Nouvelle partie");
+        sacha.WaitForText("Léo (invité) a quitté la page.");
+        Assert.Null(Services.GetRequiredService<ChessHub>().Active("sacha"));
+        await DisposeComponentsAsync();
+    }
 
     [Fact]
     public async Task PublicGame_JoinedWithoutAccount()

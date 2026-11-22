@@ -51,6 +51,10 @@ public sealed class BattleSession(BattleParty first, BattleParty second, string 
     public string Format { get; } = format;
     public DateTime CreatedAt { get; } = createdAt;
     public DateTime ExpiresAt => CreatedAt + BattleHub.RequestLifetime;
+    /// <summary>Combat fini dont celui-ci est la revanche (« Recommencer »), null pour une demande ordinaire.</summary>
+    public Guid? RematchOf { get; internal init; }
+    /// <summary>La demande a été acceptée : une fois le combat fini (ou annulé en cours de route), on peut le recommencer.</summary>
+    public bool Accepted { get; internal set; }
 
     public BattleStage Stage { get; internal set; }
     /// <summary>Dernier événement à montrer aux deux (refus, annulation, erreur).</summary>
@@ -176,7 +180,40 @@ public sealed class BattleHub : IDisposable
         sessions.Any(s => !s.IsOver && s.Involves(userId) && (s.Stage != BattleStage.Requested || s.IsFirst(userId)));
 
     /// <summary>Envoie une demande de combat (l'appelant a vérifié l'amitié et les sauvegardes, <see cref="BattleService"/>).</summary>
-    public (BattleSession? Session, string Message) Request(BattleParty first, BattleParty second, string format)
+    public (BattleSession? Session, string Message) Request(BattleParty first, BattleParty second, string format) =>
+        Create(first, second, format, null);
+
+    /// <summary>
+    /// « Recommencer » : nouvelle demande au même ami, entre les mêmes sauvegardes et au même format (l'appelant a revérifié
+    /// l'amitié et la paire, <see cref="BattleService.SavePairsAsync"/>), après un combat accepté puis fini ou annulé. Les
+    /// équipes se choisissent de nouveau. Si l'ami a déjà proposé de recommencer celui-ci, sa demande est acceptée à la
+    /// place (message vide).
+    /// </summary>
+    public (BattleSession? Session, string Message) Rematch(BattleSession previous, BattleParty first, BattleParty second, string format)
+    {
+        BattleSession? offer;
+        lock (gate)
+        {
+            if (!previous.IsOver || !previous.Accepted || !previous.Involves(first.UserId) || previous.Other(first.UserId).UserId != second.UserId)
+                return (null, "Ce combat ne peut pas être recommencé : propose un nouveau combat.");
+            offer = OfferLocked(previous, first.UserId);
+        }
+        if (offer is null)
+            return Create(first, second, format, previous.Id);
+        return Accept(offer, first.UserId) is { } error ? (null, error) : (offer, "");
+    }
+
+    /// <summary>Proposition de l'autre joueur de recommencer ce combat fini, adressée à ce joueur et pas encore acceptée.</summary>
+    public BattleSession? RematchOffer(BattleSession previous, string userId)
+    {
+        lock (gate)
+            return OfferLocked(previous, userId);
+    }
+
+    private BattleSession? OfferLocked(BattleSession previous, string userId) =>
+        sessions.FirstOrDefault(s => s.Stage == BattleStage.Requested && s.RematchOf == previous.Id && s.Second.UserId == userId);
+
+    private (BattleSession? Session, string Message) Create(BattleParty first, BattleParty second, string format, Guid? rematchOf)
     {
         BattleSession session;
         lock (gate)
@@ -185,7 +222,7 @@ public sealed class BattleHub : IDisposable
                 return (null, "Tu as déjà un combat en cours.");
             if (sessions.Any(s => !s.IsOver && s.Stage != BattleStage.Requested && s.Involves(second.UserId)))
                 return (null, $"{second.Pseudo} est déjà en train de combattre : réessaie plus tard.");
-            session = new BattleSession(first, second, format, Now);
+            session = new BattleSession(first, second, format, Now) { RematchOf = rematchOf };
             sessions.Add(session);
         }
         RequestsChanged?.Invoke(second.UserId);
@@ -202,6 +239,7 @@ public sealed class BattleHub : IDisposable
             if (Busy(userId))
                 return "Tu as déjà un combat en cours.";
             session.Stage = BattleStage.TeamBuilding;
+            session.Accepted = true;
             session.Notice = null;
         }
         session.Notify();

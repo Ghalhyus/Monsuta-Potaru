@@ -145,6 +145,50 @@ public sealed class BattleHubTests : IDisposable
         Assert.Equal("Ce combat n'attend plus d'équipe.", _hub.SubmitTeam(building, "ondine", Team("Ondine", "rouge-feu.sav"), 0));
     }
 
+    [Fact]
+    public void Rematch_AfterTheBattle_SameSaves_TeamsChosenAgain()
+    {
+        var previous = Fighting();
+        BattleHub.Forfeit(previous, "ondine");
+        WaitUntil(() => previous.Stage == BattleStage.Done, "fin du combat");
+
+        var (rematch, message) = _hub.Rematch(previous, Ondine, Sacha, Format);
+        Assert.Equal("Demande envoyée à Sacha : en attente de sa réponse.", message);
+        Assert.NotNull(rematch);
+        Assert.Equal((previous.Id, Ondine, Sacha, Format), (rematch.RematchOf, rematch.First, rematch.Second, rematch.Format));
+        Assert.Same(rematch, _hub.RematchOffer(previous, "sacha"));
+        Assert.Null(_hub.RematchOffer(previous, "ondine"));
+
+        // Sacha propose aussi, au même moment : c'est accepté
+        var (same, crossed) = _hub.Rematch(previous, Sacha, Ondine, Format);
+        Assert.Same(rematch, same);
+        Assert.Equal("", crossed);
+        Assert.Equal(BattleStage.TeamBuilding, rematch.Stage);
+        Assert.False(rematch.TeamReady("sacha")); // équipes à rechoisir
+        Assert.False(rematch.TeamReady("ondine"));
+        _hub.Leave(rematch, "sacha");
+    }
+
+    [Fact]
+    public void Rematch_OnlyAfterAnAcceptedBattle()
+    {
+        var (refused, _) = _hub.Request(Sacha, Ondine, Format);
+        _hub.Leave(refused!, "ondine");
+        var (none, message) = _hub.Rematch(refused!, Sacha, Ondine, Format);
+        Assert.Null(none);
+        Assert.Equal("Ce combat ne peut pas être recommencé : propose un nouveau combat.", message);
+
+        var (building, _) = _hub.Request(Sacha, Ondine, Format);
+        _hub.Accept(building!, "ondine");
+        Assert.Null(_hub.Rematch(building!, Sacha, Ondine, Format).Session); // pas fini
+        _hub.Leave(building!, "ondine"); // annulé pendant le choix des équipes : on peut recommencer
+        var (rematch, _) = _hub.Rematch(building!, Sacha, Ondine, Format);
+        Assert.NotNull(rematch);
+        _hub.Leave(rematch, "ondine");
+        Assert.Equal("Ondine a refusé le combat.", rematch.Notice);
+        Assert.Null(_hub.RematchOffer(building!, "ondine"));
+    }
+
     // ---------- BattleService ----------
 
     [Fact]

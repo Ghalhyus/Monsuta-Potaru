@@ -47,8 +47,11 @@ public sealed record ChessStep(
     int? RookId, int RookFrom, int RookTo, int? RevivedId, bool Bonus, bool Check, ChessColor? Winner, ChessEnd End,
     string Text, ChessPosition After)
 {
-    /// <summary>Nombre de cases parcourues (durée de la marche) ; un échange de place : la plus longue marche des deux.</summary>
-    public int Squares => Move.IsPass ? 0 : Move.IsSwap ? 4 : Math.Max(ChessGame.Distance(Move.From, Move.To), RookId is null ? 0 : 2);
+    /// <summary>
+    /// Nombre de cases parcourues sur le plateau (durée de la marche) ; un échange de place : aucune (les marches vers et
+    /// depuis les K.O. sont comptées par <see cref="ChessTiming.Playback"/>).
+    /// </summary>
+    public int Squares => Move.IsPass || Move.IsSwap ? 0 : Math.Max(ChessGame.Distance(Move.From, Move.To), RookId is null ? 0 : 2);
 }
 
 /// <summary>
@@ -59,7 +62,9 @@ public sealed record ChessStep(
 /// aussitôt (elle seule, et elle peut passer), une fois seulement : une prise super efficace pendant ce tour bonus ne
 /// donne pas d'autre tour (choix de l'utilisateur, 2026-11-22 ; avant, les tours bonus s'enchaînaient) ;</item>
 /// <item>un tour bonus qui mange le roi gagne la partie ; hors de là, échec et mat comme aux échecs (un roi n'est en
-/// échec que si une pièce adverse peut vraiment le manger) ; pat, ou deux rois seuls : nulle ;</item>
+/// échec que si une pièce adverse peut vraiment le manger) ; pat, ou deux rois seuls : nulle. Une prise super efficace
+/// peut laisser son roi mangeable si le tour bonus qui suit le met à l'abri (le roi mange, se retrouve en échec, et
+/// rejoue pour s'en aller : demandé par l'utilisateur, 2026-11-22) ; ce tour bonus ne peut alors pas être passé ;</item>
 /// <item>un pion au bout du plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case
 /// (le pion part chez les K.O.) ; sans K.O., il attend, et l'échange se fait plus tard, à la place d'un coup.</item>
 /// </list>
@@ -190,7 +195,8 @@ public sealed class ChessGame
 
     /// <summary>
     /// Coups permis de la pièce de cette case pour le camp qui joue (vide si ce n'est pas à elle : autre camp, autre pièce
-    /// pendant un tour bonus, partie finie). Un coup qui laisse son roi mangeable est interdit, sauf s'il mange le roi adverse.
+    /// pendant un tour bonus, partie finie). Un coup qui laisse son roi mangeable est interdit, sauf s'il mange le roi adverse
+    /// ou si c'est une prise super efficace dont le tour bonus peut mettre le roi à l'abri (<see cref="Legal"/>).
     /// </summary>
     public List<ChessMove> MovesFrom(int square)
     {
@@ -205,7 +211,7 @@ public sealed class ChessGame
         if (IsOver)
             return [];
         if (BonusSquare is { } bonus)
-            return [.. MovesFrom(bonus), ChessMove.Pass];
+            return CanPass ? [.. MovesFrom(bonus), ChessMove.Pass] : MovesFrom(bonus);
         return [.. Enumerable.Range(0, 64).SelectMany(MovesFrom)];
     }
 
@@ -342,16 +348,58 @@ public sealed class ChessGame
 
     private bool IsOwnRook(int square, ChessColor color) => board[square] is { Piece: ChessPiece.Rook } rook && rook.Color == color;
 
-    /// <summary>Le coup ne laisse pas son roi mangeable (ou mange le roi adverse : la partie est gagnée).</summary>
+    /// <summary>
+    /// Le coup ne laisse pas son roi mangeable (ou mange le roi adverse : la partie est gagnée). Une prise super efficace
+    /// hors tour bonus peut le laisser mangeable un instant : la pièce rejoue aussitôt, et le coup est permis si ce tour
+    /// bonus peut mettre le roi à l'abri (le roi qui mange en se mettant en échec, puis s'en va ; passer est alors
+    /// interdit, voir <see cref="CanPass"/>).
+    /// </summary>
     private bool Legal(ChessMove move)
     {
         var mover = board[move.From]!;
-        if (VictimOf(move) is { Unit.Piece: ChessPiece.King })
+        var victim = VictimOf(move);
+        if (victim is { Unit.Piece: ChessPiece.King })
             return true;
         var after = Simulate(move);
-        var king = Array.FindIndex(after, u => u is { Piece: ChessPiece.King } k && k.Color == mover.Color);
-        return king < 0 || !Attacked(after, king, Other(mover.Color), after[king]!.Type);
+        if (KingSafe(after, mover.Color))
+            return true;
+        return BonusSquare is null && victim is { } v && PokeTypes.Effectiveness(mover.Type, v.Unit.Type) > 1 && BonusCanSave(move, after);
     }
+
+    /// <summary>Le roi de ce camp n'est pas mangeable sur ce plateau (ou n'y est pas).</summary>
+    private static bool KingSafe(ChessUnit?[] on, ChessColor color)
+    {
+        var king = Array.FindIndex(on, u => u is { Piece: ChessPiece.King } k && k.Color == color);
+        return king < 0 || !Attacked(on, king, Other(color), on[king]!.Type);
+    }
+
+    /// <summary>
+    /// Après cette prise super efficace (plateau <paramref name="after"/>), la pièce arrivée a au moins un coup de tour
+    /// bonus permis : qui met son roi à l'abri, ou qui mange le roi adverse. Le plateau est posé le temps du calcul (les
+    /// coups de la pièce se calculent sur lui), puis remis : l'appelant tient le verrou de la partie.
+    /// </summary>
+    private bool BonusCanSave(ChessMove move, ChessUnit?[] after)
+    {
+        var saved = (ChessUnit?[])board.Clone();
+        var (enPassant, bonus) = (EnPassant, BonusSquare);
+        Array.Copy(after, board, board.Length);
+        (EnPassant, BonusSquare) = (null, move.To); // une prise n'ouvre pas de prise en passant ; tour bonus : pas d'autre
+        try
+        {
+            return MovesFrom(move.To).Count > 0;
+        }
+        finally
+        {
+            Array.Copy(saved, board, board.Length);
+            (EnPassant, BonusSquare) = (enPassant, bonus);
+        }
+    }
+
+    /// <summary>
+    /// Le tour bonus peut être passé : pas si son roi est mangeable (après une prise super efficace qui l'a mis en échec,
+    /// la pièce doit le mettre à l'abri).
+    /// </summary>
+    public bool CanPass => !IsOver && BonusSquare is not null && !InCheck(Turn);
 
     /// <summary>La pièce mangée par ce coup et sa case (prise en passant : le pion à côté), ou null.</summary>
     private (ChessUnit Unit, int Square)? VictimOf(ChessMove move)
@@ -514,6 +562,8 @@ public sealed class ChessGame
             text += bonus
                 ? $" C'est super efficace ! {board[move.To]!.Mon.Name} rejoue."
                 : $" C'est super efficace, mais {board[move.To]!.Mon.Name} ne peut plus bouger.";
+            if (bonus && InCheck(color))
+                text += " Il doit mettre son roi à l'abri.";
         }
         return Record(color, move, mover.Id, victim?.Unit.Id, victim?.Square ?? -1, effect, rook is null ? null : board[rook.Value.To]!.Id,
             rook?.From ?? -1, rook?.To ?? -1, revived?.Id, bonus, text);

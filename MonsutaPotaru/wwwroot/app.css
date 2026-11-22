@@ -1106,6 +1106,8 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .battle-result.won { color: #288838; }
 .battle-result.lost { color: #c03030; }
 .battle-after { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
+/* « Ondine te propose de recommencer. » : au-dessus de ses boutons Accepter / Refuser */
+.battle-rematch-offer { font-size: 1.3em; font-weight: 700; color: #305890; }
 .battle-after .btn { font-size: max(.8rem, 1em); }
 
 /* ---------- Mode hybride (.hybride, zone large seulement ; étroite : comme empilés) : le terrain en grand, l'écran du

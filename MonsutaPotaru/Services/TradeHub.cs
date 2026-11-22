@@ -18,6 +18,10 @@ public sealed class TradeSession(TradeParty first, TradeParty second, DateTime c
     public TradeParty Second { get; } = second;
     public DateTime CreatedAt { get; } = createdAt;
     public DateTime ExpiresAt => CreatedAt + TradeHub.RequestLifetime;
+    /// <summary>Échange fini dont celui-ci est la revanche (« Recommencer »), null pour une demande ordinaire.</summary>
+    public Guid? RematchOf { get; internal init; }
+    /// <summary>La demande a été acceptée : une fois l'échange fini (ou annulé en cours de route), on peut le recommencer.</summary>
+    public bool Accepted { get; internal set; }
 
     public TradeStage Stage { get; internal set; }
     /// <summary>Pokémon de <see cref="Second"/> que <see cref="First"/> veut recevoir (et l'inverse).</summary>
@@ -85,7 +89,38 @@ public sealed class TradeHub : IDisposable
     }
 
     /// <summary>Envoie une demande d'échange (l'appelant a vérifié l'amitié et les sauvegardes).</summary>
-    public (TradeSession? Session, string Message) Request(TradeParty first, TradeParty second)
+    public (TradeSession? Session, string Message) Request(TradeParty first, TradeParty second) => Create(first, second, null);
+
+    /// <summary>
+    /// « Recommencer » : nouvelle demande au même ami, entre les mêmes sauvegardes (l'appelant a revérifié l'amitié et la
+    /// paire, <see cref="TradeService.SavePairsAsync"/>), après un échange accepté puis fini ou annulé. Si l'ami a déjà
+    /// proposé de recommencer celui-ci, sa demande est acceptée à la place (message vide).
+    /// </summary>
+    public (TradeSession? Session, string Message) Rematch(TradeSession previous, TradeParty first, TradeParty second)
+    {
+        TradeSession? offer;
+        lock (gate)
+        {
+            if (!previous.IsOver || !previous.Accepted || !previous.Involves(first.UserId) || previous.Other(first.UserId).UserId != second.UserId)
+                return (null, "Cet échange ne peut pas être recommencé : propose un nouvel échange.");
+            offer = OfferLocked(previous, first.UserId);
+        }
+        if (offer is null)
+            return Create(first, second, previous.Id);
+        return Accept(offer, first.UserId) is { } error ? (null, error) : (offer, "");
+    }
+
+    /// <summary>Proposition de l'autre joueur de recommencer cet échange fini, adressée à ce joueur et pas encore acceptée.</summary>
+    public TradeSession? RematchOffer(TradeSession previous, string userId)
+    {
+        lock (gate)
+            return OfferLocked(previous, userId);
+    }
+
+    private TradeSession? OfferLocked(TradeSession previous, string userId) =>
+        sessions.FirstOrDefault(s => s.Stage == TradeStage.Requested && s.RematchOf == previous.Id && s.Second.UserId == userId);
+
+    private (TradeSession? Session, string Message) Create(TradeParty first, TradeParty second, Guid? rematchOf)
     {
         TradeSession session;
         lock (gate)
@@ -94,7 +129,7 @@ public sealed class TradeHub : IDisposable
                 return (null, "Tu as déjà un échange en cours.");
             if (sessions.Any(s => !s.IsOver && s.Stage != TradeStage.Requested && s.Involves(second.UserId)))
                 return (null, $"{second.Pseudo} est déjà en train d'échanger : réessaie plus tard.");
-            session = new TradeSession(first, second, time.GetUtcNow().UtcDateTime);
+            session = new TradeSession(first, second, time.GetUtcNow().UtcDateTime) { RematchOf = rematchOf };
             sessions.Add(session);
         }
         RequestsChanged?.Invoke(second.UserId);
@@ -113,6 +148,7 @@ public sealed class TradeHub : IDisposable
             if (Busy(userId))
                 return "Tu as déjà un échange en cours.";
             session.Stage = TradeStage.Choosing;
+            session.Accepted = true;
             session.Notice = null;
         }
         session.Notify();

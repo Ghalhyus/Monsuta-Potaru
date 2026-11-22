@@ -149,16 +149,20 @@
 
                 case TradeStage.Done:
                     <div class="alert alert-success">@(s.IsFirst(userId) ? s.Outcome!.FirstMessage : s.Outcome!.SecondMessage)</div>
+                    @RematchOffer(s)
                     <div class="d-flex flex-wrap gap-2">
-                        <a class="btn btn-primary" href="sauvegardes">Mes sauvegardes</a>
+                        @RematchButton(s)
+                        <a class="btn @(CanRematch(s) ? "btn-outline-primary" : "btn-primary")" href="sauvegardes">Mes sauvegardes</a>
                         <button type="button" class="btn btn-outline-secondary" @onclick="NewTrade">Nouvel échange</button>
                     </div>
                     break;
 
                 case TradeStage.Cancelled:
                     <div class="alert alert-secondary">@s.Notice</div>
+                    @RematchOffer(s)
                     <div class="d-flex flex-wrap gap-2">
-                        <a class="btn btn-primary" href="">Retour à l'accueil</a>
+                        @RematchButton(s)
+                        <a class="btn @(CanRematch(s) ? "btn-outline-primary" : "btn-primary")" href="">Retour à l'accueil</a>
                         <button type="button" class="btn btn-outline-secondary" @onclick="NewTrade">Nouvel échange</button>
                     </div>
                     break;
@@ -185,7 +189,7 @@ else
                     var r = request;
                     <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
                         <span>
-                            <strong>@r.First.Pseudo</strong> te propose un échange : sa sauvegarde « @r.First.SaveLabel » contre ta sauvegarde « @r.Second.SaveLabel ».
+                            <strong>@r.First.Pseudo</strong> te propose @(r.RematchOf is null ? "un échange" : "de recommencer votre échange") : sa sauvegarde « @r.First.SaveLabel » contre ta sauvegarde « @r.Second.SaveLabel ».
                             <span class="d-block small text-muted">Jusqu'à @r.ExpiresAt.ToLocalTime().ToString("HH:mm").</span>
                         </span>
                         <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Accept(r)">Accepter</button>
@@ -361,8 +365,77 @@ else
             messageIsError = true;
             return;
         }
+        Reset(); // revanche acceptée depuis l'écran de fin : on quitte l'échange fini
         message = null;
         await Join(request);
+    }
+
+    // ---------- Recommencer ----------
+
+    /// <summary>L'échange avait été accepté et il est fini (ou annulé en cours de route) : on peut le recommencer.</summary>
+    private bool CanRematch(TradeSession s) => s is { IsOver: true, Accepted: true } && Hub.RematchOffer(s, userId) is null;
+
+    /// <summary>« Recommencer avec … » : même ami, mêmes sauvegardes (amitié et paire revérifiées).</summary>
+    private RenderFragment RematchButton(TradeSession s) => __builder =>
+    {
+        @if (CanRematch(s))
+        {
+            <button type="button" class="btn btn-primary trade-rematch" disabled="@busy" @onclick="Rematch">Recommencer avec @s.Other(userId).Pseudo</button>
+        }
+    };
+
+    /// <summary>Proposition de l'autre de recommencer cet échange : Accepter ou Refuser, sans passer par la liste des demandes.</summary>
+    private RenderFragment RematchOffer(TradeSession s) => __builder =>
+    {
+        @if (s.IsOver && Hub.RematchOffer(s, userId) is { } offer)
+        {
+            <div class="alert alert-info trade-rematch-offer">
+                <p class="mb-2">
+                    <strong>@offer.First.Pseudo</strong> te propose de recommencer l'échange, entre les mêmes sauvegardes
+                    (jusqu'à @offer.ExpiresAt.ToLocalTime().ToString("HH:mm")).
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-primary trade-rematch-accept" @onclick="() => Accept(offer)">Accepter</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary trade-rematch-refuse" @onclick="() => Hub.Cancel(offer, userId)">Refuser</button>
+                </div>
+            </div>
+        }
+    };
+
+    private async Task Rematch()
+    {
+        if (session is not { IsOver: true, Accepted: true } s)
+            return;
+        busy = true;
+        try
+        {
+            var me = s.Me(userId);
+            var other = s.Other(userId);
+            // Les sauvegardes ont pu être supprimées, l'amitié retirée : la paire est relue sur le serveur
+            var pair = (await TradeStore.SavePairsAsync(userId, other.UserId)).FirstOrDefault(p => p.Mine.Id == me.SaveId && p.Theirs.Id == other.SaveId);
+            if (pair is null)
+            {
+                message = "Ces deux sauvegardes ne peuvent plus échanger ensemble (sauvegarde supprimée, ami retiré…) : propose un nouvel échange.";
+                messageIsError = true;
+                return;
+            }
+            var (created, text) = Hub.Rematch(s, new TradeParty(userId, pseudo, pair.Mine.Id, pair.Mine.Label),
+                new TradeParty(other.UserId, other.Pseudo, pair.Theirs.Id, pair.Theirs.Label));
+            if (created is null)
+            {
+                message = text;
+                messageIsError = true;
+                return;
+            }
+            Reset();
+            message = text.Length == 0 ? null : text; // vide : sa proposition croisait la mienne, c'est parti
+            messageIsError = false;
+            await Join(created);
+        }
+        finally
+        {
+            busy = false;
+        }
     }
 
     private void Choose(TradeCandidate wanted)
@@ -415,12 +488,18 @@ else
 
     private void NewTrade()
     {
+        Reset();
+        message = null;
+    }
+
+    /// <summary>Oublie l'échange affiché (fini), avant d'en commencer un autre.</summary>
+    private void Reset()
+    {
         if (session is not null)
             session.Changed -= OnSessionChanged;
         session = null;
         shownStage = null;
         theirs = null;
-        message = null;
     }
 
     public void Dispose()

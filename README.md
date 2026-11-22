@@ -217,6 +217,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   réduit à un panneau à sa droite : Pokéballs, puis menu, capacités ou équipe en colonne), au choix du joueur, par les
   boutons de la page ou dans « Préférences » ; retenue dans le compte (`SortPreferences.Battle`, `PreferencesService.SetBattleLayoutAsync`).
   Sur un écran étroit, toujours empilés.
+- **Recommencer** (`BattleHub.Rematch`, comme les échanges) : même ami, mêmes sauvegardes, même format ; les équipes
+  se choisissent de nouveau.
 - **Résultats** : table `BattleRecords` (`Services/Battle/BattleRecorder.cs`, événement `BattleHub.Finished`), sans clé
   étrangère.
 
@@ -229,7 +231,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   génération, `ChessTypes.cs`). Une pièce ne mange une autre que si son type est au moins **neutre** contre elle ;
   **super efficace** : la même pièce rejoue aussitôt (elle peut passer), **une fois seulement** (une prise super
   efficace pendant ce tour bonus n'en donne pas d'autre) ; un tour bonus qui **mange le roi** gagne. Sinon échec et mat : un roi n'est en échec que si une pièce adverse peut le manger
-  (types compris), on ne peut pas laisser son roi mangeable ; pat ou deux rois seuls : nulle. Un **pion au bout** du
+  (types compris), on ne peut pas laisser son roi mangeable, sauf par une prise super efficace dont le tour bonus le met
+  à l'abri (ce tour bonus ne peut alors pas être passé) ; pat ou deux rois seuls : nulle. Un **pion au bout** du
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
 - **Équipes** par défaut (`ChessTeams.cs`) : Psy, Feu, Électrik, Poison, Eau, Plante, Sol, un Pokémon par pièce (les
@@ -246,9 +249,15 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   contre un invité : comptée pour l'hôte seulement. Puis chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne) ; l'hôte joue les blancs. Une
   partie à la fois par joueur. Temps dépassé (`ChessHub.Tick`, il ne court qu'après les animations : `ChessTiming.Playback`),
   abandon, page quittée : défaite. Chaque coup venu du navigateur est revérifié par les règles.
+- **Recommencer** (`ChessHub.Rematch`, comme les échanges) : même adversaire, invité sans compte compris (tant qu'il
+  reste sur la page : en la quittant, il refuse la proposition), même temps par coup ; **les couleurs s'inversent**
+  (les anciens noirs jouent les blancs, quel que soit celui qui propose : celui qui invite n'est alors plus l'hôte,
+  `ChessSession.Inviter`) ; les équipes se choisissent de nouveau.
 - **Plateau** (`wwwroot/js/echecs.js`, Phaser) en pixel art dessiné par le code (aucune image), sprites Donjon Mystère à
   la même échelle ; chaque joueur voit son camp en bas, les K.O. endormis sur les côtés. Un coup s'anime : marche (le
-  cavalier en L), attaque et blessure pour une prise, échange de places pour un pion au bout. Bouton **Pièces** : les deux
+  cavalier en L), attaque et blessure pour une prise, puis le Pokémon mangé **marche jusqu'à sa place chez les K.O.**
+  (entre les cases, pendant que le mangeur prend la case ; ce trajet compte dans `ChessTiming.Playback`, calculé côté
+  serveur avec la même géométrie), échange de places pour un pion au bout (par le même chemin). Bouton **Pièces** : les deux
   équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Bouton **Aide** : qui mange qui, deux tableaux croisés
   (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après `ChessGame.CanEat` et la table des types.
   Case **« Animer les Pokémon au repos »** : décochée, les pièces du plateau restent sur la première image d'Idle, sauf
@@ -278,6 +287,11 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   des œufs. Les deux sauvegardes sont écrites dans une même transaction (copies `echange-avant` / `echange-apres`) et
   marquées modifiées sur le serveur (`SaveModification.PokemonTraded`).
 - Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
+- **Recommencer** (`TradeHub.Rematch`, même règle pour les combats et les échecs ; détails :
+  `docs/claude/multijoueurs.md`) : sur l'écran de fin d'un échange **accepté** puis fini ou annulé en cours de route
+  (pas après une demande refusée ou expirée), « Recommencer avec … » envoie une nouvelle demande au même ami, entre les
+  mêmes sauvegardes (amitié et paire revérifiées). L'ami la voit sur son propre écran de fin (Accepter / Refuser), ou
+  dans ses demandes reçues s'il est parti ; si les deux proposent en même temps, c'est accepté.
 - **Animation d'échange**, façon 4e génération (`Shared/TradeAnimation.razor`, `wwwroot/js/echange.js`), à chaque échange :
   le Pokémon envoyé part dans sa Poké Ball, l'autre arrive, puis chaque évolution par échange. Entre amis, chacun voit le
   Pokémon qu'il envoie et celui qu'il reçoit (et son évolution) ; échange interne : les deux évolutions ; GTS : celui qui
@@ -860,34 +874,34 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
 | `MonsutaPotaru/Services/TradeSounds.cs` | Musiques de l'animation d'échange présentes sur le serveur (`images/sons/`, hors Git), regardées à chaque animation |
 | `MonsutaPotaru/Services/TradeShow.cs` | Ce que montre l'animation d'échange à un joueur (`TradeShow`) : Pokémon envoyé, Pokémon reçu, évolutions (noms et images avant et après) |
-| `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
+| `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration, « Recommencer » |
 | `MonsutaPotaru/Services/GtsService.cs` | GTS : dépôt (depuis la collection), recherche, échange, boîte de réception (annulation, expiration, sauvegarde supprimée, récupération) ; `GtsEvents` (pastille du menu) et `GtsExpiry` (offres expirées, toutes les heures) |
 | `MonsutaPotaru/Data/GtsPokemon.cs` | Table des Pokémon de la GTS : offres en ligne et boîte de réception (`GtsStatus`) |
 | `MonsutaPotaru/Components/Pages/Gts.razor` | « Multijoueurs » → « GTS » (`/gts`) : boîte de réception, mes offres, recherche, dépôt en deux étapes, échange (choix, confirmation) |
 | `MonsutaPotaru/Components/Shared/CollectionPicker.razor` | Choix d'un Pokémon dans toute « Ma collection » (recherche, origine, tri, pastilles, colonnes au curseur ; grisés), par tranches : dépôt GTS, ajout d'un suivi de rubans |
 | `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement ; ajoute à la requête les PP, PV maximum et types de chaque Pokémon de l'équipe) |
-| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride), fiche d'un Pokémon de l'équipe |
+| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride), fiche d'un Pokémon de l'équipe, « Recommencer » sur l'écran de fin |
 | `MonsutaPotaru/Services/Battle/BattleSheet.cs` | Fiche d'un Pokémon de l'équipe pendant un combat, lue dans la requête : résumé, capacités, détail d'une capacité |
 | `MonsutaPotaru/Services/Battle/BattleDexData.cs` | Généré : description française de chaque talent et de chaque capacité, catégorie, puissance et précision de la 3e génération |
 | `outils/combats_textes.py` | Génère `BattleDexData.cs` (descriptions de PokéAPI, chiffres du simulateur installé) ; à relancer pour une nouvelle génération de combats |
-| `MonsutaPotaru/Services/Battle/BattleHub.cs` | Combats en direct (singleton, en mémoire) : demande, équipes, simulateur, choix vérifiés, minuteur, abandon, fin |
+| `MonsutaPotaru/Services/Battle/BattleHub.cs` | Combats en direct (singleton, en mémoire) : demande, équipes, simulateur, choix vérifiés, minuteur, abandon, fin, « Recommencer » |
 | `MonsutaPotaru/Services/Battle/BattleService.cs` | Combats : sauvegardes compatibles entre amis, Pokémon proposés pour l'équipe, équipe vérifiée, statistiques |
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui), case « Animer les Pokémon au repos » |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui), case « Animer les Pokémon au repos », « Recommencer » sur l'écran de fin |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
-| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes, coups vérifiés, temps par coup, abandon, fin |
+| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes, coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
-| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups, Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
+| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
 | `MonsutaPotaru/Services/Battle/BattleTeam.cs` | Pokémon d'une sauvegarde → Pokémon du simulateur (format par génération, forme de Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
 | `MonsutaPotaru/Services/Battle/BattleView.cs` | Combat vu par un joueur : terrain, PV, statuts, météo, étapes à animer, messages en français |
 | `MonsutaPotaru/Services/Battle/BattleNames.cs` | Noms anglais de Showdown → noms français de PKHeX (espèces, capacités, objets, talents, types) |
-| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
+| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct, « Recommencer » (bouton et proposition de l'ami sur l'écran de fin) |
 | `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |

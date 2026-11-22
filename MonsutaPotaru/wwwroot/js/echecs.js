@@ -28,7 +28,7 @@ const LABEL = [232, 226, 240];
 const FOOT = 8; // les pieds d'un Pokémon : sous le centre de sa case
 const SPRITE_UP = 6; // SpriteCollab centre le dessin, les pieds 4 à 10 px sous le centre (comme au parc)
 const APPROACH = 18; // distance où il s'arrête devant sa proie
-const MAX_PLAY = 10000; // durée maximale de l'animation d'un coup (ms)
+const MAX_PLAY = 15000; // durée maximale de l'animation d'un coup (ms) : jusqu'à ~10 s avec la marche d'un K.O.
 const FADE = 260;
 const UP = 4, DOWN = 0;
 const directionOf = (dx, dy) => (((Math.round((90 - Math.atan2(dy, dx) * 180 / Math.PI) / 45)) % 8) + 8) % 8;
@@ -490,11 +490,31 @@ export async function create(container, component, options) {
         return [corner, end];
     }
 
-    /** Où va un Pokémon K.O. (d'après la position d'après le coup). */
-    function koSpot(a, after) {
-        const list = a.mine ? myKo(after) : theirKo(after);
-        const index = list.indexOf(a.id);
-        return index < 0 ? null : koFoot(a.mine, index);
+    /** Place d'un Pokémon chez les K.O. de son camp dans cette position (-1 : il n'y est pas). */
+    const koIndex = (a, p) => (a.mine ? myKo(p) : theirKo(p)).indexOf(a.id);
+
+    /**
+     * Chemin d'une case à une place des K.O., entre les cases (choix de l'utilisateur, 2026-11-22) : une demi-case vers
+     * la ligne entre deux rangées (du côté de sa place), cette ligne jusqu'à l'espace entre le plateau et le panneau des
+     * K.O., cet espace jusqu'à la ligne voisine de sa place, puis sa place. Il ne passe ainsi sur aucun autre Pokémon.
+     * Même calcul côté serveur (ChessTiming.KoRoutePixels), pour le temps du coup.
+     */
+    function koRoute(square, mine, index) {
+        const start = footOf(square), slot = koFoot(mine, index);
+        const row = cellOf(square).row, slotRow = index % KO_ROWS;
+        const line = k => BORDER + k * SQ + FOOT; // ligne entre les rangées k - 1 et k (à hauteur des pieds)
+        const y1 = line(slotRow >= row ? row + 1 : row);
+        const y2 = slotRow > row ? line(slotRow) : slotRow < row ? line(slotRow + 1) : y1;
+        const gapX = mine ? BOARD_X + FRAME + GAP / 2 : PANEL + GAP / 2;
+        return [{ x: start.x, y: y1 }, { x: gapX, y: y1 }, { x: gapX, y: y2 }, { x: slot.x, y: y2 }, slot];
+    }
+
+    /** Le Pokémon K.O. marche de sa case à sa place (d'après la position d'après le coup), puis s'y endort. */
+    async function toKo(a, square, after) {
+        const index = koIndex(a, after);
+        if (index < 0) return;
+        await walk(a, koRoute(square, a.mine, index));
+        setState(a, "sleep");
     }
 
     /**
@@ -535,17 +555,16 @@ export async function create(container, component, options) {
                 await go(wait(durationOf(mover, "attack") * 0.4));
                 await go(once(victim, "hurt"));
                 await go(attack);
-                await go(fade(victim, 0));
-                const spot = koSpot(victim, after);
-                if (spot) {
-                    Object.assign(victim, spot);
-                    victim.once = false;
-                    setState(victim, "sleep");
-                    await go(fade(victim, 1));
+                if (koIndex(victim, after) >= 0) {
+                    // Le K.O. part vers sa place ; dès qu'il a quitté la case (une demi-case), le mangeur s'y installe
+                    const leaving = toKo(victim, step.capturedSquare, after);
+                    await go(wait(walkMs / 2));
+                    await go(Promise.all([leaving, walk(mover, [footOf(to)])]));
                 } else {
-                    victim.visible = false; // le roi mangé
+                    await go(fade(victim, 0)); // le roi mangé : la partie est finie, il n'a pas de place chez les K.O.
+                    victim.visible = false;
+                    await go(walk(mover, [footOf(to)]));
                 }
-                await go(walk(mover, [footOf(to)]));
             } else {
                 await go(walk(mover, path));
             }
@@ -558,13 +577,16 @@ export async function create(container, component, options) {
         }
     }
 
-    /** Le pion et le Pokémon K.O. échangent leurs places, en marchant en même temps. */
+    /**
+     * Le pion et le Pokémon K.O. échangent leurs places, en marchant en même temps, entre les cases (koRoute) : le pion
+     * vers les K.O., le revenu de sa place (dans la position d'avant le coup) à la case.
+     */
     async function swap(pawn, revived, square, after) {
-        const spot = koSpot(pawn, after);
-        revived.once = false;
+        const from = revived ? koIndex(revived, position) : -1;
         await Promise.all([
-            spot ? walk(pawn, [spot]) : Promise.resolve(),
-            revived ? walk(revived, [footOf(square)]) : Promise.resolve(),
+            toKo(pawn, square, after),
+            revived && from >= 0 ? walk(revived, [...koRoute(square, revived.mine, from).reverse().slice(1), footOf(square)])
+                : revived ? walk(revived, [footOf(square)]) : Promise.resolve(),
         ]);
     }
 

@@ -280,6 +280,48 @@ public sealed class BattlesPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task Rematch_AfterACancelledBattle_TeamsChosenAgain()
+    {
+        var (sacha, ondine) = await Requested();
+        await ondine.Click("Accepter");
+        await ChooseTeam(sacha);
+        sacha.WaitForText("Ton équipe est prête");
+        var saves = ondine.Find(".battle-saves").TextContent;
+        await sacha.Click("Annuler le combat"); // annulé pendant le choix des équipes : on peut recommencer
+        ondine.WaitForText("sacha a annulé le combat.");
+
+        await ondine.Click("Recommencer avec sacha");
+        ondine.WaitForText("En attente de la réponse de sacha");
+        sacha.WaitForAssertion(() => Assert.Contains("ondine te propose de recommencer.", sacha.Find(".battle-rematch-offer").TextContent));
+        Assert.False(sacha.HasButton("Recommencer avec ondine")); // accepter revient au même
+        await sacha.Find(".battle-rematch-accept").ClickAsync(new());
+
+        // Mêmes sauvegardes ; l'équipe de Sacha est à rechoisir
+        sacha.WaitForText("Valider l'équipe");
+        ondine.WaitForText("Valider l'équipe");
+        Assert.Equal(saves, ondine.Find(".battle-saves").TextContent);
+        Assert.Empty(sacha.FindAll(".battle-team-slot:not(.empty)"));
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
+    public async Task Rematch_Refused_ThenNotOfferedAgain()
+    {
+        var (sacha, ondine) = await Requested();
+        await ondine.Click("Accepter");
+        sacha.WaitForText("Valider l'équipe");
+        await ondine.Click("Annuler le combat");
+        sacha.WaitForText("ondine a annulé le combat.");
+        await sacha.Click("Recommencer avec ondine");
+        ondine.WaitForAssertion(() => Assert.Single(ondine.FindAll(".battle-rematch-offer")));
+        await ondine.Find(".battle-rematch-refuse").ClickAsync(new());
+        sacha.WaitForText("ondine a refusé le combat.");
+        Assert.False(sacha.HasButton("Recommencer avec ondine"));
+        ondine.WaitForAssertion(() => Assert.True(ondine.HasButton("Recommencer avec sacha")));
+        await DisposeComponentsAsync();
+    }
+
+    [Fact]
     public async Task WithoutFriend_OrMatchingSave_SaysSo()
     {
         var alone = Render<Battles>();

@@ -155,6 +155,48 @@ public sealed class ChessGameTests
     }
 
     [Fact]
+    public void SuperEffective_KingCanEatIntoCheck_ThenMustEscapeOnTheBonusTurn()
+    {
+        // Gallame (roi Combat) mange Démolosse (Ténèbres) : super efficace ; en e5, Boumata (tour Dragon, a5) peut le manger,
+        // mais il rejoue aussitôt et peut s'en aller : le coup est permis (bug signalé par l'utilisateur, 2026-11-22)
+        var game = Position(Psy, Fire, W, "wKe4 bNe5 bRa5 bKh8");
+        Assert.Contains(game.MovesFrom(Sq("e4")), m => m.To == Sq("e5"));
+        var eat = Play(game, "e4", "e5");
+        Assert.True(eat.Bonus);
+        Assert.True(eat.Check is false); // pas d'échec au roi adverse
+        Assert.Equal("Gallame mange Démolosse en e5. C'est super efficace ! Gallame rejoue. Il doit mettre son roi à l'abri.", eat.Text);
+        Assert.True(game.InCheck(W));
+
+        // Passer le laisserait mangeable : interdit ; seules les cases hors de la rangée 5 restent
+        Assert.False(game.CanPass);
+        Assert.DoesNotContain(ChessMove.Pass, game.LegalMoves());
+        Assert.Null(game.Play(ChessMove.Pass));
+        Assert.Equal(new[] { "d4", "d6", "e4", "e6", "f4", "f6" }, game.MovesFrom(Sq("e5")).Select(m => ChessGame.Name(m.To)).Order());
+        Play(game, "e5", "e6");
+        Assert.Equal(B, game.Turn);
+        Assert.False(game.InCheck(W));
+    }
+
+    [Fact]
+    public void SuperEffective_IntoCheck_RefusedWhenTheBonusTurnCannotEscape()
+    {
+        // Trois tours Dragon tiennent les rangées 4, 5 et 6 : en e5, Gallame ne pourrait aller nulle part à l'abri
+        var game = Position(Psy, Fire, W, "wKe4 bNe5 bRa4 bRa5 bRa6 bKh8");
+        Assert.DoesNotContain(game.MovesFrom(Sq("e4")), m => m.To == Sq("e5"));
+        Assert.Null(game.Play(new ChessMove(Sq("e4"), Sq("e5"))));
+
+        // Une prise neutre qui met son roi en échec reste interdite (pas de tour bonus) : Gallame contre Salamèche (Feu)
+        var neutral = Position(Psy, Fire, W, "wKe4 bPe5 bRa5 bKh8");
+        Assert.DoesNotContain(neutral.MovesFrom(Sq("e4")), m => m.To == Sq("e5"));
+
+        // Sans échec, le tour bonus se passe toujours
+        var free = Position(Psy, Fire, W, "wKe4 bNe5 bKh8");
+        Play(free, "e4", "e5");
+        Assert.True(free.CanPass);
+        Assert.Contains(ChessMove.Pass, free.LegalMoves());
+    }
+
+    [Fact]
     public void BonusTurn_CanEatTheKing()
     {
         // Malvalame (Spectre) mange Tarsal (super efficace), puis le roi Gallame (Combat : neutre) derrière lui
@@ -250,6 +292,26 @@ public sealed class ChessGameTests
         var step = Play(game, "b8", "b8", rook);
         Assert.True(step.Move.IsSwap);
         Assert.Equal("Boumata", game.At(Sq("b8"))!.Mon.Name);
+    }
+
+    [Fact]
+    public void Playback_CountsTheWalkToTheKnockedOut()
+    {
+        // Kaorine mange Boumata en d4 : Boumata marche jusqu'à la première place des K.O. blancs. Vu des blancs (306 px) :
+        // demi-case, 158 px jusqu'à l'espace à droite du plateau, trois lignes vers le haut, 20 px, demi-case ; vu des
+        // noirs (plateau retourné, K.O. blancs à gauche) : deux lignes seulement mais 52 px dans le panneau, 306 px aussi
+        var game = Position(Fire, Psy, B, "wKa1 wRd4 bRd8 bKh8");
+        var capture = Play(game, "d8", "d4");
+        Assert.Equal(306.0 / 32, ChessTiming.KoWalkSquares(Sq("d4"), W, 0));
+        Assert.Equal(ChessTiming.WalkPerSquare * (4 + 306.0 / 32) + ChessTiming.Strike + ChessTiming.Margin, ChessTiming.Playback(capture));
+
+        // Le pion en b8 échange sa place avec Boumata : la plus longue marche est celle vue des noirs (b8 en bas, la place
+        // en haut : 498 px), le revenu marche en même temps
+        var waiting = Position(Fire, Psy, W, "wKa1 wPb8 bKh8", ko: [(W, ChessPiece.Rook)]);
+        var swap = Play(waiting, "b8", "b8", Assert.Single(waiting.SwapsFrom(Sq("b8"))));
+        Assert.True(swap.Move.IsSwap);
+        Assert.Equal(0, swap.Squares);
+        Assert.Equal(ChessTiming.WalkPerSquare * (498.0 / 32) + ChessTiming.Margin, ChessTiming.Playback(swap));
     }
 
     [Fact]
