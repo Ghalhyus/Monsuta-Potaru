@@ -89,9 +89,9 @@ public sealed class ChessGameTests
     }
 
     [Fact]
-    public void SuperEffective_ChainsBonusTurns_ThenPass()
+    public void SuperEffective_GivesOneBonusTurn_ThenPass()
     {
-        // Démolosse (Ténèbres) contre Tarsal (Psy) : super efficace, deux fois de suite
+        // Démolosse (Ténèbres) contre Tarsal (Psy) : super efficace, il rejoue
         var game = Position(Fire, Psy, W, "wKa1 wNe4 bPf6 bPd7 bKh1");
         var first = Play(game, "e4", "f6");
         Assert.True(first.Bonus);
@@ -101,13 +101,31 @@ public sealed class ChessGameTests
         Assert.Contains(ChessMove.Pass, game.LegalMoves());
         Assert.Contains("super efficace", first.Text);
 
-        var second = Play(game, "f6", "d7");
-        Assert.True(second.Bonus);
         var pass = game.Play(ChessMove.Pass)!;
         Assert.False(pass.Bonus);
         Assert.Equal(B, game.Turn);
         Assert.Null(game.BonusSquare);
         Assert.Null(game.Play(ChessMove.Pass)); // plus de tour bonus
+    }
+
+    [Fact]
+    public void SuperEffective_DuringTheBonusTurn_DoesNotGiveAnother()
+    {
+        // Démolosse mange deux Tarsal de suite : le second, pendant son tour bonus, ne le fait pas rejouer encore
+        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPf6 bPd7 bPb6 bKh1");
+        Assert.True(Play(game, "e4", "f6").Bonus);
+        var second = Play(game, "f6", "d7");
+        Assert.False(second.Bonus);
+        Assert.Equal(2, second.Effect);
+        Assert.Equal("Démolosse mange Tarsal en d7. C'est super efficace, mais Démolosse a déjà rejoué.", second.Text);
+        Assert.Equal(B, game.Turn);
+        Assert.Null(game.BonusSquare);
+        Assert.DoesNotContain(ChessMove.Pass, game.LegalMoves());
+
+        // Au tour suivant de ce camp, une nouvelle prise super efficace redonne un tour bonus
+        Play(game, "h1", "h2");
+        Assert.True(Play(game, "d7", "b6").Bonus);
+        Assert.Equal(Sq("b6"), game.BonusSquare);
     }
 
     [Fact]

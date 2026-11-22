@@ -5,6 +5,7 @@
 @inject ChessHub Hub
 @inject FriendService FriendStore
 @inject AccountLimiter Limiter
+@inject PreferencesService PreferenceStore
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -15,7 +16,8 @@
    ouverte à tous, mais un visiteur sans compte n'y voit que « Rejoindre une partie », sous un prénom) ; chacun prend une
    équipe (pas la même) ; l'hôte joue les blancs. Le plateau est dessiné
    et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
-   relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Quitter la page
+   relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Les Pokémon au repos
+   peuvent rester figés (préférence du compte, case de la page) : seule la pièce choisie s'anime. Quitter la page
    pendant la partie demande confirmation, puis fait perdre. *@
 <NavigationLock ConfirmExternalNavigation="InGame" OnBeforeInternalNavigation="BeforeLeaving" />
 
@@ -130,6 +132,11 @@ else
                                     <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
                                 }
                             </div>
+                            @* Préférence du compte (aussi dans « Préférences ») ; sans compte : pour cette partie seulement *@
+                            <div class="form-check small mb-2 chess-idle">
+                                <input class="form-check-input" type="checkbox" id="chess-idle" checked="@idleAnimated" @onchange="IdleChanged" />
+                                <label class="form-check-label" for="chess-idle">Animer les Pokémon au repos</label>
+                            </div>
                             <div class="chess-status @(StatusClass())" aria-live="polite">
                                 <span class="chess-status-text">@StatusText()</span>
                                 @if (SecondsLeft is { } left && s.Stage == ChessStage.Playing && !animating)
@@ -220,7 +227,7 @@ else
                 <h5>Aide</h5>
                 <p class="small text-muted mb-2">
                     Un Pokémon ne mange une pièce que si son type est neutre ou super efficace contre le sien. Super efficace,
-                    il mange et rejoue aussitôt.
+                    il mange et rejoue aussitôt, une fois seulement.
                 </p>
                 <div class="chess-help-tables">
                     @HelpTable("Tes Pokémon contre les siens", mine, theirs)
@@ -349,6 +356,7 @@ else
     private IJSObjectReference? module;
     private IJSObjectReference? board;
     private bool boardStarting;
+    private bool idleAnimated = true; // Pokémon animés au repos (préférence du compte ; sans compte : pour la page)
     private DotNetObjectReference<Chess>? selfRef;
     private int played; // coups déjà montrés sur le plateau
     private bool animating;
@@ -397,6 +405,7 @@ else
         Hub.RequestsChanged += OnRequestsChanged;
         if (!signedIn)
             return;
+        idleAnimated = (await PreferenceStore.SortsAsync(userId)).ChessIdle;
         if (Hub.Active(userId) is { } active) // page rechargée pendant une partie : on la reprend où elle en est
             Join(active);
         friends = (await FriendStore.ListAsync(userId)).Friends.ToList();
@@ -448,6 +457,7 @@ else
             flip = mine == ChessColor.Black,
             units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.Mon.DonjonFolder, name = u.Mon.Name }),
             position = start.Position,
+            idle = idleAnimated,
             timing = new
             {
                 walk = ChessTiming.WalkPerSquare.TotalMilliseconds,
@@ -755,6 +765,28 @@ else
         // la session prévient les deux pages (OnSessionChanged) : le coup s'anime
     }
 
+    /// <summary>
+    /// Case « Animer les Pokémon au repos » : le plateau suit tout de suite ; enregistrée dans le compte (sans compte :
+    /// gardée pour la page seulement).
+    /// </summary>
+    private async Task IdleChanged(ChangeEventArgs e)
+    {
+        idleAnimated = e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on);
+        if (board is not null)
+        {
+            try
+            {
+                await board.InvokeVoidAsync("setIdle", idleAnimated);
+            }
+            catch (JSDisconnectedException)
+            {
+                return; // onglet fermé
+            }
+        }
+        if (signedIn && !(await PreferenceStore.SetChessIdleAsync(userId, idleAnimated)).Ok)
+            info = "Ton choix vaut pour cette partie, mais il n'a pas pu être gardé dans ton compte.";
+    }
+
     private async Task Forfeit()
     {
         if (session is null || !await JS.InvokeAsync<bool>("confirm", "Abandonner la partie ? Tu perdras."))
@@ -768,6 +800,7 @@ else
         if (board is null || session is null)
             return;
         int? check = null;
+        var bonusTurn = snapshot?.BonusSquare is not null;
         if (lastStep is { Check: true, End: ChessEnd.None or ChessEnd.Checkmate } step)
         {
             var enemy = step.Color == ChessColor.White ? ChessColor.Black : ChessColor.White;
@@ -778,7 +811,8 @@ else
             await board.InvokeVoidAsync("highlight", new
             {
                 selected,
-                moves = options.Targets.Select(t => new { to = t.To, capture = t.VictimId is not null, super = t.Effect > 1 }),
+                // Coins dorés : la pièce rejouera ; pas pendant son tour bonus (un seul)
+                moves = options.Targets.Select(t => new { to = t.To, capture = t.VictimId is not null, super = t.Effect > 1 && !bonusTurn }).ToArray(),
                 blocked = options.Blocked.Select(b => b.Square),
                 last = lastStep is { Move.IsPass: false } l ? new[] { l.Move.From, l.Move.To } : [],
                 check,
@@ -931,7 +965,7 @@ else
         <p>Des échecs où chaque pièce est un Pokémon avec un seul type :</p>
         <ul>
             <li>Une pièce ne mange une autre que si son type est au moins neutre contre elle (pas très efficace ou sans effet : impossible).</li>
-            <li>Super efficace : le Pokémon qui a mangé rejoue aussitôt (il peut passer), et encore à chaque nouvelle prise super efficace. S'il mange le roi, la partie est gagnée.</li>
+            <li>Super efficace : le Pokémon qui a mangé rejoue aussitôt (il peut passer), une fois seulement : une prise super efficace pendant ce tour bonus ne le fait pas rejouer encore. S'il mange le roi, la partie est gagnée.</li>
             <li>Sinon, échec et mat comme aux échecs : un roi n'est en échec que si une pièce adverse peut vraiment le manger.</li>
             <li>Un pion au bout du plateau prend la place d'un Pokémon K.O. de son équipe (pas d'un pion). Sans K.O., il attend.</li>
             <li>Celui qui invite (ou qui crée la partie publique) joue les blancs. Passé le temps par coup, ou en quittant la page, on perd.</li>

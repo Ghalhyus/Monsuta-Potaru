@@ -101,6 +101,34 @@ public sealed class SortPreferencesTests : IDisposable
     }
 
     [Fact]
+    public void Json_KeepsTheChessIdleChoice_OnlyWhenRefused()
+    {
+        Assert.True(SortPreferences.Default.ChessIdle); // animés par défaut
+        var still = new SortPreferences { ChessIdle = false };
+        Assert.Equal("""{"echecsRepos":false}""", still.ToJson());
+        Assert.False(SortPreferences.FromJson(still.ToJson()).ChessIdle);
+        Assert.Null(new SortPreferences { ChessIdle = true }.ToJson()); // animés : réglage d'origine
+        Assert.True(SortPreferences.FromJson("""{"echecsRepos":true}""").ChessIdle);
+        Assert.True(SortPreferences.FromJson("""{"combat":"cote"}""").ChessIdle);
+        Assert.True(SortPreferences.FromJson("""{"echecsRepos":"non"}""").ChessIdle); // trafiquée : illisible, réglages d'origine
+    }
+
+    [Fact]
+    public async Task Service_SavesTheChessIdleChoice_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { Battle = BattleLayout.SideBySide })).Ok);
+        var still = await service.SetChessIdleAsync("sacha", false);
+        Assert.Equal((true, "Pokémon des échecs figés au repos."), (still.Ok, still.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal((false, BattleLayout.SideBySide), (read.ChessIdle, read.Battle));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Pokémon des échecs animés au repos.", (await service.SetChessIdleAsync("sacha", true)).Message);
+        Assert.True((await service.SortsAsync("sacha")).ChessIdle);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetChessIdleAsync("disparu", false)).Message);
+    }
+
+    [Fact]
     public async Task Service_SavesTheCompletionView_WithoutTouchingTheRest()
     {
         var service = new PreferencesService(_db.Factory);

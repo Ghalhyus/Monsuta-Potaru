@@ -167,16 +167,70 @@ public sealed class ChessPageTests : PageTestContext
         ondine.WaitForText("Super efficace ! Démolosse rejoue");
         Assert.True(ondine.HasButton("Passer"));
         sacha.WaitForText("Au tour de ondine");
+        // Sur le plateau, la prise de Tarsal en f2 n'a pas les coins dorés (« il rejouera ») : un seul tour bonus
+        ondine.WaitForAssertion(() => Assert.Equal(false, LastMarkedMove(Sq("f2"))?.GetType().GetProperty("super")!.GetValue(LastMarkedMove(Sq("f2")))));
 
-        // Démolosse ne peut pas manger Gallame (Combat) : expliqué, rien n'est joué
-        await Click(ondine, "f2"); // Tarsal : super efficace encore
-        ondine.WaitForText("Démolosse mange Tarsal en f2.");
+        // Pendant son tour bonus, Démolosse mange encore un Tarsal (super efficace) : il ne rejoue pas une deuxième fois
+        await Click(ondine, "f2");
+        ondine.WaitForText("Démolosse mange Tarsal en f2. C'est super efficace, mais Démolosse a déjà rejoué.");
+        sacha.WaitForText("À toi de jouer.");
+        Assert.False(ondine.HasButton("Passer"));
+
+        // 4. a4 Cd3 5. h3 Cxb2 : un nouveau tour, un nouveau tour bonus. Démolosse ne peut pas manger Gardevoir (Fée) en
+        // d1 : expliqué, rien n'est joué ; il passe
+        await Click(sacha, "a3"); await Click(sacha, "a4");
+        ondine.WaitForText("À toi de jouer.");
+        await Click(ondine, "f2"); await Click(ondine, "d3");
+        sacha.WaitForText("À toi de jouer.");
+        await Click(sacha, "h2"); await Click(sacha, "h3");
+        ondine.WaitForText("À toi de jouer.");
+        await Click(ondine, "d3"); await Click(ondine, "b2");
         ondine.WaitForText("Super efficace ! Démolosse rejoue");
         await Click(ondine, "d1");
         ondine.WaitForText("Pas très efficace : Démolosse (Ténèbres) ne peut pas manger Gardevoir (Fée).");
         await ondine.Click("Passer");
         ondine.WaitForText("Démolosse ne rejoue pas.");
         sacha.WaitForText("À toi de jouer.");
+    }
+
+    /// <summary>Case permise marquée sur le plateau vers <paramref name="square"/>, dans le dernier « highlight » qui en a.</summary>
+    private object? LastMarkedMove(int square) => JSInterop.Invocations.Where(i => i.Identifier == "highlight")
+        .Select(i => i.Arguments[0]!.GetType().GetProperty("moves")!.GetValue(i.Arguments[0]) as System.Collections.IEnumerable)
+        .Select(moves => moves!.Cast<object>().FirstOrDefault(m => (int)m.GetType().GetProperty("to")!.GetValue(m)! == square))
+        .LastOrDefault(m => m is not null);
+
+    /// <summary>Valeur « idle » passée par la page à echecs.js à la création de chaque plateau.</summary>
+    private bool?[] BoardsIdle() => [.. JSInterop.Invocations.Where(i => i.Identifier == "create")
+        .Select(i => i.Arguments[2]?.GetType().GetProperty("idle")?.GetValue(i.Arguments[2]) as bool?)];
+
+    [Fact]
+    public async Task IdleAnimations_FollowTheAccount_AndAreSavedFromTheGame()
+    {
+        var preferences = Services.GetRequiredService<PreferencesService>();
+        Assert.True((await preferences.SetChessIdleAsync("sacha", false)).Ok); // Sacha les a coupées dans « Préférences »
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        ondine.WaitForText("Choisis ton équipe");
+        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        sacha.WaitForText("Choisis ton équipe");
+        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        sacha.WaitForText("À toi de jouer.");
+        ondine.WaitForText("Au tour de sacha");
+
+        // Chaque plateau naît avec le réglage de son joueur
+        Assert.False(sacha.Find("#chess-idle").HasAttribute("checked"));
+        Assert.True(ondine.Find("#chess-idle").HasAttribute("checked"));
+        sacha.WaitForAssertion(() => Assert.Equal(2, BoardsIdle().Length));
+        Assert.Equal([false, true], BoardsIdle().Order());
+
+        // Sacha les remet pendant la partie : le plateau suit, le compte le garde
+        await sacha.Find("#chess-idle").ChangeAsync(new() { Value = true });
+        Assert.Equal(true, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
+        await ondine.Find("#chess-idle").ChangeAsync(new() { Value = false });
+        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.False((await preferences.SortsAsync("ondine")).ChessIdle);
+        Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
     }
 
     /// <summary>Sacha crée une partie publique (sans ami) ; rend son code.</summary>
@@ -233,6 +287,14 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
         guest.WaitForText("Tu joues les noirs · 1 min par coup");
         sacha.WaitForText("Partie contre Léo (invité)");
+
+        // L'invité a la case des animations au repos, pour cette partie seulement (pas de compte où la garder)
+        Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
+        await guest.Find("#chess-idle").ChangeAsync(new() { Value = false });
+        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.False(guest.Find("#chess-idle").HasAttribute("checked"));
+        Assert.DoesNotContain("gardé dans ton compte", guest.Text());
+        Assert.True((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessIdle);
 
         // L'invité abandonne : victoire pour Sacha
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);

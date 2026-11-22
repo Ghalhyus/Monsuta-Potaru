@@ -227,8 +227,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - **Règles** (`Services/Chess/ChessGame.cs`, sans réseau ni affichage) : les pièces et les déplacements des échecs,
   roque et prise en passant compris ; chaque pièce est un Pokémon à **un seul type** (table des types depuis la 6e
   génération, `ChessTypes.cs`). Une pièce ne mange une autre que si son type est au moins **neutre** contre elle ;
-  **super efficace** : la même pièce rejoue aussitôt (elle peut passer), à nouveau à chaque prise super efficace ; un tour
-  bonus qui **mange le roi** gagne. Sinon échec et mat : un roi n'est en échec que si une pièce adverse peut le manger
+  **super efficace** : la même pièce rejoue aussitôt (elle peut passer), **une fois seulement** (une prise super
+  efficace pendant ce tour bonus n'en donne pas d'autre) ; un tour bonus qui **mange le roi** gagne. Sinon échec et mat : un roi n'est en échec que si une pièce adverse peut le manger
   (types compris), on ne peut pas laisser son roi mangeable ; pat ou deux rois seuls : nulle. Un **pion au bout** du
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
@@ -250,6 +250,9 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   cavalier en L), attaque et blessure pour une prise, échange de places pour un pion au bout. Bouton **Pièces** : les deux
   équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Bouton **Aide** : qui mange qui, deux tableaux croisés
   (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après `ChessGame.CanEat` et la table des types.
+  Case **« Animer les Pokémon au repos »** : décochée, les pièces du plateau restent sur la première image d'Idle, sauf
+  la pièce sélectionnée, et les K.O. sur celle de Sleep (marche, attaque et blessure restent animées). Gardée dans le compte
+  (`SortPreferences.ChessIdle`, aussi dans « Préférences ») ; sans compte, pour la partie en cours seulement.
 - **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
   « Statistiques » (onglet Mini-jeux, bloc « Échecs »). Pièces mangées par chaque camp (`WhiteCaptures`,
   `BlackCaptures`, migration `ChessCaptures` : 0 pour les parties d'avant).
@@ -337,7 +340,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   absente : hybride) et leur **mode agrandi** (`"combatAgrandi":true`), voir « Combats », dans leur propre formulaire :
   enregistrer ou rétablir les tris ne les change pas, et inversement. De même pour l'**affichage des étapes d'une
   complétion** (`"completionVue":"grille"` ; absent : liste), aussi choisi par le bouton « Liste / Grille » de la page,
-  qui l'enregistre dans le compte qui regarde (voir « Complétion (100 %) »).
+  qui l'enregistre dans le compte qui regarde (voir « Complétion (100 %) »). Et des **Pokémon des échecs au repos**
+  (`"echecsRepos":false` ; absent : animés), aussi choisis par la case de la page d'une partie (voir « Échecs »).
 
 ### Thèmes
 
@@ -870,13 +874,13 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui) |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui), case « Animer les Pokémon au repos » |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes, coups vérifiés, temps par coup, abandon, fin |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
-| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups |
+| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups, Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
 | `MonsutaPotaru/Services/Battle/BattleTeam.cs` | Pokémon d'une sauvegarde → Pokémon du simulateur (format par génération, forme de Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
@@ -901,8 +905,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
-| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans ; disposition et mode agrandi des écrans d'un combat |
-| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte, disposition et mode agrandi des écrans d'un combat en JSON (`SortPreferences`), et leur service (`PreferencesService`) |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans ; disposition et mode agrandi des écrans d'un combat ; affichage des étapes d'une complétion ; Pokémon des échecs au repos |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte, disposition et mode agrandi des écrans d'un combat, affichage des étapes d'une complétion, Pokémon des échecs au repos en JSON (`SortPreferences`), et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |

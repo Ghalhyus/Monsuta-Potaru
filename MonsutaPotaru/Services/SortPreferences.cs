@@ -212,8 +212,9 @@ public static class SiteSorts
 /// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
 /// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
 /// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>), et l'affichage des étapes d'une complétion
-/// (<see cref="CompletionView"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
-/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille"}</c>.
+/// (<see cref="CompletionView"/>), et les Pokémon au repos des échecs (<see cref="ChessIdle"/>). Rangés en JSON dans
+/// <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille","echecsRepos":false}</c>.
 /// </summary>
 public sealed record SortPreferences
 {
@@ -233,6 +234,12 @@ public sealed record SortPreferences
     /// <summary>Étapes d'une complétion en liste ou en grille (bouton de la page, ou « Préférences »).</summary>
     public CompletionStepsView CompletionView { get; init; }
 
+    /// <summary>
+    /// Pokémon des échecs animés au repos (Idle sur le plateau, Sleep chez les K.O., en boucle) ; sinon figés sur la
+    /// première image, sauf la pièce sélectionnée (case de la page d'une partie, ou « Préférences »). Vrai par défaut : seul le refus est écrit.
+    /// </summary>
+    public bool ChessIdle { get; init; } = true;
+
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
 
     private static readonly JsonSerializerOptions Json = new()
@@ -251,6 +258,7 @@ public sealed record SortPreferences
         public string? Combat { get; set; }
         public bool? CombatAgrandi { get; set; }
         public string? CompletionVue { get; set; }
+        public bool? EchecsRepos { get; set; }
     }
 
     private sealed class StoredSort
@@ -276,9 +284,11 @@ public sealed record SortPreferences
             Combat = Battle == SiteSorts.DefaultBattleLayout ? null : SiteSorts.Slug(Battle),
             CombatAgrandi = BattleEnlarged ? true : null,
             CompletionVue = CompletionView == CompletionStepsView.List ? null : SiteSorts.Slug(CompletionView),
+            EchecsRepos = ChessIdle ? null : false,
         };
         return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
             && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null && stored.CompletionVue is null
+            && stored.EchecsRepos is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -314,13 +324,14 @@ public sealed record SortPreferences
             Battle = SiteSorts.BattleLayoutFrom(stored.Combat),
             BattleEnlarged = stored.CombatAgrandi == true,
             CompletionView = SiteSorts.CompletionViewFrom(stored.CompletionVue),
+            ChessIdle = stored.EchecsRepos != false,
         };
     }
 }
 
 /// <summary>
-/// Lecture et enregistrement des préférences d'un compte : les tris par défaut, la disposition des écrans d'un combat et
-/// l'affichage des étapes d'une complétion.
+/// Lecture et enregistrement des préférences d'un compte : les tris par défaut, la disposition des écrans d'un combat,
+/// l'affichage des étapes d'une complétion et les Pokémon au repos des échecs.
 /// </summary>
 public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
@@ -361,6 +372,13 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
     {
         var result = await SetSortsAsync(userId, await SortsAsync(userId) with { CompletionView = view });
         return result.Ok ? new(true, "Affichage des étapes de complétion enregistré.") : result;
+    }
+
+    /// <summary>Pokémon des échecs animés au repos ou figés, choisi sur la page d'une partie ou dans les préférences ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetChessIdleAsync(string userId, bool animated)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { ChessIdle = animated });
+        return result.Ok ? new(true, animated ? "Pokémon des échecs animés au repos." : "Pokémon des échecs figés au repos.") : result;
     }
 
     /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>

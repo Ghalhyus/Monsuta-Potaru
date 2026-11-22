@@ -56,7 +56,8 @@ public sealed record ChessStep(
 /// déplacements, le roque et la prise en passant des échecs, et en plus :
 /// <list type="bullet">
 /// <item>une pièce ne mange une autre que si son type est au moins neutre contre elle ; super efficace, elle rejoue
-/// aussitôt (elle seule, et elle peut passer), autant de fois qu'elle refait une prise super efficace ;</item>
+/// aussitôt (elle seule, et elle peut passer), une fois seulement : une prise super efficace pendant ce tour bonus ne
+/// donne pas d'autre tour (choix de l'utilisateur, 2026-11-22 ; avant, les tours bonus s'enchaînaient) ;</item>
 /// <item>un tour bonus qui mange le roi gagne la partie ; hors de là, échec et mat comme aux échecs (un roi n'est en
 /// échec que si une pièce adverse peut vraiment le manger) ; pat, ou deux rois seuls : nulle ;</item>
 /// <item>un pion au bout du plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case
@@ -445,6 +446,7 @@ public sealed class ChessGame
         if (!LegalMoves().Contains(move))
             return null;
         var color = Turn;
+        var onBonusTurn = BonusSquare is not null;
         if (move.IsPass)
         {
             var passer = board[BonusSquare!.Value]!;
@@ -493,10 +495,14 @@ public sealed class ChessGame
                 rook?.From ?? -1, rook?.To ?? -1, revived?.Id, false, $"{text} Le roi est mangé : victoire !");
         }
 
-        // Tour bonus : super efficace, et la pièce (ou le Pokémon revenu à sa place) peut encore bouger
+        // Tour bonus : super efficace, et la pièce (ou le Pokémon revenu à sa place) peut encore bouger ; un seul par tour
         BonusSquare = null;
         var bonus = false;
-        if (victim is not null && effect > 1)
+        if (victim is not null && effect > 1 && onBonusTurn)
+        {
+            text += $" C'est super efficace, mais {board[move.To]!.Mon.Name} a déjà rejoué.";
+        }
+        else if (victim is not null && effect > 1)
         {
             BonusSquare = move.To;
             bonus = MovesFrom(move.To).Count > 0;

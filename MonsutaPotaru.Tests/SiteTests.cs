@@ -241,6 +241,18 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         var (_, gridTampered) = await Submit(browser, "/Account/Manage/Preferences", "completion-view", new Dictionary<string, string> { ["completionVue"] = "pirate" });
         Assert.Equal("liste", Parser.ParseDocument(gridTampered).QuerySelector("select[name=completionVue] option[selected]")?.GetAttribute("value"));
 
+        // Préférences : Pokémon des échecs au repos, cochée par défaut ; leur propre formulaire (case décochée : rien
+        // d'envoyé ; « Revenir aux tris d'origine » n'y touche pas)
+        Assert.True(Parser.ParseDocument(gridTampered).QuerySelector("input[name=repos]")?.HasAttribute("checked"));
+        var (_, still) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["repos"] = "" });
+        var stillPage = Parser.ParseDocument(still);
+        Assert.Contains("Pokémon des échecs figés au repos.", stillPage.QuerySelector(".alert")?.TextContent ?? still);
+        Assert.False(stillPage.QuerySelector("input[name=repos]")?.HasAttribute("checked") ?? true);
+        var (_, stillKept) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
+        Assert.False(Parser.ParseDocument(stillKept).QuerySelector("input[name=repos]")?.HasAttribute("checked") ?? true);
+        var (_, animated) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["repos"] = "oui" });
+        Assert.True(Parser.ParseDocument(animated).QuerySelector("input[name=repos]")?.HasAttribute("checked"));
+
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>
         {

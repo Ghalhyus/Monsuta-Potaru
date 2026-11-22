@@ -117,6 +117,13 @@ README : « Comptes », « Administration », « Thèmes ».
   complétion (réglage du joueur connecté, même chez un autre joueur ; rien pour un compte absent). Pour l'instant seule la
   complétion All the Mons s'en sert (essai demandé par l'utilisateur avant de l'étendre).
 
+## Préférences : Pokémon des échecs au repos (2026-11-22)
+- Même colonne JSON (`"echecsRepos":false` ; absent ou autre : animés), `SortPreferences.ChessIdle` (vrai par défaut :
+  seul le refus est écrit). Son propre bloc « Échecs » et son propre formulaire (`@formname="chess"`, case `repos` de
+  valeur `oui` ; décochée, rien n'est envoyé) ; « Revenir aux tris d'origine » le garde.
+- Écriture : `PreferencesService.SetChessIdleAsync`, appelée aussi par la case de la page d'une partie (rien pour un
+  invité sans compte). Interface : `docs/claude/echecs.md`.
+
 ## Tests
 - `AccountServiceTests` monte Identity comme `Program.cs` (`AccountService.ConfigureIdentity`) sur la base de test.
 - Les comptes de `TestDatabase` sont créés sans Identity (pas d'adresse) : n'y appeler aucune méthode qui les revalide.

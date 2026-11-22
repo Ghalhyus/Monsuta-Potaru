@@ -4,7 +4,9 @@
 // tout (ChessHub) : ce module signale les clics sur les cases (OnSquareClicked), affiche les marques que la page lui donne
 // (highlight) et joue chaque coup (play) : la pièce marche jusqu'à sa case (le cavalier en L) ; si elle mange, elle
 // s'arrête devant sa proie, attaque, la proie a mal puis rejoint les K.O. sur le côté (endormie) ; un pion au bout du
-// plateau et le Pokémon K.O. qui le remplace échangent leurs places en marchant.
+// plateau et le Pokémon K.O. qui le remplace échangent leurs places en marchant. Animations au repos coupées (préférence du
+// joueur, setIdle) : les pièces du plateau restent sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O.
+// sur la première image de Sleep.
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 import { loadSheets } from "./parc.js";
 
@@ -54,10 +56,12 @@ const shade = ([r, g, b], d) => [r + d, g + d, b + d].map(v => Math.max(0, Math.
 /**
  * Plateau dans <container> ; <component> (Chess.razor) est prévenu des clics. Options : flip (les noirs en bas : je joue
  * les noirs), units (toutes les pièces : id, mine, folder des sprites, name), position (Board : id et case ; WhiteKo,
- * BlackKo), timing (walk : durée de marche d'une case ; strike : attaque et K.O., en ms).
+ * BlackKo), timing (walk : durée de marche d'une case ; strike : attaque et K.O., en ms), idle (faux : pièces figées au
+ * repos, sauf la sélectionnée).
  */
 export async function create(container, component, options) {
     const flip = options?.flip === true;
+    let idleAnimated = options?.idle !== false;
     const walkMs = Number(options?.timing?.walk) || 350;
     const units = new Map((options?.units ?? []).map(u => [u.id, u]));
     let position = options?.position ?? { board: [], whiteKo: [], blackKo: [] };
@@ -411,15 +415,29 @@ export async function create(container, component, options) {
         return anim ? anim.durations.reduce((t, d) => t + d, 0) : 400;
     }
 
+    /** Pièce sur la case sélectionnée (marks.selected), d'après la dernière position connue ; null sans sélection. */
+    function selectedId() {
+        if (!Number.isInteger(marks.selected)) return null;
+        return (position.board ?? []).find(b => b.square === marks.selected)?.id ?? null;
+    }
+
     function tick(delta) {
+        const chosen = idleAnimated ? null : selectedId();
         for (const a of actors.values()) {
             const anim = animOf(a);
             if (anim) {
-                a.frameTime += delta;
-                while (a.frameTime >= anim.durations[a.frame % anim.durations.length]) {
-                    if (a.once && a.frame >= anim.durations.length - 1) { a.frameTime = 0; break; } // reste sur la dernière image
-                    a.frameTime -= anim.durations[a.frame % anim.durations.length];
-                    a.frame = (a.frame + 1) % anim.durations.length;
+                if (!idleAnimated && (a.state === "idle" || a.state === "sleep") && a.id !== chosen) {
+                    // Figé au repos (sur le plateau, ou endormi chez les K.O.) : la première image (sélectionné, il
+                    // repartira du début de l'animation)
+                    a.frame = 0;
+                    a.frameTime = 0;
+                } else {
+                    a.frameTime += delta;
+                    while (a.frameTime >= anim.durations[a.frame % anim.durations.length]) {
+                        if (a.once && a.frame >= anim.durations.length - 1) { a.frameTime = 0; break; } // reste sur la dernière image
+                        a.frameTime -= anim.durations[a.frame % anim.durations.length];
+                        a.frame = (a.frame + 1) % anim.durations.length;
+                    }
                 }
                 const row = Math.min(a.state === "sleep" ? 0 : a.dir, anim.rows - 1);
                 a.sprite.setTexture(anim.key, row * anim.columns + a.frame % anim.columns);
@@ -563,6 +581,8 @@ export async function create(container, component, options) {
         highlight(next) { marks = next ?? {}; drawMarks(); },
         /** Toutes les pièces à leur place, sans animation. */
         setPosition(p) { if (p) sync(p); },
+        /** Animations au repos (Idle en boucle) ou pièces figées, sauf la sélectionnée. */
+        setIdle(animated) { idleAnimated = animated !== false; },
         dispose() {
             disposed = true;
             observer.disconnect();
