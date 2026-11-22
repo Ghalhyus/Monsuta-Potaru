@@ -500,7 +500,11 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal("0025/", Folder(25));
         Assert.Equal("0025/0000/0001/", Folder(25, shiny: true)); // chromatique
         Assert.Equal("0025/0000/0000/0002/", Folder(25, female: true)); // femelle
-        Assert.Equal("0016/", Folder(16, shiny: true)); // Roucool : pas de chromatique
+        // Espèce sans chromatique : cherchée dans les images (SpriteCollab en ajoute, Roucool a eu le sien en 2026-11).
+        var donjon = Path.Combine(RealSavesTests.WebRootWithImages(), "images", "donjon");
+        var sansChromatique = Enumerable.Range(1, 1025).Select(n => (ushort)n).First(n =>
+            PokemonSprites.HasDonjonSprites(n) && !File.Exists(Path.Combine(donjon, $"{n:0000}", "0000", "0001", "AnimData.xml")));
+        Assert.Equal($"{sansChromatique:0000}/", Folder(sansChromatique, shiny: true)); // repli sur l'espèce
         Assert.Equal("0026/0001/", Folder(26, 1, EntityContext.Gen7)); // Raichu d'Alola
         Assert.Equal("0077/0001/", Folder(77, 1, EntityContext.Gen8)); // Ponyta de Galar
         Assert.Equal("0128/0001/", Folder(128, 1)); // Tauros de Paldea, race Combative : « Paldea » chez SpriteCollab
