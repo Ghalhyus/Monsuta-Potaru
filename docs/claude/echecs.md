@@ -31,6 +31,30 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
   en base et bloc « Échecs » des statistiques ; mes Pokémon tournés vers l'adversaire (on voit leur dos, comme les siens
   en combat) ; pas de musique.
 
+## Partie publique (demandée le 2026-11-22)
+- Bouton « Créer une partie publique » dans « Nouvelle partie » (même sans ami ; le temps par coup est en premier dans la
+  rangée). `ChessHub.CreatePublic` : code de 8 caractères (`CodeAlphabet`, sans 0, O, 1, I, L), unique parmi les parties,
+  `Guest` vide (`ChessParty("", "")` ; `Involves("")` toujours faux) jusqu'à `JoinPublic`, qui le remplace (verrou du
+  hub puis de la session). Vaut `RequestLifetime` (expiration par `Tick`, message « le code a expiré ») ; une fois.
+- Choix de l'utilisateur : **lien à partager** (`?code=`, `[SupplyParameterFromQuery]`, code déjà rempli ; « Copier le
+  code » / « Copier le lien » par `navigator.clipboard.writeText`, message de repli si la copie est refusée) et **lien
+  sur l'accueil et la connexion** (sans compte) ; l'invité **tape un prénom** (`ChessHub.GuestPseudo` : 2 à 20 caractères,
+  lettres, chiffres, espaces, tirets, apostrophes, points ; « Léo (invité) ») ; parties **comptées pour l'hôte**
+  (`ChessRecords.BlackId` = identifiant d'invité, pas de clé étrangère) ; un joueur **connecté** peut aussi saisir un
+  code (sous son pseudo, comptée pour lui).
+- Page sans `[Authorize]` : sans compte, `userId` = `ChessHub.NewGuestId()` (« invite-… », tiré par le serveur, perdu au
+  rechargement = page quittée = défaite) ; seulement le bloc « Rejoindre une partie » (`JoinBlock`) et un lien de
+  connexion qui revient avec le code. Connecté : ce bloc en premier s'il vient d'un lien, sinon sous « Nouvelle partie ».
+- Bouton et non `<form>` : un formulaire envoyé avant l'interactivité partirait en POST au serveur sans `FormName`.
+- **Essais limités par IP** : `AccountLimiter.TryChessCode` (10 par minute). Un composant interactif n'a pas de
+  `HttpContext` : App.razor passe `RemoteIpAddress` à `Routes` (`ClientIp`), qui le cascade (`Name = "ClientIp"`) ; les
+  paramètres d'un composant racine interactif sont protégés dans la page (non modifiables par le navigateur).
+- Tests : `ChessHubTests` (code, saisie libre, une fois, expiration, joueur occupé, prénoms, résultat compté),
+  `ChessPageTests` (invité sans compte de bout en bout, lien pour un joueur connecté, limite d'essais : `RenderAnonymous`),
+  `SiteTests` (page ouverte sans compte, code du lien rempli, liens de l'accueil et de la connexion).
+- Piège de test : la page de l'hôte a un `NavigationLock` (quitter annule la partie) ; un `NavigateTo` vers le lien avec
+  sa page ouverte est refusé (`confirm` faux dans bUnit). Créer alors la partie par le hub.
+
 ## Règles (`ChessGame`)
 - Cases 0 à 63 = 8 × rangée + colonne, a1 = 0. Une pièce = `ChessUnit` (numéro fixe toute la partie : echecs.js anime
   par numéro), son `ChessMon` (espèce, forme, type, pièce).

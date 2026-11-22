@@ -102,11 +102,21 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         var browser = site.Browser();
         var home = await browser.GetAsync("/");
         Assert.Equal(HttpStatusCode.OK, home.StatusCode);
+        Assert.Contains("Rejoindre une partie d'échecs avec un code", WebUtility.HtmlDecode(await home.Content.ReadAsStringAsync()));
         Assert.True(File.Exists(site.DatabasePath)); // la base temporaire, pas celle du poste
         Assert.True(home.Headers.Contains("Content-Security-Policy"));
         var page = await browser.GetAsync("/inventaire");
         Assert.Contains("/Account/Login", page.RequestMessage!.RequestUri!.ToString());
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Account/Register")).StatusCode);
+        Assert.Contains("href=\"mini-jeux/echecs\"", await browser.GetStringAsync("/Account/Login"));
+        // Échecs : ouverts sans compte, pour rejoindre une partie publique (rien d'autre), le code du lien déjà rempli
+        var chess = await browser.GetAsync("/mini-jeux/echecs?code=abcd-2345");
+        Assert.Equal(HttpStatusCode.OK, chess.StatusCode);
+        Assert.DoesNotContain("/Account/Login", chess.RequestMessage!.RequestUri!.AbsolutePath);
+        var chessHtml = WebUtility.HtmlDecode(await chess.Content.ReadAsStringAsync());
+        Assert.Contains("Rejoindre une partie", chessHtml);
+        Assert.Contains("value=\"ABCD 2345\"", chessHtml);
+        Assert.DoesNotContain("Nouvelle partie", chessHtml);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Account/AccessDenied")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Account/InvalidUser")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Error")).StatusCode);

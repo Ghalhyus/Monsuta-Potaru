@@ -1,9 +1,11 @@
+using System.Security.Cryptography;
+
 namespace MonsutaPotaru.Services;
 
 /// <summary>Étape d'une partie d'échecs en direct.</summary>
 public enum ChessStage { Requested, TeamChoice, Playing, Done, Cancelled }
 
-/// <summary>Un joueur d'une partie : compte et pseudo.</summary>
+/// <summary>Un joueur d'une partie : compte (ou identifiant d'invité, <see cref="ChessHub.NewGuestId"/>) et pseudo.</summary>
 public sealed record ChessParty(string UserId, string Pseudo);
 
 /// <summary>
@@ -30,17 +32,22 @@ public static class ChessTiming
 }
 
 /// <summary>
-/// Une partie entre deux amis connectés (<see cref="ChessHub"/>) : l'hôte (<see cref="Host"/>, qui a invité) joue les
-/// blancs, l'invité (<see cref="Guest"/>) les noirs. Les deux pages s'abonnent à <see cref="Changed"/> et lisent la partie
+/// Une partie (<see cref="ChessHub"/>) : l'hôte (<see cref="Host"/>, qui a invité un ami ou créé une partie publique) joue
+/// les blancs, son adversaire (<see cref="Guest"/>) les noirs. Une partie publique (<see cref="Code"/>) n'a pas encore
+/// d'adversaire tant que personne n'a saisi son code. Les deux pages s'abonnent à <see cref="Changed"/> et lisent la partie
 /// par les méthodes de la session (verrou : l'autre joueur et le minuteur la changent sur d'autres fils).
 /// </summary>
-public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeconds, DateTime createdAt)
+public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeconds, DateTime createdAt, string? code = null)
 {
     internal readonly object Gate = new();
 
     public Guid Id { get; } = Guid.NewGuid();
     public ChessParty Host { get; } = host;
-    public ChessParty Guest { get; } = guest;
+    /// <summary>L'adversaire ; pour une partie publique, personne (identifiant vide) jusqu'à la saisie du code.</summary>
+    public ChessParty Guest { get; internal set; } = guest;
+    /// <summary>Code d'une partie publique (8 caractères, <see cref="ChessHub.CodeAlphabet"/>) ; null pour une invitation.</summary>
+    public string? Code { get; } = code;
+    public bool IsPublic => Code is not null;
     /// <summary>Temps pour jouer un coup, en secondes (choisi par l'hôte).</summary>
     public int MoveSeconds { get; } = moveSeconds;
     public DateTime CreatedAt { get; } = createdAt;
@@ -55,7 +62,7 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
     internal DateTime? Deadline;
 
     public bool IsOver => Stage is ChessStage.Done or ChessStage.Cancelled;
-    public bool Involves(string userId) => Host.UserId == userId || Guest.UserId == userId;
+    public bool Involves(string userId) => userId.Length > 0 && (Host.UserId == userId || Guest.UserId == userId);
     public bool IsHost(string userId) => Host.UserId == userId;
     public ChessParty Me(string userId) => IsHost(userId) ? Host : Guest;
     public ChessParty Other(string userId) => IsHost(userId) ? Guest : Host;
@@ -134,14 +141,27 @@ public sealed record ChessOptions(IReadOnlyList<ChessTarget> Targets, IReadOnlyL
 
 /// <summary>
 /// Parties d'échecs Pokémon en direct (Mini-jeux → Échecs), en mémoire : un redémarrage du serveur les arrête. Un joueur
-/// ne joue qu'une partie à la fois. Une invitation vaut <see cref="RequestLifetime"/>, tant que son auteur reste sur la
-/// page ; puis chacun choisit une équipe (pas la même), et la partie commence. Chaque coup est vérifié ici
+/// ne joue qu'une partie à la fois. Une invitation (à un ami) ou une partie publique (rejointe par son code, avec ou sans
+/// compte) vaut <see cref="RequestLifetime"/>, tant que son auteur reste sur la page ; puis chacun choisit une équipe (pas
+/// la même), et la partie commence. Chaque coup est vérifié ici
 /// (<see cref="ChessGame"/>) ; un joueur qui ne joue pas dans le temps choisi par l'hôte perd (<see cref="Tick"/>), comme
 /// celui qui abandonne ou quitte la page.
 /// </summary>
 public sealed class ChessHub : IDisposable
 {
     public static readonly TimeSpan RequestLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>Longueur du code d'une partie publique.</summary>
+    public const int CodeLength = 8;
+
+    /// <summary>Caractères des codes : sans 0, O, 1, I ni L, qui se confondent à la lecture (31 caractères : 31⁸ codes).</summary>
+    public const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+    /// <summary>Longueur permise du prénom d'un invité sans compte.</summary>
+    public const int GuestNameMin = 2, GuestNameMax = 20;
+
+    /// <summary>Préfixe des identifiants d'invités sans compte (jamais celui d'un compte : ceux-ci sont des GUID).</summary>
+    public const string GuestIdPrefix = "invite-";
 
     private readonly object gate = new();
     private readonly List<ChessSession> sessions = [];
@@ -180,6 +200,30 @@ public sealed class ChessHub : IDisposable
             return sessions.Where(s => s.Stage == ChessStage.Requested && s.Guest.UserId == userId).ToList();
     }
 
+    /// <summary>Identifiant d'un invité sans compte, tiré par le serveur pour la durée de sa page.</summary>
+    public static string NewGuestId() => GuestIdPrefix + Guid.NewGuid().ToString("N");
+
+    /// <summary>Code tel que saisi (minuscules, espaces, tirets) ramené à sa forme : « k7mp-q2xa » → « K7MPQ2XA ».</summary>
+    public static string NormalizeCode(string? raw) =>
+        new((raw ?? "").Where(c => !char.IsWhiteSpace(c) && c != '-').Select(char.ToUpperInvariant).ToArray());
+
+    /// <summary>Code affiché en deux groupes : « K7MP Q2XA ».</summary>
+    public static string FormatCode(string code) => code.Length == CodeLength ? $"{code[..4]} {code[4..]}" : code;
+
+    /// <summary>
+    /// Prénom d'un invité sans compte (venu du navigateur) : 2 à 20 caractères, lettres, chiffres, espaces, tirets,
+    /// apostrophes et points. Rend le pseudo affiché (« Léo (invité) ») ou un message d'erreur.
+    /// </summary>
+    public static (string? Pseudo, string? Error) GuestPseudo(string? raw)
+    {
+        var name = string.Join(' ', (raw ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (name.Length is < GuestNameMin or > GuestNameMax)
+            return (null, $"Ton prénom doit faire de {GuestNameMin} à {GuestNameMax} caractères.");
+        if (!name.All(c => char.IsLetterOrDigit(c) || c is ' ' or '-' or '\'' or '’' or '.'))
+            return (null, "Ton prénom ne peut contenir que des lettres, des chiffres, des espaces, des tirets, des apostrophes et des points.");
+        return ($"{name} (invité)", null);
+    }
+
     private bool Busy(string userId) =>
         sessions.Any(s => !s.IsOver && s.Involves(userId) && (s.Stage != ChessStage.Requested || s.IsHost(userId)));
 
@@ -205,6 +249,59 @@ public sealed class ChessHub : IDisposable
         }
         RequestsChanged?.Invoke(guest.UserId);
         return (session, $"Invitation envoyée à {guest.Pseudo} : en attente de sa réponse.");
+    }
+
+    /// <summary>
+    /// Crée une partie publique : un code de <see cref="CodeLength"/> caractères, à donner à l'adversaire (avec ou sans
+    /// compte), qui le saisit dans sa page (<see cref="JoinPublic"/>). Le temps par coup vient du navigateur.
+    /// </summary>
+    public (ChessSession? Session, string Message) CreatePublic(ChessParty host, int moveSeconds)
+    {
+        if (!ChessTiming.MoveSeconds.Contains(moveSeconds))
+            return (null, "Ce temps par coup n'est pas proposé.");
+        ChessSession session;
+        lock (gate)
+        {
+            if (Busy(host.UserId))
+                return (null, "Tu as déjà une partie en cours.");
+            string code;
+            do
+                code = RandomNumberGenerator.GetString(CodeAlphabet, CodeLength);
+            while (sessions.Any(s => s.Code == code));
+            session = new ChessSession(host, new ChessParty("", ""), moveSeconds, Now, code);
+            sessions.Add(session);
+        }
+        return (session, $"Partie publique créée : donne le code {FormatCode(session.Code!)} à ton adversaire.");
+    }
+
+    /// <summary>
+    /// Rejoint la partie publique de ce code (saisi dans le navigateur : l'appelant limite les essais par adresse IP,
+    /// <see cref="AccountLimiter.TryChessCode"/>) : les deux joueurs passent au choix de leur équipe.
+    /// </summary>
+    public (ChessSession? Session, string? Error) JoinPublic(string? code, ChessParty player)
+    {
+        var key = NormalizeCode(code);
+        if (key.Length != CodeLength)
+            return (null, $"Le code a {CodeLength} caractères : vérifie-le.");
+        ChessSession? found;
+        lock (gate)
+        {
+            found = sessions.FirstOrDefault(s => s.Stage == ChessStage.Requested && s.Code == key);
+            if (found is null)
+                return (null, "Aucune partie n'attend avec ce code : vérifie-le, ou demande un nouveau code.");
+            if (found.Host.UserId == player.UserId)
+                return (null, "C'est ta propre partie : donne ce code à ton adversaire.");
+            if (Busy(player.UserId))
+                return (null, "Tu as déjà une partie en cours.");
+            lock (found.Gate)
+            {
+                found.Guest = player;
+                found.Stage = ChessStage.TeamChoice;
+                found.Notice = null;
+            }
+        }
+        found.Notify();
+        return (found, null);
     }
 
     /// <summary>Accepte une invitation reçue : les deux joueurs passent au choix de leur équipe.</summary>
@@ -367,7 +464,9 @@ public sealed class ChessHub : IDisposable
             foreach (var s in expired)
             {
                 s.Stage = ChessStage.Cancelled;
-                s.Notice = $"{s.Guest.Pseudo} n'a pas répondu à temps : l'invitation a expiré.";
+                s.Notice = s.IsPublic
+                    ? "Personne n'a rejoint la partie à temps : le code a expiré."
+                    : $"{s.Guest.Pseudo} n'a pas répondu à temps : l'invitation a expiré.";
                 sessions.Remove(s);
             }
             foreach (var s in sessions.Where(s => s.Stage == ChessStage.Playing))

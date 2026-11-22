@@ -175,6 +175,84 @@ public sealed class ChessHubTests : IDisposable
     }
 
     [Fact]
+    public void PublicGame_IsJoinedOnceByItsCode()
+    {
+        Assert.Null(_hub.CreatePublic(Sacha, 45).Session); // temps trafiqué
+        var (session, message) = _hub.CreatePublic(Sacha, 60);
+        Assert.NotNull(session);
+        var code = session.Code!;
+        Assert.Equal(ChessHub.CodeLength, code.Length);
+        Assert.All(code, c => Assert.Contains(c, ChessHub.CodeAlphabet));
+        Assert.Contains($"donne le code {ChessHub.FormatCode(code)}", message);
+        Assert.True(session.IsPublic);
+        Assert.Same(session, _hub.Active("sacha"));
+        Assert.False(session.Involves("")); // pas encore d'adversaire
+        Assert.Equal("Tu as déjà une partie en cours.", _hub.CreatePublic(Sacha, 60).Message);
+        Assert.Empty(_hub.Incoming("ondine")); // une partie publique n'est l'invitation de personne
+
+        // Code mal tapé, trop court, ou son propre code
+        Assert.Equal("Le code a 8 caractères : vérifie-le.", _hub.JoinPublic("ABC", Ondine).Error);
+        var other = code[0] == 'A' ? "B" + code[1..] : "A" + code[1..];
+        Assert.Contains("Aucune partie n'attend avec ce code", _hub.JoinPublic(other, Ondine).Error);
+        Assert.Equal("C'est ta propre partie : donne ce code à ton adversaire.", _hub.JoinPublic(code, Sacha).Error);
+
+        // Saisi en minuscules, avec un tiret et des espaces : rejoint ; l'invité joue les noirs
+        var guestId = ChessHub.NewGuestId();
+        var typed = $" {code[..4].ToLowerInvariant()}-{code[4..]} ";
+        var (joined, error) = _hub.JoinPublic(typed, new ChessParty(guestId, "Léo (invité)"));
+        Assert.Null(error);
+        Assert.Same(session, joined);
+        Assert.Equal((ChessStage.TeamChoice, "Léo (invité)"), (session.Stage, session.Guest.Pseudo));
+        Assert.Equal(ChessColor.Black, session.ColorOf(guestId));
+        Assert.Same(session, _hub.Active(guestId));
+
+        // Une seule fois
+        Assert.Contains("Aucune partie n'attend avec ce code", _hub.JoinPublic(code, Ondine).Error);
+        Assert.Null(_hub.ChooseTeam(session, guestId, "feu"));
+        Assert.Null(_hub.ChooseTeam(session, "sacha", "psy"));
+        Assert.Equal(ChessStage.Playing, session.Stage);
+    }
+
+    [Fact]
+    public void PublicGame_Expires_AndBusyPlayersCannotJoin()
+    {
+        var (busy, _) = _hub.Request(Pierre, Ondine, 60);
+        Assert.Null(_hub.Accept(busy!, "ondine"));
+        var (session, _) = _hub.CreatePublic(Sacha, 60);
+        Assert.Equal("Tu as déjà une partie en cours.", _hub.JoinPublic(session!.Code, Ondine).Error);
+
+        _time.Now += ChessHub.RequestLifetime;
+        _hub.Tick();
+        Assert.Equal((ChessStage.Cancelled, "Personne n'a rejoint la partie à temps : le code a expiré."), (session.Stage, session.Notice));
+        Assert.Contains("Aucune partie n'attend avec ce code", _hub.JoinPublic(session.Code, new ChessParty(ChessHub.NewGuestId(), "Léo (invité)")).Error);
+        Assert.Null(_hub.Active("sacha"));
+    }
+
+    [Theory]
+    [InlineData("Léo", "Léo (invité)")]
+    [InlineData("  Marie   Ève ", "Marie Ève (invité)")]
+    [InlineData("O'Neil-Jr.", "O'Neil-Jr. (invité)")]
+    [InlineData("L", null)]
+    [InlineData("Un prénom bien trop long", null)]
+    [InlineData("<script>", null)]
+    [InlineData(null, null)]
+    public void GuestPseudo_IsChecked(string? typed, string? expected)
+    {
+        var (pseudo, error) = ChessHub.GuestPseudo(typed);
+        Assert.Equal(expected, pseudo);
+        Assert.Equal(expected is null, error is not null);
+    }
+
+    [Fact]
+    public void Codes_AreNormalizedAndFormatted()
+    {
+        Assert.Equal("K7MPQ2XA", ChessHub.NormalizeCode(" k7mp-q2xa\t"));
+        Assert.Equal("K7MP Q2XA", ChessHub.FormatCode("K7MPQ2XA"));
+        Assert.StartsWith(ChessHub.GuestIdPrefix, ChessHub.NewGuestId());
+        Assert.NotEqual(ChessHub.NewGuestId(), ChessHub.NewGuestId());
+    }
+
+    [Fact]
     public async Task FinishedGames_AreRecordedAndCounted()
     {
         var won = Playing();
@@ -196,5 +274,17 @@ public sealed class ChessHubTests : IDisposable
         Assert.Equal(new BattleRecordStats(1, 0, 0, 1), await stats.StatsAsync("sacha"));
         Assert.Equal(new BattleRecordStats(0, 1, 0, 1), await stats.StatsAsync("ondine"));
         Assert.Equal(new BattleRecordStats(0, 0, 0, 0), await stats.StatsAsync("pierre"));
+
+        // Partie publique contre un invité sans compte : comptée pour l'hôte (l'invité n'a pas de statistiques)
+        var guestId = ChessHub.NewGuestId();
+        var open = _hub.CreatePublic(Sacha, 60).Session!;
+        Assert.Null(_hub.JoinPublic(open.Code, new ChessParty(guestId, "Léo (invité)")).Error);
+        Assert.Null(_hub.ChooseTeam(open, guestId, "feu"));
+        Assert.Null(_hub.ChooseTeam(open, "sacha", "psy"));
+        _hub.Forfeit(open, "sacha");
+        await ChessRecorder.RecordAsync(_db.Factory, open, DateTime.UtcNow);
+        using (var db = _db.NewContext())
+            Assert.Single(db.ChessRecords, r => r.BlackId == guestId && r.WinnerId == guestId);
+        Assert.Equal(new BattleRecordStats(1, 1, 0, 2), await stats.StatsAsync("sacha"));
     }
 }

@@ -50,6 +50,7 @@ public abstract class PageTestContext : BunitContext
         Services.AddScoped<BattleService>();
         Services.AddScoped<ChessService>();
         Services.AddSingleton(_ => new ChessHub(TimeProvider.System, ticking: false));
+        Services.AddSingleton<AccountLimiter>();
         Services.AddSingleton(_ => new BattleHub(BattleTests.Showdown(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BattleHub>.Instance));
         // Pseudo cherché comme le fait Identity (NormalizedUserName) : pages des autres joueurs.
@@ -93,6 +94,13 @@ public abstract class PageTestContext : BunitContext
     {
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId), new Claim(ClaimTypes.Name, userId)], "Test");
         var state = Task.FromResult(new Microsoft.AspNetCore.Components.Authorization.AuthenticationState(new ClaimsPrincipal(identity)));
+        return Render<T>(p => p.AddCascadingValue(state));
+    }
+
+    /// <summary>Page rendue pour un visiteur sans compte (par exemple un invité des échecs), à côté du compte connecté.</summary>
+    protected IRenderedComponent<T> RenderAnonymous<T>() where T : Microsoft.AspNetCore.Components.IComponent
+    {
+        var state = Task.FromResult(new Microsoft.AspNetCore.Components.Authorization.AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
         return Render<T>(p => p.AddCascadingValue(state));
     }
 

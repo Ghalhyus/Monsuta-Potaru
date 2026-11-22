@@ -3,9 +3,10 @@ using System.Threading.RateLimiting;
 namespace MonsutaPotaru.Services;
 
 /// <summary>
-/// Limites d'envois des formulaires de compte par adresse IP. Connexion : contre les essais de mots de passe sur beaucoup
+/// Limites d'envois par adresse IP : formulaires de compte, et codes des parties d'échecs publiques. Connexion : contre les essais de mots de passe sur beaucoup
 /// de comptes à la fois, que le blocage d'un compte (<see cref="AccountService.FindForLoginAsync"/>) ne voit pas.
-/// Inscription : contre les essais d'adresses (une adresse déjà inscrite est refusée) et de codes d'invitation. En
+/// Inscription : contre les essais d'adresses (une adresse déjà inscrite est refusée) et de codes d'invitation. Codes des
+/// échecs (<see cref="ChessHub.JoinPublic"/>, même sans compte) : contre qui chercherait une partie au hasard. En
 /// production, l'adresse IP est celle transmise par Caddy, comme pour la liaison 3DS
 /// (<see cref="Api.SyncEndpoints.PairingRateLimit"/>). Singleton : les compteurs sont partagés par toutes les requêtes.
 /// </summary>
@@ -17,11 +18,16 @@ public sealed class AccountLimiter : IDisposable
     /// <summary>Envois du formulaire d'inscription permis par adresse IP et par heure.</summary>
     public const int RegistrationsPerHour = 10;
 
+    /// <summary>Codes de parties d'échecs publiques essayés par adresse IP et par minute.</summary>
+    public const int ChessCodesPerMinute = 10;
+
     public const string TooManyLoginsMessage = "Trop d'essais de connexion : attends une minute et réessaie.";
     public const string TooManyRegistrationsMessage = "Trop d'essais d'inscription : réessaie dans une heure.";
+    public const string TooManyChessCodesMessage = "Trop de codes essayés : attends une minute et réessaie.";
 
     private readonly PartitionedRateLimiter<string> logins = PerAddress(LoginsPerMinute, TimeSpan.FromMinutes(1));
     private readonly PartitionedRateLimiter<string> registrations = PerAddress(RegistrationsPerHour, TimeSpan.FromHours(1));
+    private readonly PartitionedRateLimiter<string> chessCodes = PerAddress(ChessCodesPerMinute, TimeSpan.FromMinutes(1));
 
     private static PartitionedRateLimiter<string> PerAddress(int permits, TimeSpan window) =>
         PartitionedRateLimiter.Create<string, string>(ip => RateLimitPartition.GetFixedWindowLimiter(ip, _ =>
@@ -33,6 +39,9 @@ public sealed class AccountLimiter : IDisposable
     /// <summary>Un envoi de plus du formulaire d'inscription : faux au-delà de la limite (rien n'est alors vérifié).</summary>
     public bool TryRegister(string? ip) => TryAcquire(registrations, ip);
 
+    /// <summary>Un code de partie d'échecs de plus : faux au-delà de la limite (le code n'est alors pas cherché).</summary>
+    public bool TryChessCode(string? ip) => TryAcquire(chessCodes, ip);
+
     private static bool TryAcquire(PartitionedRateLimiter<string> limiter, string? ip)
     {
         using var lease = limiter.AttemptAcquire(ip ?? "inconnue");
@@ -43,5 +52,6 @@ public sealed class AccountLimiter : IDisposable
     {
         logins.Dispose();
         registrations.Dispose();
+        chessCodes.Dispose();
     }
 }

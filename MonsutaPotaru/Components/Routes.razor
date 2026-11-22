@@ -1,5 +1,9 @@
 ﻿@using MonsutaPotaru.Components.Account.Shared
 @* Thème du compte (App.razor), transmis aux mises en page : MainLayout choisit son cadre (Ardoise ou menu classique). *@
+@* Adresse IP du visiteur (App.razor, lue dans la requête de la page : un composant interactif n'a plus de HttpContext) :
+   limite des essais de codes des échecs (AccountLimiter). Paramètre d'un composant racine : protégé dans la page, il ne
+   peut pas être modifié par le navigateur. *@
+<CascadingValue Name="ClientIp" Value="ClientIp" IsFixed="true">
 <CascadingValue Name="SiteTheme" Value="Theme" IsFixed="true">
     <Router AppAssembly="typeof(Program).Assembly">
         <Found Context="routeData">
@@ -25,10 +29,14 @@
         </Found>
     </Router>
 </CascadingValue>
+</CascadingValue>
 
 @code {
     /// <summary>Clé du thème du compte (<c>SiteThemes</c>), posée par App.razor.</summary>
     [Parameter] public string? Theme { get; set; }
+
+    /// <summary>Adresse IP du visiteur (celle transmise par Caddy en production), posée par App.razor.</summary>
+    [Parameter] public string? ClientIp { get; set; }
 
     /// <summary>
     /// Pseudo du joueur des pages /joueurs/{Pseudo}/... ; vide pour les pages du compte. Collection, Parc, Inventaire... ont

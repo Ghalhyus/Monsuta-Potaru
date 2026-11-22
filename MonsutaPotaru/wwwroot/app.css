@@ -1367,6 +1367,13 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-new { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .chess-new .form-select { width: auto; min-width: 12rem; flex: 0 1 auto; }
 
+/* Partie publique : le code en grand, lisible à voix haute ; « Rejoindre une partie » : code, prénom, bouton sur une ligne */
+.chess-code { font-family: var(--bs-font-monospace, monospace); font-size: 2rem; font-weight: 700; letter-spacing: .15em; margin-bottom: .5rem; }
+.chess-code-buttons { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+.chess-join { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.chess-join .form-control { width: auto; flex: 0 1 14rem; min-width: 10rem; }
+.chess-code-input { font-family: var(--bs-font-monospace, monospace); text-transform: uppercase; letter-spacing: .08em; }
+
 /* Choix des équipes : trois cartes côte à côte */
 .chess-teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .75rem; }
 .chess-team.chosen { box-shadow: 0 0 0 2px #198754; }

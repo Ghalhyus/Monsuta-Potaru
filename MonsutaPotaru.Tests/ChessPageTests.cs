@@ -178,4 +178,97 @@ public sealed class ChessPageTests : PageTestContext
         ondine.WaitForText("Démolosse ne rejoue pas.");
         sacha.WaitForText("À toi de jouer.");
     }
+
+    /// <summary>Sacha crée une partie publique (sans ami) ; rend son code.</summary>
+    private static async Task<string> CreatePublic(IRenderedComponent<Chess> sacha)
+    {
+        sacha.WaitForText("Nouvelle partie");
+        await sacha.Click("Créer une partie publique");
+        sacha.WaitForText("Donne ce code à ton adversaire");
+        var code = ChessHub.NormalizeCode(sacha.Find(".chess-code").TextContent);
+        Assert.Equal(ChessHub.CodeLength, code.Length);
+        return code;
+    }
+
+    /// <summary>Un autre code que celui-ci (même longueur, mêmes caractères permis).</summary>
+    private static string OtherCode(string code) => (code[0] == 'A' ? "B" : "A") + code[1..];
+
+    [Fact]
+    public async Task PublicGame_JoinedWithoutAccount()
+    {
+        var sacha = Render<Chess>();
+        sacha.WaitForText("Pour inviter un ami, ajoute-en dans Amis."); // pas d'ami : la partie publique reste possible
+        await sacha.Find("select.chess-time").ChangeAsync(new() { Value = "60" });
+        var code = await CreatePublic(sacha);
+        sacha.WaitForText("Partie publique");
+        sacha.WaitForText("1 min par coup");
+
+        // Le lien, le code déjà rempli, copié dans le presse-papiers
+        JSInterop.SetupVoid("navigator.clipboard.writeText", _ => true).SetVoidResult();
+        await sacha.Click("Copier le lien");
+        sacha.WaitForText("Lien copié : envoie-le à ton adversaire.");
+        Assert.Equal($"http://localhost/mini-jeux/echecs?code={code}",
+            JSInterop.Invocations.Last(i => i.Identifier == "navigator.clipboard.writeText").Arguments[0]);
+
+        // Sans compte : seulement « Rejoindre une partie », avec un prénom
+        var guest = RenderAnonymous<Chess>();
+        guest.WaitForText("Rejoindre une partie");
+        Assert.DoesNotContain("Nouvelle partie", guest.Text());
+        Assert.Empty(guest.FindAll("button.chess-public"));
+        Assert.Contains("Connecte-toi", guest.Text());
+        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = code.ToLowerInvariant() });
+        await guest.Click("Rejoindre");
+        guest.WaitForText("Ton prénom doit faire de 2 à 20 caractères.");
+        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
+        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = OtherCode(code) });
+        await guest.Click("Rejoindre");
+        guest.WaitForText("Aucune partie n'attend avec ce code");
+        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = $"{code[..4]}-{code[4..]}".ToLowerInvariant() });
+        await guest.Click("Rejoindre");
+
+        // Choix des équipes, puis la partie : l'invité joue les noirs
+        guest.WaitForText("Partie contre sacha");
+        sacha.WaitForText("Partie contre Léo (invité)");
+        await guest.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        guest.WaitForText("Tu joues les noirs · 1 min par coup");
+        sacha.WaitForText("Partie contre Léo (invité)");
+
+        // L'invité abandonne : victoire pour Sacha
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
+        await guest.Click("Abandonner");
+        sacha.WaitForText("Victoire ! (abandon)");
+        sacha.WaitForText("Léo (invité) abandonne la partie.");
+    }
+
+    [Fact]
+    public async Task PublicGame_JoinedByLink_AndCodeTriesAreLimited()
+    {
+        // Partie créée sans la page de Sacha : sa page bloquerait la navigation vers le lien (quitter annule la partie)
+        var session = Services.GetRequiredService<ChessHub>().CreatePublic(new ChessParty("sacha", "sacha"), 120).Session!;
+        var code = session.Code!;
+
+        // Ondine, connectée, ouvre le lien : le code est rempli, sans prénom à donner
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .NavigateTo($"mini-jeux/echecs?code={code.ToLowerInvariant()}");
+        var ondine = RenderAs<Chess>("ondine");
+        ondine.WaitForText("Rejoindre une partie");
+        Assert.Equal(ChessHub.FormatCode(code), ondine.Find("input.chess-code-input").GetAttribute("value"));
+        Assert.Empty(ondine.FindAll("input.chess-guest-name"));
+        await ondine.Click("Rejoindre");
+        ondine.WaitForText("Choisis ton équipe");
+        Assert.Equal((ChessStage.TeamChoice, "ondine"), (session.Stage, session.Guest.Pseudo));
+
+        // Essais de codes limités par adresse IP (Ondine en a déjà fait un) : au-delà, le code n'est plus cherché
+        var guest = RenderAnonymous<Chess>();
+        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
+        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = OtherCode(code) });
+        for (var i = 1; i < AccountLimiter.ChessCodesPerMinute; i++)
+        {
+            await guest.Click("Rejoindre");
+            guest.WaitForText("Aucune partie n'attend avec ce code");
+        }
+        await guest.Click("Rejoindre");
+        guest.WaitForText(AccountLimiter.TooManyChessCodesMessage);
+    }
 }

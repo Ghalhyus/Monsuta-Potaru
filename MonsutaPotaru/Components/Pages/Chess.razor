@@ -1,18 +1,19 @@
 @page "/mini-jeux/echecs"
-@attribute [Authorize]
 @implements IAsyncDisposable
 @using System.Security.Claims
-@using Microsoft.AspNetCore.Authorization
 @using MonsutaPotaru.Services
 @inject ChessHub Hub
 @inject FriendService FriendStore
+@inject AccountLimiter Limiter
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Échecs</PageTitle>
 
-@* Mini-jeux → Échecs : échecs Pokémon en direct avec un ami (règles : ChessGame). L'hôte invite un ami et choisit le
-   temps par coup ; l'ami accepte ; chacun prend une équipe (pas la même) ; l'hôte joue les blancs. Le plateau est dessiné
+@* Mini-jeux → Échecs : échecs Pokémon en direct (règles : ChessGame). L'hôte invite un ami, ou crée une partie publique
+   dont il donne le code (8 caractères) ; l'ami accepte, ou l'adversaire saisit le code : avec un compte, ou sans (page
+   ouverte à tous, mais un visiteur sans compte n'y voit que « Rejoindre une partie », sous un prénom) ; chacun prend une
+   équipe (pas la même) ; l'hôte joue les blancs. Le plateau est dessiné
    et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
    relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Quitter la page
    pendant la partie demande confirmation, puis fait perdre. *@
@@ -41,7 +42,8 @@ else
     var other = s.Other(userId);
     var preparing = s.Stage is ChessStage.Requested or ChessStage.TeamChoice;
     @* Avant la partie : titre et bouton dans l'en-tête du bloc ; pendant la partie : dans la colonne à côté du plateau *@
-    <Block Title="@(preparing ? $"Partie contre {other.Pseudo}" : null)" Class="chess-block" Actions="@(preparing ? CancelActions : null)">
+    var waitingPublic = s.IsPublic && s.Stage == ChessStage.Requested;
+    <Block Title="@(!preparing ? null : waitingPublic ? "Partie publique" : $"Partie contre {other.Pseudo}")" Class="chess-block" Actions="@(preparing ? CancelActions : null)">
         <ChildContent>
             @if (preparing)
             {
@@ -49,6 +51,20 @@ else
             }
             @switch (s.Stage)
             {
+                case ChessStage.Requested when waitingPublic:
+                    @* Partie publique : le code à donner à l'adversaire, ou le lien qui le contient *@
+                    <p class="mb-2">Donne ce code à ton adversaire, avec ou sans compte : il le saisit dans la page des échecs.</p>
+                    <div class="chess-code" aria-label="Code de la partie">@ChessHub.FormatCode(s.Code!)</div>
+                    <div class="chess-code-buttons">
+                        <button type="button" class="btn btn-sm btn-outline-primary chess-copy-code" @onclick="() => Copy(s.Code!, false)">Copier le code</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary chess-copy-link" @onclick="() => Copy(JoinLink(s.Code!), true)">Copier le lien</button>
+                    </div>
+                    <p class="small text-muted mb-0">
+                        Le code vaut jusqu'à @s.ExpiresAt.ToLocalTime().ToString("HH:mm"), tant que tu restes sur cette page, et ne
+                        sert qu'une fois. Avec le lien, il est déjà rempli.
+                    </p>
+                    break;
+
                 case ChessStage.Requested:
                     <p>En attente de la réponse de @other.Pseudo… L'invitation vaut jusqu'à @s.ExpiresAt.ToLocalTime().ToString("HH:mm"), tant que tu restes sur cette page.</p>
                     break;
@@ -220,8 +236,19 @@ else
         </div>
     }
 }
+else if (!signedIn)
+{
+    @* Sans compte : rien d'autre que « Rejoindre une partie » (code et prénom) *@
+    @JoinBlock
+}
 else
 {
+    @* Arrivé par le lien d'une partie publique : le code d'abord *@
+    @if (CodeFromLink is not null)
+    {
+        @JoinBlock
+    }
+
     @* ---------- Invitations reçues ---------- *@
     var incoming = Hub.Incoming(userId);
     @if (incoming.Count > 0)
@@ -244,48 +271,51 @@ else
         </Block>
     }
 
-    @* ---------- Nouvelle partie : l'ami et le temps par coup ---------- *@
+    @* ---------- Nouvelle partie : le temps par coup, puis un ami à inviter ou une partie publique ---------- *@
     <Block Title="Nouvelle partie">
-        <Help>
-            <p>Des échecs où chaque pièce est un Pokémon avec un seul type :</p>
-            <ul>
-                <li>Une pièce ne mange une autre que si son type est au moins neutre contre elle (pas très efficace ou sans effet : impossible).</li>
-                <li>Super efficace : le Pokémon qui a mangé rejoue aussitôt (il peut passer), et encore à chaque nouvelle prise super efficace. S'il mange le roi, la partie est gagnée.</li>
-                <li>Sinon, échec et mat comme aux échecs : un roi n'est en échec que si une pièce adverse peut vraiment le manger.</li>
-                <li>Un pion au bout du plateau prend la place d'un Pokémon K.O. de son équipe (pas d'un pion). Sans K.O., il attend.</li>
-                <li>Celui qui invite joue les blancs. Passé le temps par coup, ou en quittant la page, on perd.</li>
-            </ul>
-        </Help>
+        <Help>@Rules</Help>
         <ChildContent>
             @if (friends is null)
             {
                 <p class="text-muted">Chargement…</p>
             }
-            else if (friends.Count == 0)
-            {
-                <p class="text-muted">Il te faut un ami pour jouer : ajoute-en dans <a href="amis">Amis</a>.</p>
-            }
             else
             {
                 <div class="chess-new">
-                    <select class="form-select chess-friend" aria-label="Ami" value="@friendId" @onchange="e => friendId = e.Value?.ToString() ?? string.Empty">
-                        <option value="">Choisis un ami…</option>
-                        @foreach (var f in friends)
-                        {
-                            <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
-                        }
-                    </select>
                     <select class="form-select chess-time" aria-label="Temps par coup" value="@moveSeconds" @onchange="TimeChosen">
                         @foreach (var seconds in ChessTiming.MoveSeconds)
                         {
                             <option value="@seconds">@ChessTiming.Label(seconds) par coup</option>
                         }
                     </select>
-                    <button type="button" class="btn btn-primary chess-invite" disabled="@(friendId.Length == 0)" @onclick="Invite">Inviter</button>
+                    @if (friends.Count > 0)
+                    {
+                        <select class="form-select chess-friend" aria-label="Ami" value="@friendId" @onchange="e => friendId = e.Value?.ToString() ?? string.Empty">
+                            <option value="">Choisis un ami…</option>
+                            @foreach (var f in friends)
+                            {
+                                <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                            }
+                        </select>
+                        <button type="button" class="btn btn-primary chess-invite" disabled="@(friendId.Length == 0)" @onclick="Invite">Inviter</button>
+                    }
+                    <button type="button" class="btn btn-outline-primary chess-public" @onclick="CreatePublic">Créer une partie publique</button>
                 </div>
+                <p class="small text-muted mt-2 mb-0">
+                    Partie publique : tu obtiens un code à donner à ton adversaire, qui peut jouer même sans compte.
+                    @if (friends.Count == 0)
+                    {
+                        <span>Pour inviter un ami, ajoute-en dans <a href="amis">Amis</a>.</span>
+                    }
+                </p>
             }
         </ChildContent>
     </Block>
+
+    @if (CodeFromLink is null)
+    {
+        @JoinBlock
+    }
 }
 
 @code {
@@ -345,12 +375,28 @@ else
         ? Math.Clamp((int)Math.Ceiling((deadline - DateTime.UtcNow).TotalSeconds), 0, session.MoveSeconds)
         : null;
 
+    /// <summary>Adresse IP du visiteur (App.razor) : essais de codes limités par adresse.</summary>
+    [CascadingParameter(Name = "ClientIp")] private string? ClientIp { get; set; }
+
+    /// <summary>Code d'une partie publique venu du lien partagé (« ?code=K7MPQ2XA ») : déjà rempli.</summary>
+    [SupplyParameterFromQuery(Name = "code")] private string? CodeFromLink { get; set; }
+
+    // Sans compte : identifiant d'invité tiré pour la durée de la page ; il ne peut que rejoindre une partie publique
+    private bool signedIn;
+    private string joinCode = "";
+    private string guestName = "";
+    private string? joinError;
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthState).User;
-        userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-        pseudo = user.Identity?.Name ?? "";
+        signedIn = user.Identity?.IsAuthenticated == true && user.FindFirstValue(ClaimTypes.NameIdentifier) is { Length: > 0 };
+        userId = signedIn ? user.FindFirstValue(ClaimTypes.NameIdentifier)! : ChessHub.NewGuestId();
+        pseudo = signedIn ? user.Identity?.Name ?? "" : "";
+        joinCode = CodeFromLink is null ? "" : ChessHub.FormatCode(ChessHub.NormalizeCode(CodeFromLink));
         Hub.RequestsChanged += OnRequestsChanged;
+        if (!signedIn)
+            return;
         if (Hub.Active(userId) is { } active) // page rechargée pendant une partie : on la reprend où elle en est
             Join(active);
         friends = (await FriendStore.ListAsync(userId)).Friends.ToList();
@@ -490,6 +536,68 @@ else
         messageIsError = created is null;
         if (created is not null)
             Join(created);
+    }
+
+    /// <summary>Partie publique : un code à donner à l'adversaire (seulement avec un compte).</summary>
+    private void CreatePublic()
+    {
+        if (!signedIn)
+            return;
+        var (created, text) = Hub.CreatePublic(new ChessParty(userId, pseudo), moveSeconds);
+        message = created is null ? text : null; // le code s'affiche dans le bloc de la partie
+        messageIsError = created is null;
+        if (created is not null)
+            Join(created);
+    }
+
+    /// <summary>Rejoint une partie publique par son code (essais limités par adresse IP) ; sans compte, sous un prénom.</summary>
+    private void JoinWithCode()
+    {
+        joinError = null;
+        var player = new ChessParty(userId, pseudo);
+        if (!signedIn)
+        {
+            var (guestPseudo, nameError) = ChessHub.GuestPseudo(guestName);
+            if (guestPseudo is null)
+            {
+                joinError = nameError;
+                return;
+            }
+            player = new ChessParty(userId, guestPseudo);
+        }
+        if (!Limiter.TryChessCode(ClientIp))
+        {
+            joinError = AccountLimiter.TooManyChessCodesMessage;
+            return;
+        }
+        var (joined, error) = Hub.JoinPublic(joinCode, player);
+        if (joined is null)
+        {
+            joinError = error;
+            return;
+        }
+        pseudo = player.Pseudo;
+        message = null;
+        joinCode = "";
+        Join(joined);
+    }
+
+    /// <summary>Lien d'une partie publique, le code déjà rempli.</summary>
+    private string JoinLink(string code) => Navigation.ToAbsoluteUri($"mini-jeux/echecs?code={code}").ToString();
+
+    private async Task Copy(string text, bool link)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            message = link ? "Lien copié : envoie-le à ton adversaire." : "Code copié : envoie-le à ton adversaire.";
+            messageIsError = false;
+        }
+        catch (JSException)
+        {
+            message = link ? $"Copie impossible : recopie le lien à la main ({text})." : "Copie impossible : recopie le code à la main.";
+            messageIsError = true;
+        }
     }
 
     private void Accept(ChessSession request)
@@ -697,7 +805,7 @@ else
             return;
         var question = session!.Stage == ChessStage.Playing
             ? "Quitter cette page abandonne la partie : tu perdras. Continuer ?"
-            : "Quitter cette page annule la partie, pour toi et pour ton ami. Continuer ?";
+            : "Quitter cette page annule la partie, pour toi et pour ton adversaire. Continuer ?";
         if (!await JS.InvokeAsync<bool>("confirm", question))
         {
             context.PreventNavigation();
@@ -831,6 +939,59 @@ else
             }
         </ul>
     };
+
+    /// <summary>Les règles, dans l'aide des blocs « Nouvelle partie » et « Rejoindre une partie ».</summary>
+    private static RenderFragment Rules => __builder =>
+    {
+        <p>Des échecs où chaque pièce est un Pokémon avec un seul type :</p>
+        <ul>
+            <li>Une pièce ne mange une autre que si son type est au moins neutre contre elle (pas très efficace ou sans effet : impossible).</li>
+            <li>Super efficace : le Pokémon qui a mangé rejoue aussitôt (il peut passer), et encore à chaque nouvelle prise super efficace. S'il mange le roi, la partie est gagnée.</li>
+            <li>Sinon, échec et mat comme aux échecs : un roi n'est en échec que si une pièce adverse peut vraiment le manger.</li>
+            <li>Un pion au bout du plateau prend la place d'un Pokémon K.O. de son équipe (pas d'un pion). Sans K.O., il attend.</li>
+            <li>Celui qui invite (ou qui crée la partie publique) joue les blancs. Passé le temps par coup, ou en quittant la page, on perd.</li>
+        </ul>
+    };
+
+    /// <summary>
+    /// « Rejoindre une partie » : le code d'une partie publique et, sans compte, un prénom. Bouton et non formulaire : un
+    /// formulaire envoyé avant que la page soit interactive partirait au serveur sans être attendu.
+    /// </summary>
+    private RenderFragment JoinBlock => __builder =>
+    {
+        <Block Title="Rejoindre une partie">
+            <Help>@Rules</Help>
+            <ChildContent>
+                <p class="small text-muted mb-2">
+                    Quelqu'un a créé une partie publique ? Saisis le code qu'il t'a donné@(signedIn ? "" : ", et ton prénom").
+                </p>
+                <div class="chess-join">
+                    <input type="text" class="form-control chess-code-input" aria-label="Code de la partie" placeholder="Code (8 caractères)"
+                           maxlength="16" autocomplete="off" spellcheck="false" @bind="joinCode" />
+                    @if (!signedIn)
+                    {
+                        <input type="text" class="form-control chess-guest-name" aria-label="Ton prénom" placeholder="Ton prénom"
+                               maxlength="@ChessHub.GuestNameMax" autocomplete="given-name" @bind="guestName" />
+                    }
+                    <button type="button" class="btn btn-primary chess-join-button" @onclick="JoinWithCode">Rejoindre</button>
+                </div>
+                @if (joinError is not null)
+                {
+                    <p class="chess-join-error text-danger small mt-2 mb-0" role="alert">@joinError</p>
+                }
+                @if (!signedIn)
+                {
+                    <p class="small text-muted mt-2 mb-0">
+                        Tu as un compte ? <a href="@LoginLink">Connecte-toi</a> pour jouer sous ton pseudo.
+                    </p>
+                }
+            </ChildContent>
+        </Block>
+    };
+
+    /// <summary>Connexion, puis retour ici (avec le code du lien, s'il y en a un).</summary>
+    private string LoginLink => "Account/Login?ReturnUrl=" + Uri.EscapeDataString(
+        "/mini-jeux/echecs" + (CodeFromLink is null ? "" : "?code=" + Uri.EscapeDataString(ChessHub.NormalizeCode(CodeFromLink))));
 
     /// <summary>Ordre des pièces dans les listes et les tableaux : roi d'abord, pion à la fin.</summary>
     private static readonly ChessPiece[] PieceOrder =

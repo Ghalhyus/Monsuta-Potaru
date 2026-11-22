@@ -236,7 +236,13 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   prendre la même. Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
   sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;
-  invitation valable 10 minutes ; l'ami accepte ; chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne) ; l'hôte joue les blancs. Une
+  invitation valable 10 minutes ; l'ami accepte. Ou **partie publique** (`ChessHub.CreatePublic`) : un code de 8
+  caractères (sans 0, O, 1, I ni L ; `RandomNumberGenerator`), valable 10 minutes et une seule fois, donné à l'adversaire
+  (code ou lien `?code=`), qui le saisit dans la page (`JoinPublic`), **avec ou sans compte** : la page n'exige plus de
+  connexion, mais sans compte elle ne montre que « Rejoindre une partie » (code et prénom de 2 à 20 caractères, affiché
+  « Léo (invité) », identifiant d'invité tiré par le serveur pour la durée de la page). Essais de codes : 10 par minute
+  et par adresse IP (`AccountLimiter.TryChessCode`, IP lue par App.razor et transmise en paramètre protégé). Partie
+  contre un invité : comptée pour l'hôte seulement. Puis chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne) ; l'hôte joue les blancs. Une
   partie à la fois par joueur. Temps dépassé (`ChessHub.Tick`, il ne court qu'après les animations : `ChessTiming.Playback`),
   abandon, page quittée : défaite. Chaque coup venu du navigateur est revérifié par les règles.
 - **Plateau** (`wwwroot/js/echecs.js`, Phaser) en pixel art dessiné par le code (aucune image), sprites Donjon Mystère à
@@ -855,10 +861,10 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`) : invitations, ami et temps par coup, choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui) |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui) |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
-| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, équipes, coups vérifiés, temps par coup, abandon, fin |
+| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes, coups vérifiés, temps par coup, abandon, fin |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
 | `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups |
@@ -897,7 +903,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Layout/Breadcrumbs.cs` | Fil d'Ariane du thème Ardoise, déduit de l'adresse de la page (`BreadcrumbsTests`) |
 | `MonsutaPotaru/Data/SiteSetting.cs` | Table des réglages du site (code d'invitation) et rôles des comptes (`SiteRoles`) |
 | `MonsutaPotaru/Services/AccountService.cs` | Comptes : règles du pseudo, inscription, connexion par l'adresse (blocage après 5 échecs), choix du pseudo des anciens comptes, changement d'adresse ; réglages d'Identity, messages d'Identity en français |
-| `MonsutaPotaru/Services/AccountLimiter.cs` | Limites d'envois par adresse IP : connexion (10 par minute), inscription (10 par heure) |
+| `MonsutaPotaru/Services/AccountLimiter.cs` | Limites d'envois par adresse IP : connexion (10 par minute), inscription (10 par heure), codes des parties d'échecs publiques (10 par minute) |
 | `MonsutaPotaru/Components/Account/Pages/` | Pages du compte : connexion, inscription, « Choisis ton pseudo », « Mon compte » (`Manage/` : profil, adresse, mot de passe, données personnelles) |
 | `MonsutaPotaru/Components/Account/Shared/PseudoGuard.razor` | Renvoie un compte sans pseudo sur « Choisis ton pseudo » (autour du contenu de `MainLayout`) |
 | `MonsutaPotaru/Services/BankService.cs` | Accès base, validation transactionnelle, copies de sécurité |
