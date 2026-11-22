@@ -1410,7 +1410,30 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-swap-choice img { width: 2rem; height: 2rem; object-fit: contain; image-rendering: pixelated; }
 .chess-after { display: flex; flex-wrap: wrap; gap: .5rem; }
 
-/* Fenêtre « Pièces » : les deux équipes côte à côte (l'une sous l'autre sur un téléphone) */
 /* Fenêtre « Pièces » : assez large pour les deux équipes côte à côte (deux colonnes de 19rem) */
 .chess-pieces { width: min(calc(100vw - 2rem), 43rem); }
 .chess-pieces-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 1rem; }
+
+/* Fenêtre « Aide » : deux tableaux croisés (qui mange qui), côte à côte sur un grand écran, l'un sous l'autre sinon (la
+   fenêtre défile alors, pas la page) ; un tableau trop large pour l'écran défile de côté. Images à 4rem (nettes à 150 %). */
+.chess-help { width: max-content; max-width: calc(100vw - 2rem); }
+.chess-help-tables { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5rem; }
+.chess-help-scroll { max-width: 100%; overflow-x: auto; }
+.chess-help-table { border-collapse: collapse; }
+.chess-help-table caption { caption-side: top; padding: 0 0 .35rem; color: inherit; font-weight: 600; }
+.chess-help-table th, .chess-help-table td { border: 1px solid var(--bs-border-color, #dee2e6); }
+.chess-help-table th { font-weight: normal; }
+.chess-help-table img { display: block; width: 4rem; height: 4rem; object-fit: contain; image-rendering: pixelated; }
+.chess-help-corner { vertical-align: bottom; text-align: right; padding: .25rem .4rem; white-space: nowrap; }
+.chess-help-col { width: 5.5rem; padding: .25rem; text-align: center; vertical-align: bottom; font-size: .85rem; line-height: 1.25; }
+.chess-help-col img { margin: 0 auto .15rem; }
+.chess-help-row { padding: .1rem .4rem .1rem .1rem; }
+.chess-help-row-content { display: grid; grid-template-columns: 4rem 8.5rem; align-items: center; gap: .4rem; text-align: left; }
+.chess-help-title { display: flex; flex-direction: column; align-items: center; gap: .1rem; }
+.chess-help-row .chess-help-title { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .1rem .4rem; }
+.chess-help-piece { margin-top: .1rem; }
+.chess-help-mark { text-align: center; vertical-align: middle; font-size: 1.2rem; font-weight: 700; }
+.chess-help-mark.super { color: #198754; background: rgba(25, 135, 84, .16); }
+.chess-help-mark.blocked { color: #dc3545; background: rgba(220, 53, 69, .13); }
+.chess-help-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.chess-help-legend .chess-help-mark { display: inline-block; min-width: 2rem; padding: 0 .3rem; border-radius: .3rem; font-size: 1rem; }

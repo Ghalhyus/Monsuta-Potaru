@@ -108,6 +108,7 @@ else
                             <p class="small text-muted mb-2">@SideLine(s)</p>
                             <div class="chess-side-buttons">
                                 <button type="button" class="btn btn-sm btn-outline-secondary chess-pieces-button" @onclick="() => showPieces = true">Pièces</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary chess-help-button" @onclick="() => showHelp = true">Aide</button>
                                 @if (s.Stage == ChessStage.Playing)
                                 {
                                     <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
@@ -188,6 +189,33 @@ else
                     }
                 </div>
                 <button type="button" class="btn btn-secondary mt-3" @onclick="() => showPieces = false">Fermer</button>
+            </div>
+        </div>
+    }
+
+    @if (showHelp && s.Stage is not (ChessStage.Requested or ChessStage.TeamChoice)
+        && s.TeamOf(userId) is { } mine && s.TeamOf(other.UserId) is { } theirs)
+    {
+        @* Fenêtre « Aide » : qui mange qui, dans les deux sens (deux tableaux croisés, d'après la même table des types que
+           les règles de la partie) *@
+        <div class="dialog-backdrop" @onclick="() => showHelp = false"></div>
+        <div class="dialog-panel card chess-help" role="dialog" aria-modal="true" aria-label="Aide">
+            <div class="card-body">
+                <h5>Aide</h5>
+                <p class="small text-muted mb-2">
+                    Un Pokémon ne mange une pièce que si son type est neutre ou super efficace contre le sien. Super efficace,
+                    il mange et rejoue aussitôt.
+                </p>
+                <div class="chess-help-tables">
+                    @HelpTable("Tes Pokémon contre les siens", mine, theirs)
+                    @HelpTable($"Ceux de {other.Pseudo} contre les tiens", theirs, mine)
+                </div>
+                <p class="chess-help-legend small mt-2 mb-0">
+                    <span class="chess-help-mark super">×2</span> super efficace : il mange et rejoue
+                    <span class="chess-help-mark eats">✓</span> il mange
+                    <span class="chess-help-mark blocked">✗</span> il ne peut pas manger
+                </p>
+                <button type="button" class="btn btn-secondary mt-3" @onclick="() => showHelp = false">Fermer</button>
             </div>
         </div>
     }
@@ -275,6 +303,7 @@ else
     private string? message;
     private bool messageIsError;
     private bool showPieces;
+    private bool showHelp;
 
     // Plateau (echecs.js)
     private ElementReference boardHost;
@@ -689,6 +718,7 @@ else
         lastStep = null;
         message = null;
         showPieces = false;
+        showHelp = false;
         ClearSelection();
         await DisposeBoard();
     }
@@ -773,7 +803,7 @@ else
     private RenderFragment TeamList(ChessTeam team, ChessColor? color) => __builder =>
     {
         <ul class="chess-team-list">
-            @foreach (var piece in new[] { ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn })
+            @foreach (var piece in PieceOrder)
             {
                 var mon = team.Of(piece);
                 @* Le sprite (96 × 96) à 4rem : un pixel d'image par pixel d'écran à 150 % ; à côté, le nom en entier et le
@@ -801,6 +831,81 @@ else
             }
         </ul>
     };
+
+    /// <summary>Ordre des pièces dans les listes et les tableaux : roi d'abord, pion à la fin.</summary>
+    private static readonly ChessPiece[] PieceOrder =
+        [ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn];
+
+    /// <summary>
+    /// Fenêtre « Aide » : un tableau croisé, les Pokémon de <paramref name="attackers"/> en lignes, ceux de
+    /// <paramref name="victims"/> en colonnes ; chaque case dit si la pièce de la ligne mange celle de la colonne. Une
+    /// espèce par pièce : les huit pions n'ont qu'une ligne (ou colonne).
+    /// </summary>
+    private static RenderFragment HelpTable(string title, ChessTeam attackers, ChessTeam victims) => __builder =>
+    {
+        <div class="chess-help-scroll">
+            <table class="chess-help-table">
+                <caption>@title</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="chess-help-corner small text-muted">mange&nbsp;→</th>
+                        @foreach (var piece in PieceOrder)
+                        {
+                            var victim = victims.Of(piece);
+                            <th scope="col" class="chess-help-col">
+                                <img src="@victim.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                @HelpLabel(victim)
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var piece in PieceOrder)
+                    {
+                        var attacker = attackers.Of(piece);
+                        <tr>
+                            <th scope="row" class="chess-help-row">
+                                <div class="chess-help-row-content">
+                                    <img src="@attacker.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                    <div>@HelpLabel(attacker)</div>
+                                </div>
+                            </th>
+                            @foreach (var column in PieceOrder)
+                            {
+                                var victim = victims.Of(column);
+                                var (css, mark, sentence) = HelpMark(attacker, victim);
+                                <td class="chess-help-mark @css" title="@sentence">@mark</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    /// <summary>
+    /// Nom, type et pièce d'un Pokémon, dans les en-têtes des tableaux de l'aide : le nom au-dessus du type dans les
+    /// colonnes (étroites), sur la même ligne dans les lignes (le tableau tient ainsi en hauteur).
+    /// </summary>
+    private static RenderFragment HelpLabel(ChessMon mon) => __builder =>
+    {
+        <span class="chess-help-title">
+            <span class="chess-mon-name">@mon.Name</span>
+            <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+        </span>
+        <span class="chess-help-piece d-block">
+            <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(mon.Piece)</span>
+            <span class="chess-piece-name">@ChessTeams.PieceName(mon.Piece)</span>
+        </span>
+    };
+
+    /// <summary>Marque d'une case de l'aide (classe CSS, symbole, phrase au survol), d'après la règle de prise des parties.</summary>
+    private static (string Css, string Mark, string Sentence) HelpMark(ChessMon attacker, ChessMon victim) =>
+        !ChessGame.CanEat(attacker.Type, victim.Type)
+            ? ("blocked", "✗", $"{attacker.Name} ne peut pas manger {victim.Name}.")
+            : PokeTypes.Effectiveness(attacker.Type, victim.Type) > 1
+                ? ("super", "×2", $"{attacker.Name} mange {victim.Name} et rejoue : c'est super efficace !")
+                : ("eats", "✓", $"{attacker.Name} mange {victim.Name}.");
 
     public async ValueTask DisposeAsync()
     {

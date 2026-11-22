@@ -242,7 +242,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - **Plateau** (`wwwroot/js/echecs.js`, Phaser) en pixel art dessiné par le code (aucune image), sprites Donjon Mystère à
   la même échelle ; chaque joueur voit son camp en bas, les K.O. endormis sur les côtés. Un coup s'anime : marche (le
   cavalier en L), attaque et blessure pour une prise, échange de places pour un pion au bout. Bouton **Pièces** : les deux
-  équipes (pièce, Pokémon, type, combien sur le plateau et K.O.).
+  équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Bouton **Aide** : qui mange qui, deux tableaux croisés
+  (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après `ChessGame.CanEat` et la table des types.
 - **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
   « Statistiques » (onglet Multijoueurs, bloc « Échecs »).
 
@@ -854,7 +855,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`) : invitations, ami et temps par coup, choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtre « Pièces » |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`) : invitations, ami et temps par coup, choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui) |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, équipes, coups vérifiés, temps par coup, abandon, fin |

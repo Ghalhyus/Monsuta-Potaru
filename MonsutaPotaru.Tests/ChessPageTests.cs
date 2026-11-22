@@ -108,6 +108,33 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.Click("Fermer");
         Assert.Empty(sacha.FindAll(".chess-pieces"));
 
+        // Fenêtre « Aide » : qui mange qui, dans les deux sens (Sacha : équipe Psy, Ondine : équipe Feu)
+        await sacha.Click("Aide");
+        var tables = sacha.FindAll(".chess-help-table");
+        Assert.Equal(["Tes Pokémon contre les siens", "Ceux de ondine contre les tiens"],
+            tables.Select(t => t.QuerySelector("caption")!.TextContent));
+        foreach (var table in tables)
+        {
+            Assert.Equal(6, table.QuerySelectorAll("thead th.chess-help-col").Length);
+            Assert.All(table.QuerySelectorAll("tbody tr"), row => Assert.Equal(6, row.QuerySelectorAll("td").Length));
+        }
+        // Colonnes : roi, reine, tour, fou, cavalier, pion
+        string Mark(int table, string attacker, int column) =>
+            tables[table].QuerySelectorAll("tbody tr").Single(r => r.QuerySelector("th")!.TextContent.Contains(attacker))
+                .QuerySelectorAll("td")[column].TextContent;
+        Assert.Equal("×2", Mark(0, "Gallame", 4)); // Combat contre Démolosse (Ténèbres)
+        Assert.Equal("×2", Mark(0, "Gardevoir", 2)); // Fée contre Boumata (Dragon)
+        Assert.Equal("✗", Mark(0, "Tarsal", 4)); // Psy contre Ténèbres : sans effet
+        Assert.Equal("✗", Mark(0, "Kaorine", 0)); // Sol contre Dracaufeu (Vol) : sans effet
+        Assert.Equal("✓", Mark(0, "Tarsal", 5)); // Psy contre Salamèche (Feu)
+        Assert.Equal("×2", Mark(1, "Démolosse", 5)); // Ténèbres contre Tarsal (Psy)
+        Assert.Equal("✗", Mark(1, "Boumata", 1)); // Dragon contre Gardevoir (Fée)
+        Assert.Equal("✓", Mark(1, "Salamèche", 5));
+        Assert.Contains(tables[0].QuerySelectorAll("td"), td => td.GetAttribute("title") == "Gallame mange Démolosse et rejoue : c'est super efficace !");
+        Assert.Contains("il ne peut pas manger", sacha.Find(".chess-help-legend").TextContent);
+        await sacha.Click("Fermer");
+        Assert.Empty(sacha.FindAll(".chess-help"));
+
         // Abandon (confirmé) : défaite pour Sacha, victoire pour Ondine
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
         await sacha.Click("Abandonner");

@@ -3,7 +3,7 @@
 README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-jeux/echecs`), règles
 `Services/Chess/ChessGame.cs`, types `ChessTypes.cs`, équipes `ChessTeams.cs`, parties en direct `ChessHub.cs`, résultats
 `ChessRecorder.cs` (+ `ChessService`, statistiques), plateau `wwwroot/js/echecs.js` (Phaser). Tests : `ChessGameTests`
-(règles), `ChessHubTests` (hub, enregistrement), `ChessPageTests` (page, deux joueurs).
+(règles), `ChessHubTests` (hub, enregistrement), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Aide »).
 
 ## Choix de l'utilisateur (2026-11-22)
 - Demande d'origine : un seul type par Pokémon ; super efficace = la pièce rejoue ; neutre = elle mange ; pas très
@@ -23,7 +23,8 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
   - **pion au bout** : il ne remplace qu'un Pokémon **K.O.** ; les deux échangent leurs places **en marchant** ; les K.O.
     sont **visibles sur le côté** ; sans K.O., il attend et l'échange se fait plus tard, à la place d'un coup ;
   - roque et prise en passant gardés (avec la règle des types) ;
-  - bouton d'aide : fenêtre **« Pièces »** avec les deux équipes côte à côte ;
+  - bouton d'aide : fenêtre **« Pièces »** avec les deux équipes côte à côte (puis, le même jour, une fenêtre « Aide » à
+    part : voir plus bas) ;
   - plateau **pixélisé comme les sprites**, **dessiné par le code** (pas de tuiles d'un pack).
 - Proposés par moi, sans objection : un Pokémon revenu pendant un tour bonus prend ce tour bonus ; un pion K.O. ne revient
   pas ; deux rois seuls = nulle ; pas de nulle par répétition ni par 50 coups ; une partie à la fois par joueur ; résultats
@@ -52,6 +53,17 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 - Délai : `Deadline` = maintenant + durée des animations du coup (`ChessTiming.Playback` : 350 ms par case, 1,6 s pour
   une prise, 1 s de marge) + temps par coup. echecs.js reçoit les mêmes durées (`timing`).
 - Quitter la page (ou la recharger) pendant la partie = défaite (`Dispose` → `Leave`), comme les combats.
+
+## Fenêtre « Aide » (demandée le 2026-11-22)
+- Bouton « Aide » à côté de « Pièces » ; fenêtre du même genre (fond grisé). Choix de l'utilisateur : **deux tableaux
+  croisés** (« Tes Pokémon contre les siens », « Ceux de <pseudo> contre les tiens » : les menaces), marques **×2** (mange
+  et rejoue), **✓** (mange), **✗** (ne mange pas, sans distinguer « pas très efficace » de « sans effet ») ; en têtes
+  l'image à 4rem, le nom, le type, la pièce. Une ligne (colonne) par pièce : les huit pions une fois.
+- Marques par `ChessGame.CanEat` puis `PokeTypes.Effectiveness` (`HelpMark`) : la même règle que les parties.
+- Taille : un tableau ≈ 744 × 570 px CSS ; côte à côte (≈ 1550 × 760 px pour la fenêtre) sur l'écran de l'utilisateur
+  (2293 px CSS de large), l'un sous l'autre sinon (la fenêtre défile) ; trop étroit pour un tableau (téléphone) : il
+  défile de côté (`.chess-help-scroll`). Dans les lignes, nom et type sur une ligne (`.chess-help-title`), sinon un
+  tableau ne tenait pas en hauteur.
 
 ## Cartes des équipes et fenêtre « Pièces »
 - Images des Pokémon (96 × 96) à **4rem** : un pixel d'image par pixel d'écran chez l'utilisateur (150 %) ; plus petites,
