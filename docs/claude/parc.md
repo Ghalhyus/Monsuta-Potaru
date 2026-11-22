@@ -54,6 +54,10 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   ainsi (« Dusk » ↔ « Dusk_Mane »). ~240 formes de PKHeX trouvent leur sprite ; les autres n'en ont pas encore chez
   SpriteCollab (casquettes de Pikachu, coupes de Couafarel...).
 - Une espèce peut aller au parc si `images/donjon/<espèce sur 4 chiffres>/AnimData.xml` existe (`HasDonjonSprites`).
+- **La CI prend les images du serveur, souvent plus récentes que celles du PC** (SpriteCollab en ajoute) : un test ne
+  nomme pas une espèce « sans chromatique » ou « sans sprite ». Le 2026-11-22, `Sprites_AndFamilies` attendait Roucool sans
+  chromatique : passé en local (images du 2026-10-31), échoué en CI (`0016/0000/0001/`). Il choisit maintenant, dans les
+  images présentes, une espèce sans dossier `0000/0001/`.
 - SpriteCollab centre chaque image sur le même point, les pieds 4 à 10 px sous le centre (le dessin remonte l'image de
   6 px de sprite pour poser les pieds sur l'ombre).
 
