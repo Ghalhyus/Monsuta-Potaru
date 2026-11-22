@@ -13,7 +13,7 @@ Pokémon au repos).
   mange, l'autre joue sa blessure ; invitation acceptée comme les échanges et les combats ; chaque joueur choisit une
   équipe, **pas la même** (la partie bloquerait), et peut **revenir sur son choix** tant que l'autre n'a pas choisi
   la sienne (`ChessHub.ClearTeam`, bouton « Changer d'équipe », demandé le 2026-11-22) ; l'invité joue les noirs ; équipes par défaut seulement (Psy, Feu,
-  Électrik : `ChessTeams.All`, types choisis par lui, Motisma Lavage = forme 2, Raichu d'Alola = forme 1). Espèces
+  Électrik : `ChessTeams.All`, types choisis par lui ; quatre autres ajoutées ensuite, voir plus bas, Motisma Lavage = forme 2, Raichu d'Alola = forme 1). Espèces
   vérifiées d'après les noms français de PKHeX (`GameInfo.GetStrings("fr").specieslist`) : Kaorine = 344, Rhinolove =
   528, Boumata = 776 (la première version avait pris Tiboudet, Chovsourir et Draïeul).
 - Réponses à mes questions :
@@ -34,6 +34,19 @@ Pokémon au repos).
   pas ; deux rois seuls = nulle ; pas de nulle par répétition ni par 50 coups ; une partie à la fois par joueur ; résultats
   en base et bloc « Échecs » des statistiques ; mes Pokémon tournés vers l'adversaire (on voit leur dos, comme les siens
   en combat) ; pas de musique.
+
+## Équipes Poison, Eau, Plante, Sol (ajoutées le 2026-11-22)
+- Composition et types donnés par l'utilisateur (`ChessTeams.All`) ; noms corrigés d'après PKHeX : **Roserade** (sans
+  accent), **Libégon** (avec). Noms vérifiés en cherchant la chaîne UTF-8 dans `PKHeX.Core.dll` (Windows PowerShell 5.1
+  ne charge pas une DLL .NET 10).
+- **Deux espèces de pion** (équipe Poison) : deux membres `Pawn` dans `Members`, `PawnAt(colonne)` les alterne
+  (Nidoran♂ en a, c, e, g, choix de l'utilisateur, pour les deux camps) ; `Of(pièce)` rend le premier. Ils doivent avoir
+  **le même type** (test `Teams_HaveOnePokemonPerPiece`) : l'aide n'a qu'une ligne par pièce et calcule sa marque avec le
+  premier. Choix de l'utilisateur : **une ligne « Pion », deux images** (`MembersOf`, `NamesOf` « Nidoran♂ / Nidoran♀ »,
+  `NamesInSentence` « … ou … » dans les phrases de l'aide). `.chess-team-list` est une grille dont les lignes sont des
+  sous-grilles : la colonne des images prend 8rem pour cette équipe, les noms restent alignés. Les tableaux de l'aide
+  passent alors à ≈ 800 px CSS de large (tiennent encore côte à côte chez l'utilisateur).
+- `FromPosition` place un pion selon la colonne de sa case ; un pion K.O. donné par `ko` est le premier.
 
 ## Partie publique (demandée le 2026-11-22)
 - Bouton « Créer une partie publique » dans « Nouvelle partie » (même sans ami ; le temps par coup est en premier dans la

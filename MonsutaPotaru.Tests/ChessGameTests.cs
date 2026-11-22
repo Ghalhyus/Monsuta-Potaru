@@ -11,6 +11,7 @@ public sealed class ChessGameTests
     private static readonly ChessTeam Fire = ChessTeams.Find("feu")!;
     private static readonly ChessTeam Psy = ChessTeams.Find("psy")!;
     private static readonly ChessTeam Electric = ChessTeams.Find("electrique")!;
+    private static readonly ChessTeam Poison = ChessTeams.Find("poison")!;
 
     private const ChessColor W = ChessColor.White;
     private const ChessColor B = ChessColor.Black;
@@ -37,11 +38,36 @@ public sealed class ChessGameTests
     [Fact]
     public void Teams_HaveOnePokemonPerPiece()
     {
-        Assert.Equal(3, ChessTeams.All.Count);
+        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol"], ChessTeams.All.Select(t => t.Id));
         foreach (var team in ChessTeams.All)
-            Assert.Equal(Enum.GetValues<ChessPiece>().Order(), team.Members.Select(m => m.Piece).Order());
+        {
+            Assert.Equal(Enum.GetValues<ChessPiece>(), team.Members.Select(m => m.Piece).Distinct().Order());
+            // Une seule pièce peut avoir deux espèces, le pion ; les Pokémon d'une même pièce ont le même type (aide)
+            foreach (var piece in Enum.GetValues<ChessPiece>())
+            {
+                var members = team.MembersOf(piece);
+                Assert.True(members.Count == 1 || piece == ChessPiece.Pawn && members.Count == 2, $"{team.Id} : {piece}");
+                Assert.Single(members.Select(m => m.Type).Distinct());
+            }
+        }
         Assert.Null(ChessTeams.Find("pirate"));
         Assert.Equal("Raichu d'Alola", Electric.Of(ChessPiece.Queen).Name);
+        Assert.Equal("Nidoran♂ / Nidoran♀", Poison.NamesOf(ChessPiece.Pawn));
+        Assert.Equal("Nidoran♂ ou Nidoran♀", Poison.NamesInSentence(ChessPiece.Pawn));
+        Assert.Equal("Libégon", ChessTeams.Find("sol")!.Of(ChessPiece.Knight).Name);
+    }
+
+    [Fact]
+    public void Start_NidoranPawnsAlternate()
+    {
+        var game = new ChessGame(Poison, Fire);
+        var whites = Enumerable.Range(0, 8).Select(file => game.At(Sq($"{(char)('a' + file)}2"))!.Mon.Name);
+        Assert.Equal(["Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀"], whites);
+        Assert.Equal("Salamèche", game.At(Sq("b7"))!.Mon.Name);
+        var black = new ChessGame(Fire, Poison);
+        Assert.Equal("Nidoran♂", black.At(Sq("a7"))!.Mon.Name);
+        Assert.Equal("Nidoran♀", black.At(Sq("h7"))!.Mon.Name);
+        Assert.Equal("Nidoking", black.At(Sq("e8"))!.Mon.Name);
     }
 
     [Theory]

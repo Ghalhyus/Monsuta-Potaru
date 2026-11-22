@@ -90,7 +90,7 @@ public sealed class ChessGame
             for (var file = 0; file < 8; file++)
                 Place(new ChessUnit(id++, color, team.Of(BackRank[file])), Square(back, file));
             for (var file = 0; file < 8; file++)
-                Place(new ChessUnit(id++, color, team.Of(ChessPiece.Pawn)), Square(pawns, file));
+                Place(new ChessUnit(id++, color, team.PawnAt(file)), Square(pawns, file));
         }
     }
 
@@ -112,7 +112,10 @@ public sealed class ChessGame
         game.units.Clear();
         var id = 0;
         foreach (var (color, piece, square) in pieces)
-            game.Place(new ChessUnit(id++, color, (color == ChessColor.White ? white : black).Of(piece)), square);
+        {
+            var team = color == ChessColor.White ? white : black;
+            game.Place(new ChessUnit(id++, color, piece == ChessPiece.Pawn ? team.PawnAt(FileOf(square)) : team.Of(piece)), square);
+        }
         foreach (var (color, piece) in ko ?? [])
         {
             var unit = new ChessUnit(id++, color, (color == ChessColor.White ? white : black).Of(piece));

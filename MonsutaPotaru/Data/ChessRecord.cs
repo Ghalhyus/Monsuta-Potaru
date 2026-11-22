@@ -15,7 +15,7 @@ public class ChessRecord
     public string WhiteId { get; set; } = "";
     public string BlackId { get; set; } = "";
 
-    /// <summary>Identifiants des équipes (<c>ChessTeams</c> : « psy », « feu », « electrique »).</summary>
+    /// <summary>Identifiants des équipes (<c>ChessTeams.All</c> : « psy », « feu »…).</summary>
     public string WhiteTeam { get; set; } = "";
     public string BlackTeam { get; set; } = "";
 

@@ -232,7 +232,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   (types compris), on ne peut pas laisser son roi mangeable ; pat ou deux rois seuls : nulle. Un **pion au bout** du
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
-- **Équipes** par défaut (`ChessTeams.cs`) : Psy, Feu, Électrik, un Pokémon par pièce ; les deux joueurs ne peuvent pas
+- **Équipes** par défaut (`ChessTeams.cs`) : Psy, Feu, Électrik, Poison, Eau, Plante, Sol, un Pokémon par pièce (les
+  pions de l'équipe Poison : Nidoran♂ en a, c, e, g, Nidoran♀ en b, d, f, h, même type) ; les deux joueurs ne peuvent pas
   prendre la même. Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
   sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;

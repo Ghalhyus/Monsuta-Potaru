@@ -146,6 +146,33 @@ public sealed class ChessPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task PoisonTeam_ShowsBothNidoranOnThePawnLine()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        ondine.WaitForText("Choisis ton équipe");
+        Assert.Equal(["Équipe Psy", "Équipe Feu", "Équipe Électrik", "Équipe Poison", "Équipe Eau", "Équipe Plante", "Équipe Sol"],
+            ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
+        // Une ligne « Pion », deux images
+        var pawn = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li").Last();
+        Assert.Equal(2, pawn.QuerySelectorAll(".chess-mon-images img").Length);
+        Assert.Equal("Nidoran♂ / Nidoran♀", pawn.QuerySelector(".chess-mon-name")!.TextContent);
+        await ondine.FindAll(".chess-team")[3].QuerySelector("button")!.ClickAsync(new()); // Poison
+        sacha.WaitForText("Choisis ton équipe");
+        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
+        sacha.WaitForText("À toi de jouer.");
+
+        // Aide : toujours six colonnes, la colonne des pions avec les deux Nidoran (Psy contre Poison : ×2)
+        await sacha.Click("Aide");
+        var columns = sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("thead th.chess-help-col");
+        Assert.Equal(6, columns.Length);
+        Assert.Equal(2, columns[5].QuerySelectorAll("img").Length);
+        Assert.Contains("Nidoran♂ / Nidoran♀", columns[5].TextContent);
+        Assert.Contains(sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("td"),
+            td => td.GetAttribute("title") == "Tarsal mange Nidoran♂ ou Nidoran♀ et rejoue : c'est super efficace !");
+    }
+
+    [Fact]
     public async Task BlockedCapture_IsExplained_AndBonusTurnCanBePassed()
     {
         var (sacha, ondine) = await Invited();

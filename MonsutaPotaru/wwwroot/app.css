@@ -1387,8 +1387,10 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .75rem; }
 .chess-team.chosen { box-shadow: 0 0 0 2px #198754; }
 .chess-team.taken { opacity: .6; }
-.chess-team-list { list-style: none; margin: 0; padding: 0; }
-.chess-team-list li { display: grid; grid-template-columns: 4rem 1fr; align-items: center; gap: .5rem; padding: .15rem 0; }
+/* Colonne des images à la largeur de la plus large (deux pions Nidoran : 8rem), commune aux lignes (sous-grille). */
+.chess-team-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto 1fr; column-gap: .5rem; }
+.chess-team-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; padding: .15rem 0; }
+.chess-mon-images { display: flex; }
 .chess-team-list img { width: 4rem; height: 4rem; object-fit: contain; image-rendering: pixelated; }
 .chess-mon { min-width: 0; }
 .chess-mon-title { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .45rem; }
@@ -1442,9 +1444,9 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-help-table img { display: block; width: 4rem; height: 4rem; object-fit: contain; image-rendering: pixelated; }
 .chess-help-corner { vertical-align: bottom; text-align: right; padding: .25rem .4rem; white-space: nowrap; }
 .chess-help-col { width: 5.5rem; padding: .25rem; text-align: center; vertical-align: bottom; font-size: .85rem; line-height: 1.25; }
-.chess-help-col img { margin: 0 auto .15rem; }
+.chess-help-col .chess-mon-images { justify-content: center; margin-bottom: .15rem; }
 .chess-help-row { padding: .1rem .4rem .1rem .1rem; }
-.chess-help-row-content { display: grid; grid-template-columns: 4rem 8.5rem; align-items: center; gap: .4rem; text-align: left; }
+.chess-help-row-content { display: grid; grid-template-columns: auto 8.5rem; align-items: center; gap: .4rem; text-align: left; }
 .chess-help-title { display: flex; flex-direction: column; align-items: center; gap: .1rem; }
 .chess-help-row .chess-help-title { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .1rem .4rem; }
 .chess-help-piece { margin-top: .1rem; }
