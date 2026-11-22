@@ -30,6 +30,10 @@ Rassemble les images servies par le site, dans MonsutaPotaru/wwwroot/images/ :
   soleil.png, lune.png, ultra-soleil.png, ultra-lune.png, lets-go-pikachu.png, lets-go-evoli.png, epee.png, bouclier.png,
   diamant-etincelant.png, perle-scintillante.png, legendes-arceus.png, ecarlate.png, violet.png : Bulbagarden Archives,
   versions anglaises, faute de françaises) ;
+- rubans/ : images des rubans comptés par « Défis » → « Rubans » (PKHeX, PKHeX.Drawing.Misc/Resources/img/ribbons, sous
+  leur nom chez PKHeX : rubans/ribbonchampiong3.png ; les deux souvenirs ont aussi leur image dorée,
+  rubans/ribboncountmemorycontest2.png), et les rubans de 3e et 4e génération qu'ils réunissent (rubans/ribbong3coolsuper.png,
+  rubans/ribbonabilitydouble.png...) ;
 - combats : dans les dossiers de la 3e génération des living dex (rubis-saphir/, emeraude/, rouge-feu-vert-feuille/), les
   sprites de dos (dos/<numéro>.png) et chromatiques (chromatique/, dos/chromatique/), mêmes formes, plus Morphéo selon le
   temps (351-sunny.png, 351-rainy.png, 351-snowy.png) ; PokéAPI, versions/generation-iii/<jeu>/back/ et shiny/.
@@ -43,7 +47,7 @@ jeton, seulement des fichiers bruts.
 Les objets qu'aucune source n'a (objets rares, objets de Légendes Arceus, accessoires de pique-nique...)
 gardent inconnu.png : il suffit de déposer leur image sous leur numéro pour la remplacer.
 
-Lancement (Python 3, rien à installer) : python outils/images.py [pokemon] [objets] [donjon] [livingdex] [combats] [--sortie <dossier>]
+Lancement (Python 3, rien à installer) : python outils/images.py [pokemon] [objets] [donjon] [livingdex] [combats] [rubans] [--sortie <dossier>]
 (tout, sans argument ; dans MonsutaPotaru/wwwroot/images, sauf --sortie : le serveur l'utilise pour ~/monsuta-potaru-images, voir
 deploy/images-serveur.ps1). Les images ne sont pas dans le dépôt Git : en local, outils/recuperer-images.cmd les copie
 depuis le serveur, plus vite que les reconstruire.
@@ -112,8 +116,17 @@ def pokemon_jobs():
         for mine, theirs in folders.items():
             jobs[f"pokemon/{mine}{number}.png"] = f"{POKEAPI}/{theirs}/{number}.png"
 
-    # Formes : PokéAPI range les variétés (formes régionales, Méga...) sous leur propre numéro (10091.png pour Rattata
-    # d'Alola), les autres formes sous <espèce>-<forme>.png (201-b.png). Le site les range toutes sous <espèce>-<forme>.
+    jobs.update(form_jobs(species, folders))
+    jobs.update(female_jobs(species, folders))
+    return jobs, []
+
+
+def form_jobs(species, folders):
+    """
+    Formes : PokéAPI range les variétés (formes régionales, Méga...) sous leur propre numéro (10091.png pour Rattata
+    d'Alola), les autres formes sous <espèce>-<forme>.png (201-b.png). Le site les range toutes sous <espèce>-<forme>.
+    """
+    jobs = {}
     pokemon = {p["id"]: p for p in table("pokemon")}
     species_names = {s["id"]: s["identifier"] for s in table("pokemon_species")}
     for form in table("pokemon_forms"):
@@ -126,13 +139,14 @@ def pokemon_jobs():
         sources = [f"{number}-{name}.png"] + ([f"{form['pokemon_id']}.png"] if form["is_default"] == "1" else [])
         for mine, theirs in folders.items():
             jobs[f"pokemon/{mine}{number}-{name}.png"] = [f"{POKEAPI}/{theirs}/{source}" for source in sources]
+    return jobs
 
-    # Femelles différentes des mâles (Pikachu, Rapasdepic, Hippodocus...), pour la forme de base seulement.
-    for s in table("pokemon_species"):
-        if s["has_gender_differences"] == "1" and int(s["id"]) <= species:
-            for mine, theirs in folders.items():
-                jobs[f"pokemon/{mine}femelle/{s['id']}.png"] = [f"{POKEAPI}/{theirs}/female/{s['id']}.png"]
-    return jobs, []
+
+def female_jobs(species, folders):
+    """Femelles différentes des mâles (Pikachu, Rapasdepic, Hippodocus...), pour la forme de base seulement."""
+    return {f"pokemon/{mine}femelle/{s['id']}.png": [f"{POKEAPI}/{theirs}/female/{s['id']}.png"]
+            for s in table("pokemon_species") if s["has_gender_differences"] == "1" and int(s["id"]) <= species
+            for mine, theirs in folders.items()}
 
 
 def item_jobs():
@@ -171,61 +185,11 @@ def donjon_jobs():
     autre, <CopyOf>, sans planche à elle), et un AnimData.xml réduit à ces animations, écrit tout de suite.
     """
     tracker = json.loads(get(f"{SPRITECOLLAB}/tracker.json"))
-    names = {}  # identifiant d'auteur (Discord) → nom affiché
-    for line in get(f"{SPRITECOLLAB}/credit_names.txt").decode("utf-8").splitlines()[1:]:
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            names[parts[1]] = parts[0]
-    folders = []  # (dossier, nom, auteurs)
-    portraits = []  # (dossier, nom, auteurs, portraits présents)
-    def authors_of(credit):
-        return [names.get(a, a) for a in [credit.get("primary", "")] + credit.get("secondary", []) if a]
-    def walk(node, path, title):
-        if node.get("sprite_complete", 0) > 0 and any(a in node.get("sprite_files", {}) for a in DONJON_ANIMATIONS):
-            folders.append((path, title, authors_of(node.get("sprite_credit", {}))))
-        if node.get("portrait_complete", 0) > 0 and (kept := [p for p in DONJON_PORTRAITS if p in node.get("portrait_files", {})]):
-            portraits.append((path, title, authors_of(node.get("portrait_credit", {})), kept))
-        for key, child in node.get("subgroups", {}).items():
-            walk(child, f"{path}/{key}", f"{title} {child.get('name', '')}".strip())
-    for number, node in tracker.items():
-        walk(node, number, node.get("name", ""))
-
-    def sheets(folder):
-        """Planches nécessaires d'un dossier, d'après son AnimData.xml (réduit et écrit s'il n'est pas déjà là)."""
-        local = OUT / "donjon" / folder / "AnimData.xml"
-        # Le fichier réduit note les animations demandées : si DONJON_ANIMATIONS a changé depuis, il est repris de
-        # SpriteCollab (une animation ajoutée n'y serait pas)
-        root = ElementTree.fromstring(local.read_bytes()) if local.exists() else None
-        if root is not None and root.get("animations") != ",".join(DONJON_ANIMATIONS):
-            root = None
-        reduce = root is None
-        try:
-            if reduce:
-                root = ElementTree.fromstring(get(f"{SPRITECOLLAB}/sprite/{folder}/AnimData.xml"))
-        except urllib.error.URLError as e:
-            return folder, None, f"{folder}/AnimData.xml : {e}"
-        anims = {a.findtext("Name"): a for a in root.iter("Anim")}
-        kept, todo = set(), [a for a in DONJON_ANIMATIONS if a in anims]
-        while todo:  # suit les <CopyOf> jusqu'aux animations qui ont une planche
-            name = todo.pop()
-            if name in kept:
-                continue
-            kept.add(name)
-            if (copy := anims[name].findtext("CopyOf")) and copy in anims:
-                todo.append(copy)
-        if reduce:
-            root.set("animations", ",".join(DONJON_ANIMATIONS))
-            container = root.find("Anims")
-            for anim in list(container):
-                if anim.findtext("Name") not in kept:
-                    container.remove(anim)
-            local.parent.mkdir(parents=True, exist_ok=True)
-            local.write_bytes(ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
-        return folder, [n for n in kept if not anims[n].findtext("CopyOf")], None
+    folders, portraits = donjon_folders(tracker, credit_names())
 
     jobs, missing = {}, []
     with ThreadPoolExecutor(16) as pool:
-        for folder, needed, error in pool.map(sheets, [f for f, _, _ in folders]):
+        for folder, needed, error in pool.map(donjon_sheets, [f for f, _, _ in folders]):
             if error:
                 missing.append(error)
                 continue
@@ -234,14 +198,105 @@ def donjon_jobs():
     for folder, _, _, kept in portraits:
         for name in kept:
             jobs[f"donjon/portraits/{folder}/{name}.png"] = [f"{SPRITECOLLAB}/portrait/{folder}/{name}.png"]
+    write_donjon_forms(tracker)
+    write_donjon_credits(folders, portraits)
+    return jobs, missing
 
-    # Formes de chaque espèce (nom SpriteCollab → dossier), pour que le site retrouve le sprite d'une forme (PokemonSprites).
+
+def credit_names():
+    """Identifiant d'auteur (Discord) → nom affiché, d'après credit_names.txt de SpriteCollab."""
+    names = {}
+    for line in get(f"{SPRITECOLLAB}/credit_names.txt").decode("utf-8").splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            names[parts[1]] = parts[0]
+    return names
+
+
+def authors_of(credit, names):
+    """Auteurs d'un dossier : le principal puis les autres, par leur nom affiché."""
+    return [names.get(a, a) for a in [credit.get("primary", "")] + credit.get("secondary", []) if a]
+
+
+def donjon_folders(tracker, names):
+    """Dossiers de SpriteCollab qui ont des sprites (dossier, nom, auteurs), et ceux qui ont des portraits (dossier, nom,
+    auteurs, portraits présents), dans l'ordre de tracker.json."""
+    folders, portraits = [], []
+    for number, node in tracker.items():
+        walk_tracker(node, number, node.get("name", ""), names, (folders, portraits))
+    return folders, portraits
+
+
+def walk_tracker(node, path, title, names, found):
+    """Parcourt un dossier de tracker.json et ses sous-dossiers (formes, chromatique, femelle)."""
+    folders, portraits = found
+    if node.get("sprite_complete", 0) > 0 and any(a in node.get("sprite_files", {}) for a in DONJON_ANIMATIONS):
+        folders.append((path, title, authors_of(node.get("sprite_credit", {}), names)))
+    if node.get("portrait_complete", 0) > 0 and (kept := [p for p in DONJON_PORTRAITS if p in node.get("portrait_files", {})]):
+        portraits.append((path, title, authors_of(node.get("portrait_credit", {}), names), kept))
+    for key, child in node.get("subgroups", {}).items():
+        walk_tracker(child, f"{path}/{key}", f"{title} {child.get('name', '')}".strip(), names, found)
+
+
+def donjon_sheets(folder):
+    """Planches nécessaires d'un dossier, d'après son AnimData.xml (réduit et écrit s'il n'est pas déjà là)."""
+    local = OUT / "donjon" / folder / "AnimData.xml"
+    root = reduced_anim_data(local)
+    reduce = root is None
+    if reduce:
+        try:
+            root = ElementTree.fromstring(get(f"{SPRITECOLLAB}/sprite/{folder}/AnimData.xml"))
+        except urllib.error.URLError as e:
+            return folder, None, f"{folder}/AnimData.xml : {e}"
+    anims = {a.findtext("Name"): a for a in root.iter("Anim")}
+    kept = kept_animations(anims)
+    if reduce:
+        write_reduced(root, kept, local)
+    return folder, [n for n in kept if not anims[n].findtext("CopyOf")], None
+
+
+def reduced_anim_data(local):
+    """AnimData.xml réduit déjà écrit, s'il note les mêmes animations que DONJON_ANIMATIONS ; sinon None (il est repris de
+    SpriteCollab : une animation ajoutée n'y serait pas)."""
+    root = ElementTree.fromstring(local.read_bytes()) if local.exists() else None
+    if root is not None and root.get("animations") != ",".join(DONJON_ANIMATIONS):
+        return None
+    return root
+
+
+def kept_animations(anims):
+    """Animations gardées : celles de DONJON_ANIMATIONS, et celles qu'elles copient (<CopyOf>) jusqu'à une planche."""
+    kept, todo = set(), [a for a in DONJON_ANIMATIONS if a in anims]
+    while todo:
+        name = todo.pop()
+        if name in kept:
+            continue
+        kept.add(name)
+        if (copy := anims[name].findtext("CopyOf")) and copy in anims:
+            todo.append(copy)
+    return kept
+
+
+def write_reduced(root, kept, local):
+    """Écrit l'AnimData.xml réduit aux animations gardées (et la liste des animations demandées)."""
+    root.set("animations", ",".join(DONJON_ANIMATIONS))
+    container = root.find("Anims")
+    for anim in [a for a in container if a.findtext("Name") not in kept]:
+        container.remove(anim)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
+
+
+def write_donjon_forms(tracker):
+    """Formes de chaque espèce (nom SpriteCollab → dossier), pour que le site retrouve le sprite d'une forme (PokemonSprites)."""
     forms = {number: {child.get("name", ""): key for key, child in node.get("subgroups", {}).items() if child.get("name")}
              for number, node in tracker.items()}
     (OUT / "donjon").mkdir(parents=True, exist_ok=True)
     (OUT / "donjon" / "formes.json").write_text(json.dumps({k: v for k, v in forms.items() if v}, ensure_ascii=False), encoding="utf-8")
 
-    # Auteurs de chaque dossier : la licence CC BY-NC 4.0 demande de les citer.
+
+def write_donjon_credits(folders, portraits):
+    """Auteurs de chaque dossier : la licence CC BY-NC 4.0 demande de les citer."""
     lines = ["Sprites animés : SpriteCollab (PMD Collab, https://sprites.pmdcollab.org), licence CC BY-NC 4.0.",
              f"Auteurs de chaque dossier de sprites (animations {', '.join(DONJON_ANIMATIONS)}) :", ""]
     lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors in folders]
@@ -249,7 +304,6 @@ def donjon_jobs():
     lines += [f"{folder}\t{title}\t{', '.join(authors)}" for folder, title, authors, _ in portraits]
     (OUT / "donjon").mkdir(parents=True, exist_ok=True)
     (OUT / "donjon" / "credits.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return jobs, missing
 
 
 # Living dex : dossier des sprites de chaque groupe de jeux (dossier PokéAPI, avec fond transparent : « transparent » en 1re et
@@ -332,13 +386,16 @@ def combats_jobs():
 
 
 def livingdex_jobs():
-    """Sprites des jeux des living dex (PokéAPI, fond transparent) et jaquettes officielles (Bulbagarden Archives)."""
+    """Sprites des jeux des living dex (PokéAPI, fond transparent), chromatiques compris (chromatique/, living dex
+    chromatiques : pas en 1re génération, qui n'en a pas), et jaquettes officielles (Bulbagarden Archives)."""
     jobs, missing = {}, []
     for folder, (theirs, count) in LIVINGDEX_SPRITES.items():
-        for number in range(1, count + 1):
-            jobs[f"livingdex/{folder}/{number}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{number}.png"
-        for mine, their_file in LIVINGDEX_FORMS.get(folder, {}).items():
-            jobs[f"livingdex/{folder}/{mine}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_file}.png"
+        variants = {"": ""} if folder in ("rouge-bleu", "jaune") else {"": "", "chromatique/": "shiny/"}
+        for mine_variant, their_variant in variants.items():
+            for number in range(1, count + 1):
+                jobs[f"livingdex/{folder}/{mine_variant}{number}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_variant}{number}.png"
+            for mine, their_file in LIVINGDEX_FORMS.get(folder, {}).items():
+                jobs[f"livingdex/{folder}/{mine_variant}{mine}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_variant}{their_file}.png"
     for name, title in LIVINGDEX_COVERS.items():
         if (OUT / "livingdex" / "jaquettes" / f"{name}.png").exists():
             continue
@@ -349,6 +406,36 @@ def livingdex_jobs():
             missing.append(f"jaquette {name} ({title}) : {e}")
             print(f"  jaquette {name} introuvable ({title}) : {e}")
     return jobs, missing
+
+
+# Rubans comptés par « Défis » → « Rubans » : leur nom chez PKHeX sans « Ribbon », en minuscules. À garder en accord avec
+# Ribbons.All (MonsutaPotaru/Services/Ribbons.cs ; test RibbonsTests.ImagesScript_DownloadsEveryRibbon).
+RIBBONS = ["championg3", "championsinnoh", "championkalos", "championg6hoenn", "championalola", "championgalar", "championpaldea",
+           "countmemorycontest", "mastercoolness", "masterbeauty", "mastercuteness", "mastercleverness", "mastertoughness",
+           "conteststar", "twinklingstar",
+           "countmemorybattle", "battlerskillful", "battlerexpert", "battletreegreat", "battletreemaster", "towermaster", "masterrank",
+           "artist", "effort", "alert", "shock", "downcast", "careless", "relax", "snooze", "smile", "gorgeous", "royal",
+           "gorgeousroyal", "footprint", "legend", "bestfriends", "training", "battleroyale", "hisui",
+           "national", "earth"]
+# Les rubans de 3e et 4e génération que réunissent les deux souvenirs (fenêtre du détail) : Ribbons.ContestParts et BattleParts.
+RIBBON_PARTS = ["g3cool", "g3coolsuper", "g3coolhyper", "g3coolmaster", "g3beauty", "g3beautysuper", "g3beautyhyper",
+                "g3beautymaster", "g3cute", "g3cutesuper", "g3cutehyper", "g3cutemaster", "g3smart", "g3smartsuper",
+                "g3smarthyper", "g3smartmaster", "g3tough", "g3toughsuper", "g3toughhyper", "g3toughmaster", "g4cool",
+                "g4coolgreat", "g4coolultra", "g4coolmaster", "g4beauty", "g4beautygreat", "g4beautyultra",
+                "g4beautymaster", "g4cute", "g4cutegreat", "g4cuteultra", "g4cutemaster", "g4smart", "g4smartgreat",
+                "g4smartultra", "g4smartmaster", "g4tough", "g4toughgreat", "g4toughultra", "g4toughmaster", "winning",
+                "victory", "ability", "abilitygreat", "abilitydouble", "abilitymulti", "abilitypair", "abilityworld"]
+
+
+def rubans_jobs():
+    """Images des rubans (PKHeX), l'image dorée des deux souvenirs (40 rubans de concours, 8 de combat) et celles des
+    rubans qu'ils réunissent."""
+    jobs = {}
+    for key in RIBBONS + RIBBON_PARTS:
+        for suffix in ("", "2") if key.startswith("countmemory") else ("",):
+            name = f"ribbon{key}{suffix}.png"
+            jobs[f"rubans/{name}"] = f"{PKHEX}/PKHeX.Drawing.Misc/Resources/img/ribbons/{name}"
+    return jobs, []
 
 
 def fetch(job):
@@ -384,7 +471,7 @@ def main():
         del args[i:i + 2]
     failed = False
     parts = {"pokemon": ("Pokémon", pokemon_jobs), "objets": ("objets", item_jobs), "donjon": ("sprites Donjon Mystère", donjon_jobs),
-             "livingdex": ("living dex", livingdex_jobs), "combats": ("combats", combats_jobs)}
+             "livingdex": ("living dex", livingdex_jobs), "combats": ("combats", combats_jobs), "rubans": ("rubans", rubans_jobs)}
     chosen = [parts[a] for a in args if a in parts] or list(parts.values())
     for kind, make in chosen:
         jobs, missing = make()

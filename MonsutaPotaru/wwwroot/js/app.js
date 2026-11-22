@@ -27,7 +27,7 @@ document.addEventListener("click", e => {
 // statique, sans Blazor interactif).
 // - « Replier le menu » : attribut data-menu="replie" de la page, gardé dans un cookie qu'App.razor relit (la page
 //   suivante arrive déjà repliée) ;
-// - une rubrique (Sauvegardes, Multijoueurs) s'ouvre et se ferme d'un clic (classe « ouvert ») ;
+// - une rubrique (Sauvegardes, Multijoueurs, le compte en bas du menu) s'ouvre et se ferme d'un clic (classe « ouvert ») ;
 // - téléphone : le bouton de la barre du haut ouvre le menu par-dessus la page (data-menu-ouvert) ; un clic sur un lien
 //   ou à côté le referme ;
 // - le menu du compte (élément details) se referme après un clic dedans ou à côté, et avec Échap.
@@ -54,12 +54,28 @@ document.addEventListener("click", e => {
         root.toggleAttribute("data-menu-ouvert");
         return;
     }
-    if (e.target.closest(".ardoise-backdrop") || e.target.closest(".ardoise-menu a")) root.removeAttribute("data-menu-ouvert");
+    if (e.target.closest(".ardoise-backdrop") || e.target.closest(".ardoise-menu a")) delete root.dataset.menuOuvert;
 });
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    document.documentElement.removeAttribute("data-menu-ouvert");
+    delete document.documentElement.dataset.menuOuvert;
     for (const account of document.querySelectorAll(".ardoise-account[open]")) account.open = false;
+});
+
+// Infobulles d'aide (Shared/HelpTip.razor, des éléments details) : une seule ouverte à la fois ; un clic à côté la
+// referme (un clic dans la bulle, sur un lien par exemple, la laisse ouverte), Échap aussi, et rend le focus à son « ? ».
+document.addEventListener("click", e => {
+    if (!(e.target instanceof Element)) return;
+    for (const tip of document.querySelectorAll("details.help-tip[open]")) {
+        if (!tip.contains(e.target)) tip.open = false;
+    }
+});
+document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    for (const tip of document.querySelectorAll("details.help-tip[open]")) {
+        tip.open = false;
+        if (tip.contains(document.activeElement)) tip.querySelector("summary")?.focus();
+    }
 });
 
 // Téléchargement d'un fichier envoyé par le serveur (sauvegarde modifiée, .pk5...).
@@ -71,6 +87,63 @@ window.downloadFileFromStream = async (fileName, streamRef) => {
     a.download = fileName ?? "";
     a.click();
     URL.revokeObjectURL(url);
+};
+
+// Dossier d'un monde Minecraft choisi dans le navigateur (« Dépôt / Retrait », « Mes sauvegardes » : composant
+// WorldFolderPicker). Le navigateur donne à la page tous les fichiers du dossier choisi ; seuls ceux dont le site a
+// besoin sont ouverts et envoyés : level.dat, l'équipe et le PC (pokemon/...), les statistiques et les succès du joueur,
+// sa progression dans le livre de quêtes (ftbquests/...) et les groupes FTB (ftbteams/party/...). Les autres
+// ne sont jamais lus et leurs noms ne partent pas. Un dossier sans level.dat à sa racine (pas un monde : « saves »,
+// « .minecraft », un dossier personnel choisi par erreur) est refusé sans rien lire. Le serveur revérifie tout
+// (CobblemonSave.ZipFromFolder) : chemins, nombre, tailles.
+window.watchWorldFolder = (input, component) => {
+    const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+    const wanted = new RegExp(`^(level\\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{2}/${uuid}\\.dat(\\.old)?|stats/${uuid}\\.json|advancements/${uuid}\\.json|ftbquests/${uuid}\\.snbt|ftbteams/party/${uuid}\\.snbt)$`, "i");
+    const maxFiles = 32, maxFileBytes = 4 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024 - 65536;
+    let pending = null;
+
+    const onChange = async () => {
+        const files = Array.from(input.files ?? []);
+        input.value = ""; // la page oublie la sélection ; le même dossier peut être choisi de nouveau
+        pending = null;
+        if (files.length === 0) return;
+        const root = files[0].webkitRelativePath.split("/")[0];
+        const inside = f => f.webkitRelativePath.startsWith(root + "/") ? f.webkitRelativePath.slice(root.length + 1) : null;
+        if (!root || !files.some(f => inside(f) === "level.dat")) {
+            component.invokeMethodAsync("OnWorldRefused", "pas-un-monde");
+            return;
+        }
+        const chosen = files.filter(f => { const path = inside(f); return path !== null && wanted.test(path); });
+        const total = chosen.reduce((sum, f) => sum + f.size, 0);
+        if (chosen.length > maxFiles || chosen.some(f => f.size > maxFileBytes) || total > maxTotalBytes) {
+            component.invokeMethodAsync("OnWorldRefused", "trop-gros");
+            return;
+        }
+        const contents = await Promise.all(chosen.map(f => f.arrayBuffer()));
+        // « MPW1 », longueur de l'en-tête, en-tête JSON (chemins et tailles), puis les contenus à la suite.
+        const header = new TextEncoder().encode(JSON.stringify(chosen.map((f, i) => ({ n: inside(f), s: contents[i].byteLength }))));
+        const payload = new Uint8Array(8 + header.length + contents.reduce((sum, c) => sum + c.byteLength, 0));
+        payload.set(new TextEncoder().encode("MPW1"), 0);
+        new DataView(payload.buffer).setUint32(4, header.length, true);
+        payload.set(header, 8);
+        let offset = 8 + header.length;
+        for (const c of contents) {
+            payload.set(new Uint8Array(c), offset);
+            offset += c.byteLength;
+        }
+        pending = payload;
+        component.invokeMethodAsync("OnWorldChosen", root);
+    };
+    input.addEventListener("change", onChange);
+    return {
+        // Les fichiers préparés, une seule fois (ensuite oubliés).
+        take: () => {
+            const payload = pending ?? new Uint8Array(0);
+            pending = null;
+            return payload;
+        },
+        dispose: () => input.removeEventListener("change", onChange),
+    };
 };
 
 // Largeur de la fenêtre (« Ma collection ») : 0 pour une fenêtre étroite (téléphone), sinon 1 + le nombre de largeurs
@@ -101,7 +174,7 @@ window.watchScreenSize = (narrowWidth, windowWidths, component) => {
 // (.item-grid-probe), dont le navigateur calcule les colonnes avec les règles de .item-grid. Le composant est prévenu
 // à chaque changement (fenêtre redimensionnée, journal ouvert ou fermé).
 window.watchGridColumns = (probe, component) => {
-    const count = () => getComputedStyle(probe).gridTemplateColumns.split(" ").filter(t => t).length;
+    const count = () => getComputedStyle(probe).gridTemplateColumns.split(" ").filter(Boolean).length;
     let last = count();
     const observer = new ResizeObserver(() => {
         const current = count();

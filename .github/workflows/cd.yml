@@ -123,7 +123,10 @@ jobs:
           fi
 
           docker compose up -d --build
+          # Anciennes images, et cache de construction de plus de 3 jours : sans ça, chaque déploiement en ajoutait quelques
+          # centaines de Mo (20 Go en novembre 2026). Le cache récent reste : restauration NuGet, images du SDK et de Node.
           docker image prune -f > /dev/null
+          docker builder prune -f --filter until=72h > /dev/null
 
           echo "== Vérification"
           # Depuis le conteneur de Caddy (réseau interne de Docker) ; X-Forwarded-Proto comme Caddy, pour éviter la

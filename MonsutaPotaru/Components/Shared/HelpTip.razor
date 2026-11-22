@@ -1,0 +1,20 @@
+@* Infobulle d'aide : une icône « ? » qui ouvre, d'un clic, une bulle d'explication dessous. Un élément details : il
+   s'ouvre sans Blazor interactif (pages du compte comprises) ; wwwroot/js/app.js le referme au clic à côté ou avec Échap,
+   et n'en laisse qu'un ouvert. La bulle se place sous la ligne qui porte la classe help-tip-anchor (titre de la page ou
+   du bloc), alignée à gauche et jamais plus large qu'elle : elle ne dépasse pas de l'écran d'un téléphone (app.css). *@
+<details class="help-tip @Class">
+    <summary class="help-tip-button" title="Aide">
+        <span aria-hidden="true">?</span><span class="visually-hidden">@Label</span>
+    </summary>
+    <div class="help-tip-bubble small">@ChildContent</div>
+</details>
+
+@code {
+    /// <summary>Texte de l'aide.</summary>
+    [Parameter, EditorRequired] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Nom de l'icône lu par un lecteur d'écran (« Aide : Parc »).</summary>
+    [Parameter] public string Label { get; set; } = "Aide";
+
+    [Parameter] public string? Class { get; set; }
+}

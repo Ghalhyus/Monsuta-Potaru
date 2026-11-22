@@ -5,11 +5,16 @@ Banque Pokémon privée pour un cercle d'amis, basée sur [PKHeX.Core](https://g
 son nom, **PokeBank Sync**, et les clés de connexion leur nom technique « PokeBank » (`SetApplicationName` dans
 `Program.cs` : le changer déconnecterait tout le monde).
 
+**Pour les joueurs** : le mode d'emploi du site est dans le [guide du joueur](https://docs.google.com/document/d/1cCz7BaDp5PWYgcoyKmB7m63tj9R6L9jGBg1o5HDLijM/edit)
+(Google Doc). Ce README est pour les développeurs.
+
 - **Stack** : ASP.NET Core 10 + Blazor Server (tout en C#, pas de JavaScript à écrire), SQLite, ASP.NET Identity.
 - **Jeux testés** (vraies sauvegardes, `RealSavesTests` : voir plus bas) : Rouge, Bleu, Argent, Rouge Feu, Vert Feuille,
-  SoulSilver, Noire, Noire 2, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
+  Perle, HeartGold, SoulSilver, Noire, Noire 2, Y, Rubis Oméga, Ultra-Soleil, Épée ; Platine par la sauvegarde d'exemple. Pas encore de vraie
   sauvegarde de la 9e génération (Écarlate / Violet), ni de Let's Go, Diamant Étincelant ou Légendes Arceus : PKHeX sait
-  les lire, à valider au cas par cas.
+  les lire, à valider au cas par cas. Minecraft : modpack All the Mons (Cobblemon 1.8.4, NeoForge 1.21.1), monde solo
+  (`all-the-mons.zip` : dossier `pokemon`, `level.dat`, `stats`, `advancements` et `ftbquests` ; `CobblemonTests`,
+  `StoredWorldTests`, `AllTheMonsCompletionTests`).
 
 ## Lancer en local
 
@@ -27,11 +32,11 @@ Les combats font tourner le simulateur de Pokémon Showdown avec Node.js (22 ou 
 cloné (sans lui, le site marche mais les combats et leurs tests échouent avec un message qui l'explique) :
 
 ```bash
-npm ci --prefix showdown
+npm ci --ignore-scripts --prefix showdown
 ```
 
 Sous PowerShell, si l'exécution des scripts est bloquée (« npm.ps1 ne peut pas être chargé »), appeler `npm.cmd` à la
-place (`npm.cmd ci --prefix showdown`) : inutile de changer la politique d'exécution de Windows.
+place (`npm.cmd ci --ignore-scripts --prefix showdown`) : inutile de changer la politique d'exécution de Windows.
 
 ```bash
 dotnet run --project MonsutaPotaru
@@ -46,6 +51,13 @@ Tests :
 dotnet test
 ```
 
+Trois sortes de tests (xUnit) : les **services** sur une base SQLite en mémoire (`TestDatabase`) ; les **pages et composants**
+Blazor rendus par [bUnit](https://bunit.dev) avec les vrais services (`PageTestContext` : compte connecté, JavaScript du navigateur
+simulé, deux joueurs sur la même page pour les échanges et les combats) ; le **site entier** démarré par `Program.cs`
+(`SiteFactory`, WebApplicationFactory : base, copies et clés dans un dossier temporaire, jamais `Data/app.db`) pour
+l'inscription, la connexion, les pages du compte (formulaires envoyés au serveur), le rendu serveur de chaque page et
+l'API de la 3DS. Couverture mesurée par SonarCloud (lignes et conditions) : environ 88 %, objectif 70 % (voir « CI/CD »).
+
 `exemple-blanc2.sav` est une sauvegarde de test (Pikachu + Évoli) pour essayer le site sans vraie partie.
 Pour la régénérer : `MONSUTA_POTARU_SAMPLE_OUT=chemin/fichier.sav dotnet test`.
 
@@ -56,234 +68,272 @@ Sitrus, Enigma), 11 objets (Pierre Lune, Pierre Feu, Pépite, Restes, Attaque + 
 7 CT (2 CT01 Mitra-Poing, 3 CT06 Toxik, CT24 Tonnerre, CT26 Séisme), et ce que le site ne doit ni montrer ni toucher :
 deux CS (Coupe, Surf), le Vélo (objet rare) et une Lettre Herbe.
 
-Pour simuler « j'ai rejoué un peu » et passer la règle anti-copie de « Mes sauvegardes » (voir l'inventaire plus bas),
+Pour simuler « j'ai rejoué un peu » et passer la règle anti-copie de « Mes sauvegardes » (voir « Sauvegardes stockées » plus bas),
 `MONSUTA_POTARU_ADD_PLAYTIME=chemin/fichier.sav dotnet test` ajoute une heure de jeu au fichier, modifié sur place (n'importe quel jeu). Pour la régénérer : `MONSUTA_POTARU_SAMPLE_PT_OUT=chemin/fichier.sav dotnet test`.
 
 **Vraies sauvegardes de test** : les fichiers déposés dans `MonsutaPotaru.Tests/Sauvegardes/` (versionnés, malgré la règle `*.sav`) passent tout le parcours du site dans `RealSavesTests` : lecture et réécriture à l'identique,
 dépôt d'un Pokémon puis retour au même emplacement, stockage (tous ses Pokémon dans la collection), retrait d'argent,
 retrait de tous les objets du sac et du PC puis dépôt de retour (objets rares, CS et Cristaux Z intacts). Il suffit d'y ajouter un
 fichier pour qu'il soit testé ; sans le dossier, ces tests ne vérifient rien. Actuellement : Rouge, Bleu, Argent (partie
-randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu), SoulSilver, Noire (`noir.sav`), Noire 2, Rubis Oméga, Ultra-Soleil, Épée. SoulSilver : les blocs annexes
-jamais écrits par le jeu (Tour de Combat, vidéos...) restent à zéro, sans somme de contrôle valide, et PKHeX marque à
-l'écriture toutes les boîtes comme modifiées : le fichier change une fois, puis plus. En 1re et 2e génération, le fichier réécrit n'est pas identique octet pour octet (le contenu l'est) :
+randomisée : ses Pokémon sont signalés illégaux), Rouge Feu, Vert Feuille (2 parties de 3e génération, pour les combats ; PKHeX les reconnaît toutes deux comme Rouge Feu, `SaveVersion` reconnaît Vert Feuille d'après ses Pokémon), Perle (`perle.sav`, partie à 3 badges ; PKHeX la lit comme
+« Diamant / Perle »), HeartGold (`heartgold.sav`, une partie de PokéAthlon gagnée), SoulSilver, Noire (`noir.sav`), Noire 2, Y (`y.sav`, partie à 1 badge), Rubis Oméga, Ultra-Soleil, Épée. 4e génération : les blocs
+annexes jamais écrits par le jeu (Tour de Combat, vidéos, Panthéon de Perle...) restent à zéro, sans somme de contrôle
+valide ; PKHeX leur en donne une à l'écriture (et marque toutes les boîtes de SoulSilver comme modifiées) : le fichier
+change une fois, puis plus. En 1re et 2e génération, le fichier réécrit n'est pas identique octet pour octet (le contenu l'est) :
 le jeu ne prépare ses boîtes qu'au premier changement de boîte et PKHeX les écrit vides en règle ; et une boîte y est une
 liste sans trou, tassée à l'écriture comme le fait le jeu (un Pokémon déposé dans la banque laisse sa place au suivant).
 
 ## Fonctionnement
 
-1. L'utilisateur charge sa sauvegarde (`.sav`, `.dsv`…) dans « Transfert ».
-2. Il dépose / retire des Pokémon : les changements restent **en attente** (en mémoire) et sont annulables.
+Le mode d'emploi du site, pour les joueurs, est dans le **[guide du joueur](https://docs.google.com/document/d/1cCz7BaDp5PWYgcoyKmB7m63tj9R6L9jGBg1o5HDLijM/edit)**
+(Google Doc, un chapitre par rubrique du menu). Ici, seulement les règles que le code doit respecter et où elles sont ; le détail de
+chaque sujet est dans sa fiche `docs/claude/` (voir `CLAUDE.md`).
+
+1. L'utilisateur charge sa sauvegarde (`.sav`, `.dsv`…) dans « Dépôt / Retrait » (`/transfert`).
+2. Il dépose / retire des Pokémon : les changements restent **en attente** (en mémoire, `SaveSession`) et sont annulables.
 3. « Valider et télécharger » : la base est mise à jour dans une transaction, une copie *avant/après* de la
    sauvegarde est écrite dans `Data/backups/<id utilisateur>/`, et la sauvegarde modifiée est téléchargée.
 4. L'utilisateur **remplace** sa sauvegarde par ce fichier.
 
+Un retrait convertit le Pokémon au format du jeu si PKHeX le peut (PK4 → PK5) et refuse ce qui est incompatible (espèce,
+attaques ou objets absents du jeu, génération antérieure). La page grise d'avance les Pokémon du stockage interne
+incompatibles avec la sauvegarde chargée (`SaveSession.WithdrawalProblem`, les mêmes vérifications que `TryWithdraw`) :
+ni sélectionnables ni glissables, un clic donne la raison, « Tout sélectionner » et « Retirer les N » les sautent.
+
+### Minecraft (All the Mons, Cobblemon)
+
+`Services/Cobblemon/`, fiche `docs/claude/minecraft.md`. « Dépôt / Retrait » et « Mes sauvegardes » acceptent un monde
+Minecraft solo du modpack All the Mons (Cobblemon, format NBT, réglage par défaut) : l'équipe (« Équipe », 6 cases) puis
+les boîtes du PC (100 dans All the Mons, 30 cases).
+
+- **Fichiers lus** : le dossier `pokemon` (équipe, PC), `level.dat` (nom et graine du monde),
+  `stats/<UUID du joueur>.json` (temps de jeu), et pour la complétion `advancements/<UUID du joueur>.json` (succès) et
+  `ftbquests/<UUID de l'équipe>.snbt` (livre de quêtes : l'équipe FTB du joueur, ou le groupe dont il est membre d'après
+  `ftbteams/party/<UUID>.snbt`). Le joueur **choisit le dossier du monde** (`WorldFolderPicker`, script
+  `watchWorldFolder` d'`app.js`) ou envoie un zip de ces fichiers. `level.dat` est exigé partout, `stats` dans
+  « Mes sauvegardes » seulement ; succès et quêtes sont facultatifs (un monde sans eux a sa complétion à 0 %, avec un
+  conseil). Seuls ces fichiers sont gardés (`CobblemonSave.Bundle`), ceux des autres équipes FTB sont écartés.
+- **Sécurité du choix de dossier** : le navigateur n'ouvre et n'envoie que ces fichiers (pas `InputFile`, qui enverrait
+  au serveur le nom de tous les fichiers du dossier) ; un dossier sans `level.dat` à sa racine est refusé sans rien lire ;
+  le serveur revérifie tout (`CobblemonSave.ZipFromFolder` : chemins exacts, 32 fichiers et 4 Mo par fichier au plus,
+  tailles annoncées) ; le nom du dossier, qui sert de nom de fichier, est réduit aux caractères sûrs
+  (`CobblemonSave.FolderFileName`). Les messages de refus du navigateur sont des codes fixes.
+- **Identité** : `cobblemon:<UUID du joueur>:<graine>` (`CobblemonSave.IdentityKey`), une fois sur tout le serveur. Un
+  monde stocké est refusé dans « Dépôt / Retrait » (chargement et validation), comme une sauvegarde de jeu.
+- **Mes sauvegardes** : « All the Mons — Kantalia » (nom du monde à la place du dresseur, génération 0, sans numéro de
+  dresseur) ; mise à jour par le même monde seulement, confirmation si moins de temps de jeu ; ses Pokémon comptent dans
+  la taille de la collection. « Télécharger » et la suppression rendent le dossier `pokemon` seul.
+- **Jamais lu par PKHeX** : `StoredSaveService.TryRead` refuse un zip ; échanges, GTS et combats l'ignorent donc ;
+  l'inventaire, l'échange interne et la 3DS l'écartent de leurs listes. Le living dex et la complétion n'en ont qu'un :
+  All the Mons (voir « Living dex » et « Complétion (100 %) »).
+
+- **Mondes séparés** : un Pokémon de Minecraft ne retourne que dans un monde Minecraft, un Pokémon des jeux ne va jamais
+  dans Minecraft (grisés dans un sens comme dans l'autre, `SaveSession.WithdrawalProblem`). Les Pokémon de Minecraft sont
+  dans « Ma collection » (origine « All the Mons », filtres et tris), mais ni sur la GTS, ni dans les rubans, le parc ou
+  le living dex global, et sans fichier à télécharger.
+- **Gardés intacts** : le Pokémon est enregistré en NBT tel que Cobblemon l'a écrit (`BankPokemon.Extension` =
+  `cobblemon`, `BankService.IsCobblemon`) et repart tel quel. Le zip rendu ne contient que le dossier `pokemon` (jamais
+  `level.dat` ni `stats`) ; les copies `.dat.old` de Cobblemon sont réécrites comme le `.dat` (sinon le jeu pourrait
+  relire l'ancienne version).
+- **Doublons** : empreinte `cobblemon:<UUID du Pokémon>` ; un zip dont un Pokémon est déjà dans le compte est refusé,
+  comme une sauvegarde de jeu.
+- **Refusés** : monde à plusieurs joueurs, format JSON, zip sans équipe, sans PC ou sans `level.dat`, plusieurs mondes
+  dans un zip. Un Pokémon dans un enclos (Pasture) est verrouillé (à reprendre dans le jeu).
+- Le joueur décompresse le zip rendu dans le dossier du monde, **Minecraft fermé** (sinon le jeu réécrit ses fichiers).
+
 ### Comptes
 
-`Services/AccountService.cs`, pages dans `Components/Account` (ASP.NET Identity, tout en français) :
+`Services/AccountService.cs`, pages dans `Components/Account` (ASP.NET Identity, messages en français :
+`FrenchIdentityErrorDescriber`). Détails : `docs/claude/comptes.md`.
 
-- **Inscription** : pseudo, adresse mail, mot de passe et **code d'invitation** (obligatoire, gardé en base : voir
-  « Administration » ; majuscules, tirets et espaces ne comptent pas). Rôle **Standard**. Mot de passe d'**au moins 12
-  caractères** (`AccountService.PasswordMinLength`), avec une majuscule, une minuscule, un chiffre et un caractère
-  spécial ; un compte plus ancien garde son mot de passe plus court jusqu'à ce qu'il le change. **10 envois du formulaire par
-  heure et par adresse IP** au plus (`AccountLimiter`) : sans mail de confirmation, une adresse déjà inscrite est
-  forcément refusée, la limite empêche d'en essayer beaucoup (et de chercher le code d'invitation).
-  Le **pseudo** (3 à 20 caractères : lettres, accents compris, chiffres, espaces, tirets, points, tirets bas ; espaces en
-  trop retirés) est unique sans tenir compte des majuscules et **définitif**. C'est le nom d'utilisateur d'Identity : le
-  menu (lien vers « Mon compte ») et la 3DS (`compte` de l'API) l'affichent ; l'adresse mail n'est montrée à personne.
-- **Connexion** par l'**adresse mail** (unique, `RequireUniqueEmail`) et le mot de passe, pas par le pseudo. Pas de
-  double authentification (`SignInAsync` direct, même si elle était restée active). Contre les essais de mots de passe :
-  - **5 mauvais mots de passe d'affilée bloquent la connexion au compte 5 minutes**, même avec le bon (verrouillage
-    d'Identity, `AccountService.FindForLoginAsync`) ; le blocage se lève tout seul, un bon mot de passe remet le
-    compteur à zéro ;
-  - **10 envois du formulaire par minute et par adresse IP** au plus (celle transmise par Caddy, `AccountLimiter`) :
-    contre les essais sur beaucoup de comptes à la fois ; au-delà, « Trop d'essais de connexion : attends une minute » ;
-  - les mauvais mots de passe tapés dans « Mon compte » (Adresse mail, Mot de passe, Supprimer le compte :
-    `AccountService.CheckPasswordAsync`) **comptent avec ceux de la connexion** : une session volée ne permet pas de
-    deviner le mot de passe. Bloqué, ces actions sont refusées (« Trop de mauvais mots de passe : réessaie dans 5
-    minutes » : la personne est connectée, c'est son compte) ; la session ouverte, elle, reste ouverte ;
-  - un seul message pour tout échec (« Adresse mail ou mot de passe incorrect. Après 5 échecs, la connexion à ce compte
-    est bloquée 5 minutes. ») : la page ne dit pas si l'adresse a un compte, ni s'il est bloqué. Le mot de passe est
-    vérifié même pour une adresse inconnue, pour que la durée de la réponse ne le dise pas non plus.
-- **Comptes d'avant le pseudo** : leur nom d'utilisateur est encore leur adresse (« @ », interdit dans un pseudo :
-  `AccountService.HasPseudo`). `Shared/PseudoGuard.razor` (autour du contenu de `MainLayout`) les renvoie sur
-  « Choisis ton pseudo » (`/Account/Pseudo`) tant qu'ils n'en ont pas ; la 3DS continue de marcher.
-- **Mon compte** : Profil (pseudo et adresse, en lecture), Adresse mail (changée **directement** avec le mot de passe :
-  le site n'envoie aucun mail), Mot de passe, Données personnelles (téléchargement en JSON : identifiant, pseudo, adresse ;
-  suppression du compte et de tout ce qu'il contient).
-- **Retirés** : téléphone, double authentification, connexions externes, mot de passe oublié et confirmation par mail
-  (rien n'était envoyé). Migration `RemovePhoneAndTwoFactor` : numéros effacés, double authentification coupée, clés et
-  codes de secours supprimés. Un mot de passe oublié passe par l'administrateur.
-- Messages d'Identity en français : `FrenchIdentityErrorDescriber` (même fichier).
+- **Inscription** : pseudo, adresse, mot de passe, **code d'invitation** (en base, voir « Administration » ; majuscules,
+  tirets et espaces ignorés). Rôle Standard. Mot de passe de 12 caractères au moins (`AccountService.PasswordMinLength`),
+  majuscule, minuscule, chiffre, caractère spécial (un ancien compte garde le sien jusqu'au changement).
+- **Pseudo** : 3 à 20 caractères (lettres, accents, chiffres, espaces, tirets, points, tirets bas), unique sans la casse,
+  **définitif** ; c'est le `UserName` d'Identity. L'adresse n'est montrée à personne. Compte d'avant le pseudo (`UserName`
+  = adresse, « @ » interdit dans un pseudo : `AccountService.HasPseudo`) : `Shared/PseudoGuard.razor` le renvoie sur
+  `/Account/Pseudo` ; la 3DS continue de marcher.
+- **Connexion** par l'adresse (`RequireUniqueEmail`), pas par le pseudo, sans double authentification. Contre les essais :
+  5 échecs d'affilée bloquent le compte 5 minutes (`AccountService.FindForLoginAsync`) ; 10 envois par minute et par IP
+  pour la connexion, 10 par heure pour l'inscription (`AccountLimiter`, IP transmise par Caddy) ; les mauvais mots de
+  passe de « Mon compte » (`CheckPasswordAsync`) comptent avec ceux de la connexion ; un seul message pour tout échec, et
+  le mot de passe est vérifié même pour une adresse inconnue (durée de réponse identique).
+- **Mon compte** : Profil, Adresse mail (changée directement, aucun mail envoyé), Mot de passe, Thèmes, Préférences
+  (tris par défaut, voir ci-dessous), Visibilité, Données personnelles (JSON ; suppression du compte et de tout ce qu'il contient).
+- **Retirés** : téléphone, double authentification, connexions externes, mot de passe oublié, confirmation par mail
+  (migration `RemovePhoneAndTwoFactor`). Un mot de passe oublié passe par l'administrateur.
 
 ### Multijoueurs
 
-Menu « Multijoueurs » → **Rechercher un joueur** (`/joueurs`, `Pages/PlayerSearch.razor`) : une partie du pseudo (2
-caractères au moins, majuscules et accents ignorés), parmi les profils trouvables (« Tout le monde » et « Amis seulement »). Profil d'un joueur : `/joueurs/{pseudo}`
-(`Pages/PlayerProfilePage.razor`, `Shared/PlayerHeader.razor`) : un onglet « Profil » (son accueil, avec « Demander en ami »),
-puis un onglet par page visible. Les pages Collection, Parc,
-Inventaire et Living dex ont une seconde adresse (`/joueurs/{pseudo}/collection`...) qui les affiche pour ce joueur en
-**lecture seule** : aucun bouton qui modifie, copie ou télécharge (et les actions refusent un visiteur), ni journal de
-l'inventaire, ni noms de fichiers, ni ID de dresseur (`PokemonCard.HideTrainerId`) ; le porte-monnaie reste visible.
-« Mon compte » → **Visibilité** (colonnes `Audience` et `PublicPages`, migrations `ProfileVisibility` puis `Friends`) :
-« Qui peut voir mes pages ? », trois boutons radio, et les pages cochées une à une (les quatre par défaut) :
-- **Tout le monde** (défaut) : trouvable, pages cochées visibles de tous ;
-- **Amis seulement** : trouvable (on peut lui demander d'être ami), pages cochées visibles de ses amis seulement ; un
-  autre joueur ne voit que son pseudo et « Demander en ami » ;
-- **Personne** : introuvable, aucune page visible, même de ses amis ; ami par son code seulement (l'ancien profil
-  privé devient « Personne »).
+Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : `docs/claude/multijoueurs.md`.
 
-Un profil introuvable ou une page non visible répond comme un joueur inexistant, pour tous, administrateurs compris
-(`Services/PlayerService.cs`) ; le joueur voit ses propres pages comme un ami.
-
-**Amis** (Multijoueurs → Amis, `/amis`, `Pages/Friends.razor`, `Services/FriendService.cs`) : compteur rouge des demandes
-reçues dans le menu (sur « Multijoueurs » replié aussi). Onglet **Amis** : la liste, cherchable par pseudo, avec un lien
-vers chaque profil et « Retirer » (des deux côtés). Onglet **Demandes** (`?onglet=demandes`) : mon **code ami**
-(`ABCD-EFGH`, permanent, régénérable : l'ancien ne marche plus ; colonne `FriendCode`), la saisie du code d'un autre
-joueur (majuscules, tirets et espaces ignorés), les demandes reçues (accepter, refuser) et envoyées (annuler). Une
-demande se fait aussi depuis le profil d'un joueur trouvable (« Demander en ami ») ; le code marche même pour un profil
-« Personne ». Une demande qui croise celle de l'autre est acceptée d'emblée. Tables `FriendRequests` (une par sens et
-par paire) et `Friendships` (deux lignes par amitié) ; supprimées avec le compte.
+- **Rechercher un joueur** (`/joueurs`, `Pages/PlayerSearch.razor`) : 2 caractères du pseudo au moins, casse et accents
+  ignorés, parmi les profils trouvables. Profil : `/joueurs/{pseudo}` (`Pages/PlayerProfilePage.razor`,
+  `Shared/PlayerHeader.razor`). Collection, Parc, Inventaire, Living dex, Complétion et Statistiques ont une seconde adresse
+  (`/joueurs/{pseudo}/collection`...) en **lecture seule** : aucun bouton qui modifie, copie ou télécharge (et les actions
+  refusent un visiteur), ni journal, ni noms de fichiers, ni ID de dresseur (`PokemonCard.HideTrainerId`).
+- **Visibilité** (colonnes `Audience` et `PublicPages`) : Tout le monde (défaut), Amis seulement (trouvable, pages pour
+  les amis), Personne (introuvable, rien de visible, même des amis ; ami par code seulement). Un profil introuvable ou une
+  page non visible répond comme un joueur inexistant, administrateurs compris (`Services/PlayerService.cs`).
+- **Amis** (`/amis`, `Pages/Friends.razor`, `Services/FriendService.cs`) : code ami `ABCD-EFGH` permanent et
+  régénérable (`FriendCode`), demandes reçues et envoyées, compteur rouge dans le menu. Deux demandes croisées sont
+  acceptées d'emblée. Tables `FriendRequests` (une par sens et par paire) et `Friendships` (deux lignes par amitié),
+  supprimées avec le compte.
 
 ### Combats
 
-Combats entre amis, génération par génération : la **3e** d'abord (Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille),
-combat simple, équipes de 6, niveaux réels, sans clause (comme un combat de câble), Pokémon illégaux acceptés mais
-signalés. Égalité (derniers Pokémon K.O. au même tour) : **match nul**, comme en 3e génération.
+`/combats`, `Pages/Battles.razor` ; détails : `docs/claude/combats.md`.
 
-**Moteur** : le simulateur de [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (paquet `@pkmn/sim`, dossier
-`showdown/`), toutes les capacités, talents et objets de la génération exacts. Un processus Node.js par combat
-(`showdown/combat.js`, lancé par `Services/Battle/ShowdownBattle.cs`), qui reçoit les Pokémon par numéros (traduits en
-noms de Showdown ; avec leurs **PP Plus** réels, Showdown en supposerait 3) et les choix des joueurs, et renvoie le
-protocole de Showdown. Le pont **ne transmet que les choix** (« p1 move 2 », « p2 switch 3 ») et la fin forcée
-(abandon, temps écoulé) : jamais `eval`, que le simulateur accepte aussi. Le hasard (graine) est tiré par le serveur.
-Deoxys a la forme du jeu de sa sauvegarde (Rouge Feu : Attaque, Émeraude : Vitesse...).
-
-**Déroulé** : Multijoueurs → **Combats** (`/combats`, `Pages/Battles.razor`), avec un ami, **en direct** (les deux
-connectés), comme les échanges : l'ami, puis une paire de sauvegardes stockées de même génération parmi celles qui ont
-leurs combats (`BattleService.SavePairsAsync`, amitié revérifiée), demande valable 10 minutes (compteur rouge dans le
-menu), un combat à la fois. Chacun choisit ensuite **6 Pokémon** de sa sauvegarde (tous s'il en a moins ; équipe et
-boîtes, sans les œufs), dans l'ordre (le premier entre en combat) ; chaque Pokémon garde sa place et son empreinte,
-revérifiées au départ (`BattleService.TeamAsync`). Les Pokémon **illégaux** sont marqués au choix, et l'adversaire en est
-averti au début du combat. Les sauvegardes ne sont jamais modifiées (combat amical).
-
-Le combat (`Services/Battle/BattleHub.cs`, singleton, en mémoire) : chaque choix est **vérifié par le serveur** sur la
-dernière requête de Showdown avant d'être transmis (capacité qui existe et n'est pas bloquée, Pokémon qui n'est ni au
-combat ni K.O., pas de rappel d'un Pokémon piégé) ; un choix que Showdown refuse quand même (interdiction cachée) est
-signalé et se refait. **60 secondes** pour chaque choix (remplaçant après un K.O. compris), comptées une fois les étapes
-du tour jouées : passé ce délai, le joueur **perd** (`BattleHub.Tick`, chaque seconde). **Fuite** (avec confirmation),
-quitter la page ou fermer l'onglet : défaite. Un simulateur arrêté par erreur annule le combat, sans vainqueur.
-
-**Interface** façon Pokémon Platine, en CSS (`app.css`, « Combats ») : écran du haut (terrain, Pokémon, boîtes de PV avec
-sexe, niveau, statut, Pokéballs de l'équipe adverse, PV exacts des siens, boîte de texte) ; écran du bas (ATTAQUE, SAC
-grisé comme en combat de câble, POKéMON, FUITE ; capacités colorées par type avec leurs PP ; équipe avec PV et statut ;
-compte à rebours). Les étapes défilent une à une (`BattleTiming` : 1,3 s par message) ; le Pokémon qui attaque
-s'avance puis revient, celui qui est touché clignote, un K.O. tombe.
-
-**Sprites** (`Services/Battle/BattleSprites.cs`) : chaque joueur voit le combat avec les sprites de **son** jeu (celui de
-sa sauvegarde), ceux de l'adversaire de face, les siens **de dos**, chromatiques compris : Rubis / Saphir, Émeraude (dos de
-Rubis / Saphir), Rouge Feu / Vert Feuille. Ce sont les dossiers des living dex (`images/livingdex/<jeu>/`), complétés par
-`dos/`, `chromatique/` et `dos/chromatique/` (`outils/images.py combats`). Zarbi garde sa lettre (forme d'aspect
-transmise à Showdown), Morphéo change selon le temps, Deoxys a la forme du jeu **de celui qui regarde** (seule image de
-son jeu ; ses statistiques restent celles du jeu de son dresseur). Un sprite absent : l'image de la collection.
-
-**Résultats** : chaque combat terminé (victoire, défaite, match nul ; abandon et temps écoulé compris, pas un combat
-annulé) est écrit dans la table `BattleRecords` (`Services/Battle/BattleRecorder.cs`, à l'événement
-`BattleHub.Finished` ; migration `BattleRecords`), sans clé étrangère, comme les échanges : victoires, défaites, matchs
-nuls et adversaires différents dans les **Statistiques**.
-
-**Traduction** (`Services/Battle/BattleView.cs`) : chaque joueur voit le combat de son côté, en français, comme dans
-Pokémon Platine (« Pika utilise Surf ! », « Abo ennemi est K.O. ! », « L'Attaque d'Abo ennemi baisse ! »), PV exacts pour
-ses Pokémon, en pourcentage pour ceux de l'adversaire ; noms français de PKHeX retrouvés depuis les noms anglais de
-Showdown (`BattleNames`). Vérifié sur des centaines de combats aléatoires (toute la 3e génération) : aucune ligne du
-protocole sans traduction (test `BattleTests.RandomBattles_EndAndAreFullyTranslated`).
+- 3e génération pour l'instant (Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille) : combat simple, 6 Pokémon, niveaux
+  réels, sans clause ; illégaux acceptés mais signalés ; égalité = match nul. Les sauvegardes ne sont jamais modifiées.
+- **Moteur** : [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (`@pkmn/sim`, dossier `showdown/`), un
+  processus Node.js par combat (`showdown/combat.js`, lancé par `Services/Battle/ShowdownBattle.cs`). Le pont ne
+  transmet que les choix (« p1 move 2 ») et la fin forcée, **jamais `eval`** ; la graine est tirée par le serveur. PP Plus
+  réels transmis. Deoxys a la forme du jeu de sa sauvegarde.
+- **Déroulé** : avec un ami, en direct ; paire de sauvegardes de même génération (`BattleService.SavePairsAsync`, amitié
+  revérifiée), demande valable 10 minutes, un combat à la fois. Équipe de 6 (équipe et boîtes, sans œufs), place et
+  empreinte revérifiées au départ (`BattleService.TeamAsync`). Recherche et pastilles de « Ma collection » au-dessus
+  des Pokémon (sans la pastille « Œuf ») ; un Pokémon déjà dans l'équipe y reste quand un filtre le cache.
+- **Combat** (`Services/Battle/BattleHub.cs`, singleton en mémoire) : chaque choix est vérifié par le serveur sur la
+  dernière requête de Showdown ; 60 secondes par choix (`BattleHub.Tick`), sinon défaite ; abandon (bouton
+  « ABANDONNER », confirmé), départ de la page ou onglet fermé : défaite ; simulateur arrêté par erreur : combat annulé.
+- **Affichage** sur deux écrans, façon 4e génération, dessinés en CSS (`app.css`, « Combats » ; aucune image reprise
+  d'un jeu) : terrain en haut ; en bas, Pokéballs des deux équipes, menu principal (ATTAQUE, ABANDONNER, POKéMON ; pas
+  de bouton SAC : pas de sac en combat de câble), capacités, équipe. Sprites du jeu de chaque joueur
+  (`Services/Battle/BattleSprites.cs`), rythme dans `BattleTiming`, traduction française du protocole
+  (`Services/Battle/BattleView.cs`, `BattleNames` ; test `BattleTests.RandomBattles_EndAndAreFullyTranslated`).
+- **Disposition** des écrans : empilés, côte à côte ou **hybride** (par défaut ; les comptes créés avant le 2026-11-14
+  gardent « Empilés », migration `HybridBattleDefault`). Bouton **Agrandir / Réduire** juste à côté du titre du combat : écrans
+  sans taille maximale, sur toute la largeur du contenu sans dépasser la hauteur de la fenêtre, ligne des sauvegardes et
+  boutons de disposition cachés, menu du site gardé. Les deux sont retenus dans le compte (« Préférences »).
+- **Fiche d'un Pokémon de son équipe** (`Services/Battle/BattleSheet.cs`), pendant son propre choix seulement : un clic
+  sur un Pokémon du menu POKéMON ouvre son écran de sélection (CHANGER, RÉSUMÉ, CAPACITÉS), y compris pour celui qui
+  est au combat et pour un K.O. (CHANGER grisé) ; résumé (types, niveau, talent décrit, objet, PV, statistiques hors
+  modificateurs), capacités (type, PP) et détail d'une capacité (catégorie, puissance, précision, description). Tout
+  est lu dans la dernière requête de Showdown, complétée par le pont (PP de toute l'équipe, PV maximum, types). Le
+  minuteur continue de courir ; le changement de Pokémon reste vérifié par le serveur (`BattleHub.Choose`).
+  Descriptions françaises, puissances et précisions : table générée `BattleDexData.cs` (`outils/combats_textes.py`).
+- **Disposition des écrans** : empilés (d'origine), côte à côte ou **hybride** (le terrain en grand, l'écran du bas
+  réduit à un panneau à sa droite : Pokéballs, puis menu, capacités ou équipe en colonne), au choix du joueur, par les
+  boutons de la page ou dans « Préférences » ; retenue dans le compte (`SortPreferences.Battle`, `PreferencesService.SetBattleLayoutAsync`).
+  Sur un écran étroit, toujours empilés.
+- **Résultats** : table `BattleRecords` (`Services/Battle/BattleRecorder.cs`, événement `BattleHub.Finished`), sans clé
+  étrangère.
 
 ### Échanges
 
-Multijoueurs → **Échanges** (`/echanges`, `Pages/Trades.razor`), avec un ami, **en direct** (les deux connectés), entre
-deux sauvegardes stockées du **même contexte de jeu** de PKHeX (même génération : Noire ↔ Noire 2, Platine ↔ HeartGold ;
-pas Let's Go ↔ Soleil, ni Épée ↔ Diamant Étincelant). Compteur rouge des demandes reçues dans le menu.
+`/echanges`, `Pages/Trades.razor` ; mécanique `Services/TradeService.cs`, déroulé en direct `Services/TradeHub.cs`
+(singleton : un redémarrage annule les échanges en cours).
 
-1. **Demande** : l'ami, puis la paire de sauvegardes (avec la date de la version stockée et un rappel si elle a été
-   modifiée par le site sans être téléchargée : l'échange porte sur la version stockée). Le serveur revérifie l'amitié
-   avant de montrer les sauvegardes de l'autre (`TradeService.SavePairsAsync`) : rien pour un autre compte. Elle vaut 10 minutes, tant que
-   son auteur reste sur la page ; l'ami l'accepte ou la refuse. Un joueur ne fait qu'un échange à la fois.
-2. **Choix**, en direct sur les deux pages : chacun choisit, parmi les Pokémon de l'autre (équipe et boîtes, hors cases
-   verrouillées), **celui qu'il veut recevoir** ; seuls ceux que sa sauvegarde peut recevoir sont proposés
-   (`SaveFile.IsCompatiblePKM` après conversion de format). Les œufs aussi (espèce cachée).
-3. **Validation** : « tu donnes X, tu reçois Y », par les deux ; un refus ramène au choix.
-4. **Échange** (`Services/TradeService.cs`) : chaque Pokémon prend la place de celui qui part, au format de l'autre
-   jeu, avec le joueur comme dresseur actuel et dans son Pokédex (`EntityImportSettings.All`) ; **évolution par échange**
-   selon l'arbre des évolutions du jeu (PKHeX) : simple (Kadabra), objet tenu consommé (Onix + Peau Métal), Carabing ↔
-   Escargaume entre eux ; ni œuf, ni Pierre Stase. Refusé si un Pokémon a changé depuis le choix (empreinte), ou si une
-   équipe ne garderait que des œufs. Les deux sauvegardes sont écrites dans une même transaction (copies de sécurité
-   `echange-avant` / `echange-apres`), leurs Pokémon relus dans la collection, et marquées **modifiées sur le serveur**
-   (`SaveModification.PokemonTraded`, migration `Trades`) : à télécharger avant de les mettre à jour, comme après un retrait.
+- Entre deux sauvegardes stockées **qui échangent sur console** (`TradeFamily`, même règle pour l'échange interne) : même
+  contexte de jeu de PKHeX (Noire ↔ Noire 2, Platine ↔ HeartGold ; pas Let's Go ↔ Soleil, ni Épée ↔ Diamant Étincelant),
+  plus le Time Capsule (Rouge / Bleu / Jaune ↔ Or / Argent / Cristal : espèces et attaques de la 1re génération, sans
+  œuf) ; en 1re et 2e génération, pas de japonais ↔ non japonais (Or / Argent coréens : avec les non japonais de 2e
+  génération seulement). Les conditions de progression du jeu ne sont pas vérifiées. Avec un ami, en direct. Le serveur revérifie l'amitié avant de montrer les
+  sauvegardes de l'autre (`TradeService.SavePairsAsync`). Demande valable 10 minutes, un échange à la fois.
+- Chacun choisit le Pokémon qu'il **reçoit** (équipe et boîtes, hors cases verrouillées, œufs compris), parmi ceux que sa
+  sauvegarde accepte (`SaveFile.IsCompatiblePKM` après conversion) ; validation par les deux. Recherche et pastilles de
+  « Ma collection » au-dessus des Pokémon de l'ami (voir « Filtres de « Ma collection » »).
+- **Échange** : chaque Pokémon prend la place de l'autre, au format de l'autre jeu, avec le joueur comme dresseur actuel
+  (`EntityImportSettings.All`) ; évolution par échange selon PKHeX (simple, objet tenu consommé, Carabing ↔ Escargaume ;
+  ni œuf, ni Pierre Stase). Refusé si un Pokémon a changé depuis le choix (empreinte) ou si une équipe ne garderait que
+  des œufs. Les deux sauvegardes sont écrites dans une même transaction (copies `echange-avant` / `echange-apres`) et
+  marquées modifiées sur le serveur (`SaveModification.PokemonTraded`).
+- Quitter la page pendant un échange demande confirmation (`NavigationLock`) puis l'annule.
+- **Animation d'échange**, façon 4e génération (`Shared/TradeAnimation.razor`, `wwwroot/js/echange.js`), à chaque échange :
+  le Pokémon envoyé part dans sa Poké Ball, l'autre arrive, puis chaque évolution par échange. Entre amis, chacun voit le
+  Pokémon qu'il envoie et celui qu'il reçoit (et son évolution) ; échange interne : les deux évolutions ; GTS : celui qui
+  accepte, tout de suite, le déposant en récupérant le Pokémon reçu. **Musiques de HeartGold / SoulSilver** (échange,
+  évolution, fanfare : `wwwroot/images/sons/`, **hors Git**, `Services/TradeSounds.cs`) ; un fichier absent ne joue rien,
+  sans aucun l'animation est muette. « Passer » et son coupé (retenu par le navigateur). L'échange est déjà
+  écrit : l'animation ne fait que le montrer, l'évolution ne s'annule pas (seule la Pierre Stase l'empêche). Un œuf est
+  dessiné, sans son image (elle révélerait l'espèce).
+- Comptés dans les **statistiques** (voir « Statistiques ») : table `TradeRecords`.
+- **Échange interne** (`/echange-interne?de=3&vers=5`, rubrique « Mes Pokémon », `Pages/InternalTrade.razor`) : entre deux
+  sauvegardes stockées du même compte (deux parties du même jeu comprises, jamais une avec elle-même), en 4 étapes (les
+  sauvegardes, le Pokémon envoyé par la première, celui qu'elle reçoit de la seconde, la confirmation avec les évolutions
+  annoncées), « Retour » à chaque étape. Même mécanique et mêmes refus que l'échange entre amis
+  (`TradeService.ExecuteInternalAsync`, sauvegardes revérifiées : au compte, différentes, compatibles) ; un œuf qui
+  laisserait une équipe sans Pokémon est grisé (`InternalReceivableAsync`). Sauvegarde pas encore téléchargée acceptée
+  (avertissement). Étapes 2 et 3 : recherche et pastilles de « Ma collection », propres à chaque étape et gardées au
+  « Retour ». **Pas compté** dans `TradeRecords` ni dans les statistiques.
 
-**Annuler l'échange** ramène à l'accueil ; **quitter la page** pendant un échange demande confirmation
-(`NavigationLock`), puis l'annule ; l'autre joueur en est prévenu. Le déroulé est en mémoire (`Services/TradeHub.cs`,
-singleton) : un redémarrage du serveur annule les échanges en cours.
+### GTS
 
-**Statistiques** (`/statistiques`, `Pages/Statistics.razor`) : nombre d'échanges réussis et de partenaires différents
-(table `TradeRecords`, et pour les combats victoires, défaites, matchs nuls et adversaires différents, table `BattleRecords`, sans clé étrangère : les statistiques d'un joueur survivent à la suppression du compte de son
-partenaire), base des futurs succès. Le **pseudo** du menu est un menu repliable : « Paramètres du profil » (Mon compte)
-et « Statistiques ».
+`/gts`, `Pages/Gts.razor` ; mécanique `Services/GtsService.cs` (table `GtsPokemon`). Détails : `docs/claude/multijoueurs.md`.
+
+- **Dépôt** : un Pokémon de toute « Ma collection » (stockage interne, ou équipe et boîtes d'une sauvegarde stockée ; ni œuf,
+  ni pension, ni case verrouillée, ni dernier Pokémon hors œufs de l'équipe), choisi avec la recherche, l'origine, le tri et
+  les pastilles de « Ma collection » (sans mode compact ; colonnes au curseur, sinon selon la largeur de la fenêtre, gardées le
+  temps de la page ; `Shared/CollectionPicker.razor`, grisés : `GtsService.PickProblem`).
+  Il quitte aussitôt sa place : sauvegarde modifiée sur le serveur (`SaveModification.GtsChanged`, « un passage par la
+  GTS »), à télécharger. 5 offres en ligne par compte, 30 jours chacune.
+- **Demande** : une espèce que le jeu du Pokémon connaît (`IsPresentInGame`), niveaux « de » / « à », sexe (refusé si
+  l'espèce ne l'a pas), chromatique ou non, refus des illégaux (légalité PKHeX). Les mêmes critères pour **chercher** parmi
+  les offres des autres (les 100 plus récentes), plus « Uniquement si je possède le Pokémon demandé ».
+- **Échange** : comme sur console (`TradeFamily` de la sauvegarde d'où vient le Pokémon, ou de son format au stockage
+  interne). Celui qui accepte donne un Pokémon de sa collection qui répond à la demande (revérifiée sur le Pokémon,
+  légalité recalculée) et reçoit l'offre à sa place (même case, ou stockage interne) ; évolution par échange des deux côtés.
+  L'offre est prise par une mise à jour conditionnelle : deux joueurs en même temps, un seul l'obtient. Compté dans
+  `TradeRecords` (statistiques). Animation d'échange (voir « Échanges ») pour celui qui accepte, et pour le déposant en
+  récupérant le Pokémon (gardée en JSON dans `GtsPokemon.TradeShow`).
+- **Boîte de réception** : le Pokémon reçu par le déposant, et celui d'une offre expirée (`GtsExpiry`, toutes les heures,
+  et à l'ouverture de la page), annulée ou retirée avec sa sauvegarde (suppression : la confirmation l'annonce). **Aucune
+  sauvegarde n'est écrite sans son joueur** : il récupère le Pokémon dans le stockage interne ou dans une sauvegarde (première
+  case libre des boîtes, règles d'un retrait du stockage interne : `SaveSession.PrepareFor`). Pastille du menu en direct
+  (`GtsEvents`).
+- Un Pokémon de la GTS (offre ou boîte) **reste au compte** : il compte dans la taille de la collection et dans les doublons
+  (une vieille copie de sa sauvegarde est refusée, « (GTS) »).
+- Pseudo du déposant et de celui qui accepte affichés, sauf profil « Personne » (« un dresseur »).
+
+### Tris par défaut (« Mon compte » → « Préférences »)
+
+`Account/Pages/Manage/Preferences.razor`, `Services/SortPreferences.cs` (`SiteSorts`, `SortPreferences`,
+`PreferencesService`) ; détails : `docs/claude/comptes.md`.
+
+- Un tri par défaut par onglet de l'inventaire, celui de « Ma collection » et ceux des vues générales des living dex, des
+  complétions et des rubans, gardés dans le compte (colonne JSON `SortPreferences`, migration `SortPreferences` ; null ou illisible = tris d'origine ;
+  seuls les tris différents de l'origine y sont écrits).
+- **Priorité** : l'adresse (`?tri=`, `?ordre=`), sinon le compte. Un tri choisi sur la page s'écrit dans l'adresse, sauf
+  s'il est celui du compte ; sinon en entier (`?tri=arrivee` quand le compte trie par nom). L'inventaire ne retient plus
+  ses tris dans le navigateur ; un tri changé dans un onglet est gardé pendant la visite.
+- Chez un autre joueur, ce sont les tris **du visiteur** ; ceux du propriétaire ne sont jamais lus.
+- Formulaire et adresse lus par les mêmes fonctions (`SiteSorts.*FromQuery`) : une valeur inconnue donne le tri d'origine.
+- La même page et la même colonne gardent la **disposition des écrans d'un combat** (`"combat":"empile"` ou `"cote"` ;
+  absente : hybride) et leur **mode agrandi** (`"combatAgrandi":true`), voir « Combats », dans leur propre formulaire :
+  enregistrer ou rétablir les tris ne les change pas, et inversement. De même pour l'**affichage des étapes d'une
+  complétion** (`"completionVue":"grille"` ; absent : liste), aussi choisi par le bouton « Liste / Grille » de la page,
+  qui l'enregistre dans le compte qui regarde (voir « Complétion (100 %) »).
 
 ### Thèmes
 
-« Mon compte » → **Thèmes** (`Account/Pages/Manage/Themes.razor`) : une carte par thème, avec une miniature dessinée en
-CSS ; un clic l'applique (la page est rechargée). Le choix est gardé dans le compte (colonne `Theme`, migration
-`UserTheme` ; null = défaut), donc sur tous les appareils. Liste et défaut : `Services/SiteThemes.cs`. Le serveur pose la
-clé du thème du compte sur la page dès le premier rendu (`<html data-theme="pokedex">`, `App.razor`).
+`Account/Pages/Manage/Themes.razor`, liste et défaut dans `Services/SiteThemes.cs` ; détails : `docs/claude/comptes.md`.
 
-**Thème par défaut : Ardoise** (`SiteThemes.Default`), pour les visiteurs sans compte et les comptes qui n'ont rien
-choisi. Le défaut n'est jamais enregistré (colonne à null) : un compte qui n'a rien choisi suit un changement de défaut.
-Conséquence au passage de Classique à Ardoise : les comptes restés sur Classique (enregistré à null, puisque c'était le
-défaut) sont passés en Ardoise ; Classique, choisi de nouveau, est maintenant enregistré.
-
-- **Classique** : le thème d'origine, qui n'a aucun style à lui.
-
-- **Pokédex** (`wwwroot/themes/pokedex.css`, tout sous `[data-theme="pokedex"]`) : le Pokédex rouge, **sobre** (un
-  premier essai inspiré du sac de Rubis Oméga / Saphir Alpha a été jugé trop chargé). Menu latéral comme le boîtier
-  (rouge adouci `#c2323d` : celui du Pokédex était trop vif ; charnière plus sombre, lentille bleue et trois voyants devant
-  le nom du site, lien actif en petit écran clair ; barre du haut de la page dans la même teinte),
-  contenus dans des « écrans » gris-bleu au cadre ardoise (cartes, tableaux, boîtes du Transfert, grilles de Pokémon,
-  cartes des living dex), dialogues et fiches de Pokémon dans un cadre rouge ; le rouge pour les accents (bouton
-  principal, onglet choisi, objet ou Pokémon choisi, barres de progression), liens en bleu lentille, fond blanc. **Tout
-  le site** : le menu, la barre du haut et le contenu des pages (`main`, dialogues compris). Le parc garde son décor.
-  Les styles du menu sont isolés par composant (`NavMenu.razor.css`, chargés après) : ses sélecteurs commencent par
-  `html` pour passer devant.
-- **Ardoise** (`wwwroot/themes/ardoise.css`) : sobre, comme un outil de gestion. Le seul thème qui a **son propre cadre**
-  (`Components/Layout/ArdoiseLayout.razor`, choisi par `MainLayout` d'après la clé du thème, transmise par `App.razor` →
-  `Routes.razor` en valeur en cascade `SiteTheme`) :
-  - menu latéral ardoise (`#232d3b`), lien de la page affichée marqué d'orange (`#e8751a`) ; rubriques Sauvegardes et
-    Multijoueurs ouvertes d'un clic, et d'elles-mêmes sur l'une de leurs pages ;
-  - bouton « Replier le menu » : colonne d'icônes (nom en bulle), pages d'une rubrique affichées à côté au survol.
-    Choix gardé dans le cookie `menu=replie`, que `App.razor` relit pour poser `data-menu="replie"` sur la page dès le
-    premier rendu (pas de menu qui se replie sous les yeux) ;
-  - barre du haut blanche : fil d'Ariane (`Components/Layout/Breadcrumbs.cs`, le chemin de la page dans le menu, déduit
-    de son adresse : « Multijoueurs › Rechercher un joueur › Sacha › Parc »), porte-monnaie (lien vers « Inventaire »),
-    menu du compte en haut à droite (pastille à l'initiale du pseudo : paramètres du profil, statistiques,
-    déconnexion) ; sans compte, « Inscription » et « Connexion » ;
-  - téléphone : le menu s'ouvre par-dessus la page (bouton de la barre du haut), le fil d'Ariane ne garde que la page
-    affichée ;
-  - tout marche sans interactivité (pages du compte en rendu statique) : clics gérés par `wwwroot/js/app.js`, menu du
-    compte en élément `details`.
-
-  Contenu des pages (sous `[data-theme="ardoise"]`) : fond gris clair, cartes et tableaux en blocs blancs à bordure
-  fine, onglets soulignés d'orange, bouton principal orange, autres boutons gris, grilles de Pokémon gris clair à la
-  place du bleu ciel ; dialogues et fiches de Pokémon surélevés, liseré orange. Le parc garde son décor. Compteurs du
-  menu (porte-monnaie, demandes d'ami, d'échange et de combat) : `Components/Layout/SiteMenuBase.cs`, communs aux deux
-  menus.
-
-  **En-têtes de page et blocs** (tous les thèmes) : chaque page commence par `Shared/PageHeader.razor` (titre h1, nombre
-  en pastille, description, boutons d'action à droite, icône du menu ; lien de retour), ses parties titrées sont des
-  `Shared/Block.razor` (titre h2, actions à droite ; `Flush` : liste collée aux bords). Classique et Pokédex : sans cadre,
-  comme les titres d'avant (styles de base dans `app.css`). Ardoise : l'en-tête est un bandeau blanc avec l'icône de la
-  page dans un carré orange (sur les pages d'un autre joueur, son en-tête `PlayerHeader` porte le bandeau et les onglets,
-  le titre de la page dessous reste simple) ; les blocs sont des panneaux blancs à en-tête. Une nouvelle page : un
-  `PageHeader` en tête, des `Block` pour ses parties.
-- `app.css` fixe certaines couleurs en dur (`.btn-primary`, `.btn-link`, anneau bleu du focus) : un thème doit les
-  écraser explicitement, pas seulement changer les variables de Bootstrap.
+- Choix gardé dans le compte (colonne `Theme`, null = défaut, jamais enregistré : un compte qui n'a rien choisi suit un
+  changement de défaut). Le serveur pose la clé sur la page dès le premier rendu (`<html data-theme="...">`, `App.razor`).
+- **Ardoise** (défaut, `wwwroot/themes/ardoise.css`) : le seul thème à cadre propre (`Components/Layout/ArdoiseLayout.razor`,
+  choisi par `MainLayout` d'après la valeur en cascade `SiteTheme`) : menu repliable (cookie `menu=replie`, relu par
+  `App.razor`), fil d'Ariane (`Components/Layout/Breadcrumbs.cs`), menu du compte en `details` dans la barre du haut
+  **et** en bas du menu latéral (rubrique au pseudo ; sans compte : Inscription, Connexion) ; tout marche sans
+  interactivité (clics gérés par `wwwroot/js/app.js`). **Pokédex** (`wwwroot/themes/pokedex.css`, tout sous
+  `[data-theme="pokedex"]`) ; **Classique** (aucun style à lui).
+- Les styles du menu sont isolés par composant (`NavMenu.razor.css`) : les sélecteurs d'un thème commencent par `html`
+  pour passer devant. `app.css` fixe certaines couleurs en dur (`.btn-primary`, `.btn-link`, anneau du focus) : un thème
+  doit les écraser explicitement.
+- **Menu en rubriques**, le même dans les deux menus (`NavMenu`, `ArdoiseLayout`) : Accueil ; Mes Pokémon (Ma collection,
+  Parc, Dépôt / Retrait, Échange interne) ; Inventaire (Banque d'objets, Transfert d'inventaire) ; Défis (Living dex) ;
+  Multijoueurs (Rechercher un joueur, Amis, Échange, Combat) ; Sauvegardes (Mes sauvegardes, Synchronisation 3DS) ;
+  Administration (administrateurs seulement). Chaque rubrique est fermée et s'ouvre d'elle-même sur l'une de ses pages
+  (`SiteMenuBase`, `pokemonOpen`…), puis d'un clic. Le nom d'une page est le même dans le menu, son titre et le fil
+  d'Ariane ; les adresses n'ont pas changé (`/transfert`, `/inventaire`, `/livingdex`, `/echanges`, `/combats`).
+- Compteurs du menu (demandes reçues) : `Components/Layout/SiteMenuBase.cs`, communs aux deux menus. Le porte-monnaie
+  est dans la barre du haut, dans tous les thèmes (`Components/Layout/WalletLink.razor`).
+- **Une nouvelle page** : un `Shared/PageHeader.razor` en tête (titre h1, nombre, aide, actions, icône), des
+  `Shared/Block.razor` pour ses parties (titre h2 ; `Flush` : liste collée aux bords).
+- **L'aide d'une page ou d'un bloc** va dans une infobulle (paramètre `Help` : icône « ? » à côté du titre, la bulle
+  s'ouvre d'un clic et se referme d'un clic à côté ou avec Échap), pas en texte sous le titre, en courts paragraphes
+  (`<p>`) et listes (`<ul>`, `<ol>` pour des étapes) plutôt qu'en un bloc ; une consigne courte
+  peut rester affichée, avec son détail dans un `Shared/HelpTip.razor` à côté.
 
 ### Sécurité
 
@@ -296,14 +346,14 @@ défaut) sont passés en Ardoise ; Classique, choisi de nouveau, est maintenant 
   nôtre la contient. En `Development` seulement, les scripts de rechargement de Visual Studio (`localhost:*`) sont permis.
 - **Aucun script écrit dans la page** : la CSP ne l'exécuterait pas. Les scripts du site sont dans `wwwroot/js` :
   `app.js` (chargé dans le `<head>` d'`App.razor` : images de remplacement, téléchargement, largeur d'écran, grille de
-  l'inventaire, glisser-déposer, fermeture du menu sur téléphone) et `parc.js`. Pas de `onerror` / `onclick` dans le
+  l'inventaire, glisser-déposer, fermeture du menu sur téléphone), `parc.js` et `transfert-objets.js` (modules chargés
+  par leur page). Pas de `onerror` / `onclick` dans le
   HTML : une image absente prend `data-remplacement="images/…/inconnu.png"` (ou `data-cacher-si-absente`), un seul
   écouteur d'`app.js` s'en charge. Pas d'`<ImportMap />` (script écrit dans la page) : `parc.js` est chargé par son
   chemin, et charge Phaser par le sien (`wwwroot/lib/phaser`, servi par le site). Test
   `SecurityHeadersTests.Pages_HaveNoInlineScript`.
-- **Fichiers envoyés** : 8 Mo au plus depuis le navigateur (« Mes sauvegardes », « Transfert » :
-  `StoredSaveService.ReadUploadAsync`), 4 Mo depuis la 3DS (`SyncEndpoints.MaxSaveBytes`) ; les sauvegardes Pokémon
-  font au plus quelques Mo.
+- **Fichiers envoyés** : 8 Mo au plus depuis le navigateur (« Mes sauvegardes », « Dépôt / Retrait » :
+  `StoredSaveService.ReadUploadAsync`), 4 Mo depuis la 3DS (`SyncEndpoints.MaxSaveBytes`).
 - **Ce que le navigateur envoie peut être trafiqué** (valeurs d'événements, arguments des méthodes appelées par
   JavaScript) : les services revérifient le compte, l'amitié (`TradeService.SavePairsAsync`) et la visibilité
   (`ParkService.GetMemberAsync`, `PlayerService.FindAsync`).
@@ -311,111 +361,80 @@ défaut) sont passés en Ardoise ; Classique, choisi de nouveau, est maintenant 
 ### Administration
 
 Rôles Identity **exclusifs** (`Data/SiteSetting.cs`, `SiteRoles`, créés avec la base, identifiants fixes) : **Standard**
-pour tous (donné à l'inscription, et aux comptes existants par la migration `RolesAndInviteCode`), **Administrateur** pour
-ceux qui gèrent le site, avec tout ce que peut un Standard en plus. Page « Administration » (`/administration`,
-`Components/Pages/Admin.razor`, lien du menu pour les seuls administrateurs ; un autre compte y lit « Accès refusé ») :
+pour tous, **Administrateur** en plus pour ceux qui gèrent le site. Page `/administration` (`Components/Pages/Admin.razor`,
+lien du menu pour les seuls administrateurs ; les autres lisent « Accès refusé ») :
 
-- **Code d'invitation** : affiché, et **régénéré** au hasard (`ABCD-EFGH`, sans caractères ambigus, après confirmation) ;
-  l'ancien ne marche plus aussitôt. Gardé en base (table `SiteSettings`) : au premier démarrage, il reprend
-  `Bank:InviteCode` (`INVITE_CODE` du `.env`) ou est tiré au hasard ; ensuite la configuration n'est plus lue.
-- **Comptes** : pseudo et rôle (jamais l'adresse ; « Pseudo pas encore choisi » pour un ancien compte), bouton pour
-  donner ou retirer le rôle administrateur. On ne se le retire pas soi-même, et il en reste toujours au moins un
-  (vérifié dans la requête même du retrait). Un changement de rôle renouvelle le tampon de sécurité du compte : il est
-  déconnecté à la prochaine vérification (30 minutes au plus) et retrouve ses droits en se reconnectant. Chaque action
-  revérifie le rôle en base (`AdminService`) : le cookie peut garder un rôle retiré d'ici là.
-- **Premier administrateur** : le compte du pseudo `Bank:AdminPseudo` (`ADMIN_PSEUDO` du `.env`), **tant que le site n'en
-  a aucun** : au démarrage s'il existe déjà, sinon à son inscription ou quand il choisit son pseudo. Une fois qu'il y a
-  un administrateur, le réglage est ignoré (un rôle retiré ne revient pas au redémarrage).
-- **Mode debug**, pour tester le site avec son propre compte (`Services/DebugService.cs`) : bouton « Activer /
-  Désactiver ». Gardé **en mémoire** (`DebugMode`, rien en base) : il vaut pour tous les onglets du compte jusqu'à sa
-  **déconnexion** ou au redémarrage du serveur, et ne change rien pour les autres comptes. Chaque action revérifie en
-  base que le compte est encore administrateur (sinon le mode est coupé). Il ajoute :
-  - dans « Inventaire », sous le porte-monnaie : **+10 000, +100 000 et +1 000 000 ₽** (montants fixes, tout autre
-    refusé), crédités comme un retrait et écrits au journal (« Argent ajouté (mode debug) ») ;
-  - dans « Parc », sous le titre : **« + taille »** et **« − taille »**, gratuits et hors journal, de 20 à 80 Pokémon.
-    Réduit, le parc garde ses premiers arrivés : les derniers retournent dans la collection (le message dit combien).
-- L'administrateur ne change pas les mots de passe (pas encore d'outil pour un mot de passe oublié).
+- **Code d'invitation** (`ABCD-EFGH`, sans caractères ambigus) : régénéré après confirmation, l'ancien ne marche plus.
+  Table `SiteSettings` : au premier démarrage, il reprend `Bank:InviteCode` (`INVITE_CODE` du `.env`) ou est tiré au
+  hasard ; ensuite la configuration n'est plus lue.
+- **Comptes** : pseudo et rôle (jamais l'adresse), rôle administrateur donné ou retiré. Pas sur soi-même, et il en reste
+  toujours un (vérifié dans la requête même du retrait). Un changement de rôle renouvelle le tampon de sécurité
+  (déconnexion sous 30 minutes) ; chaque action revérifie le rôle en base (`AdminService`).
+- **Premier administrateur** : le pseudo `Bank:AdminPseudo` (`ADMIN_PSEUDO` du `.env`), **tant que le site n'en a aucun**
+  (au démarrage, à l'inscription ou au choix du pseudo) ; ignoré ensuite.
+- **Mode debug** (`Services/DebugService.cs`) : **en mémoire** (`DebugMode`), pour le compte, jusqu'à sa déconnexion ou au
+  redémarrage ; chaque action revérifie en base que le compte est administrateur. Inventaire : +10 000, +100 000 et
+  +1 000 000 ₽ (montants fixes, tout autre refusé, écrits au journal) ; Parc : « + taille » / « − taille » (gratuits, hors
+  journal ; réduit, le parc rend ses derniers arrivés à la collection), « Habitats (debug) », « Attaquer (debug) ».
 
 ### Sauvegardes stockées (consultation)
 
-Dans « Mes sauvegardes », l'utilisateur peut aussi **stocker** une sauvegarde complète : le fichier reste sur le serveur
-et tous ses Pokémon (équipe, boîtes, pension, Boîte Combat…) apparaissent dans la collection **en lecture seule**
-(ni retrait vers un jeu, ni téléchargement `.pkX`). « Mettre à jour » remplace le fichier et tous ses Pokémon ;
-« Supprimer » propose de **télécharger et supprimer** (le fichier est d'abord rendu à l'utilisateur) ou de **supprimer sans
-télécharger**, après une seconde confirmation. Ce second choix est grisé (et refusé par le serveur,
-`StoredSaveService.DeleteWithoutDownloadAsync`) tant qu'une version modifiée sur le serveur (retrait d'argent, transfert
-d'objets) n'a pas été téléchargée : ces changements, absents du jeu, seraient perdus. Une copie est gardée dans
-`Data/backups/` à chaque fois, même sans téléchargement (non mentionnée au joueur : elle ne lui est pas accessible).
+`Pages/Saves.razor`, `Services/StoredSaveService.cs`. Les Pokémon d'une sauvegarde stockée (équipe, boîtes, pension...)
+sont dans la collection en **lecture seule** (ni retrait vers un jeu, ni téléchargement `.pkX`).
 
-Partout où une sauvegarde stockée est nommée (« Jeu — Dresseur »), son **nom de fichier** l'accompagne, pour distinguer
-deux parties du même jeu : en petit gris en dessous dans les fenêtres de choix (argent, objets), le détail d'un objet, la
-fiche d'un Pokémon et le journal ; à la suite (« Noire — Ghal · noir.sav ») dans les listes déroulantes et l'infobulle
-d'un Pokémon, qui n'ont qu'une ligne. Le journal garde le nom qu'avait le fichier au moment de l'opération, dans le même
-texte que « Jeu — Dresseur » après un retour à la ligne (`WalletOperation.SaveLabelOf`) ; les opérations plus anciennes ont
-reçu le nom actuel du fichier (migration `JournalFileNames`), sauf celles dont la sauvegarde avait été supprimée.
-
-- Une même partie ne peut être stockée **qu'une fois sur tout le serveur**, tous comptes confondus. Elle est reconnue
-  par génération + jeu + ID dresseur / ID secret + nom du dresseur (`SaveIdentity`) ; c'est dissuasif, pas infaillible
-  (PKHeX permet de modifier ces valeurs). Les jeux de 1re et 2e génération n'ont pas d'ID secret.
-- Tant qu'elle est stockée, la sauvegarde est **refusée dans « Transfert »** (au chargement et à la validation).
-- Une mise à jour avec moins de temps de jeu que la version stockée demande confirmation (ancienne copie ?).
+- **Une partie stockée une seule fois sur tout le serveur**, tous comptes confondus : génération + jeu + ID dresseur / ID
+  secret + nom du dresseur (`SaveIdentity`) ; dissuasif, pas infaillible. Pas d'ID secret en 1re et 2e génération.
+- Tant qu'elle est stockée, la sauvegarde est **refusée dans « Dépôt / Retrait »** (au chargement et à la validation).
+- Mise à jour avec moins de temps de jeu : confirmation demandée.
+- **Suppression** : « télécharger et supprimer » ou « supprimer sans télécharger », ce second choix refusé par le serveur
+  (`StoredSaveService.DeleteWithoutDownloadAsync`) tant qu'une version modifiée sur le serveur n'a pas été téléchargée.
+  Une copie est gardée dans `Data/backups/` à chaque fois (non mentionnée au joueur).
+- **Nom de fichier** : il accompagne « Jeu — Dresseur » partout (en dessous, ou « Noire — Ghal · noir.sav » sur une
+  ligne). Le journal garde le nom du moment de l'opération (`WalletOperation.SaveLabelOf` ; migration `JournalFileNames`).
+- **Rouge Feu ou Vert Feuille** : même format, PKHeX répond toujours Rouge Feu. `SaveVersion` (à chaque lecture, rien
+  d'écrit dans le fichier) nomme la sauvegarde Vert Feuille si les Pokémon du dresseur (même nom, ID et ID secret) en
+  viennent en majorité ; son Deoxys prend alors la forme Défense en combat. `SaveIdentity` garde Rouge Feu pour les deux,
+  pour que l'empreinte ne change pas. Les anciennes sont renommées au démarrage (`StoredSaveService.FillGameNamesAsync`).
+- **Modifiée sur le serveur** (règle anti-copie, `SaveModification`, écrite par `InventoryService.SaveServerChangeAsync`) :
+  après un retrait d'argent ou d'objets, un dépôt d'objets ou un échange, la mise à jour est bloquée tant que la version
+  modifiée n'a pas été téléchargée, puis n'accepte qu'un fichier avec **plus** de temps de jeu, ou à temps égal le fichier
+  exact rendu par le serveur (empreinte SHA-256 ; en Game Boy, la même mémoire du jeu, les 32 premiers Ko :
+  `StoredSaveService.SameGameBoyMemory`). L'ancienne sauvegarde du jeu est refusée. Dissuasif, pas infaillible.
 
 ### Doublons (vieille copie d'une sauvegarde)
 
-Un Pokémon déposé dans le stockage interne peut réapparaître dans une **vieille copie** de sa sauvegarde, celle d'avant le
-dépôt (exemple vécu : le Pikachu Rockeur de Rubis Oméga, déposé le 13/10, retrouvé dans la sauvegarde stockée le 16/10).
-Chaque Pokémon a une **empreinte** (`BankPokemon.Fingerprint`, `Services/PokemonFingerprint.cs`), sans l'espèce, qui
-change à l'évolution :
+Un Pokémon déposé peut réapparaître dans une **vieille copie** de sa sauvegarde. Chaque Pokémon a une **empreinte**
+(`BankPokemon.Fingerprint`, `Services/PokemonFingerprint.cs`), sans l'espèce, qui ne change pas à l'évolution :
 
-- 3e génération et suivantes : PID + ID dresseur complet (ID + ID secret), qui ne changent jamais, même d'un jeu à l'autre ;
+- 3e génération et suivantes : PID + ID dresseur complet (ID + ID secret) ;
 - 1re et 2e génération (sans PID) : IV + ID dresseur + nom du dresseur + famille d'évolution (environ 1 risque sur 65 000
   de confondre deux Pokémon du même dresseur et de la même famille).
 
 Une sauvegarde dont un Pokémon est déjà **ailleurs dans le compte** (stockage interne ou autre sauvegarde stockée ;
-**jamais entre comptes**) est **refusée** : « Sauvegarde refusée : 1 Pokémon de cette sauvegarde est déjà ailleurs dans ton
-compte : Pikachu N.20 (stockage interne). C'est sans doute une vieille copie : envoie la sauvegarde actuelle de ton jeu. »
-(5 noms au plus). Il faut envoyer la sauvegarde actuelle du jeu, qui n'a plus le Pokémon déposé.
-
-- **« Mes sauvegardes »** (ajout et mise à jour) et la **3DS** (`raison` : `Duplicate`). Une mise à jour ne se compare
-  pas à sa propre version précédente ; le contrôle passe avant la question du temps de jeu.
-- **« Transfert »** : refus au chargement. La validation refuse aussi le dépôt d'un Pokémon déjà au stockage interne
-  (déposé entre-temps depuis un autre onglet), avant les retraits : retirer l'original et déposer sa copie le dupliquerait.
-  Un Pokémon retiré du stockage interne vers un jeu peut y revenir plus tard (il n'y est plus).
-- Revers acceptés : deux Pokémon d'événement à PID fixe (même distribution) ou d'échange en jeu ont la même empreinte
-  sans être des copies, et un Pokémon échangé entre deux de tes jeux bloque le second tant que le premier est stocké dans
-  une version qui l'a encore (mettre à jour le premier d'abord).
-
-L'empreinte est calculée à l'enregistrement, et au démarrage pour les Pokémon plus anciens (migration `PokemonFingerprints`).
+**jamais entre comptes**) est **refusée**, avec 5 noms au plus dans le message : « Mes sauvegardes » (ajout et mise à
+jour ; une mise à jour ne se compare pas à sa version précédente, et le contrôle passe avant la question du temps de jeu),
+la 3DS (`raison` : `Duplicate`) et « Dépôt / Retrait » (au chargement ; la validation refuse aussi le dépôt d'un Pokémon déjà
+au stockage interne, avant les retraits). Revers acceptés : Pokémon d'événement à PID fixe ou d'échange en jeu, et un
+Pokémon échangé en jeu entre deux parties du même compte (l'« Échange interne » le fait sans ce souci : le Pokémon passe
+d'une sauvegarde à l'autre sur le serveur). Empreinte calculée à l'enregistrement, et au démarrage pour les plus
+anciens (migration `PokemonFingerprints`). Détails : `docs/claude/collection.md`.
 
 ### Synchronisation depuis une 3DS
 
-Le homebrew **PokeBank Sync** (dépôt à part, `3DS_Saves_Synchronization`) envoie les sauvegardes Pokémon d'une 3DS
-vers les sauvegardes stockées. Page « Synchronisation 3DS » (`/sauvegardes/3ds`), dans le menu repliable « Sauvegardes »
-avec « Mes sauvegardes » (ouvert de lui-même sur l'une des deux pages) :
+Le homebrew **PokeBank Sync** (dépôt à part, `3DS_Saves_Synchronization`) envoie les sauvegardes d'une 3DS vers les
+sauvegardes stockées et les récupère. Page `/sauvegardes/3ds` (`Pages/Sync3ds.razor`), service `SyncService`.
 
-- **Relier une 3DS** affiche un code de 8 caractères (`ABCD-EFGH`, sans 0/O ni 1/I/L), valable 10 minutes et une seule
-  fois ; en demander un autre ou « Annuler » le remplace. Tapé sur la console (majuscules, tiret et espaces facultatifs), il
-  est échangé contre un **jeton longue durée** gardé sur sa carte SD ; le site n'en garde que l'empreinte SHA-256. La page
-  guette la liaison (relecture toutes les 3 secondes tant que le code est affiché) et l'annonce d'elle-même.
-- La liste des consoles reliées montre leur nom (envoyé par la console), la date de liaison et la dernière connexion.
-  **Retirer** une console rend son jeton inutilisable ; les sauvegardes déjà envoyées restent.
-- Un **envoi** ajoute une partie nouvelle, ou met à jour la partie déjà stockée **par ce compte**, avec toutes les règles
-  ci-dessus. Un fichier identique à la version stockée est ignoré (« déjà à jour » ; en Game Boy, la même mémoire du jeu suffit et le
-  fichier du site est gardé) ; sous un autre nom (la console a reconnu la
-  version exacte du jeu), seul le nom de la sauvegarde stockée change. Rien n'est jamais forcé : moins de
-  temps de jeu, partie modifiée sur le serveur et pas encore téléchargée, partie d'un autre compte, collection pleine sont
-  refusés avec le message du site, que la console affiche. Le nom de fichier envoyé est nettoyé (sans dossier, 100
-  caractères au plus). L'emplacement du fichier sur la console (`cle`) est noté à chaque envoi réussi (table
-  `SyncSaveLocations`, une sauvegarde stockée par fichier et par console ; supprimé avec la console ou la sauvegarde).
-- **Récupération** (« Récupérer » sur la console) : la console liste les sauvegardes stockées du compte (empreinte du
-  fichier actuel, temps de jeu, modifiée sur le serveur, console d'origine et jeu précis pour y trouver une ROM, emplacements
-  connus sur cette console). Avant de remplacer sa sauvegarde, elle la fait **comparer** par le site (PKHeX) :
-  refusé si ce n'est pas la même partie (autre dresseur) ou si celle de la console a **plus de temps de jeu** (sa
-  progression serait perdue) ; identique (en Game Boy : même mémoire du jeu, les 32 premiers Ko, une sauvegarde d'émulateur ayant quelques octets
-  de plus, `StoredSaveService.SameGameBoyMemory`) : « à jour » ; même temps de jeu mais contenu différent (retrait d'argent,
-  transfert d'objets du site) ou moins de temps de jeu : récupérable. Le téléchargement par la console vaut
-  « Télécharger » (lève le blocage de « Mettre à jour ») et note l'emplacement où elle l'écrit. Cas sans issue pour
-  l'instant : la console a joué **après** une modification du site sans la récupérer (envoi refusé, récupération aussi).
+- **Liaison** : code de 8 caractères (`ABCD-EFGH`, sans 0/O ni 1/I/L), 10 minutes, une seule fois, échangé contre un
+  **jeton longue durée** gardé sur la carte SD ; le site n'en garde que l'empreinte SHA-256. La page relit toutes les 3
+  secondes tant que le code est affiché. **Retirer** une console rend son jeton inutilisable.
+- **Envoi** : ajoute une partie, ou met à jour celle **de ce compte**, avec toutes les règles des sauvegardes stockées.
+  Fichier identique ignoré (`inchangee` ; en Game Boy, même mémoire du jeu) ; sous un autre nom, seul le nom change. Rien
+  n'est jamais forcé. Nom de fichier nettoyé (sans dossier, 100 caractères au plus). Emplacement sur la console (`cle`)
+  noté à chaque envoi réussi (table `SyncSaveLocations`).
+- **Récupération** : la console fait **comparer** sa sauvegarde par le site avant de la remplacer : refusé si autre
+  partie ou plus de temps de jeu sur la console ; identique : « à jour » ; sinon récupérable. Le téléchargement par la
+  console vaut « Télécharger » (lève le blocage de « Mettre à jour »). Cas sans issue : la console a joué après une
+  modification du site sans la récupérer.
 
 API (JSON, messages en français prêts à afficher ; `MonsutaPotaru/Api/SyncEndpoints.cs`) :
 
@@ -432,593 +451,358 @@ Toutes sauf la liaison demandent `Authorization: Bearer <jeton>` (401 sinon, jet
 
 ### Filtres de « Ma collection »
 
-Sous la recherche, des **pastilles** (« Type : Feu, Eau ▾ × ») : un clic ouvre les valeurs à cocher, la
-croix retire le filtre, « + Filtre » en ajoute un, « Tout effacer » les retire tous. Filtres : **génération** (d'après le
-numéro de Pokédex : 1re = Bulbizarre à Mew...), **type** (types des jeux
-récents de l'espèce et de sa forme : Mélofée est Fée même venu de Rouge/Bleu), **sexe** (mâle, femelle, asexué), **nature**,
-**talent** (seuls ceux présents dans la collection sont proposés, avec une recherche), **IV** (minimum de 0 à 31 pour
-chaque statistique, « IV : PV ≥ 31, Vit ≥ 25 »), **niveau** (« de » et « à », chacun facultatif, bornes comprises :
-« Niveau : ≤ 29 », « ≥ 51 », « 20 à 40 » ; inversées si « de » dépasse « à »), **forme** (standard, Alola, Galar, Hisui,
-Paldea, autre forme), **Méga-Évolution** (tient sa Méga-Gemme ou son orbe, comme pour l'image), **chromatique**,
-**surnom** (nom affiché différent du nom de l'espèce : un surnom identique à l'espèce ne compte pas) et **œuf** (oui / non).
-Les mêmes pastilles servent dans la fenêtre de choix du « Parc ». Les
-valeurs d'un même filtre s'additionnent (Feu ou Eau), les filtres se cumulent (Feu et femelle) ; un filtre sans valeur
-(« Tous ») ne filtre rien. Les œufs sont exclus dès qu'un autre filtre qu'« Œuf » est actif, pour ne pas révéler leur espèce.
-Les filtres sont gardés dans l'adresse (`?generation=1,2&type=feu,eau&sexe=f&iv=pv31,vit25&niveau=20-40&surnom=oui&mega=oui`,
-`niveau=-29` : 29 et moins, `niveau=51-` : 51 et plus), avec la recherche, l'origine et le tri.
+Pastilles de filtres (`Pages/Collection.razor`), aussi dans la fenêtre de choix du « Parc » : génération (d'après le
+numéro de Pokédex), type (types récents de l'espèce et de la forme), sexe, nature, talent (ceux de la collection),
+IV (minimum par statistique), niveau (« de » / « à », bornes comprises, inversées si besoin), forme, Méga-Évolution
+(gemme ou orbe tenus), chromatique, surnom (différent du nom de l'espèce) et œuf. Valeurs d'un filtre en « ou », filtres
+en « et » ; les œufs sont exclus dès qu'un autre filtre qu'« Œuf » est actif (leur espèce reste cachée). Tout est gardé
+dans l'adresse avec la recherche, l'origine et le tri
+(`?generation=1,2&type=feu,eau&sexe=f&iv=pv31,vit25&niveau=20-40&surnom=oui&mega=oui`, `niveau=-29`, `niveau=51-`).
 
-En 1re et 2e génération, les IV (0 à 15) sont ramenés à l'échelle actuelle (× 2 + 1 : 15 → 31 ; Atq. Spé. et Déf. Spé.
-valent le « Spécial »), la nature est celle que donne leur transfert vers les jeux suivants (expérience modulo 25, aussi
-affichée sur leur fiche), et ils n'ont pas de talent (exclus par un filtre « Talent »). Ces caractéristiques sont
-enregistrées avec chaque Pokémon (`Services/PokemonTraits.cs`) : la collection filtre en base, sans relire les fichiers.
+Les mêmes pastilles et la même recherche (espèce ou surnom, casse et accents ignorés) sont au-dessus des Pokémon à
+choisir de l'échange entre amis, de l'échange interne et de l'équipe de combat (`Shared/PokemonPickerSearch.razor`) :
+ces Pokémon sont lus dans une sauvegarde, filtrés en mémoire avec les mêmes règles (`PokemonFilterTraits`,
+`PokemonSearch.Filter`), dans l'ordre des boîtes, sans tri ; rien dans l'adresse (gardés le temps de la page). La
+recherche ne trouve pas un œuf par son espèce, même chez l'ami. Sur les Pokémon d'un ami, nature et IV ne sont pas
+affichés mais se devinent avec les filtres (voulu : choisir « le Pokémon aux bons IV »).
+
+1re et 2e génération : IV ramenés à l'échelle actuelle (× 2 + 1 ; Atq. Spé. et Déf. Spé. = « Spécial »), nature de leur
+transfert vers les jeux suivants (expérience modulo 25), pas de talent. Ces caractéristiques sont enregistrées avec
+chaque Pokémon (`Services/PokemonTraits.cs`) : la collection filtre en base, sans relire les fichiers.
+
+### Mode compact de « Ma collection »
+
+Interrupteur « Mode compact » (`?compact=1`, désactivé par défaut) : un dossier par **espèce**, toutes formes réunies,
+image de la forme de base non chromatique, nombre de Pokémon en bas à droite ; une espèce à un seul Pokémon garde une
+case normale ; tous les œufs dans un dossier « Œufs », toujours à la fin. Recherche, origine et pastilles s'appliquent
+d'abord ; dossiers et contenu suivent le tri (placés comme leur premier Pokémon). Tri en plus, en mode compact seulement :
+**Quantité** (`?tri=quantite`), les dossiers les plus nombreux d'abord (inversable), à égalité par numéro de Pokédex
+croissant, leur contenu par arrivée ; pas proposé dans les préférences ; en quittant le mode compact (ou par un lien sans
+lui), le tri du compte reprend. Un dossier ouvert déroule ses Pokémon
+dans les cases suivantes ; plusieurs à la fois, pas gardés dans l'adresse. Marche aussi chez un autre joueur. La liste
+reste chargée au défilement : une requête regroupe par espèce (`BankService.GetGroupsAsync`), puis seules les cases
+visibles sont lues (`CollectionFolderLayout`).
 
 ### Images des Pokémon
 
-Partout (collection, « Transfert », fiche d'un Pokémon), l'image suit le Pokémon : sa **forme** (Rattata d'Alola, Zarbi B,
-Pikachu casquette...), sa **femelle** quand elle est différente du mâle (Pikachu, Rapasdepic...), sa version chromatique.
-Un Pokémon qui **tient sa Méga-Gemme** est montré méga-évolué (Mysdibule avec Mysdibulite → Méga-Mysdibule ; Dracaufite X
-ou Y → Méga-Dracaufeu X ou Y), de même Kyogre et Groudon avec leur orbe (Primo-Résurgence). Méga-Rayquaza n'a pas de gemme :
-jamais montré. Un œuf garde l'image de son espèce. Une forme sans image à elle (identique à la forme de base, ou absente
-de PokéAPI : Koraidon, Miraidon, Méga-Zygarde...) prend celle de l'espèce (liste dans `PokemonSpritesTests`). Les images
-Gigamax sont rassemblées mais pas encore utilisées.
+Partout, l'image suit la **forme**, la **femelle** quand elle diffère, le chromatique ; un Pokémon qui tient sa
+**Méga-Gemme** (ou Kyogre / Groudon leur orbe) est montré méga-évolué (jamais Méga-Rayquaza, sans gemme). Une forme sans
+image à elle prend celle de l'espèce (liste dans `PokemonSpritesTests`). Images Gigamax rassemblées mais pas encore
+utilisées. Détails : `docs/claude/images.md`.
 
 ### Inventaire (Pokédollars et objets)
 
-La page « Inventaire » affiche le porte-monnaie du compte et le « Stockage » de ses objets : un onglet par catégorie
-(objets, Pokéballs, médicaments, baies, CT / DT, « Objets » ouvert par défaut ; l'onglet choisi est gardé dans l'adresse,
-`?onglet=baies`), avec la quantité totale de chacune, en liste (par défaut) ou en grille (choix retenu par le navigateur). En grille, les colonnes sont automatiques (autant
-que la largeur en permet, moins quand le journal est ouvert ; le curseur « Colonnes » affiche « Auto (10) ») ; le curseur
-en fixe le nombre de 1 à 10 (vignettes élargies ou rétrécies), retenu par le navigateur, et le bouton « Auto » rend la
-main à la largeur. Le nombre automatique est mesuré par le navigateur sur une grille vide invisible (`.item-grid-probe`,
-`watchGridColumns` dans `wwwroot/js/app.js`). La
-recherche porte sur toute la source affichée : chaque onglet affiche alors le nombre d'objets trouvés. Chaque onglet a son
-**tri**, retenu par le navigateur et valable pour toutes les sources : « Par défaut » (numéro d'objet commun à tous les jeux,
-qui garde ensemble les Balls, les pierres, les potions... ; les CT par nom de capacité), « Nom » (accents ignorés ; pour une
-CT, le nom de la capacité, pas son numéro) ou « Quantité » (à égalité, par nom), croissant au départ et inversable. Un sélecteur choisit
-la source (gardée dans l'adresse, `?source=interne`) : « Tout » (par défaut, en premier : l'interne et toutes les
-sauvegardes additionnés), l'inventaire « Interne » ou le sac d'une sauvegarde (sac et PC additionnés pour les jeux de 1re à 3e génération), en **lecture seule** (les transferts passent par les fenêtres de
-retrait et de dépôt). Pour une sauvegarde, une CT porte son numéro dans le jeu (« CT26 Séisme ») ; pour « Tout », le numéro
-de chaque jeu (« Séisme — CT26 (Platine), DT10 (Épée) »), et un clic sur un objet ouvre à droite le détail de l'endroit où il
-se trouve (avec le sac ou le PC : « Rouge / Bleu — Red (CT26, PC) »). Les sauvegardes illisibles ou non prises en charge sont signalées au-dessus de la liste. Le bouton « Journal » ouvre
-le journal des opérations dans ce même panneau à droite (un tiers de la page, fermé à chaque arrivée) qui réduit la largeur de la
-page ; sur un téléphone, il recouvre l'écran. « Retirer de l'argent »
-ouvre une fenêtre en trois étapes (sauvegarde stockée → montant libre → confirmation) : la somme est retirée **de la
-copie stockée sur le serveur** et créditée sur le porte-monnaie, en une seule transaction (copie avant/après dans
-`Data/backups/`). Il n'y a pas encore de transfert du porte-monnaie vers une sauvegarde.
+`Pages/Inventory.razor`, `Services/InventoryService.cs`, règles des sacs dans `Services/SaveBag.cs` ; détails :
+`docs/claude/inventaire.md`.
 
-Les **objets** (objets ordinaires, Pokéballs, médicaments, baies, CT et DT) vont dans les deux sens, avec la même fenêtre
-en trois étapes (sauvegarde stockée → quantité de chaque objet, un onglet par catégorie, avec une recherche par nom →
-confirmation) : « Retirer d'une sauvegarde » les prend dans le sac de la
-copie stockée, « Déposer dans une sauvegarde » les y ajoute. Une même opération peut mêler les catégories ; le journal liste
-les objets déplacés (« 10 × Poké Ball, 6 × Potion, 1 × Super Bonbon »). Les jeux de 1re à 3e génération ont aussi un **PC
-d'objets** : la fenêtre ajoute pour eux deux onglets « Sac » et « PC » au-dessus des catégories, une même opération peut
-toucher les deux (au dépôt, l'onglet choisit la destination), et le journal les distingue (« Sac : 3 × Potion ; PC : 1 ×
-Pierre Lune »). Règles (`Services/SaveBag.cs`) :
-
-- Catégories : les **objets ordinaires** (tout le reste, dans les poches Objets, Objets de combat, Trésors, Ingrédients,
-  Bonbons et Méga-Gemmes : `SaveBag.ItemPouches`), toutes les Pokéballs (`SaveBag.BallItems`) et tout ce que les jeux de la 4e à la 9e génération rangent dans
-  leur poche Médicaments (`SaveBag.MedicineItems` : soins, statuts, Rappel, Huile/Élixir, vitamines, PP Plus/Max,
-  Super Bonbon, Plumes...), toutes les baies du sac (`SaveBag.BerryItems` : poche Baies de la 3e à la 9e génération,
-  baies de capture de Let's Go, Baie Hopo, Extra Baies de Légendes Z-A), et les CT et DT (Disques Techniques d'Épée/Bouclier), dans une même catégorie. Les **CS ne
-  sont jamais montrées ni modifiées** (les retirer pourrait bloquer la progression du joueur) : elles restent dans le sac,
-  même quand toutes les CT de la poche sont retirées.
-- **Jamais touchés** non plus : les objets rares (Vélo, Cannes...), pour la même raison, les Lettres (`SaveBag.MailItems` :
-  leur message est enregistré à part, même quand le jeu les range avec les objets) et les Cristaux Z. Chaque jeu décide de
-  la poche : un objet que le jeu de destination range parmi les objets rares y est refusé au dépôt. Le PC d'objets accepte
-  presque tout : les objets rares et les CS y sont aussi ignorés. Rouge/Bleu n'ont pas de poche « Objets rares » (Bicyclette,
-  Scope Sylphe, Cannes mélangés aux autres) : seuls les objets de la table de conversion sont transférables ; les fossiles
-  le sont.
-- **Baie Enigma** : en 3e génération, elle vient de l'e-Reader et son nom et son effet sont enregistrés dans la sauvegarde ;
-  elle n'y est ni montrée, ni retirée, ni déposée. À partir de la 4e génération, c'est une baie normale. Seul le sac est
-  concerné : les baies plantées ne sont jamais touchées.
-- Les CT et DT sont rangées **par capacité** (« Séisme »), pas par numéro : un même numéro n'apprend pas la même capacité
-  d'une génération à l'autre (CT01 : Mitra-Poing en Platine, Affûtage en Noir 2). Au dépôt, le site donne la CT ou la DT
-  qui apprend cette capacité dans le jeu choisi (Séisme : CT26 dans Platine, DT10 dans Épée/Bouclier, CT149 dans
-  Écarlate/Violet) ; si aucune ne l'apprend, ou seulement une CS (Surf dans Platine), le dépôt est refusé. Correspondances
-  numéro → capacité de chaque jeu : listes PKHeX, dans `SaveBag` (Épée/Bouclier et Écarlate/Violet ont un ordre particulier).
-- Un objet est repéré par son numéro d'objet PKHeX de 4e génération et suivantes, le même d'un jeu à l'autre : une Super
-  Ball retirée de Platine peut être déposée dans Noir 2. Les jeux de 1re à 3e génération numérotent leurs objets autrement
-  (Potion = 13 en 3e génération, 20 dans Rouge/Bleu) : ils sont convertis, par PKHeX pour la 2e et la 3e, par une table du
-  site pour Rouge/Bleu (PKHeX ne la fait pas ; le Multi Exp de Rouge/Bleu, sans équivalent exact, n'y est pas). Les baies
-  d'Or/Argent/Cristal deviennent leur équivalent (Baie → Baie Oran, Baie Mystère → Baie Mepo, Baie Miracle → Baie Prine...),
-  l'Appât Ball est ajoutée à la main, et les Noigrumes Bleue et Jaune, dont les numéros sont inversés en 4e génération, sont
-  remises dans l'ordre des jeux suivants. Les objets d'Or/Argent sans équivalent (Feuilles d'Or et d'Argent, Rubans, Gène
-  Hargne...) ne sont ni montrés ni touchés. L'objet est cherché dans toutes les poches du sac (Balls dans la poche « Balls » en
-  4e génération mais « Objets » en 5e, médicaments dans « Objets » en 3e).
-- Pas de limite sur le site. Au dépôt, le jeu limite : un objet qu'il ne connaît pas (ex. la Plume Santé dans Platine,
-  l'Ultra Ball des Ultra-Chimères dans Noir 2) est refusé, comme ce qui dépasse le maximum du sac (999 par objet en 4e et
-  5e génération, 99 dans les poches de la 1re à la 3e génération et pour les CT de la 4e ; 20 objets différents dans le sac de
-  Rouge/Bleu, 50 dans le PC des 1re à 3e générations). Une CT réutilisable (5e à 7e génération,
-  Let's Go, CT d'Épée/Bouclier, Légendes Z-A) est limitée à 1 par sac ; la retirer l'enlève du jeu.
-- **CT à usage unique** (1re à 4e génération, Diamant Étincelant/Perle Scintillante, Écarlate/Violet ; pas les DT
-  d'Épée/Bouclier) : dès qu'une sauvegarde a **80 exemplaires ou plus** d'une même CT (sac et PC additionnés), cette CT y est cachée (sac de la
-  sauvegarde, « Tout », détail d'un objet) et ne peut ni en être retirée ni y être déposée. Seule cette CT de cette
-  sauvegarde est concernée : les autres CT du sac, et la même CT dans une autre sauvegarde, restent normales. Un dépôt ne
-  peut pas l'amener à 80 (79 au plus). Le stockage interne n'a pas de limite. Seuil : `SaveBag.LimitedMachineThreshold`.
-
-Après un retrait (argent ou objets) ou un dépôt, le jeu du joueur n'a pas ces changements : la sauvegarde est donc marquée
-« modifiée sur le serveur ». Sa mise à jour est bloquée tant qu'elle n'a pas été téléchargée (bouton « Télécharger » de
-« Mes sauvegardes »), puis n'accepte qu'un fichier avec **plus** de temps de jeu ; à temps de jeu égal, seul le fichier
-exact rendu par le serveur passe (empreinte SHA-256 dans `SaveModification` ; en Game Boy, la même mémoire du jeu, les 32
-premiers Ko, la Console virtuelle n'ayant pas les octets ajoutés par un émulateur), l'ancienne sauvegarde du jeu est refusée.
-Dissuasif, pas infaillible : rien n'oblige le joueur à remplacer réellement sa sauvegarde.
+- Page : porte-monnaie et « Stockage » des objets, un onglet par catégorie (`?onglet=baies`), source `?source=interne`
+  (« Tout » additionne l'interne et les sauvegardes ; une sauvegarde est en lecture seule, les transferts passent par les
+  fenêtres). Grille : colonnes automatiques mesurées par le navigateur (`.item-grid-probe`, `watchGridColumns` dans
+  `wwwroot/js/app.js`) ou fixées au curseur ; vue et colonnes retenues par le navigateur ; tri de l'onglet dans l'adresse (`?tri=nom&ordre=desc`),
+  sinon celui du compte (« Tris par défaut »).
+- **Argent** : « Retirer de l'argent » prend la somme dans la **copie stockée** et la crédite au porte-monnaie, en une
+  transaction (copie avant/après). Pas encore de transfert vers une sauvegarde.
+- **Objets** dans les deux sens (objets, Pokéballs, médicaments, baies, CT / DT), plusieurs catégories par opération ; sac
+  et **PC d'objets** pour les jeux de 1re à 3e génération. Le journal liste les objets déplacés.
+- **Objet tenu** par un Pokémon : nommé par son numéro de 4e génération et suivantes, comme dans l'inventaire
+  (`SaveBag.HeldItem`), jamais par le numéro du jeu du Pokémon (la 2e et la 3e génération ont les leurs).
+- Catégories : `SaveBag.ItemPouches` (objets ordinaires), `BallItems`, `MedicineItems`, `BerryItems`, CT et DT.
+- **Jamais montrés ni touchés** (ne pas bloquer la progression) : CS (même quand toutes les CT sont retirées), objets
+  rares, Lettres (`SaveBag.MailItems`), Cristaux Z, Baie Enigma de 3e génération, baies plantées, objets d'Or / Argent
+  sans équivalent. Chaque jeu décide de la poche : un objet rare chez lui est refusé au dépôt. Rouge / Bleu (pas de poche
+  « Objets rares ») : seuls les objets de la table de conversion passent.
+- Un objet est repéré par son **numéro PKHeX de 4e génération et suivantes** ; la 2e et la 3e sont converties par PKHeX,
+  Rouge / Bleu par une table du site ; baies d'Or / Argent / Cristal vers leur équivalent, Appât Ball ajoutée à la main,
+  Noigrumes Bleue et Jaune remises dans l'ordre. Objet cherché dans toutes les poches.
+- **CT et DT par capacité**, pas par numéro : au dépôt, celle qui apprend la capacité dans le jeu choisi ; aucune (ou une
+  CS seulement) : refusé. Correspondances : listes PKHeX dans `SaveBag`.
+- Pas de limite sur le site ; le jeu limite au dépôt (objet inconnu du jeu, maximum du sac : 999 en 4e et 5e, 99 de la 1re
+  à la 3e et pour les CT de la 4e, 20 objets différents dans le sac de Rouge / Bleu, 50 dans le PC). CT réutilisable : 1
+  par sac. **CT à usage unique** : à 80 exemplaires ou plus dans une sauvegarde (sac et PC), cette CT y est cachée et
+  bloquée, un dépôt ne peut pas l'y amener (`SaveBag.LimitedMachineThreshold`).
+- Après un retrait ou un dépôt, la sauvegarde est **modifiée sur le serveur** (voir « Sauvegardes stockées »).
+- **Transfert entre deux sauvegardes** (`/inventaire/transfert?gauche=3&droite=5`, `Pages/InventoryTransfer.razor`,
+  `InventoryService.TransferBetweenSavesAsync`) : sans passer par l'inventaire interne, dans les deux sens, glisser-déposer
+  (souris, ou appui long au doigt : `wwwroot/js/transfert-objets.js`) ou bouton flèche, compteur par objet (1 au départ,
+  borné à ce que l'objet a et à la place dans l'autre). Mêmes règles qu'un retrait puis un dépôt : un objet refusé par
+  l'autre jeu est grisé (raison au survol) ; un interrupteur cache les grisés des deux colonnes (`?invalides=caches`),
+  sauf un objet qui bouge déjà, et les pastilles des onglets ne comptent alors que les visibles ; CT par capacité ; onglets Sac / PC de la 1re à la 3e génération. Rien n'est
+  écrit avant « Valider » : dans chaque sauvegarde, retraits puis dépôts ; les deux écrites en **une seule transaction**
+  (refus de l'une : aucune ne change), copies avant/après, **les deux modifiées sur le serveur**, une ligne de journal
+  par sauvegarde (`TransferItemsBetweenSaves` : envoyé, reçu).
 
 ### Parc
 
-Le menu « Parc » (`/parc`) est une carte en pixel art (forêt tout autour, chemins, étangs, prairie fleurie) qui prend
-toute la largeur de la page, où vivent jusqu'à **20 Pokémon** de la
-collection, stockage interne ou sauvegardes stockées, de **toutes les générations** (hors œufs ; `ParkService.BaseCapacity`).
-**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **25 000 ₽** du porte-monnaie (40 000 ₽ jusqu'au 2026-11-07 ; `ParkService.ExpansionPrice`) pour **20 Pokémon de
-plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
-solde (bouton grisé s'il manque de l'argent, avec un lien vers « Inventaire ») ; la taille et le débit sont vérifiés dans
-les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
-journal de l'inventaire (« Agrandissement du parc », « Forêt : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
-carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite) les garde : on peut en
-retirer, pas en ajouter tant qu'il dépasse.
-**Plusieurs parcs**, un par **paysage** (`ParkLandscape`, table `Parks`, index unique sur le compte et le paysage) : la
-**Forêt** d'abord (créée à la première visite de la page ; la migration `ParkLandscapes` a fait du parc de chaque compte sa
-Forêt, avec ses agrandissements et ses Pokémon), puis **« Acheter un parc »** (sous le titre, tant qu'il reste un paysage
-à acheter) : une fenêtre propose les paysages pas encore achetés (la **Plage**, le **Volcan**, le **Désert**, l'**Océan**, la **Grotte**, la **Montagne**, le **Donjon** et la **Forêt profonde**), au prix d'un agrandissement
-(**25 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
-venue du navigateur), insère le parc (`INSERT OR IGNORE` : un paysage déjà acheté est refusé, même pour deux achats
-simultanés) et débite dans la même transaction ; journal : « Achat d'un parc », « Nouveau parc : Plage ». Le nouveau parc
-s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à part (3 fois). Une **liste déroulante**
-(« Forêt (8 / 20) », « Plage (2 / 20) ») apparaît sous le titre dès le deuxième parc, pour le propriétaire comme pour les
-visiteurs (sans adresse propre à chaque parc : on arrive sur la Forêt). « Agrandir », « Choisir », « Vider » et les
-boutons debug agissent sur le parc affiché ; chaque méthode du service revérifie que le parc (numéro venu du navigateur)
-est bien à ce joueur. **Un Pokémon vit dans un seul parc** : dans la fenêtre de choix, ceux d'un autre parc portent son
-pictogramme (🌳 forêt, 🏝️ plage, 🌋 volcan, 🏜️ désert, 🌊 océan, 🦇 grotte, ⛰️ montagne, 🏚️ donjon, 🌲 forêt profonde, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
-quitter (« Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc. »). Nom, carte et textes de chaque paysage :
-`ParkLandscapes` (un nouveau paysage : une valeur de l'énumération, ses quatre cartes, une ligne par méthode).
-« Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
-type, forme...) et le compteur. Les espèces dont SpriteCollab n'a pas encore les sprites (64, surtout de 9e génération)
-y sont grisées (🔒) et refusées ; elles viendront quand il les aura (relancer `outils/images.py donjon`, puis
-`images-serveur`). **Carte** : faite dans [Tiled](https://www.mapeditor.org) avec les tuiles du pack Cute Fantasy (voir
-« Crédits »), 80 × 60 tuiles de 16 pixels, affichée par **Phaser** (moteur de jeu 2D, `wwwroot/lib/phaser`). Ses
-calques : « Sol », « Décors », « Devant » (feuillages : un Pokémon plus haut que le tronc passe derrière l'arbre, plus bas devant), « Collisions » (cases où l'on ne
-passe pas : eau, arbres, rochers, buissons, bancs) et « Zones » : le rectangle **« Départ »** (24 × 20 tuiles, la vue de
-départ) et le rectangle **« Parc »**, où vivent les Pokémon. **Une carte par taille** (`wwwroot/parc/parc-1-1.json` à
-`parc-1-4.json` : 24 × 20, 40 × 30, 56 × 40 tuiles centrées sur l'étang, puis toute la carte, entourée de sa forêt) :
-chaque agrandissement fait reculer la forêt et dévoile un anneau de plus, sans rien reprendre de la taille d'avant. Autour de la zone, tout est de
-la **forêt dense** (lisière irrégulière, buissons) qui s'assombrit en s'éloignant : on ne voit pas ce qu'il reste à
-débloquer. On **fait glisser la carte** (souris ou doigt) pour parcourir le parc ; la vue s'arrête à 6 cases de forêt
-au-delà de la zone. La hauteur du parc est le plus grand nombre entier de
-fois la zone « Départ » en pixels d'écran qui tient dans la hauteur visible (3, soit 960 pixels, sur un écran de 1440 à
-150 %) ; sur un téléphone, pas plus que la zone entière en largeur. Les sprites sont dessinés aux deux tiers des pixels de
-la carte, arrondis à un nombre entier de pixels d'écran (×2 quand la carte est à ×3, jamais moins de ×2) : dessin net,
-sans pixels de tailles inégales. **Zoom et plein écran** : boutons **−**, **+** et **plein écran** en haut à gauche de la
-carte (visiteurs compris). Le zoom va par crans entiers, du zoom de départ (le plus grand) jusqu'à ×1 ; les sprites
-suivent en arrondi (à ×2 et ×1 ils sont un peu plus gros par rapport à la carte). Dézoomé au-delà des bords, la carte
-est centrée (la forêt continue jusqu'au bord de la carte). La **molette** zoome autour du pointeur quand la souris est sur le parc (la page ne défile pas tant qu'elle y est). En
-plein écran (la carte et la fiche d'un Pokémon cliqué), la hauteur de l'écran donne le zoom de départ (×4 sur un écran de
-1440) ; Échap ou le même bouton en sort. Sur téléphone,
-**pincement** à deux doigts (pas de plein écran sur iPhone : bouton caché). Le zoom n'est pas retenu d'une visite à
-l'autre. **Nouvelle carte** : la dessiner dans Tiled (vue orthogonale, tuiles de 16 px, taille
-fixe, jeux de tuiles incorporés, mêmes calques ; un feuillage dans « Devant » au-dessus de son tronc, posé dans
-« Décors » et bloqué dans « Collisions »), puis `python outils/carte-parc.py <carte .tmx>` : la carte va dans
-`wwwroot/parc/<nom du fichier>.json` (`Parc_1-2.tmx` → `parc-1-2.json` ; dans Git : rien que des numéros de tuiles), les
-planches du pack qu'elle utilise dans `wwwroot/images/parc/tuiles/` (hors Git : le pack ne se redistribue pas), et
-`deploy\fond-parc.cmd` les envoie sur le serveur. Sans les planches, le parc est sur de l'herbe unie, sans erreur.
-`ParkMapTests` vérifie les quatre cartes de chaque parc (calques, « Départ » dans « Parc », dans la carte, au moins une
-quinzaine de cases libres par Pokémon, chaque case libre accessible, et chaque taille garde les cases libres de la
-précédente). Les cartes actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont faites par
-`python outils/generer-parc.py <dossier Cute_Fantasy du pack> <dossier de sortie>` (Python avec Pillow ; mêmes tirages
-à chaque fois : relancé sans changement, il redonne les mêmes cartes ; le parc entier est tiré une fois, chaque taille en
-garde sa zone), puis passées une à une par `outils/carte-parc.py`.
-**Plage** (deuxième paysage, à acheter) : `Plage_1-1.tmx` à
-`Plage_1-4.tmx` (`plage-1-1.json` à `plage-1-4.json`), faites par `outils/generer-plage.py` (mêmes arguments). Une côte,
-le sable au nord, la mer au sud : environ **65 % de mer et 35 % de sable** dans la zone des tailles 2 à 4 (les types Eau
-y sont heureux ; Feu, Roche, Acier, Électrik, Sol et Fée malheureux), îlots, ponton et barque, palmiers (extension Desert
-du pack), rochers. Zones : la vue de départ (24 × 20, moitié plage moitié mer : 52,5 % de mer, les Eau encore heureux),
-40 × 31, 56 × 43, puis toute la carte. La mer et le bord du sable (écume) sont bloqués : 8 à 10 cases de sable libres par
-Pokémon aux trois premières tailles (le test en exige 7 pour la plage), les types Eau nagent en plus dans la mer. Ce qui
-n'est pas acheté est caché par une cocoteraie dense côté plage et un récif de gros rochers côté mer ; les îlots pas encore
-achetés n'apparaissent pas. `ParkMapTests` vérifie aussi la part de mer (60 à 70 % des tailles 2 à 4, un peu plus de la
-moitié à la taille 1).
-**Volcan** (troisième paysage, à acheter) : `Volcan_1-1.tmx` à `Volcan_1-4.tmx` (`volcan-1-1.json` à `volcan-1-4.json`),
-faites par `outils/generer-volcan.py` (mêmes arguments) avec l'extension Volcano du pack. Un plateau de roche volcanique
-où un **grand lac de lave** déborde en trois **cascades** qui nourrissent des **coulées** finissant en **mares** (une
-cascade a toujours un lac en amont et une coulée en aval, `ParkMapTests` le vérifie ; dessin repris de la carte retouchée
-par l'utilisateur, `Volcan_1-4_modele.tmx`), un pont de pierre sur chaque coulée (celui de la
-vue de départ, puis deux autres aux tailles 3 et 4), des arbres et des plantes de braise, des rochers (dans la lave aussi). Tout est de type **volcan** : les
-Feu, Roche et Dragon y sont heureux, la plupart des autres malheureux (choix de l'utilisateur). Mêmes zones que la Forêt.
-17 à 31 % de **lave** dans la zone (17 % dans la vue de départ : sa cascade, le bas du grand lac et la mare sous le pont),
-bloquée : 14 à 20 cases de roche libres par Pokémon aux trois premières tailles (le test en exige 14, comme pour la
-forêt). Ce qui n'est pas acheté est un champ de gros rochers ; la lave qui en sort est coupée à la lisière (le grand lac
-continue sous les rochers), une cascade n'apparaît que tout entière. Les **cascades** et des **bulles** de lave (calque « Bulles »,
-hors des décors) sont des tuiles animées de Tiled, jouées par `parc.js`. `ParkMapTests` vérifie le type volcan partout,
-la part de lave libre, que toute case bloquée hors de la lave porte un décor (sinon `parc.js` la prendrait pour de la
-lave) et les animations.
-**Désert** (quatrième paysage, à acheter) : `Desert_1-1.tmx` à `Desert_1-4.tmx` (`desert-1-1.json` à
-`desert-1-4.json`), faites par `outils/generer-desert.py` (mêmes arguments ; `--seulement <taille>` pour une seule) avec
-l'extension Desert du pack (teinte 1, sable doré). Un désert **aride** avec **un seul point d'eau** : un **plateau** à deux
-étages au fond (flanc de 3 cases au milieu, deux escaliers dans la vue de départ, une marche plus basse autour) porte un
-**lac** qui se resserre en ruisseau et tombe en **cascade** (animée) dans l'**oasis** au pied du flanc, derrière une
-corniche de sable. L'herbe n'est qu'autour de l'eau (palmiers) ; ailleurs, cactus, acacias, rochers, herbes sèches. La
-taille 4 est la carte retouchée par l'utilisateur dans Tiled (plateau, raccords de la cascade), reprise à l'identique par le
-générateur, qui en a tiré les autres tailles ; les quatre ont ensuite été retouchées à la main : **ne plus relancer le
-générateur** sur ces cartes (il les écraserait), seulement `carte-parc.py` après une retouche. Sable : 52 / 71 / 76 / 87 % (plus de la moitié partout : les Sol heureux ;
-Feu, Roche, Acier, Eau, Poison, Plante et Fée malheureux d'après la feuille « Habitat »). Mêmes zones que la Forêt. L'eau
-et son bord de sable sont bloqués, les types Eau y nagent ; 11,3 cases libres par Pokémon dans la vue de départ (le test
-en exige 11 au désert), 19 à 38 ensuite. Ce qui n'est pas acheté est un champ serré de cactus et de rochers ; l'eau qui en
-sort est coupée à la lisière, son bord caché porte de petits rochers. `ParkMapTests` vérifie la part de sable, les humeurs,
-les animations et la cascade (lac au-dessus, eau en dessous).
-**Océan** (cinquième paysage, à acheter) : `Ocean_1-1.tmx` à `Ocean_1-4.tmx` (`ocean-1-1.json` à `ocean-1-4.json`),
-faites par `outils/generer-ocean.py` (mêmes arguments). La **pleine mer, sans plage** : **trois îlots de sable** (bord d'écume de `Beach_Tiles`, compté comme de l'eau ; d'herbe bordée de
-pierre avant le 2026-11-07),
-placés à la main dans le générateur, **aucun dans la vue de départ** (toute en eau) ; 97 à 100 %
-d'eau. **Seuls les
-Pokémon qui nagent** (type Eau, Eau/Vol et Feu/Eau compris : `ParkLandscapes.Refusal`) peuvent y vivre : les autres sont
-grisés dans la fenêtre de choix (« ne nage pas » dans l'infobulle, message au clic) et refusés par `ParkService.SetAsync`
-(la liste vient du navigateur). Les îlots ne sont pas bloqués : les nageurs y sortent de l'eau (environ un quart du temps),
-y vont d'un îlot à l'autre à la nage ; sans terre (la vue de départ), `parc.js` les garde dans l'eau (eau libre comptée
-depuis le centre de la vue de départ). Des **rochers animés** (bloqués) dans l'eau. Mêmes zones que le volcan. Ce qui n'est pas acheté est un **récif** de
-rochers serrés, qui fait aussi la bordure de la carte entière ; un îlot qui déborde de la zone est coupé à la lisière.
-`ParkMapTests` vérifie la part d'eau, que la terre des îlots est exactement les cases libres (aucune dans la vue de
-départ), qu'on va d'un îlot à l'autre par l'eau libre, et les animations.
-**Grotte** (sixième paysage, à acheter) : `Grotte_1-1.tmx` à `Grotte_1-4.tmx` (`grotte-1-1.json` à `grotte-1-4.json`),
-faites par `outils/generer-grotte.py` (mêmes arguments). Une **grotte naturelle** (planches `Tiles/Cave` du pack) : une
-grande caverne au sol de terre, des **piliers de roche** (aucun dans la vue de départ), un **lac souterrain** qu'on
-découvre à la taille 2 et qui s'étend aux tailles 3 et 4 (un deuxième, plus petit, à la taille 3), des **cristaux**
-colorés, des **stalagmites**, des rochers et des **torches** (flamme animée) réparties régulièrement (grille en quinconce, 9 cases au moins entre deux). La roche vue de dessus n'a pas de tuile :
-cases transparentes sur la **couleur de fond** de la carte (`backgroundcolor`, que `parc.js` met sous la carte à la place
-de l'herbe). Le bord d'une salle est un anneau de pierres, avec un mur de deux rangées sous son bord du haut ; la salle de
-chaque taille s'arrête juste hors de la zone, si bien que la zone reste libre (23 cases par Pokémon dans la vue de
-départ, 24 à 32 ensuite). Les pierres du bord du lac sont **praticables** : les nageurs y entrent dans l'eau (`parc.js`
-relie l'eau libre à la terre case par case) ; celles qu'un agrandissement changera en eau sont bloquées dès avant. Eau
-libre : 0 / 4,5 / 8,7 / 5,6 % de la zone. Tout le reste est de type cave : Sol, Roche, Ténèbres, Spectre et Dragon heureux, Vol, Eau, Feu et Fée
-malheureux. **Pénombre** : un calque d'objets « Lumières » (un point par torche ou bouquet de cristaux, avec son rayon et
-sa couleur) ; `parc.js` y dessine une seule fois un voile sombre (`SHADE`, devant les Pokémon, sous le brouillard), éclairci
-autour de chaque lumière et teinté de sa couleur. `ParkMapTests` vérifie la part de cave, les humeurs, que les nageurs
-atteignent toute l'eau du lac depuis le bord, la couleur de fond, les lumières, l'écart entre les torches et leur animation.
-**Montagne** (septième paysage, à acheter) : `Montagne_1-1.tmx` à `Montagne_1-4.tmx` (`montagne-1-1.json` à
-`montagne-1-4.json`), faites par `outils/generer-montagne.py` (mêmes arguments). **Tous les Pokémon** y vont (ils marchent
-dans la vallée, les Eau nagent dans la rivière), mais **seuls les volants** (type Vol) montent sur la montagne ; **à la
-montagne, tout type Vol vole**, Feu/Vol et Eau/Vol compris (ailleurs, ils vont dans la lave ou nagent :
-`ParkHabitats.MovementOf(type1, type2, paysage)`). Une
-vallée d'herbe bleutée traversée d'ouest en est par une **rivière** qui entre et sort par les bords de la carte, à
-toutes les tailles (la forêt de ce qui n'est pas acheté ne la couvre jamais), avec **trois ponts de bois** (un dans la vue
-de départ, deux à la taille 3), des **massifs aux
-flancs de pierre sur deux étages**, sans escalier : un plateau (herbe verte) et parfois un sommet posé dessus (herbe vert
-jaune), des sapins, des rochers et des nids là-haut. Les plateaux viennent des tuiles de hauteur de `Grass_Tiles` : rebord
-d'après les quatre coins de chaque case, flanc de 2 à 4 lignes sous le bord du bas (bas plat : la planche n'a pas de coin
-rentrant avec un flanc). Le dessus des plateaux et des sommets est bloqué pour la marche, mais un volant s'y pose : calque
-**« Sommets »** ; rebords et flancs, qu'il survole sans s'y arrêter (en hauteur, comme au-dessus de l'eau) : calque
-**« Survol »** (`SUMMIT` et `AIR` dans `parc.js`). Ce qui n'est pas acheté est une **forêt de sapins**, qui fait aussi la
-bordure de la carte entière (les massifs restent hors de cette bordure). **Un massif n'est montré que tout entier** : à
-une taille où il déborde de la zone, la forêt le cache (un au départ, trois à la taille 2, neuf à la taille 3 ; la carte
-entière n'en ajoute pas, l'anneau entre la bordure et la taille 3 est trop mince) ; aucun sapin de la forêt ne cache le
-pied de leurs flancs. La vallée est reliée à pied (les ponts relient ses deux rives) : 11,3 / 17,1 / 19,7 / 28,7 cases de
-terre par Pokémon, plus 29 à 200 cases de sommets pour les
-volants. Surtout de la végétation et des flancs (falaise) : les
-volants y sont heureux. Essai du 2026-11-07 (instance de test : achat et choix dans la vraie page, puis 15 min simulées aux
-tailles 1, 2 et 4 avec 14 volants, 3 nageurs et 3 marcheurs) : volants 22 à 27 % du temps sur les sommets, 8 à 11 %
-au-dessus des flancs ; nageurs 55 à 69 % dans la rivière ; marcheurs jamais en haut ; aucune case interdite.
-`ParkMapTests` vérifie les calques « Sommets » et « Survol » (cases bloquées, toutes atteintes en volant), qu'aucun sommet
-n'est perdu à l'agrandissement et les humeurs.
-**Donjon** (huitième paysage, à acheter) : `Donjon_1-1.tmx` à `Donjon_1-4.tmx` (`donjon-1-1.json` à `donjon-1-4.json`),
-faites par `outils/generer-donjon.py` (mêmes arguments), avec l'extension Dungeons du pack (teinte Dungeon_1, pierres
-rondes). Un **souterrain délaissé** ouvert à tous : des **salles et des couloirs** de pierre creusés dans la roche (la
-roche vue de dessus est la couleur de fond de la carte, comme la grotte), le dessus du mur tout autour, sa face sous le
-bord du haut ; chaque salle et chaque couloir appartient à une taille et n'est montré que tout entier (la grande salle à
-piliers de la vue de départ ; deux longues salles à la taille 2 ; quatre salles aux coins, deux cryptes et deux salles
-d'égout, et deux galeries à la taille 3 ; à la carte entière, les grandes salles des bords, qui se rejoignent dans les
-coins : une galerie tout autour). Des **bassins d'égout** (eau
-bloquée, où les nageurs vont ; leur rebord de pierre se parcourt), deux avec un petit pont de bois ; des piliers brisés,
-des tombes, une statue, quelques pots, caisses, os et gravats (peu : le sol reste dégagé), des pics du sol animés, de l'or
-et des coffres oubliés. **Pénombre** comme la grotte : des torches contre les murs (flamme animée) et des candélabres jusqu'à ce
-qu'aucune case de dallage ne soit à plus de 7 cases d'une lumière. La face des murs et l'ombre à son pied sont bloquées
-(on ne marche pas au bas des murs) ; les couloirs horizontaux et les galeries ont cinq rangées, dont deux où l'on marche.
-Un objet bloquant a toujours du dallage tout autour. 14,5 / 14,1 / 18,0 / 24,2 cases libres par Pokémon. Tout est de
-type donjon (sauf l'eau des bassins et les ponts) : Spectre, Ténèbres, Poison, Psy, Acier et Dragon heureux, Normal, Vol,
-Eau, Plante et Fée malheureux. `ParkMapTests` vérifie la part de donjon, les humeurs, que les nageurs atteignent l'eau de
-chaque bassin, la couleur de fond, les lumières et les animations.
-**Forêt profonde** (neuvième paysage, à acheter) : `Foret_profonde_1-1.tmx` à `Foret_profonde_1-4.tmx`
-(`foret-profonde-1-1.json` à `foret-profonde-1-4.json`), faites par `outils/generer-foret-profonde.py` (mêmes arguments),
-avec le pack et les herbes hautes et champignons de l'extension ShroomLands. Un **labyrinthe végétal** sans aucun point
-d'eau, ouvert à tous : des **clairières reliées par des sentiers sinueux** (3 cases de large au moins), avec des boucles et
-des culs-de-sac, entre des **murs d'arbres serrés** (sapins et chênes en quinconce, grands arbres au milieu des bois, une
-haie de buissons au bord, des herbes hautes sombres entre les troncs) ; chaque clairière et chaque sentier appartient à une
-taille et n'est montré que tout entier (deux clairières autour d'un bosquet dans la vue de départ, de nouvelles clairières
-et de nouveaux sentiers à chaque agrandissement). Le feuillage déborde sur le bord des clairières (on passe derrière), jamais
-sur un sentier. Grands champignons (les bleus luisent), rochers moussus, souches, petits champignons, touffes d'herbe
-animées et quelques fleurs ; peu d'objets qui bloquent, et jamais en travers d'un sentier. **Pénombre verte** (le voile de
-la grotte, sa couleur et son opacité en propriétés du calque « Lumières ») : un puits de lumière au milieu de chaque
-clairière, et des champignons lumineux sur les sentiers jusqu'à ce qu'aucune case ne soit à plus de 8 cases d'une lumière.
-15,4 / 18,1 / 21,2 / 24,9 cases libres par Pokémon (« il faut un peu plus de place » : clairières agrandies de 15 % au plus,
-sentiers élargis ; puis les gros blocs de forêt, au bord de la zone comme entre les clairières, reculent jusqu'à ne plus
-dépasser 8 cases d'épaisseur environ). Tout est de type végétation : Plante, Insecte, Fée, Poison, Normal,
-Vol, Acier, Électrik, Combat et Psy heureux, Eau et Roche malheureux. Essai (2026-11-21, instance de test : achat dans la
-vraie page, puis 15 min simulées aux tailles 1, 2 et 4 avec 20 Pokémon dont 2 nageurs et 3 volants) : aucune case
-interdite, 12 / 21 / 48 secteurs de 8 × 8 cases parcourus, les nageurs marchent comme les autres. `ParkMapTests` vérifie
-qu'il n'y a que de la végétation et pas d'eau, qu'au moins un tiers de la zone reste en forêt, le voile, les lumières et
-les animations.
-Les neuf générateurs partagent leur moteur (`outils/parc_carte.py` : jeux de tuiles, tuiles animées, calques, formes,
-écriture des cartes).
-**Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
-aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
-eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, volcan, donjons) et les écrit dans le champ
-`habitats` de la carte (une chaîne par ligne, un chiffre par case). Une case prend le type de sa tuile de « Sol », qu'une
-planche de sol dans « Décors » remplace ; objets, arbres et fleurs gardent le type du dessous. Une planche sans règle
-arrête le script. Ce que chaque type de Pokémon **aime ou non** vient de la feuille « Habitat » de l'utilisateur, recopiée
-dans `ParkHabitats` (par exemple Eau : aime l'eau, aucun autre habitat ; Roche : aime cave et volcan, pas le sable, la
-végétation ni l'eau). `ParkHabitats.Map(paysage, taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
-(cartes lues au démarrage) ; dans le navigateur, `habitatAt(x, y)` de `parc.js`. En **mode debug**, le bouton
-« Habitats (debug) » colore chaque case selon son type, avec la légende et le nombre de cases de chaque type.
-**Bonheur** (`ParkHabitats.MoodOf`) : d'après les types du Pokémon, ce qu'il aime ou non (un double type aime un habitat
-si l'un de ses types l'aime, même si l'autre le déteste). Il est **malheureux** si un habitat qu'il n'aime pas couvre
-50 % ou plus de la zone « Parc » (toutes ses cases : chemins, eau et forêt de la lisière comprises), sinon **heureux** si
-un habitat qu'il aime en couvre plus de 50 %, sinon **normal**. Le parc compte selon son paysage et sa taille. La fiche d'un Pokémon du
-parc montre son **portrait** Donjon Mystère Happy, Normal ou Sad (SpriteCollab, dans le dossier le plus proche de sa
-forme, chromatique, femelle ; sinon son portrait Normal ; sans portrait : le sprite) à la place du sprite, et la raison
-sous son nom (« Heureux : aime la végétation (80 % du parc). »). Dans la Forêt (69 à 80 % de végétation) :
-les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
-autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux ; au Volcan (tout
-de type volcan), les Feu, Roche et Dragon heureux, les autres malheureux sauf ceux qu'il laisse indifférents.
-Pour gérer son parc : l'interrupteur **« Seulement ceux du parc »** de la fenêtre ne montre que les
-Pokémon choisis (avec la recherche et les pastilles) ; la liste est figée quand on l'allume, un Pokémon décoché reste affiché
-pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
-côté de « Choisir les Pokémon », le vide d'un coup après confirmation (`ParkService.ClearAsync`) : ses Pokémon restent dans
-la collection. Ni l'un ni l'autre pour un visiteur. Un clic sur un Pokémon du parc le fait se tourner vers toi et ouvre sa fiche, avec « Retirer du parc ». La fiche n'est
-donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`) : le numéro vient du navigateur, et un visiteur ne
-doit pas lire ainsi le reste de la collection.
-Un Pokémon qui quitte la collection (retiré, sauvegarde mise à jour ou supprimée) quitte le parc (table `ParkMembers`,
-suppression en cascade).
+`/parc`, `Pages/Park.razor`, `Services/ParkService.cs`, affichage et animation `wwwroot/js/parc.js` (Phaser), cartes
+faites dans [Tiled](https://www.mapeditor.org) avec le pack Cute Fantasy (voir « Crédits »). Tout le reste (cartes de
+chaque paysage, générateurs, types de cases, comportement, tests) : `docs/claude/parc.md`.
 
-Animation dans le navigateur (`wwwroot/js/parc.js`, Phaser), avec les sprites Donjon Mystère Idle, Walk, Sleep, Charge, Attack et Hurt (8 directions)
-de la **forme** du Pokémon (Raichu d'Alola, Ponyta de Galar, Zarbi B...) ou de sa **Méga-Évolution** s'il tient sa gemme,
-chromatique et femelle quand SpriteCollab les a, sinon ceux de l'espèce (`PokemonSprites.DonjonFolder` : noms de formes de
-PKHeX rapprochés de ceux de SpriteCollab, `images/donjon/formes.json`). Pour qu'ils aient l'air de vivre :
-- une **énergie** qui baisse en marchant et remonte en dormant (3 à 5 minutes d'activité, puis une sieste d'une minute) ;
-- des **intentions** : explorer un endroit du parc, rendre visite à un Pokémon de sa famille d'évolution (`ParkService.Family`)
-  et rester un moment avec lui, observer autour de soi, aller dormir près d'un congénère ;
-- un **caractère** tiré de la nature (Vitesse augmentée : plus actif ; diminuée : plus dormeur ; Déf. Spé. : plus sociable) ;
-- la **nuit** (heure de l'appareil, 22 h – 6 h, progressive le soir et à l'aube) : le parc s'assombrit, ils s'endorment plus
-  tôt et dorment longtemps ;
-- la **curiosité** : un Pokémon éveillé se tourne vers le pointeur de la souris, et vient souvent voir de près ;
-- le **malheur** (humeur « malheureux », voir « Bonheur ») : toutes les 45 s à 1 min 30 environ, il marche jusqu'au
-  Pokémon le plus proche à 8 cases au plus (pas de sa famille, éveillé ou endormi) et l'**attaque** (animation Attack) ;
-  le Pokémon frappé a mal (Hurt, un dormeur se réveille), puis **s'enfuit** deux fois plus vite à 6 à 10 cases de
-  l'attaquant, sans répliquer. Immobile, un malheureux **boude** aussi (Hurt seul) toutes les 40 s environ. L'humeur est
-  donnée par la page (`ParkPokemon.Mood`) ; les attaques se passent dans le navigateur (un visiteur voit les siennes). En
-  **mode debug**, « Attaquer (debug) » dans la fiche d'un Pokémon le fait attaquer le plus proche, quel que soit son
-  bonheur ;
-- des **chemins** qui contournent les obstacles (recherche de chemin sur les cases de la carte, lissée en lignes droites) :
-  jamais sur une case bloquée, ni hors de la zone « Parc » ;
-- l'**eau** : les Pokémon de type **Eau** (l'un de leurs deux types) **nagent** dans l'eau libre (sans rocher, nénuphar
-  ni récif ; plus le bord qui la touche, comme l'écume de la plage), environ deux promenades sur trois, et y dorment ; dans
-  l'eau, le bas du sprite est caché et des remous remplacent l'ombre. Les types **Vol** la **survolent** (raccourci, et
-  de temps en temps un tour au-dessus de l'eau), plus haut que leur ombre, mais ne s'y arrêtent pas : ils se posent et
-  dorment sur la terre ferme. Un Eau/Vol nage. Les autres ne vont pas dans l'eau ; un malheureux qui ne nage pas
-  n'attaque pas un Pokémon dans l'eau. La façon de se déplacer vient de la page (`ParkPokemon.Moves`,
-  `ParkHabitats.MovementOf`) ;
-- la **lave** (Volcan) : les types **Feu** y vont **de temps en temps** (une promenade sur quatre, `LAVA_BATH` dans
-  `parc.js` : bien moins que les Eau dans l'eau, choix de l'utilisateur), s'y enfoncent comme un nageur, avec des remous
-  dorés ; ils n'y dorment pas (fatigués, ils en sortent d'abord) et arrivent au parc sur la roche. Un Feu/Vol va dans la
-  lave plutôt que de voler ; un Feu/Eau nage et va dans la lave. Les types **Vol** la survolent comme l'eau ;
-- le nom au survol, des « z » au-dessus des dormeurs, les plus bas dessinés devant (devant les arbres aussi : chaque
-  feuillage est trié selon la ligne de son tronc). Les positions ne sont pas gardées.
-
-**Déplacer un Pokémon** (propriétaire du parc seulement ; pas les visiteurs) : à la souris, appuyer sur lui et bouger le
-**soulève** ; au doigt, il faut un **appui long** (0,3 s) avant de bouger (un glissement direct fait défiler la vue). Il
-suit le pointeur, un peu au-dessus de son ombre, devant tout, avec son animation **Charge** (Idle quand SpriteCollab ne
-l'a pas) ; la case visée est encadrée en clair si on peut l'y poser, en **rouge** sinon (eau, sauf pour un type Eau ; lave,
-sauf pour un type Feu ; arbre, rocher, banc, hors de la zone « Parc »). Lâché sur une case interdite, il **revient à sa place** ; posé, il reste quelques secondes
-immobile puis reprend sa vie (un dormeur soulevé se réveille). Près du bord de la vue, la vue défile. Deux doigts pendant
-le transport : pincement, le Pokémon revient à sa place. Rien n'est enregistré : comme les positions, le déplacement ne
-vaut que dans ce navigateur.
+- Pokémon de la collection, toutes générations, hors œufs. **20 places** (`ParkService.BaseCapacity`), **Agrandir** :
+  25 000 ₽ pour 20 de plus, 3 fois (`ParkService.ExpansionPrice`, `ExpandAsync`). Taille et débit vérifiés dans les mises
+  à jour elles-mêmes (deux achats simultanés ne dépassent ni la taille ni le solde) ; achat au journal. Un parc déjà
+  au-dessus de sa capacité garde ses Pokémon, sans pouvoir en ajouter.
+- **Un parc par paysage** (`ParkLandscape`, table `Parks`, index unique compte + paysage) : Forêt créée à la première
+  visite, puis Plage, Volcan, Désert, Océan, Grotte, Montagne, Donjon et Forêt profonde à **25 000 ₽** (`ParkService.ParkPrice`,
+  `BuyAsync` : `INSERT OR IGNORE` et débit dans la même transaction). Chaque parc a sa taille. Chaque méthode revérifie que
+  le parc (numéro venu du navigateur) est à ce joueur. **Un Pokémon dans un seul parc** (table `ParkMembers`, suppression
+  en cascade quand il quitte la collection). Nom, cartes et textes de chaque paysage : `ParkLandscapes`.
+- Océan : seuls les nageurs (`ParkLandscapes.Refusal`, revérifié par `ParkService.SetAsync`). Espèces sans sprites
+  SpriteCollab : refusées. Dans la fenêtre de choix, un Pokémon qui ne peut pas venir (`ParkCandidate.Locked`) est
+  grisé (sprite en noir et blanc, pâle) et rangé à la fin ; un clic donne la raison sans le cocher.
+- **Bonheur** (`ParkHabitats.MoodOf`, d'après la feuille « Habitat » de l'utilisateur) : malheureux si un habitat qu'il
+  n'aime pas couvre 50 % ou plus de la zone « Parc », sinon heureux si un habitat qu'il aime en couvre plus de 50 %, sinon
+  normal ; un double type aime un habitat si l'un de ses types l'aime.
+- **Malus « attaqué »** (`ParkService.RecordAttackAsync`, colonnes `MalusUntil` et `MalusLevels` de `ParkMembers`,
+  migration `ParkAttackMalus`) : attaqué, un Pokémon perd un niveau de bonheur (heureux → neutre → malheureux) pendant
+  15 min ; attaqué de nouveau pendant son malus, un niveau de plus (jamais sous malheureux) et 15 min de plus sur le même
+  compteur ; fini, tout est oublié et l'habitat décide de nouveau. Enregistré seulement depuis la page du propriétaire
+  (numéro revérifié : ce Pokémon, dans ce parc du joueur) ; changer de parc l'efface. Un malheureux (habitat ou malus)
+  attaque et boude, avec un nuage d'orage au-dessus de lui.
+- Fenêtre « Choisir les Pokémon » : liste « Tous les Pokémon » (par défaut) / « Ceux de ce parc » / « Dans aucun parc »,
+  d'après le parc enregistré (rien ne bouge avant « Valider ») ; un filtre d'affichage seulement, `SetAsync` revérifie.
+- La fiche n'est donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`). Positions et déplacements à la
+  souris ne sont pas enregistrés (navigateur seulement). Visiteurs : rien qui modifie.
+- Déplacer un Pokémon : **appui d'une demi-seconde sans bouger** (souris ou doigt), un cercle se remplit à côté de lui ;
+  bouger avant fait défiler la vue (on ne prend pas un Pokémon en voulant seulement bouger la vue).
 
 ### Living dex
 
-Le menu « Living dex » (`/livingdex`, entre « Inventaire » et « Sauvegardes ») suit un **living dex** : un exemplaire de
-chaque Pokémon du Pokédex d'un jeu. Pour l'instant les jeux de 1re génération (**Pokémon Rouge, Bleu et Jaune**), de 2e
-(**Pokémon Or, Argent et Cristal**), de 3e (**Pokémon Rubis, Saphir, Émeraude, Rouge Feu et Vert Feuille** ; pas
-Colosseum ni XD), de 4e (**Pokémon Diamant, Perle, Platine, Or HeartGold et Argent SoulSilver**, noms français de PKHeX)
-de 5e (**Pokémon Noire, Blanche, Noire 2 et Blanche 2**), de 6e (**Pokémon X, Y, Rubis Oméga et Saphir Alpha**) et de
-7e (**Pokémon Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu et Let's Go Évoli**) et de 8e (**Pokémon Épée,
-Bouclier, Diamant Étincelant, Perle Scintillante et Légendes Pokémon : Arceus**) et de 9e (**Pokémon Écarlate et
-Violet** ; pas encore Légendes Z-A).
+`/livingdex`, `Pages/LivingDexes.razor` et `Pages/LivingDexPage.razor`, table `LivingDexes` (`Data/LivingDex.cs`), jeux
+et modes dans `LivingDexGames` (`Services/LivingDexService.cs`), global dans `Services/GlobalLivingDex.cs`. Modes et cases
+jeu par jeu, préférences de l'utilisateur, images : `docs/claude/living-dex.md`.
 
-- **Vue générale** (`/livingdex`) : une carte par living dex (jaquette, sauvegarde, barre de progression, « x / y »).
-  Boutons **Régional / National / Complet** pour la progression de toutes les cartes (`?mode=regional`, `?mode=complet`) :
-  une carte dont le jeu n'a pas ce mode compte en National et l'indique (« National seul », 1re génération) ; un clic
-  sur une carte ouvre le living dex dans le mode affiché. Même comptage que sur sa page (`LivingDexService.EntriesAsync`).
-  **Tri** à côté (« Trier par » Génération / Complétion, et ↑ / ↓ pour le sens ; `?tri=completion`, `?ordre=desc`,
-  `LivingDexGames.Sort`) : par génération, l'ordre des jeux ou son exact inverse ; par complétion, le pourcentage exact
-  dans le mode affiché (celui de la carte, le National pour « National seul »), à égalité dans l'ordre des jeux.
-- **Barres de progression** (cartes et page d'un living dex, `Shared/LivingDexProgress.razor`) : pourcentage au centre
-  de la barre, avec une décimale **arrondie vers le bas** (« 5,6 % » ; 100 % seulement quand tout y est),
-  `LivingDexGames.Percent`.
-- **Création** : « + Créer un living dex », d'abord le **jeu** (jaquettes groupées par génération, **repliées** au
-  départ : le titre de chaque génération, « ▸ 4e génération (5 jeux) », la déplie ou la replie ; repliée, celle du jeu
-  choisi le montre encore ; un jeu qui a déjà son living dex est grisé), puis une de ses **sauvegardes** stockées pas encore liées. PKHeX reconnaît Jaune, Cristal,
-  Émeraude, Platine, et depuis PKHeX 26 HeartGold et SoulSilver, mais pas Rouge de Bleu, Or d'Argent, Rubis de Saphir,
-  Rouge Feu de Vert Feuille ni Diamant de Perle (même format) : une sauvegarde Rouge / Bleu est proposée pour Rouge comme
-  pour Bleu, de même pour les autres paires (pour Rouge Feu / Vert Feuille, PKHeX répond toujours « Rouge Feu » faute de mieux). À partir
-  de la 5e génération, chaque sauvegarde dit son jeu (Let's Go, Légendes Arceus et Écarlate / Violet compris). **Un living dex par jeu** et par compte, une
-  sauvegarde pour un seul living dex (index uniques).
-- **Comptage** : un Pokémon est enregistré s'il est dans l'**équipe ou les boîtes** de la sauvegarde liée (pas les œufs) ;
-  le living dex suit donc chaque mise à jour de la sauvegarde (site ou 3DS). Le premier exemplaire (équipe, puis boîtes)
-  remplit la case.
-- **Modes** : Régional (le Pokédex de la région), National (tout le national que le jeu peut contenir) et Complet (chaque
-  forme de chaque Pokémon du national : formes régionales, Méga-Évolutions, Gigamax, formes qui changent l'aspect comme
-  Sancoki / Tritosor ou les lettres de Zarbi ; pas le sexe ; **seulement celles qu'une sauvegarde du jeu peut contenir**).
-  En Régional et National, n'importe quelle forme d'une espèce compte ; en Complet, la forme exacte. **Un mode identique à
-  un autre, ordre compris, est caché** :
-  - 1re génération (une région, aucune forme) : le National seul, 151 Pokémon, sans onglets ;
-  - 2e génération : **Régional** (Pokédex de Johto, `?mode=regional` : les mêmes 251 Pokémon que le national, dans l'ordre
-    et avec les numéros du jeu, Germignon n° 1, Celebi n° 251 ; infobulle « Johto #001 Germignon (national #152) »),
-    **National** (251) et **Complet** (276 : les 26 lettres de Zarbi, A à Z, enregistrées dans chaque Zarbi ; aucune autre
-    forme dans ces jeux) ;
-  - 3e génération : **Régional** (Hoenn pour Rubis, Saphir et Émeraude : 202 Pokémon, Arcko n° 1, Deoxys n° 202 ; Kanto
-    pour Rouge Feu et Vert Feuille : les 151 premiers), **National** (386) et **Complet** (413 : les 28 lettres de Zarbi,
-    avec « ! » et « ? »). Les formes de Morphéo n'existent qu'en combat : une seule case. **Deoxys** n'enregistre pas sa
-    forme en 3e génération, c'est le jeu qui la donne : sa case (dans tous les modes) a la forme et l'image de celle du jeu
-    (Normale dans Rubis / Saphir, Vitesse dans Émeraude, Attaque dans Rouge Feu, Défense dans Vert Feuille) et n'importe
-    quel Deoxys la remplit. Les trois autres formes, impossibles dans la partie, ne comptent pas (une appli qui les compte,
-    avec celles de Morphéo, arrive à 419) ;
-  - 4e génération : **Régional** (Sinnoh de Diamant / Perle : 151, Tortipouss n° 1, Manaphy n° 151 ; Sinnoh agrandi de
-    Platine : 210, Giratina n° 210 ; Johto de HeartGold / SoulSilver : 256, Celebi n° 256), **National** (493) et
-    **Complet** : les 28 lettres de Zarbi, les 4 formes de Deoxys (chaque Deoxys garde la sienne en 4e), les 3 capes de
-    Cheniti et de Cheniselle, les mers Occident / Orient de Sancoki et Tritosor (529 en Diamant / Perle) ; à partir de
-    Platine, les 6 formes de Motisma, Giratina Originel (il tient l'Orbe Platiné, ce qui se garde en boîte) et Shaymin
-    Céleste (536 en Platine) ; en HeartGold / SoulSilver, Pichu Troizépi (537 ; il ne peut pas aller dans les autres
-    jeux). Les formes de chaque jeu viennent de PKHeX (`PersonalTable` : Motisma n'en a qu'une en Diamant / Perle).
-    **Arceus** n'a qu'une case, quelle que soit sa Plaque ; Morphéo et Ceriflor non plus (formes de combat).
-    **Shaymin Céleste** redevient Terrestre dans une boîte : pour ne pas bloquer l'équipe, sa case se remplit avec un
-    **deuxième Shaymin** (n'importe quelle forme, le premier remplit la case Shaymin) **et la Gracidée** dans le sac de la
-    sauvegarde (objet rare : la banque n'y touche pas) ; l'infobulle dit ce qui manque (« il faut un deuxième Shaymin et
-    la Gracidée dans le sac ») ou « Gracidée dans le sac ». En Régional et National, un Shaymin suffit ;
-  - 5e génération : **Régional** (Unys de Noire / Blanche : 156 Pokémon ; de Noire 2 / Blanche 2 : 301 ; numérotés **à
-    partir de 0**, Victini n° 000, jusqu'à Genesect), **National** (649) et **Complet** : les formes de la 4e (sauf Pichu
-    Troizépi, qui ne passe pas en 5e ; même règle pour Shaymin Céleste), Bargantua motif Bleu et les 4 saisons de
-    Vivaldaim et Haydaim (699 en Noire / Blanche) ; en Noire 2 / Blanche 2, les formes Totémiques de Boréas, Fulguris et
-    Démétéros, Kyurem Blanc et Noir, Keldeo Décidé (705). Seuls les Vivaldaim et Haydaim **de l'équipe** prennent la
-    saison du jeu (au chargement) : en boîte, ils gardent la leur ; l'infobulle d'une saison manquante le rappelle (« à
-    garder en boîte »). **Genesect** n'a qu'une case, quel que soit son Module (comme Arceus) ; Darumacho Transe et
-    Meloetta Danse n'existent qu'en combat ;
-  - 6e génération : **Régional** (Kalos de X / Y : trois sous-Pokédex à la suite, **Centre** 153, **Côtes** 153 et
-    **Montagnes** 151, 457 Pokémon sans doublon, chacun avec son titre dans la grille et sa numérotation à partir de 1,
-    infobulle « Kalos Côtes #001 Baudrive (national #425) » ; Hoenn de Rubis Oméga / Saphir Alpha : 211), **National**
-    (721) et **Complet** (825 en X / Y, 847 en Rubis Oméga / Saphir Alpha) : les formes de la 5e (les saisons ne changent
-    plus, sans conseil), les 5 fleurs de Flabébé, Floette (sans l'Éternelle, jamais distribuée) et Florges, les 4 tailles
-    de Pitrouille et Banshitrouye. **Méga-Évolutions et Primo-Résurgences** (formes de combat) : une case chacune, remplie
-    par un exemplaire **de plus** de l'espèce qui tient sa Méga-Gemme (Gemme Rouge / Bleue pour les Primo ; Méga-Rayquaza,
-    sans gemme : un Rayquaza de plus qui connaît Draco-Ascension) ; la case de l'espèce en prend un autre (Dracaufeu : 3
-    exemplaires) ; infobulle « il faut un Dracaufeu de plus avec Dracaufite X », ou « avec Mysdibulite ». 30 en X / Y,
-    50 en Rubis Oméga / Saphir Alpha (le nombre de formes de chaque jeu vient de PKHeX). Rubis Oméga / Saphir Alpha
-    seulement : **Hoopa Déchaîné** comme Shaymin Céleste (deuxième Hoopa et Vase Scellé dans le sac) et une case **Pikachu
-    Cosplayeur**, remplie par n'importe quel costume (un seul par partie). Une seule case, quelle que soit la forme :
-    Prismillon (et Lépidonille, Pérégrain : trop de motifs à rassembler), Couafarel (les coupes ne tiennent qu'en équipe),
-    Mistigrix (sa forme est le sexe), Arceus, Genesect ; Exagide Assaut et Xerneas Déchaîné n'existent qu'en combat ;
-  - 7e génération : **Régional** (Alola de Soleil / Lune : 302, Brindibou n° 1, Marshadow n° 302 ; d'Ultra-Soleil /
-    Ultra-Lune : 403, Zeraora n° 403 ; une seule liste, les Pokédex des îles se recoupent), **National** (802 ; 807 en
-    Ultra) et **Complet** (956 en Soleil / Lune, **964** en Ultra : ça tient, de justesse, dans les 960 places des boîtes
-    et les 6 de l'équipe) : les formes de la 6e (Méga comprises, les 50 : PKHeX dit que chaque gemme peut se tenir en 7e,
-    `ItemStorage7SM.GetAllHeld`), les **18 formes d'Alola** (« Rattata d'Alola »), les 4 styles de Plumeline, Lougaroc
-    Diurne, Nocturne et Crépusculaire (Ultra seulement), Zygarde **50 % et 10 %** (avec ou sans Rassemblement : la même
-    case), les **7 noyaux de Météno**, Necrozma Crinière du Couchant et Ailes de l'Aurore (Ultra). **Shaymin Céleste et
-    Hoopa Déchaîné** tiennent en boîte à partir de la 7e (règles de légalité de PKHeX) : cases ordinaires, sans deuxième
-    exemplaire ni objet. Une seule case : **Silvallié** (comme Arceus), Pikachu (les **casquettes** ne comptent pas :
-    distributions terminées), Amphinobi ; un **Pokémon Dominant** (Ultra : seule la taille change) remplit la case de sa
-    forme ordinaire (Rattatac Dominant : Rattatac d'Alola). Formes de combat exclues : Météno Météore, Ultra-Necrozma,
-    Zygarde Parfait, Froussardine en banc, Mimiqui démasqué, Amphinobi Sacha ;
-  - **Let's Go Pikachu / Évoli** : seulement les 151 de Kanto, **Meltan et Melmetal** (n° 808 et 809) : son Pokédex est
-    tout ce que le jeu peut contenir, donc **National** (153) et **Complet** (186 : les 18 formes d'Alola et 15 Méga ; ni
-    casquette, ni Pikachu / Évoli Partenaire). Les Pokémon n'y tiennent **pas d'objet** : une case Méga se remplit avec un
-    **exemplaire de plus** de l'espèce **et sa gemme dans le sac** (`LivingDexSlot.MegaInBag` ; Dracaufeu : trois pour les
-    deux Méga) ; infobulle « il faut un Dracaufeu de plus et la Dracaufite X dans le sac ». Le Parc GO (Pokémon venus
-    de Pokémon GO, hors des boîtes) ne compte pas ;
-  - 8e génération : seulement ce que le jeu peut contenir, d'après PKHeX (`PersonalTable.IsPresentInGame` :
-    `LivingDexGames.Present`), dans tous les modes ; pas de Méga.
-    - **Épée / Bouclier** : **Régional** = Galar (400), puis ce que l'**Isolarmure** (110 de plus) et la **Couronneige**
-      (74 de plus) ajoutent, sans doublon, en trois sections avec les numéros du jeu (`RegionalNumbers`) : 584 ;
-      **National** : les 664 espèces du jeu ; **Complet** (764) : formes d'Alola et de Galar (« Miaouss de Galar »),
-      Motisma, Kyurem, Necrozma, Lougaroc, Zygarde, Pitrouille..., Salarsen Grave, Shifours Mille Poings, Sylveroy du Froid
-      et d'Effroi, les **9 crèmes de Charmilly** (« Charmilly (Lait Ruby) » ; n'importe quelle décoration), et **32 cases
-      Gigamax** (« Dracaufeu Gigamax ») : le facteur Gigamax n'est pas une forme, sa case se remplit avec un exemplaire
-      **de plus** qui l'a (comme une Méga ; « il faut un Dracaufeu de plus avec le facteur Gigamax ») ; une seule pour
-      Charmilly et Salarsen (même aspect Gigamax), deux pour Shifours. Exclus : Pikachu à casquette, Zarude Papa et
-      Magearna Couleur du Passé (distributions terminées), Théffroi / Polthégeist Authentique (même aspect), les formes de
-      combat (Darumacho Transe, Zacian / Zamazenta Suprême, Bekaglaçon, Morpeko, Éthernatos Infinimax...) ;
-    - **Diamant Étincelant / Perle Scintillante** : **Régional** (Sinnoh, le même que Diamant / Perle : 151), **National**
-      (493) et **Complet** (536) : les formes de Diamant / Perle, Shaymin Céleste en case ordinaire (il tient en boîte à
-      partir de la 7e) ; Papilord, une case (sa cape ne se voit pas) ;
-    - **Légendes Arceus** : **Régional** (Hisui : 242, Brindibou n° 1), **National** (les mêmes 242, dans l'ordre
-      national, comme Johto) et **Complet** (291) : formes de Hisui, Goupix et Feunard d'Alola, Dialga, Palkia et Giratina
-      Originels, formes Totémiques (Amovénus compris), Bargantua Blanc, Zarbi, capes, mers, Motisma, Shaymin Céleste. Une
-      espèce qui n'existe qu'en forme de Hisui (Caninos, Typhlosion...) a une seule case, à cette forme (« Caninos de
-      Hisui », même en National) ; pas les formes Roi (impossibles à capturer) ;
-  - 9e génération, **Écarlate / Violet** : comme Épée / Bouclier, seulement ce que le jeu peut contenir.
-    **Régional** = Paldea (400), puis ce que **Septentria** (99 de plus) et la **Myrtille** (165 de plus) ajoutent, sans
-    doublon, en trois sections avec les numéros du jeu : 664 ; **National** : les 733 espèces du jeu ; **Complet**
-    (855, pour 966 places) : formes d'Alola, de Galar, de Hisui et de **Paldea** (Axoloto, les 3 races de Tauros : « Tauros de
-    Paldea (race Combative) »), Ursaking Lune Vermeille, **Famignol Famille de Quatre** et **Deusolourdo Triple** (rares,
-    mais des formes d'aspect), les 4 plumages de Tapatoès, les 3 formes de Nigirigon, **Mordudor Marche** (venu de
-    Pokémon GO par HOME), les 4 masques d'Ogerpon, et les formes des générations précédentes que le jeu connaît
-    (Motisma, Bargantua, saisons, fleurs, noyaux de Météno, crèmes de Charmilly...). Ni Méga ni Gigamax. Une seule case :
-    Koraidon et Miraidon (leurs autres formes sont celles de la monture, jamais en boîte), Prismillon, Arceus,
-    Silvallié. Exclus : Pikachu à casquette, Zarude Papa, Magearna Couleur du Passé, Poltchageist / Théffroyable
-    Onéreux (même aspect), formes de sexe, formes de combat (Superdofin Super, Ogerpon et Terapagos Téracristal...).
-- **Page d'un living dex** (`/livingdex/{id}`) : jaquette officielle, compteur et barre de progression, filtre
-  **Tous / Manquants / Possédés** avec le nombre de chacun (`?filtre=manquants`, `?filtre=possedes`, gardé en changeant
-  de mode), grille dans l'ordre du Pokédex avec les **sprites du jeu** (Rouge / Bleu : couleurs du Super Game Boy, Jaune :
-  Game Boy Color ; Or, Argent et Cristal ont chacun les leurs ; Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille,
-  Diamant / Perle, Platine et HeartGold / SoulSilver aussi ; ceux, fixes, de Noire / Blanche pour toute la 5e génération :
-  PokéAPI n'a pas ceux de Noire 2 / Blanche 2 ; **à partir de la 6e génération, les images de « Ma collection »**, les
-  sprites 3D de ces jeux n'ayant pas plu : `SpriteFolder` null, `LivingDexGames.Sprite` → `PokemonSprites.Url`, la Méga
-  par sa gemme comme un Pokémon qui la tient, les Gigamax par `PokemonSprites.GigamaxUrl` ; 7e et 8e génération aussi),
-  **une image par forme** (Zarbi B, Deoxys Vitesse...), en couleur si le Pokémon est dans la sauvegarde, en **silhouette
-  noire** sinon. Infobulle : numéro, nom (« Zarbi B » en Complet, « Deoxys (forme Vitesse) »)
-  et place (« Boîte 2, case 8 ») ou « manquant » ; un clic sur un Pokémon possédé ouvre sa fiche. Nombre de colonnes au
-  curseur, comme dans « Ma collection » (3 à 20, selon la largeur de la fenêtre par défaut, `?colonnes=12` ;
-  `Shared/GridColumns.cs`, commun aux deux pages).
-- **Suppression** : « Supprimer ce living dex » (la sauvegarde reste). Supprimer la sauvegarde supprime son living dex
-  (suppression en cascade), ce que la confirmation de « Mes sauvegardes » signale.
-- **Living dex global** (`Services/GlobalLivingDex.cs`, jeu `LivingDexGame.Global`) : un par compte, choisi en tête de
-  « + Créer un living dex », **sans sauvegarde** (`LivingDex.StoredSaveId` null, migration `GlobalLivingDex`) : il compte
-  les Pokémon du **stockage interne** (« Transfert »), pas ceux des sauvegardes stockées ni les œufs, et **pas les
-  chromatiques** (ignorés même s'ils pourraient remplir une case) ; chaque exemplaire
-  ne remplit qu'une case (d'abord les cases qui en demandent un de plus, puis les formes exactes, puis « n'importe quelle
-  forme »), dans l'ordre des dépôts. Carte et page : la **Master Ball** (image de l'objet) à la place d'une jaquette
-  (`Shared/LivingDexCover.razor`), toujours **en tête** de la vue générale, quel que soit le tri.
-  Une forme y est reconnue par son **nom anglais chez PKHeX**, pas par son numéro : Pikachu 1 est Rockeur en 6e
-  génération, à casquette Originale ensuite. Trois modes :
-  - **National** : les 1 025 espèces ;
-  - **Complet** (1 283) : les cases Complet de tous les living dex par jeu réunies (formes régionales, Méga, Gigamax,
-    formes d'aspect, avec les mêmes choix : un seul Prismillon, 9 crèmes de Charmilly, pas de casquettes...), sans
-    Légendes Z-A ; la forme exacte l'emporte quand un jeu accepte n'importe laquelle et un autre non (Hoopa) ; plus de
-    condition de sac (Shaymin Céleste, Méga de Let's Go : la gemme tenue) ;
-  - **Ultime** (1 578 : 12 lots de 50 emplacements au-delà des 1 000 de départ) : **toutes les formes** qu'une boîte
-    d'un jeu pris en charge peut garder (tables de chaque jeu de PKHeX ; présence dans le jeu à partir de la 8e), même
-    celles au même aspect (Pikachu Partenaire, costumes et casquettes, Dominants, Papilord, Lépidonille, Théffroi
-    Authentique, Zygarde Rassemblement...), les formes de couleur (20 Prismillon, **63 Charmilly** : crème × décoration,
-    lue dans le `FormArgument`), **mâle et femelle à part** quand la femelle est différente (forme de base, liste de
-    PokéAPI ; « Pikachu ♀ »), les Méga, Primo, Gigamax (deux pour Salarsen) et les formes de combat dues à un objet tenu
-    (Zacian / Zamazenta Suprêmes : Épée / Bouclier Rouillés, Ultra-Necrozma : Ultranécrozélite), chacune avec un
-    **exemplaire de plus**. Exclues : les formes de combat sans objet (Darumacho Transe, Exagide, Mimiqui démasqué,
-    Zygarde Parfait, Superdofin Super, Téracristal...), les coupes de Couafarel (en équipe seulement, et le stockage
-    interne ne reçoit que des Pokémon des boîtes), les formes de monture de Koraidon et Miraidon, Floette Éternelle
-    (jamais distribuée), les formes Roi de Légendes Arceus, Arceus « ??? ». **Spinda** n'a qu'une case.
-  Vue générale : bouton **Ultime** (`?mode=ultime`), qui ne montre que les living dex qui ont ce mode (les globaux) ; en
-  Régional, une carte globale compte en National (« National seul »).
-- **Living dex global chromatique** (`LivingDexGame.GlobalShiny`) : le même, un par compte, image le **Charme Chroma**,
-  juste après le global ; il ne compte **que les chromatiques** du stockage interne (images chromatiques de la
-  collection). Ses cases sont celles du global **sans ce qui n'a jamais existé en chromatique** dans un jeu pris en
-  charge (`GlobalLivingDex.ShinyLocked`, d'après la « List of unobtainable Shiny Pokémon » de Bulbapedia, distributions
-  et cadeaux de HOME compris) : 25 espèces (Victini, Hoopa, Volcanion — le chromatique de HOME vient de Légendes Z-A et
-  ne va ni dans Épée / Bouclier ni dans Écarlate / Violet —, Cosmog, Cosmovum, Magearna, Marshadow, Wushours, Shifours,
-  Zarude, Blizzeval, Spectreval, Sylveroy, et Serpente-Eau à Pêchaminus), les costumes et casquettes de Pikachu (sauf la
-  Partenaire), Pikachu et Évoli Partenaires, Pichu Troizépi, Amphinobi Lien Naturel, le motif Poké Ball, Ursaking Lune
-  Vermeille, Melmetal Gigamax, les Pokémon Dominants. National 1 000, Complet 1 244, Ultime 1 508.
+- Jeux de la 1re à la 9e génération (pas Colosseum, XD, ni Légendes Z-A). **Un living dex normal et un chromatique par
+  jeu et par compte** (index unique compte + jeu + `Shiny`), une sauvegarde pour un seul living dex, même entre normal
+  et chromatique (index unique) ; supprimer la sauvegarde supprime son living dex (cascade).
+- PKHeX ne distingue pas Rouge de Bleu, Or d'Argent, Rubis de Saphir, Rouge Feu de Vert Feuille, ni Diamant de Perle :
+  la sauvegarde est proposée pour les deux jeux. À partir de la 5e génération, chaque sauvegarde dit son jeu.
+- **Comptage** : équipe et boîtes de la sauvegarde liée (pas les œufs), donc à jour à chaque mise à jour de la sauvegarde.
+- **Modes** : Régional, National, Complet (chaque forme qu'une sauvegarde du jeu peut contenir, pas le sexe) ; en
+  Régional et National n'importe quelle forme compte, en Complet la forme exacte. Un mode identique à un autre, ordre
+  compris, est caché ; la 1re génération, où les trois sont identiques, garde le **Régional** (Kanto) : sa carte n'apparaît
+  qu'en Régional dans la vue générale, et elle ne compte qu'en régional dans les statistiques (`LivingDexGames.RegionalOnly`).
+  Cases qui demandent un exemplaire de plus (Méga, Primo, Gigamax), un objet dans le sac (Shaymin
+  Céleste, Hoopa Déchaîné jusqu'à la 6e, Méga de Let's Go) ou une forme fixée par le jeu (Deoxys de 3e génération).
+- **Chromatique d'un jeu** (`LivingDex.Shiny`, `LivingDexGames.Get(jeu, shiny: true)`) : pas en 1re génération
+  (`HasShiny`) ; seulement les chromatiques de sa sauvegarde ; un seul mode, le Régional (Let's Go : son Pokédex, en
+  National) ; sans les espèces de `GlobalLivingDex.ShinyLockedSpecies`, les autres cases gardent leur numéro régional ;
+  sprites dans `chromatique/` (jusqu'à la 5e génération), sinon images chromatiques de la collection ; jaquette avec le
+  Charme Chroma.
+- Vue générale : `?mode=regional|complet|ultime`, `?filtre=chromatiques|normaux` (global chromatique compris dans
+  « chromatiques », `LivingDexGames.Matches`), `?tri=generation|completion`, `?ordre=desc` (`LivingDexGames.Sort` : le chromatique
+  d'un jeu suit son normal ; sans tri dans l'adresse, celui du compte, voir « Tris par défaut ») ; une carte sans le
+  mode demandé compte en National, ou dans son seul mode (« Régional seul »), sauf la 1re génération, cachée hors du
+  Régional ; pourcentage arrondi vers le bas (`LivingDexGames.Percent`). Page : `?filtre=manquants|possedes`, colonnes `?colonnes=12`
+  (`Shared/GridColumns.cs`, commun avec « Ma collection »).
+- **Global** (`LivingDexGame.Global`, `StoredSaveId` null) : stockage interne seulement, sans œufs ni chromatiques,
+  chaque exemplaire pour une seule case ; formes reconnues par leur nom anglais chez PKHeX ; National 1 025, Complet
+  1 283, Ultime 1 578. **Global chromatique** (`LivingDexGame.GlobalShiny`) : les chromatiques seulement, sans
+  `GlobalLivingDex.ShinyLocked` (National 1 000, Complet 1 244, Ultime 1 508).
+- Images : `outils/images.py livingdex` (sprites PokéAPI, jaquettes Bulbagarden Archives) ; sans elles, l'image de la
+  collection (`LivingDexGames.Fallback`).
+- **All the Mons** (`LivingDexGame.AllTheMons`, `Services/Cobblemon/AllTheMonsLivingDex.cs`) : un par compte, sur un
+  monde Minecraft stocké (génération 0), qui ne sert à aucun autre living dex ; compte l'équipe et le PC du monde,
+  **chromatiques compris** (pas encore de living dex chromatique) ; modes et règles du global (National, Complet, Ultime,
+  exemplaire de plus pour les Méga et Gigamax), cases adaptées au modpack : sans ce que Cobblemon n'a pas (Pichu Troizépi,
+  Dominants, Partenaires de Let's Go, capes de Papilord, motifs de Lépidonille et Pérégrain, Arceus Légende, Fragilady
+  Reine) ; avec, en Complet et Ultime, toutes les Méga de Légendes Z-A (celles de PKHeX), Stari Patrickyu, Floette
+  Éternelle, Piglich et Creepyon (espèces du modpack, n° 9901 et 9902, aussi en National) ; en Ultime, les coupes de
+  Couafarel et trois motifs de Prismillon de Cobblemon. National 1 027, Complet 1 335, Ultime 1 593. Forme d'un Pokémon :
+  `CobblemonPokemon.FormKey` (nom anglais de PKHeX, ou identifiant de Cobblemon). Jaquette et images propres au modpack
+  versionnées dans `wwwroot/minecraft/` (rendus des modèles du mod : `outils/rendu-cobblemon.py`). Tables relevées dans
+  les fichiers du modpack : à revoir à sa mise à jour (`docs/claude/living-dex.md`).
 
-Données : table `LivingDexes` (`Data/LivingDex.cs`), jeux et modes dans `LivingDexGames` (`Services/LivingDexService.cs`).
-Images : `outils/images.py livingdex` (sprites de PokéAPI, jaquettes de Bulbagarden Archives, en anglais faute de
-françaises), téléchargées sur le VPS à chaque déploiement (ou `deploy\images-serveur.cmd`) ; formes : `LIVINGDEX_FORMS`
-(noms de fichiers de PokéAPI ; Deoxys, Cheniselle, Motisma, Giratina, Shaymin, Bargantua, les Totémiques, Kyurem et Keldeo
-d'après ses Pokémon 10001 à 10024). Sans
-elles, la grille affiche l'image de la même
-forme sur le site (`LivingDexGames.Fallback`).
+### Rubans
+
+`/rubans`, `Pages/RibbonList.razor` et `Pages/RibbonPage.razor`, table `RibbonTrackers` (`Data/RibbonTracker.cs`,
+migration `RibbonTrackers`), `Services/RibbonService.cs`, rubans comptés dans `Services/Ribbons.cs`. Détails :
+`docs/claude/rubans.md`.
+
+- **Suivi** d'un Pokémon de la collection (stockage interne ou sauvegarde stockée ; pas les œufs, pas un Pokémon sans
+  empreinte), **retrouvé par son empreinte** (`BankPokemon.Fingerprint`) : les lignes d'une sauvegarde stockée sont
+  recréées à chaque mise à jour. Un suivi par Pokémon et par compte (index unique compte + empreinte). L'identifiant
+  envoyé par le navigateur est revérifié (Pokémon du compte).
+- **Ajout** : choix dans toute la collection avec `Shared/CollectionPicker.razor` (comme le dépôt GTS : recherche, origine,
+  tri, colonnes, pastilles de « Ma collection », rien dans l'adresse) ; œufs, Pokémon sans empreinte et déjà suivis grisés
+  avec leur raison (`RibbonService.UnavailableAsync`, mêmes messages que `AddAsync`, qui revérifie).
+- Chaque lecture reprend l'état du Pokémon dans le compte (le plus récent s'il y en a plusieurs) ; **parti** du compte, le
+  suivi garde son dernier état connu (octets et affichage) et se remet à jour s'il revient. Arrêter le suivi ne touche pas
+  au Pokémon.
+- **Rubans comptés** (42, `Ribbons.All`, la même liste pour tous) : ceux que n'importe quel Pokémon peut obtenir en jouant,
+  Colosseum / XD compris (National, Terre) ; pas les distributions, les anciens tournois, les Marques ni Exceptionnel. Les rubans de
+  concours et de combat de 3e et 4e génération deviennent **Souvenir Concours** (sur 40) et **Souvenir Combat** (sur 8),
+  un ruban chacun, obtenu dès le premier, doré au complet ; un Pokémon encore en 3e ou 4e génération est compté pareil
+  (`Ribbons.MemoryCounts`). Un ruban que le Pokémon ne peut plus obtenir compte quand même (voulu).
+- **Complétion sur 88** (`Ribbons.Total`) : les 40 rubans simples, et ceux des souvenirs un par un (40 + 8), d'après leur
+  compteur (`RibbonState.Earned` / `Worth`). Un souvenir entamé est à la fois dans « Manquants » et « Possédés ».
+- **Détail d'un souvenir** (fenêtre au clic, `Ribbons.ContestParts` / `BattleParts`) : chacun de ses rubans, obtenu ou
+  manquant jusqu'à la 5e génération ; à partir de la 6e, le jeu ne garde que le compteur : « Inconnu », sauf à 0 ou au
+  complet.
+- Vue générale : recherche par surnom ou espèce (sans accents), `?tri=ajout|nom|completion`, `?ordre=desc` (sans tri
+  dans l'adresse, celui du compte, voir « Tris par défaut »). Page : `?filtre=manquants|possedes`.
+- Images : `outils/images.py rubans` (PKHeX), listes `RIBBONS` et `RIBBON_PARTS` à garder en accord avec `Ribbons` (testé).
+
+### Complétion (100 %)
+
+`/completion`, `Pages/CompletionList.razor` et `Pages/CompletionPage.razor`, table `Completions` (`Data/Completion.cs`,
+migration `CompletionChallenge`), `Services/Completion/` : service (`CompletionService.cs`), sections, conditions et
+textes communs (`Completion.cs`), lecture d'une partie (`Gen1Completion.cs` à `Gen9Completion.cs`), tables générées
+(`Gen1CompletionData.cs` par `outils/completion_gen1.py`, et ainsi de suite jusqu'à `Gen9CompletionData.cs` par
+`outils/completion_gen9.py`). Détails : `docs/claude/completion.md`.
+
+- Pour l'instant **de la 1re à la 9e génération** (sans Légendes Z-A) : Rouge, Bleu, Jaune, Or, Argent, Cristal (versions internationales :
+  une sauvegarde japonaise ou coréenne a d'autres adresses, pas proposée), Rubis, Saphir, Émeraude, Rouge Feu, Vert
+  Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir
+  Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go, Pikachu / Évoli, Épée, Bouclier, Diamant Étincelant, Perle
+  Scintillante, Légendes Arceus, Écarlate et Violet (toutes les langues : les drapeaux sont lus par PKHeX). 7e génération :
+  section Dresseurs lue dans les ROM : dresseurs des routes et **combats lancés par un script** (hors histoire : Doyens,
+  Capitaines, Conseil 4, dernier combat de la Ligue, Guzma au Manoir Chelou, Elsa-Mina au Paradis Æther), au premier de
+  leurs lieux, « Lieu inconnu » sans lieu, variantes d'un combat (Pokémon de départ, version) en une ligne ; pas Let's Go ; 8e génération : pas de section Dresseurs (FlagsEditorEX ne donne pas leur lieu). Let's Go : une sauvegarde
+  proposée pour les deux jeux (PKHeX ne les distingue pas).
+  **Une complétion par jeu et par compte** (index unique compte + jeu), une
+  sauvegarde pour une seule (index unique) ; la même sauvegarde peut avoir aussi son living dex ; supprimer la sauvegarde
+  supprime sa complétion (cascade). Rouge / Bleu, Or / Argent, Rubis / Saphir, Rouge Feu / Vert Feuille et Diamant /
+  Perle : la sauvegarde est proposée pour les deux jeux.
+- **Lue dans la sauvegarde liée** à chaque affichage (drapeaux d'événements, objets ramassés, objets cachés, échanges,
+  badges, Pokédex « capturé » du jeu, Panthéon, amitié de Pikachu) : à jour à chaque mise à jour de la sauvegarde. Rien
+  à cocher à la main.
+- **Sections** au même poids (pourcentage global = moyenne des sections, fractions exactes, arrondi vers le bas : 100 %
+  seulement quand tout est fait) : Histoire (badges, étapes clés, Ligue ; Jaune : amitié de Pikachu au maximum ; 2e
+  génération : les 16 badges, Red ; 7e génération : les épreuves par leur cristal Z, les Poké Montures), Pokédex (les
+  151, les 251, ou le national de 386 en 3e génération, de 493 en 4e, de 649 en 5e, de 721 en 6e, de 802 en Soleil /
+  Lune et de 807 en Ultra-Soleil / Ultra-Lune, Mew, Celebi, Jirachi, Deoxys, Arceus, Genesect et Marshadow compris ;
+  Let's Go : les 151 de Kanto, Meltan et Melmetal ; Épée / Bouclier : les 584 des Pokédex de Galar, de l'Isolarmure et de
+  Couronneige, les DLC comptent toujours ; Diamant Étincelant / Perle Scintillante : le national de 493 ; Légendes Arceus :
+  les 242 de Hisui, chacun en trois étapes, capturé, recherche au niveau 10 et Parfait ; Écarlate / Violet : les 692
+  présents dans le jeu, Paldea, Septentria, Myrtille et légendaires des Friandises, les DLC comptent toujours), Dresseurs (chacun, rival
+  compris ; 1re génération : pas le Conseil 4, remis à zéro après le Panthéon ; 4e génération : seulement les dresseurs
+  qui gardent une trace, pas les combats lancés par un script comme ceux du rival ; 6e génération : les dresseurs des
+  cartes et ceux dont le script lève le drapeau (dresseurs d'arène, familles de la Route 111…), pas le rival, Lysandre
+  ni les Teams ; en Rubis Oméga, les sbires Magma, en Saphir Alpha, les sbires Aqua ; 9e génération : les dresseurs
+  des routes, de Septentria et du Terra-Dôme, et ceux des Arènes, faits d'office par le badge ; lieu d'après leur zone,
+  classe traduite à la main, au genre épicène quand le jeu ne le dit pas), Objets (au sol, cachés, jetons cachés,
+  cadeaux, CT, cannes ; 6e génération : chaque CT et CS, boutiques et Maison de Combat comprises, et chaque Méga-Gemme,
+  comptées dès qu'elles sont dans le sac ou tenues par un Pokémon ; 7e génération : chaque CT et chaque cristal Z hors
+  épreuves, Méga-Gemmes de Let's Go, dès qu'ils sont dans le sac ; 8e génération : chaque CT, et en Épée / Bouclier
+  chaque DT, dès qu'elles sont dans le sac (une DT apprise en sort : l'étape redevient à faire, choix de l'utilisateur) ;
+  pas de section Objets en Légendes Arceus, ses objets reviennent ; 9e génération : chaque objet au sol, les cadeaux des
+  représentants de la Ligue et du Clan des Monstres, et les 229 CT, chacune faite dès que sa recette est débloquée, même
+  utilisée ou jamais fabriquée), Rencontres uniques (légendaires, Ronflex, Pokémon offerts, échanges du jeu…). En 2e génération,
+  une sixième : **Quêtes annexes** (4 puzzles et 26 Zarbi des Ruines d'Alpha, Fratrie des sept jours, Noigrumes de
+  Fargas, Ranch Meumeu, pont Pépite, poupée de Copieuse… ; en 3e génération : tableaux des concours de rang Master,
+  symboles de la Zone de Combat, Maîtres des capacités à usage unique, baies du Maître des Baies, et à Hoenn les
+  **rubans** des 20 concours, Gagnant, Victoire et Effort ; en 4e génération :
+  concours de rang Master, 28 Zarbi, formes de Motisma, Giratina et Shaymin en Platine, puzzles et salles des Ruines
+  d'Alpha en HeartGold / SoulSilver, et les **rubans** des Super Concours Normal à Ultra (Diamant, Perle, Platine), les
+  six Aptitude de la Tour de Combat et Effort ; un ruban compte s'il est sur un Pokémon **de la sauvegarde** (équipe ou
+  boîtes : parti à la banque, l'étape redevient à faire, choix de l'utilisateur), et le **PokéAthlon** d'HG / SS (77 étapes :
+  5 parcours gagnés, trophées et objets exposés des quatre salles du musée, recalculés d'après le bloc PokéAthlon de la
+  sauvegarde, 27 Cartes Mémo ; pas les parcours en connexion ni la Coupe des Cracks) ; en 5e génération : Chefs du Métro de Combat, les 100 parures du Music-Hall, et en
+  Noire 2 / Blanche 2 chaque tournoi du PWT et chacune des 254 médailles, dont celles du Gratte-Ciel Noir / de l'Arbre
+  Creux Blanc et des films de Pokéwood ; en 6e génération : Maison de Combat (Châtelaines en normal et en Super), les 30
+  épreuves du Super Training, en X / Y chaque noble du Château de Combat (son drapeau de dresseur), et en Rubis Oméga / Saphir Alpha la progression des Concours Live ; en 7e génération :
+  Arbre de Combat (Red / Blue au 20e combat, puis 50 victoires en Super), Boîte, Cœurs et Cellules Zygarde (95 ou 100,
+  chacune à son lieu), les 28 Pokémon du Scanner des Îles (par le Pokédex : rien d'autre ne les garde), et en Let's Go
+  les 153 Experts, Grand Maître, Red, Green ; pas les Coachs, sans trace connue ; en 8e génération : les 149 Taupiqueur
+  d'Alola d'Épée / Bouclier, chacun à son lieu ; en Diamant Étincelant / Perle Scintillante, la Tour de Combat (Magnat,
+  rang 10 de la classe Expert), les concours de rang Master, les 28 Zarbi et les statues des Grands Souterrains ; en
+  Légendes Arceus, les 107 Flammes Étranges (comptées par région), les 28 Zarbi et les rangs du Groupe Galaxie ; pas le
+  rang de la Tour de Combat d'Épée / Bouclier, ni les missions ni les revanches des Monarques d'Arceus, sans trace
+  connue ; en 9e génération : pieux des Fléaux, revanches d'Arène et de la Team Star, raids 3★ à 6★, glisse du Mont
+  Nappé, Chasse aux Monstres, quête de Billy et O'Nare, diplômes du Pokédex, coachs spéciaux du Club de la Ligue,
+  Gromago ; pas le Grand Tournoi ni les contrôles de l'Académie, sans trace connue). Les étapes des
+  distributions comptent (choix de l'utilisateur) : GS Ball de Cristal et son Celebi, Ticket Éon, Mystique, Aurora et
+  Vieille Carte en 3e génération ; en 4e, seulement celles qui ont été distribuées (Carte Membre et Lettre en Platine,
+  GS Ball et Arceus en HeartGold / SoulSilver ; pas la Flûte Azur ; le Pass Liberté de Victini en Noire / Blanche ;
+  en 6e, la Braségalite de X / Y et la Diancite ; pas la Latiasite ni la Latiosite de X / Y,
+  qui ne viennent que d'un échange ; en 7e, les cristaux Z distribués ; en Let's Go, Meltan et Melmetal (Pokémon GO) ;
+  en 6e et 7e génération, **pas les Pokémon reçus par cadeau mystère** (Diancie, Hoopa, Volcanion, ceux de Rubis Oméga /
+  Saphir Alpha, Magearna, Marshadow, Zeraora, Pikachu Casquette Partenaire, et en Diamant Étincelant / Perle
+  Scintillante Darkrai, Shaymin et Arceus), ni Mew de la Poké Ball Plus (Let's Go, DÉ/PS), qui restent dans le Pokédex ;
+  les Pokémon débloqués par la sauvegarde d'un autre jeu comptent : Pikachu et Évoli Gigamax d'Épée / Bouclier, Jirachi
+  de DÉ/PS, Darkrai et Shaymin d'Arceus).
+  Rien à cocher à la main : une étape sans trace dans la sauvegarde (achats au Casino, Concours de
+  Capture, rangs des concours en dessous de Master…) n'est pas comptée, ni un objet qui revient (objets cachés
+  renouvelables de Rouge Feu / Vert Feuille, cadeaux quotidiens, nectars des jardins d'Alola).
+- **Choix exclusifs** (fossile Dôme ou Nautile, Kicklee ou Tygnon) : une seule étape, faite dès que l'un est choisi.
+  **Étapes ratées** (plus faisables dans la partie : les Rockets de la Sylphe SARL après Giovanni, le premier combat
+  contre le rival sur la Route 22 après le badge de Pierre ; en 2e génération, les Rockets du Puits Ramoloss, du
+  repaire d'Acajou et de la Tour Radio, les passagers du premier voyage de L'Aquaria ; en 3e et 4e génération, chaque
+  dresseur visible au départ puis parti sans avoir été battu ; en 5e, sauf ceux d'une seule version, que le jeu
+  cache dans l'autre) : comptées dans le total,
+  marquées « raté » (choix de l'utilisateur : le 100 % reste strict).
+- **Vue générale** : tri « Génération » (ordre des jeux, ou son exact inverse) ou « Complétion » (moyenne exacte des
+  sections, en fractions : deux cartes affichées au même pourcentage restent départagées ; à égalité, l'ordre des jeux),
+  ↑ / ↓ ; gardé dans l'adresse (`?tri=generation|completion`, `?ordre=desc`), sinon celui du compte (« Tris par
+  défaut »). Création : jaquettes groupées par génération, repliées au départ, comme pour les living dex
+  (`Shared/GamePicker.razor`).
+- Page : `?section=pokedex|dresseurs|objets|rencontres|quetes` (Histoire sans rien), `?filtre=manquants|faits` ; étapes
+  groupées par lieu dans l'ordre de l'aventure ; Pokédex et Zarbi en sprites du jeu, comme le living dex.
+- **All the Mons** (`LivingDexGame.AllTheMons`, `Services/Cobblemon/AllTheMonsCompletion.cs`, tables
+  `AllTheMonsCompletionData.cs` générées par `outils/completion_allthemons.py` sur une instance du modpack) : sur un monde
+  Minecraft stocké, une par compte. Deux sections : **Quêtes** (`?section=` vide ; tout le livre de quêtes de FTB Quests,
+  optionnelles et chapitres « WIP » compris, 4 656 quêtes ; sans les 60 notes « Tous droits réservés » d'All the Mods,
+  invisibles hors du mode édition) et **Succès** (`?section=succes` ; les 1 735 succès affichés dans l'écran des progrès,
+  cachés compris : Minecraft, mods, et ceux du script kubejs du modpack ; pas les recettes). **Chaque étape pèse autant**
+  (choix de l'utilisateur : `CompletionProgress.ByStep`, le global est le total des étapes faites sur le total, pas la
+  moyenne des sections ; idem pour le tri et les statistiques). Étapes rangées par chapitre (« Cobblemon — Evolution ») et
+  par onglet ; quête ou succès caché pas encore fait : « Quête cachée » / « Succès caché ». **Titres seulement**, jamais
+  les descriptions (licence du modpack), en français quand le modpack ou le mod les traduit, sinon en anglais. Tables
+  relevées sur All the Mons 2.1.0 : une quête ou un succès ajouté par une mise à jour est ignoré jusqu'au prochain relevé.
+  **Lisibilité** (essai sur All the Mons avant les autres complétions) : chaque chapitre (onglet) est une ligne repliée
+  au départ, avec son avancement et sa barre ; un clic la déplie (`?ouverts=0,5`, rangs des chapitres de la section,
+  vidé au changement de section) ; un chapitre sans étape à montrer avec le filtre disparaît. Étapes en **liste** ou en
+  **grille** de cases (vertes si faites), réglage du compte qui regarde (« Préférences »), chez soi comme chez les autres.
+
+### Statistiques
+
+Détails : `docs/claude/statistiques.md`.
+
+- `/statistiques` (menu du pseudo) et `/joueurs/{pseudo}/statistiques` (case « Statistiques » de « Visibilité », cochée
+  pour tous les comptes à son arrivée : migration `StatisticsVisibility`). Onglets à gauche, en ligne au-dessus sur un
+  écran étroit : **Générale**, **Défis**, **Multijoueurs** (`?onglet=defis`, `?onglet=multijoueurs`). Chaque onglet est
+  calculé à son ouverture, sans cache (`Services/StatisticsService.cs`).
+- **Argent dépensé** : toutes les sorties du porte-monnaie (montants négatifs du journal : emplacements, agrandissements,
+  parcs). **Argent déposé** : le solde plus l'argent dépensé (un aller-retour d'argent ne compte pas deux fois).
+- **Living dex** : les normaux (globaux compris) et les chromatiques **à part**. Pourcentage = **moyenne** des
+  pourcentages des living dex (chacun pèse autant ; fractions exactes, arrondi vers le bas comme les barres : 100 %
+  seulement quand tous sont complets). Un living dex ne compte que dans les modes qu'il a (`LivingDexGames.Modes` : un
+  Rouge, Régional seulement, n'entre ni dans le national ni dans le complet) ; le **général** prend chacun dans son plus
+  grand mode (Complet, Ultime pour les globaux, Régional pour la 1re génération, son seul mode pour un chromatique d'un jeu). **Complété** : 100 % dans le
+  mode. Même comptage que la vue générale (`LivingDexService.ProgressAsync`).
+- **Rubans** (onglet Défis) : sur les **Pokémon suivis** seulement (« Rubans », les partis avec leurs derniers rubans
+  connus) : rubans gagnés en tout, **chaque ruban réuni dans un souvenir compte** (comme la complétion sur 88), rubans
+  par Pokémon (dixièmes, arrondi vers le bas), complétion moyenne (moyenne exacte, même règle que les living dex),
+  Pokémon complets.
+- **Complétion (100 %)** (onglet Défis) : moyenne des pourcentages globaux des complétions (un 0 % pour une sauvegarde
+  illisible), puis de chaque section **sur les seules complétions qui l'ont** (pas de quêtes annexes en 1re génération) ;
+  complétions à 100 %. Même comptage que la vue générale (`CompletionService.ListAsync`).
+- Un visiteur voit les rubans et les complétions dès que la case « Statistiques » est cochée, même si ses pages Rubans
+  (jamais publiques) ou Complétion sont cachées : les moyennes seulement, sans lien.
+- **Échange** et **Combat** : tables `TradeRecords` et `BattleRecords`, sans clé étrangère (elles survivent à la
+  suppression du compte du partenaire) ; l'échange interne n'y est pas.
 
 ### Taille de la collection
 
-Chaque compte a une limite de Pokémon dans sa collection (stockage interne + sauvegardes stockées, œufs compris) : 1 000 au
-départ, y compris pour les comptes créés avant cette règle. Toute opération qui fait grossir la collection au-delà
-est refusée **en entière** avec un message qui chiffre le manque : dépôt dans le stockage interne (vérifié dès le glisser-déposer,
-puis à la validation), ajout ou mise à jour d'une sauvegarde stockée. Ce qui réduit la collection n'est jamais bloqué :
-un compte au-dessus de sa limite garde tout, mais ne peut plus rien ajouter.
-
-« Agrandir » (page « Ma collection ») achète des lots de 50 emplacements pour 10 000 ₽ avec le porte-monnaie ;
-l'achat apparaît dans le journal de l'inventaire. Valeurs dans `Services/CollectionCapacity.cs`.
-
-Lors d'un retrait, PKHeX convertit le Pokémon au format du jeu si possible (ex. PK4 → PK5) et refuse ce qui
-est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversion vers une génération antérieure).
+Chaque compte a une limite (stockage interne + sauvegardes stockées + Pokémon de la GTS, œufs compris) : 1 000 au départ. Toute opération qui
+la dépasserait est refusée **en entier** avec un message qui chiffre le manque : dépôt dans le stockage interne (dès le
+glisser-déposer, puis à la validation), ajout ou mise à jour d'une sauvegarde stockée. Ce qui réduit la collection n'est
+jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 ₽ (journal de l'inventaire). Valeurs dans
+`Services/CollectionCapacity.cs`.
 
 ## Organisation du code
 
 | Fichier | Rôle |
 |---|---|
-| `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX) |
+| `MonsutaPotaru/Services/SaveSession.cs` | Sauvegarde chargée + dépôts/retraits en attente (PKHeX, ou monde Minecraft) |
+| `MonsutaPotaru/Services/Cobblemon/Nbt.cs` | Lecture et écriture des fichiers NBT de Minecraft (gzip, UTF-8 « modifié » de Java), à l'octet près |
+| `MonsutaPotaru/Services/Cobblemon/CobblemonPokemon.cs` | Pokémon de Cobblemon : NBT gardé intact, lu pour l'affichage (identifiants de Showdown → numéros de PKHeX) |
+| `MonsutaPotaru/Services/Cobblemon/CobblemonSave.cs` | Monde All the Mons (zip ou dossier choisi) : équipe et PC du joueur, level.dat (identité), stats (temps de jeu), succès et quêtes de l'équipe FTB (complétion), zip rendu (dossier `pokemon` seul), fichiers gardés, envoi du navigateur revérifié |
+| `MonsutaPotaru/Services/Cobblemon/Snbt.cs` | Lecture du SNBT (NBT en texte) des fichiers de FTB Quests et FTB Teams |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsCompletion.cs` | Complétion All the Mons : quêtes faites (progression FTB de l'équipe) et succès obtenus, lus dans un monde stocké |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsCompletionData.cs` | Généré par `outils/completion_allthemons.py` : chapitres, quêtes, onglets et succès du modpack (identifiants et titres) |
+| `outils/completion_allthemons.py` | Génère `AllTheMonsCompletionData.cs` d'après une instance All the Mons installée (quêtes de `config/ftbquests`, succès des jars des mods, de Minecraft et du script kubejs, exécuté par Node.js avec des fonctions simulées ; traductions fr_fr puis en_us) |
+| `MonsutaPotaru/Components/Shared/WorldFolderPicker.razor` | Bouton « choisir le dossier du monde » (« Dépôt / Retrait », « Mes sauvegardes ») : reçoit du navigateur les seuls fichiers utiles, les fait revérifier |
 | `MonsutaPotaru/Services/AdminService.cs` | Administration : rôles (donner, retirer, garde-fous), liste des comptes, code d'invitation (lecture, régénération), initialisation au démarrage (code, premier administrateur) |
 | `MonsutaPotaru/Services/DebugService.cs` | Mode debug d'un administrateur : comptes actifs en mémoire (`DebugMode`, coupé à la déconnexion), argent ajouté (montants fixes, journal), parc agrandi ou réduit gratuitement |
 | `MonsutaPotaru/Components/Pages/Admin.razor` | Page « Administration » : code d'invitation, comptes et rôles |
@@ -1026,10 +810,19 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Services/FriendService.cs` | Amis : code ami, demandes (par pseudo ou par code), acceptation, refus, annulation, retrait, listes, compteur du menu |
 | `MonsutaPotaru/Components/Pages/Friends.razor` | « Multijoueurs » → « Amis » : onglets Amis (recherche, retrait) et Demandes (code ami, reçues, envoyées) |
 | `MonsutaPotaru/Data/Friendship.cs` | Tables des amitiés (deux lignes par amitié) et des demandes d'ami |
-| `MonsutaPotaru/Services/TradeService.cs` | Échanges : sauvegardes compatibles, Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
+| `MonsutaPotaru/Services/TradeService.cs` | Échanges entre amis et échange interne : sauvegardes compatibles (`TradeFamily`, Time Capsule), Pokémon proposés, évolution par échange, écriture des deux sauvegardes, statistiques |
+| `MonsutaPotaru/Services/TradeSounds.cs` | Musiques de l'animation d'échange présentes sur le serveur (`images/sons/`, hors Git), regardées à chaque animation |
+| `MonsutaPotaru/Services/TradeShow.cs` | Ce que montre l'animation d'échange à un joueur (`TradeShow`) : Pokémon envoyé, Pokémon reçu, évolutions (noms et images avant et après) |
 | `MonsutaPotaru/Services/TradeHub.cs` | Échanges en direct (singleton, en mémoire) : demande, choix, validation, annulation, expiration |
-| `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement) |
-| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combats » : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (interface façon Platine) |
+| `MonsutaPotaru/Services/GtsService.cs` | GTS : dépôt (depuis la collection), recherche, échange, boîte de réception (annulation, expiration, sauvegarde supprimée, récupération) ; `GtsEvents` (pastille du menu) et `GtsExpiry` (offres expirées, toutes les heures) |
+| `MonsutaPotaru/Data/GtsPokemon.cs` | Table des Pokémon de la GTS : offres en ligne et boîte de réception (`GtsStatus`) |
+| `MonsutaPotaru/Components/Pages/Gts.razor` | « Multijoueurs » → « GTS » (`/gts`) : boîte de réception, mes offres, recherche, dépôt en deux étapes, échange (choix, confirmation) |
+| `MonsutaPotaru/Components/Shared/CollectionPicker.razor` | Choix d'un Pokémon dans toute « Ma collection » (recherche, origine, tri, pastilles, colonnes au curseur ; grisés), par tranches : dépôt GTS, ajout d'un suivi de rubans |
+| `showdown/` | Simulateur des combats : `package.json` (`@pkmn/sim`, version fixée), `combat.js` (pont : Pokémon par numéros, PP Plus, choix seulement ; ajoute à la requête les PP, PV maximum et types de chaque Pokémon de l'équipe) |
+| `MonsutaPotaru/Components/Pages/Battles.razor` | « Multijoueurs » → « Combat » (`/combats`) : demandes, ami et sauvegardes, choix de l'équipe, combat en direct (deux écrans façon 4e génération, empilés, côte à côte ou hybride), fiche d'un Pokémon de l'équipe |
+| `MonsutaPotaru/Services/Battle/BattleSheet.cs` | Fiche d'un Pokémon de l'équipe pendant un combat, lue dans la requête : résumé, capacités, détail d'une capacité |
+| `MonsutaPotaru/Services/Battle/BattleDexData.cs` | Généré : description française de chaque talent et de chaque capacité, catégorie, puissance et précision de la 3e génération |
+| `outils/combats_textes.py` | Génère `BattleDexData.cs` (descriptions de PokéAPI, chiffres du simulateur installé) ; à relancer pour une nouvelle génération de combats |
 | `MonsutaPotaru/Services/Battle/BattleHub.cs` | Combats en direct (singleton, en mémoire) : demande, équipes, simulateur, choix vérifiés, minuteur, abandon, fin |
 | `MonsutaPotaru/Services/Battle/BattleService.cs` | Combats : sauvegardes compatibles entre amis, Pokémon proposés pour l'équipe, équipe vérifiée, statistiques |
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
@@ -1040,9 +833,16 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
 | `MonsutaPotaru/Services/Battle/BattleView.cs` | Combat vu par un joueur : terrain, PV, statuts, météo, étapes à animer, messages en français |
 | `MonsutaPotaru/Services/Battle/BattleNames.cs` | Noms anglais de Showdown → noms français de PKHeX (espèces, capacités, objets, talents, types) |
-| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échanges » : demandes, choix de l'ami et des sauvegardes, échange en direct |
+| `MonsutaPotaru/Components/Pages/Trades.razor` | « Multijoueurs » → « Échange » (`/echanges`) : demandes, choix de l'ami et des sauvegardes, échange en direct |
+| `MonsutaPotaru/Components/Pages/InternalTrade.razor` | « Échange interne » (`/echange-interne`) : deux sauvegardes du compte, Pokémon envoyé, Pokémon reçu, confirmation, « Retour » à chaque étape |
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo) : échanges, combats |
+| `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
+| `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats) |
+| `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
+| `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |
+| `MonsutaPotaru/Components/Shared/CompletionStatsBlock.razor` | Statistiques des complétions : moyenne générale et par section en barres, complétions à 100 % |
+| `MonsutaPotaru/Services/StatisticsService.cs` | Statistiques : argent déposé et dépensé, moyennes des living dex, rubans des Pokémon suivis, moyennes des complétions |
 | `MonsutaPotaru/Data/TradeRecord.cs` | Table des échanges réussis (statistiques, succès) |
 | `MonsutaPotaru/Components/Pages/PlayerSearch.razor` | « Multijoueurs » → « Rechercher un joueur » (`/joueurs`) |
 | `MonsutaPotaru/Components/Pages/PlayerProfilePage.razor` | Profil d'un joueur (`/joueurs/{pseudo}`) : ses pages publiques en onglets |
@@ -1050,12 +850,16 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Components/Account/Pages/Manage/Visibility.razor` | « Mon compte » → « Visibilité » : profil public ou privé, pages publiques |
 | `MonsutaPotaru/Services/SiteThemes.cs` | Thèmes du site (clé, nom, description) et thème par défaut |
 | `MonsutaPotaru/Components/Account/Pages/Manage/Themes.razor` | « Mon compte » → « Thèmes » : choix du thème, miniatures en CSS |
+| `MonsutaPotaru/Components/Account/Pages/Manage/Preferences.razor` | « Mon compte » → « Préférences » : tris par défaut de l'inventaire (un par onglet), de « Ma collection », des living dex, des complétions et des rubans ; disposition et mode agrandi des écrans d'un combat |
+| `MonsutaPotaru/Services/SortPreferences.cs` | Tris de l'inventaire, de la collection, des living dex, des complétions et des rubans (noms dans l'adresse, lecture : `SiteSorts`), tris par défaut du compte, disposition et mode agrandi des écrans d'un combat en JSON (`SortPreferences`), et leur service (`PreferencesService`) |
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
-| `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, description, actions, icône (bandeau dans le thème Ardoise) |
-| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec ses actions (panneau blanc dans le thème Ardoise) |
-| `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable, barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
-| `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes |
+| `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec son aide en infobulle et ses actions (panneau blanc dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/HelpTip.razor` | Infobulle d'aide : icône « ? », bulle ouverte d'un clic (élément `details`, refermé par `wwwroot/js/app.js`) |
+| `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable (le compte en bas, `ArdoiseLayoutTests`), barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
+| `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes (`SiteMenusTests`) |
+| `MonsutaPotaru/Components/Layout/WalletLink.razor` | Porte-monnaie de la barre du haut (tous les thèmes), tenu à jour en direct |
 | `MonsutaPotaru/Components/Layout/Breadcrumbs.cs` | Fil d'Ariane du thème Ardoise, déduit de l'adresse de la page (`BreadcrumbsTests`) |
 | `MonsutaPotaru/Data/SiteSetting.cs` | Table des réglages du site (code d'invitation) et rôles des comptes (`SiteRoles`) |
 | `MonsutaPotaru/Services/AccountService.cs` | Comptes : règles du pseudo, inscription, connexion par l'adresse (blocage après 5 échecs), choix du pseudo des anciens comptes, changement d'adresse ; réglages d'Identity, messages d'Identity en français |
@@ -1063,12 +867,13 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/Components/Account/Pages/` | Pages du compte : connexion, inscription, « Choisis ton pseudo », « Mon compte » (`Manage/` : profil, adresse, mot de passe, données personnelles) |
 | `MonsutaPotaru/Components/Account/Shared/PseudoGuard.razor` | Renvoie un compte sans pseudo sur « Choisis ton pseudo » (autour du contenu de `MainLayout`) |
 | `MonsutaPotaru/Services/BankService.cs` | Accès base, validation transactionnelle, copies de sécurité |
+| `MonsutaPotaru/Services/CollectionFolders.cs` | Mode compact de « Ma collection » : dossiers par espèce (clé, nombre, place dans le tri) et cases de la grille quand des dossiers sont ouverts |
 | `MonsutaPotaru/Services/PokemonFingerprint.cs` | Empreinte d'un Pokémon et recherche de ses doublons dans le compte (vieille copie d'une sauvegarde) |
 | `MonsutaPotaru/Services/PokemonInfo.cs` | Noms français (dont « Rouge / Bleu », « Or / Argent », « Diamant / Perle », « Or HeartGold / Argent SoulSilver » pour les groupes de jeux : une sauvegarde de ces jeux ne dit pas lequel des deux ; migrations `GameNames` et `GameGroupNames` pour les noms déjà enregistrés), sprites, légalité |
-| `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Transfert et stockage interne » (`/transfert`) : boîtes, glisser-déposer, sélection multiple |
+| `MonsutaPotaru/Components/Pages/Bank.razor` | Page « Dépôt / Retrait » (`/transfert`, rubrique « Mes Pokémon ») : boîtes, glisser-déposer, sélection multiple |
 | `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
-| `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
+| `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, dossier d'un monde Minecraft (tri des fichiers envoyés), largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
 | `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes, du donjon et de la forêt profonde ; `simulate` et `view` pour les essais |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
@@ -1081,34 +886,66 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `MonsutaPotaru/wwwroot/parc/foret-profonde-1-1.json` … `foret-profonde-1-4.json` | Cartes de la forêt profonde, une par taille, même format (plus la couleur de fond, le calque d'objets « Lumières » avec la couleur et l'opacité du voile, les touffes d'herbe animées) |
 | `MonsutaPotaru/wwwroot/parc/parc-1-1.json` … `parc-1-4.json` | Cartes de la forêt, une par taille (export de Tiled par `outils/carte-parc.py` : numéros de tuiles, calques, zones « Départ » et « Parc », types de cases) |
 | `MonsutaPotaru/Services/ParkHabitats.cs` | Types de cases du parc : feuille « Habitat » (ce que chaque type de Pokémon aime ou non), types de chaque carte et leur nombre dans la zone « Parc » (lus au démarrage), humeur d'un Pokémon (`MoodOf`), façon de se déplacer (`MovementOf` : nage, vol ; à la montagne, tout type Vol vole) |
-| `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution |
+| `MonsutaPotaru/Services/ParkService.cs` | Parcs d'un joueur (la Forêt créée à la première visite, achat d'un autre paysage, agrandissements) et leurs Pokémon : liste, choix (20 à 80, avec des sprites Donjon Mystère, un parc par Pokémon), retrait, vidage, famille d'évolution ; malus « attaqué » (`RecordAttackAsync`, `ParkMalus`) |
 | `MonsutaPotaru/Services/ParkLandscapes.cs` | Paysages des parcs (Forêt, Plage, Volcan, Désert, Océan, Grotte, Montagne, Donjon, Forêt profonde) : nom, carte, pictogramme, textes de la page, et qui ne peut pas y vivre (`Refusal` : l'océan, seulement les nageurs ; `ChooserNote` : la remarque de la fenêtre de choix, à l'océan et à la montagne) |
 | `MonsutaPotaru/Data/Park.cs` | Table des parcs (un par paysage et par compte, avec ses agrandissements) et énumération `ParkLandscape` |
-| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc ; supprimée avec le Pokémon ou le parc) |
-| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » : cartes des living dex du compte (progression dans le mode choisi), création (jeu, générations repliables, puis sauvegarde) |
+| `MonsutaPotaru/Data/ParkMember.cs` | Table des Pokémon au parc (leur parc, leur malus « attaqué » ; supprimée avec le Pokémon ou le parc) |
+| `MonsutaPotaru/Components/Pages/LivingDexes.razor` | Page « Living dex » (rubrique « Défis ») : cartes des living dex du compte (progression dans le mode choisi, filtre Tous / Normaux / Chromatiques), création (normal ou chromatique, jeu, générations repliables, puis sauvegarde) |
 | `MonsutaPotaru/Components/Shared/LivingDexProgress.razor` | Barre de progression d'un living dex, pourcentage au centre |
-| `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu, ou Master Ball / Charme Chroma pour les globaux |
+| `MonsutaPotaru/Components/Shared/GamePicker.razor` | Choix du jeu à la création d'un living dex ou d'une complétion : jaquettes groupées par génération, repliées au départ (le jeu choisi reste visible), jeux déjà pris grisés |
+| `MonsutaPotaru/Components/Shared/LivingDexCover.razor` | Image d'un living dex : jaquette du jeu (avec le Charme Chroma pour un chromatique), ou Master Ball / Charme Chroma pour les globaux |
 | `MonsutaPotaru/Components/Pages/LivingDexPage.razor` | Page d'un living dex : grille des sprites du jeu (silhouettes des manquants), progression, fiche au clic |
 | `MonsutaPotaru/Services/LivingDexService.cs` | Living dex : jeux (`LivingDexGames` : jaquette, sprites, Pokémon de chaque mode, modes cachés), comptage dans la sauvegarde, création, suppression |
-| `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
+| `MonsutaPotaru/Data/LivingDex.cs` | Table des living dex (un normal et un chromatique par jeu et par compte, supprimé avec sa sauvegarde ; le global n'a pas de sauvegarde) |
+| `MonsutaPotaru/Components/Pages/CompletionList.razor` | Page « Complétion (100 %) » (rubrique « Défis ») : cartes des complétions du compte (progression globale et par section), tri par génération ou par complétion, création (jeu, générations repliables, puis sauvegarde) |
+| `MonsutaPotaru/Components/Pages/CompletionPage.razor` | Page d'une complétion : progression globale, une carte par section, étapes de la section choisie par lieu (faites, à faire, ratées), Pokédex en sprites, filtre, suppression |
+| `MonsutaPotaru/Services/Completion/CompletionService.cs` | Complétions : liste, sauvegardes proposées, création, lecture dans la sauvegarde, suppression |
+| `MonsutaPotaru/Services/Completion/Completion.cs` | Sections, étapes et progression (moyenne des sections), jeux pris en charge, lecture des conditions des tables dans une sauvegarde (1re à 9e génération ; rubans des Pokémon de la sauvegarde), textes des étapes (équipes, objets, CT) |
+| `MonsutaPotaru/Services/Completion/Gen1Completion.cs` à `Gen9Completion.cs` | Étapes de chaque génération (table du jeu, Pokédex, noms des objets) |
+| `MonsutaPotaru/Services/Completion/CompletionRibbons.cs` | Rubans de la complétion de 3e et 4e génération (concours, Tour de Combat, Effort), lus sur les Pokémon de la sauvegarde |
+| `MonsutaPotaru/Services/Completion/CompletionPokeathlon.cs` | PokéAthlon de la complétion d'HG / SS : parcours, trophées et objets du musée, Cartes Mémo (conditions « PA:… »), lus dans le bloc PokéAthlon de la sauvegarde |
+| `MonsutaPotaru/Services/Completion/Gen1CompletionData.cs` à `Gen4CompletionData.cs` | Tables générées des étapes de chaque jeu (lieu, condition, dresseur, objet, Pokémon) : ne pas modifier à la main |
+| `MonsutaPotaru/Data/Completion.cs` | Table des complétions (une par jeu et par compte, supprimée avec sa sauvegarde) |
+| `outils/completion_gen1.py`, `outils/completion_gen1_extract.py` | Génèrent `Gen1CompletionData.cs` d'après les désassemblages pokered et pokeyellow (lieux en français, ordre de l'aventure, étapes choisies à la main dans le script) |
+| `outils/completion_gen2.py`, `outils/completion_gen2_extract.py` | Génèrent `Gen2CompletionData.cs` d'après pokegold et pokecrystal (même principe ; histoire, rencontres et quêtes d'après les check-lists de l'utilisateur) |
+| `outils/completion_gen3.py`, `outils/completion_gen3_extract.py`, `completion_gen3_lieux.json`, `completion_gen3_ordre.json` | Génèrent `Gen3CompletionData.cs` d'après pokeruby, pokeemerald et pokefirered (constantes C, cartes JSON, scripts) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
+| `outils/completion_gen5.py`, `outils/completion_gen5_extract.py`, `outils/completion_gen5_rom.py`, `completion_gen5_ordre.json` | Génèrent `Gen5CompletionData.cs` d'après pokebw2 (Noire 2 / Blanche 2), les ROM de Pokémon Version Noire et Blanche 2 de l'utilisateur (Noire / Blanche : système de fichiers, archives NARC, textes chiffrés, scripts ; Blanche 2 : noms français des médailles et des parures) et les listes de drapeaux de FlagsEditorEX ; ordre des lieux des check-lists |
+| `outils/completion_gen6.py`, `outils/completion_gen6_rom.py`, `completion_gen6_ordre.json` | Génèrent `Gen6CompletionData.cs` d'après les listes de drapeaux de FlagsEditorEX (objets au sol, cachés, cadeaux, drapeaux et variables de l'histoire), les ROM de X et de Rubis Oméga de l'utilisateur (dresseurs : RomFS, archives GARC, zones, scripts compilés, textes chiffrés) et les check-lists de l'utilisateur (CT / CS, Méga-Gemmes, distributions, ordre des lieux) |
+| `outils/completion_gen8.py` | Génère `Gen8CompletionData.cs` (Épée / Bouclier, Diamant Étincelant / Perle Scintillante, Légendes Arceus) d'après les listes de drapeaux de FlagsEditorEX (objets au sol, cachés, Taupiqueur d'Alola, rencontres, drapeaux de l'histoire), les statues des souterrains de PKHeX et les check-lists de l'utilisateur (histoire et ordre des lieux, CT / DT, légendaires, cadeaux, échanges) |
+| `outils/completion_gen9.py` | Génère `Gen9CompletionData.cs` (Écarlate / Violet, DLC compris) d'après la liste de drapeaux de FlagsEditorEX (objets au sol, dresseurs et leur zone, cadeaux, recettes des CT, drapeaux et variables de l'histoire, badges) et la check-list de l'utilisateur (Pokédex, CT, légendaires) ; ordre des lieux et classes des dresseurs écrits à la main |
+| `outils/completion_gen7.py`, `outils/completion_gen7_rom.py`, `completion_gen7_ordre.json` | Génèrent `Gen7CompletionData.cs` (Soleil à Ultra-Lune, Let's Go) d'après les listes de drapeaux de FlagsEditorEX (objets au sol, cachés, cadeaux de Let's Go, rencontres, drapeaux de l'histoire), les lieux des cellules Zygarde de PKHeX, les ROM de Soleil, Lune et Ultra-Soleil de l'utilisateur (dresseurs des routes et combats lancés par un script : zones, aires, blocs d'événements, scripts AMX, textes chiffrés) et les check-lists de l'utilisateur (CT, cristaux Z, légendaires, Scanner des Îles, Experts) ; ordre des lieux écrit à la main |
+| `outils/completion_gen4.py`, `outils/completion_gen4_extract.py`, `completion_gen4_lieux.json`, `completion_gen4_ordre.json` | Génèrent `Gen4CompletionData.cs` d'après pokeplatinum et pokeheartgold (constantes, cartes JSON, scripts) et pokediamond (fichiers binaires du jeu : événements des cartes, scripts compilés) ; noms français des lieux (PKHeX) et ordre des lieux des check-lists de l'utilisateur |
+| `MonsutaPotaru/Services/Cobblemon/AllTheMonsLivingDex.cs` | Living dex All the Mons : cases du global adaptées au modpack (Méga de Légendes Z-A, formes et espèces du modpack), exemplaires d'un monde stocké |
+| `MonsutaPotaru/wwwroot/minecraft/` | Jaquette du living dex All the Mons (logo du modpack) et images des espèces et formes propres au modpack (`pokemon/`, rendus de `outils/rendu-cobblemon.py`), versionnées |
 | `MonsutaPotaru/Services/GlobalLivingDex.cs` | Living dex global : cases des modes National, Complet et Ultime, attribution des exemplaires du stockage interne |
-| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`) ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur |
+| `MonsutaPotaru/Components/Pages/RibbonList.razor` | Page « Rubans » (rubrique « Défis ») : cartes des Pokémon suivis (rubans obtenus, où il est), recherche, tri, ajout d'un Pokémon de la collection (`CollectionPicker`) |
+| `MonsutaPotaru/Components/Pages/RibbonPage.razor` | Page d'un suivi : rubans par famille (obtenus en couleur, manquants en gris, façon de les obtenir), détail d'un souvenir en fenêtre, filtre, fiche du Pokémon, arrêt du suivi |
+| `MonsutaPotaru/Services/Ribbons.cs` | Les 42 rubans affichés (nom, famille, façon de les obtenir, image), la complétion sur 88 (rubans des souvenirs un par un), et leur lecture dans chaque format de PKHeX |
+| `MonsutaPotaru/Services/RibbonService.cs` | Suivi des rubans : ajout, Pokémon retrouvé par son empreinte et mis à jour, Pokémon qui ne peuvent pas être ajoutés (grisés), tri et recherche de la vue générale |
+| `MonsutaPotaru/Data/RibbonTracker.cs` | Table des suivis de rubans (empreinte du Pokémon et son dernier état connu ; un par Pokémon et par compte) |
+| `MonsutaPotaru/Components/Pages/Collection.razor` | Toute la collection sur une page (chargée au fil du défilement), filtres en pastilles (`Shared/CollectionFilterChips.razor`), filtre par origine, tri par arrivée (les plus récents d'abord, par défaut), par nom d'espèce ou par numéro de Pokédex (croissants), inversable, gardé dans l'adresse (`?tri=nom&ordre=desc`), sinon celui du compte (« Tris par défaut ») ; les œufs toujours à la fin (leur espèce reste cachée), à égalité les plus récents d'abord ; le tri par nom ignore les accents (colonne `SortName`, remplie au démarrage pour les Pokémon plus anciens) ; 5 / 10 / 15 / 20 colonnes par défaut selon la largeur de la fenêtre en pixels physiques (téléphone, jusqu'à 1920, jusqu'à 2560, au-delà ; mise à l'échelle de Windows comprise), recalculées au redimensionnement, modifiables au curseur ; mode compact (un dossier par espèce, `?compact=1`, avec en plus le tri par quantité) |
 | `MonsutaPotaru/Components/Pages/Saves.razor` | Gestion des sauvegardes stockées (ajout, mise à jour, suppression) |
 | `MonsutaPotaru/Components/Pages/Sync3ds.razor` | « Synchronisation 3DS » : consoles reliées (code de liaison, attente de la console, retrait) |
 | `MonsutaPotaru/Services/SyncService.cs` | Synchronisation 3DS : codes de liaison, jetons, envoi d'une sauvegarde (ajout, mise à jour ou « déjà à jour »), emplacements sur la console, liste, comparaison et téléchargement pour « Récupérer » |
 | `MonsutaPotaru/Api/SyncEndpoints.cs` | API du homebrew PokeBank Sync (`/api/sync/...`) et limite d'essais de codes |
 | `MonsutaPotaru/Services/StoredSaveService.cs` | Stockage, mise à jour et suppression des sauvegardes stockées |
 | `MonsutaPotaru/Services/SaveIdentity.cs` | Empreinte d'une sauvegarde (unicité sur le serveur) |
-| `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), achat d'emplacements, journal |
+| `MonsutaPotaru/Services/SaveVersion.cs` | Rouge Feu ou Vert Feuille : jeu d'une sauvegarde deviné d'après le jeu d'origine des Pokémon du dresseur |
+| `MonsutaPotaru/Services/InventoryService.cs` | Inventaire : retrait de Pokédollars, retrait et dépôt d'objets (sauvegardes stockées), transfert direct entre deux sauvegardes, achat d'emplacements, journal |
 | `MonsutaPotaru/Services/SaveBag.cs` | Objets du sac et du PC d'une sauvegarde (objets, Pokéballs, médicaments, baies, CT/DT par capacité ; jamais les objets rares, Lettres ni CS) : lecture, retrait, dépôt (PKHeX), conversion des numéros d'objets des jeux de 1re à 3e génération |
 | `MonsutaPotaru/Services/CollectionCapacity.cs` | Taille maximale de la collection : règles, occupation, messages |
-| `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Inventaire » (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
+| `MonsutaPotaru/Components/Pages/Inventory.razor` | Page « Banque d'objets » (`/inventaire`, rubrique « Inventaire » ; « Inventaire » sur la page d'un autre joueur) (solde, stockage en onglets avec recherche, tri par onglet, liste/grille (colonnes de la grille au curseur) et choix de la source — interne, tout, une sauvegarde —, journal et détail d'un objet en panneau latéral, fenêtre de retrait d'argent) |
+| `MonsutaPotaru/Components/Pages/InventoryTransfer.razor` | Page « Transfert d'inventaire » (`/inventaire/transfert`) : deux sauvegardes côte à côte, objets glissés de l'une à l'autre (compteurs, flèches, objets grisés, interrupteur qui les cache), récapitulatif, « Valider » / « Annuler » |
+| `MonsutaPotaru/wwwroot/js/echange.js` | Déroulé de l'animation d'échange (envoi, voyage, arrivée, évolutions ; textes tapés lettre à lettre) et ses musiques (fondus, fanfare attendue) ; son coupé retenu (`localStorage`) |
+| `MonsutaPotaru/wwwroot/js/transfert-objets.js` | Glisser-déposer de cette page (événements pointeur : souris, appui long au doigt ; image qui suit, défilement près des bords) |
 | `MonsutaPotaru/Components/Shared/ItemTransferDialog.razor` | Fenêtre de retrait / dépôt d'objets (toutes catégories en une opération ; onglets Sac / PC pour les jeux de 1re à 3e génération) |
 | `MonsutaPotaru/Components/Shared/ItemSprite.razor` | Image d'un objet ; celle de l'objet inconnu quand le site n'en a pas |
 | `MonsutaPotaru/Services/PokemonCriteria.cs` | Filtres de « Ma collection » : valeurs choisies, requête en base, lecture et écriture dans l'adresse |
+| `MonsutaPotaru/Services/PokemonFilterTraits.cs` | Caractéristiques des filtres d'un Pokémon lu dans une sauvegarde, recherche et filtres en mémoire (`PokemonSearch`) pour les Pokémon à choisir |
 | `MonsutaPotaru/Services/PokemonTraits.cs` | Caractéristiques d'un Pokémon enregistrées pour ces filtres (types récents, nature, talent, IV, forme, Méga) |
 | `MonsutaPotaru/Services/PokemonSprites.cs` | Choix de l'image d'un Pokémon : forme (noms de PKHeX → noms de PokéAPI), Méga-Évolution selon l'objet tenu, femelle, chromatique |
 | `MonsutaPotaru/wwwroot/images/` | Hors du dépôt Git (voir « Lancer en local ») ; images servies par le site : `pokemon/<numéro d'espèce>.png`, `pokemon/<numéro>-<forme>.png` (`19-alola.png`, `6-mega-x.png`, `6-gmax.png`), `pokemon/femelle/`, `pokemon/chromatique/` (mêmes sous-dossiers), `objets/<numéro d'objet>.png`, `objets/ct-<type>.png` pour les CT/DT, un `inconnu.png` dans chaque dossier |
+| `MonsutaPotaru/wwwroot/images/sons/` | Musiques (bande originale de HeartGold / SoulSilver ; hors Git, envoyées par `deploy/sons-serveur.cmd`) : animation d'échange (`echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; combats, rangées mais pas encore jouées (`combat-rival.mp3`, `combat-champion.mp3`, `combat-meneur-de-zone.mp3`, `combat-champion-arene-kanto.mp3`, `combat-champion-arene-johto.mp3`) |
 | `MonsutaPotaru/wwwroot/images/parc/tuiles/` | Planches du pack Cute Fantasy utilisées par la carte du parc (hors Git : copiées par `outils/carte-parc.py`, envoyées par `deploy/fond-parc.cmd`) |
 | `outils/generer-parc.py` | Génère les cartes du parc 1 (`Parc_1-1.tmx` à `Parc_1-4.tmx`, pour Tiled) : herbe, chemins et eau à bordures automatiques, forêt, arbres, bancs, rochers, fleurs et collisions, avec des aperçus en PNG (Python avec Pillow) |
 | `outils/generer-plage.py` | Génère les cartes de la plage (`Plage_1-1.tmx` à `Plage_1-4.tmx`) : côte, îlots, ponton, palmiers, récif, environ 65 % de mer (la moitié à la taille 1) |
@@ -1120,14 +957,22 @@ est incompatible (espèce, attaques ou objets inexistants dans le jeu, conversio
 | `outils/generer-foret-profonde.py` | Génère les cartes de la forêt profonde (`Foret_profonde_1-1.tmx` à `Foret_profonde_1-4.tmx`) : labyrinthe de clairières et de sentiers par taille, murs d'arbres serrés, herbes hautes, champignons, rochers moussus, souches, touffes animées, puits de lumière et champignons lumineux |
 | `outils/generer-grotte.py` | Génère les cartes de la grotte (`Grotte_1-1.tmx` à `Grotte_1-4.tmx`) : caverne, piliers de roche, lacs souterrains, cristaux, stalagmites, torches et leurs lumières |
 | `outils/parc_carte.py` | Moteur commun des générateurs (forêt, plage, volcan, désert, océan, grotte, montagne, donjon, forêt profonde) : jeux de tuiles, calques, formes, bordures automatiques, objets, poches enfermées, écriture des `.tmx` (couleur de fond, calque « Lumières » et son voile) et aperçus |
+| `outils/rendu-cobblemon.py` | Rendu des modèles 3D du modpack All the Mons (Piglich, Creepyon, Stari Patrickyu, coupes de Couafarel et motifs de Prismillon de Cobblemon) en PNG pour le living dex All the Mons, depuis une instance installée (Python seul) |
 | `outils/carte-parc.py` | Prépare une carte de Tiled pour le parc : vérifications, types de cases (`habitats`), carte dans `wwwroot/parc/`, planches dans `images/parc/tuiles/` (Python seul ; un `.tmx` est exporté par Tiled en ligne de commande) |
 | `deploy/fond-parc.cmd` (`fond-parc.ps1`) | Envoie les planches du parc dans les images du serveur, par SSH |
+| `deploy/sons-serveur.cmd` (`sons-serveur.ps1`) | Envoie les musiques (`images/sons/*.mp3` : animation d'échange, combats) dans les images du serveur, par SSH |
+| `MonsutaPotaru.Tests/AllTheMonsLivingDexTests.cs` | Living dex All the Mons : cases de chaque mode (Méga de Légendes Z-A, formes et espèces du modpack, ce que Cobblemon n'a pas), images versionnées, formes de Cobblemon lues comme celles de PKHeX, création sur un monde seulement, comptage de l'équipe et du PC |
+| `MonsutaPotaru.Tests/AllTheMonsCompletionTests.cs` | Complétion All the Mons : tables du modpack, lecteur SNBT, succès et quêtes gardés (équipe ou groupe FTB), étapes lues dans le vrai monde, poids par étape, service ; pages dans `CompletionPagesTests` |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
+| `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
+| `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
+| `MonsutaPotaru.Tests/*PageTests.cs`, `AccountPagesTests.cs`, `LivingDexPagesTests.cs`, `RibbonPagesTests.cs`, `CompletionPagesTests.cs`, `ArdoiseLayoutTests.cs`, `SiteMenusTests.cs`, `HelpTipTests.cs` | Pages et composants rendus par bUnit : cadre Ardoise, menus en rubriques, infobulles d'aide, Banque d'objets, Transfert d'inventaire, Dépôt / Retrait, Parc, Combat, Échange, Ma collection (filtres), Living dex, Rubans, Complétion, Amis, Mes sauvegardes, 3DS, Administration, joueurs |
+| `MonsutaPotaru.Tests/SiteTests.cs` | Site entier (`SiteFactory`, WebApplicationFactory) : inscription, connexion, pages du compte, rendu serveur de chaque page, thèmes, API de la 3DS, environnement de production |
 | `MonsutaPotaru/wwwroot/images/donjon/` | Sprites animés de SpriteCollab (Idle, Walk, Sleep, Charge, Attack, Hurt) dans les dossiers de SpriteCollab (`0025/`, `0025/0000/0001/` chromatique...) : planches `<Animation>-Anim.png` et `AnimData.xml` réduit à ces animations ; portraits Normal, Happy, Sad dans `portraits/<même dossier>/` ; `credits.txt` (auteurs) |
 | `outils/recuperer-images.cmd` | Copie les images du serveur dans `wwwroot/images` par SSH (après un clonage) |
 | `deploy/images-serveur.cmd` (`images-serveur.ps1`) | Remplit ou met à jour les images du serveur (`~/monsuta-potaru-images`) et redémarre le site |
-| `outils/images.py` | Rassemble ces images (PokéAPI ; pour les objets, puis pokesprite et PKHeX par numéro d'objet) ; à relancer pour en ajouter |
+| `outils/images.py` | Rassemble ces images (PokéAPI ; pour les objets, puis pokesprite et PKHeX par numéro d'objet ; rubans : PKHeX) ; à relancer pour en ajouter |
 | `MonsutaPotaru/Data/BankPokemon.cs` | Table des Pokémon (octets bruts + métadonnées ; `StoredSaveId` si lecture seule) |
 | `MonsutaPotaru/Data/StoredSave.cs` | Table des sauvegardes stockées |
 | `MonsutaPotaru/Data/SyncDevice.cs` | Tables des consoles 3DS reliées (empreinte du jeton), des emplacements des sauvegardes sur chaque console et des codes de liaison |
@@ -1167,7 +1012,8 @@ l'IP du VPS.
    (demande le nom de domaine et le pseudo de ton compte, futur administrateur ; génère le code d'invitation de départ et
    l'affiche à la fin). Inscris-toi ensuite avec ce pseudo : le compte devient administrateur.
 3. Depuis Windows : `deploy\images-serveur.cmd ubuntu@IP_DU_VPS` (images, voir plus bas), puis
-   `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` (planches du parc, copiées en local depuis le pack).
+   `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` (planches du parc, copiées en local depuis le pack), puis
+   `deploy\sons-serveur.cmd ubuntu@IP_DU_VPS` (musiques de l'animation d'échange).
 
 **Mises à jour** : par GitHub (« CI/CD » ci-dessous), ou `deploy\publier.cmd ubuntu@IP_DU_VPS` depuis Windows. Les
 migrations de la base s'appliquent au démarrage ; les données restent dans le volume Docker.
@@ -1192,7 +1038,7 @@ partent au bout de 14 jours, comme les nouvelles.
 
 **CI/CD** (GitHub Actions, deux workflows séparés : `.github/workflows/ci.yml` et `cd.yml`, l'un se lance sans l'autre) :
 
-- **CI, tests** à chaque push (ou « Run workflow » du workflow « CI » pour les relancer), sur une machine Ubuntu propre (un fichier oublié dans un commit s'y voit) : .NET 10, simulateur de combat (`npm ci --prefix showdown`), images
+- **CI, tests** à chaque push (ou « Run workflow » du workflow « CI » pour les relancer), sur une machine Ubuntu propre (un fichier oublié dans un commit s'y voit) : .NET 10, simulateur de combat (`npm ci --ignore-scripts --prefix showdown`), images
   copiées depuis `~/monsuta-potaru-images` du VPS par SSH (exigées par les tests d'images), puis `dotnet test`. Résultat dans
   l'onglet « Actions » du dépôt et à côté de chaque commit. Attention : Linux distingue majuscules et minuscules dans les
   noms de fichiers, Windows non.
@@ -1211,7 +1057,8 @@ partent au bout de 14 jours, comme les nouvelles.
   sauvegarde des données (`sauvegarder.sh`, quelques secondes de coupure), envoi de la même archive que `publier.ps1`,
   **images manquantes** (`outils/images.py --sortie ~/monsuta-potaru-images`, comme `images-serveur` : les présentes sont gardées ;
   un échec ne bloque pas, avertissement orange et journal complet dans `~/monsuta-potaru-images.log` sur le VPS),
-  `docker compose up -d --build`, et vérification que le site répond, script de Blazor compris (`_framework/blazor.web.js` ; une minute au plus, sinon échec). Le dépôt est
+  `docker compose up -d --build`, nettoyage (anciennes images, cache de construction de plus de 3 jours : `docker builder prune`,
+  comme `publier.ps1` ; sans lui, il atteignait 20 Go), et vérification que le site répond, script de Blazor compris (`_framework/blazor.web.js` ; une minute au plus, sinon échec). Le dépôt est
   public, ses journaux d'Actions aussi : ils n'affichent ni secret ni journal du site (à lire par SSH). Jamais deux déploiements à la fois. La première installation se fait toujours avec `publier.cmd`.
 
 Mise en place (une fois), avec une clé SSH réservée à GitHub (révocable sans toucher à la tienne), dans PowerShell :
@@ -1236,9 +1083,10 @@ et servi depuis le disque (`Program.cs` : `MapStaticAssets` ne connaît que les 
 `deploy\images-serveur.cmd ubuntu@IP_DU_VPS` lance `outils/images.py --sortie ~/monsuta-potaru-images` sur le VPS (téléchargement
 depuis les projets d'origine, ~10 minutes la première fois, les images présentes sont gardées), puis redémarre le site,
 qui lit la liste des images au démarrage. À relancer pour mettre les images à jour. Les développeurs les copient depuis le
-VPS avec `outils\recuperer-images.cmd` (voir « Lancer en local »). Seule exception : les planches du parc, qui ne se
-téléchargent nulle part (pack acheté, `outils/carte-parc.py`, voir « Parc ») ; `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` les
-envoie depuis le PC.
+VPS avec `outils\recuperer-images.cmd` (voir « Lancer en local »). Exceptions, qui ne se téléchargent nulle part : les
+planches du parc (pack acheté, `outils/carte-parc.py`, voir « Parc »), que `deploy\fond-parc.cmd ubuntu@IP_DU_VPS` envoie
+depuis le PC, et les musiques de l'animation d'échange (`images/sons/`), envoyées par `deploy\sons-serveur.cmd
+ubuntu@IP_DU_VPS` (jouées aussitôt, sans redémarrage).
 
 **Sauvegardes** : la sauvegarde de l'hébergeur ne couvre souvent que 24 h, or la base est le seul endroit où sont les
 Pokémon déposés. `deploy/sauvegarder.sh` archive chaque nuit le volume dans `~/sauvegardes` sur le VPS ; en garder aussi
@@ -1270,24 +1118,43 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 
 | Projet | Utilisé pour | Licence |
 |---|---|---|
-| [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (Guangcong Luo et contributeurs), paquet [`@pkmn/sim`](https://github.com/pkmn/ps) | Simulateur des combats (`showdown/combat.js`) : règles, capacités, talents, objets de chaque génération | MIT |
-| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français, légalité ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) | GPL-3.0 |
+| [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (Guangcong Luo et contributeurs), paquet [`@pkmn/sim`](https://github.com/pkmn/ps) | Simulateur des combats (`showdown/combat.js`) : règles, capacités, talents, objets de chaque génération ; catégorie, puissance et précision des capacités de la 3e génération (lues par `outils/combats_textes.py`, reprises dans `BattleDexData.cs`) | MIT |
+| [PKHeX](https://github.com/kwsch/PKHeX) (Kaphotics et contributeurs), paquet `PKHeX.Core` | Lecture et écriture des sauvegardes, Pokémon, sacs, noms français (dont les noms des lieux de 3e et 4e génération repris dans `outils/completion_gen3_lieux.json` et `completion_gen4_lieux.json`, ceux de la 5e à la 9e génération, des objets et des espèces lus par `outils/completion_gen5.py` à `completion_gen9.py`, noms des épreuves du Super Training, lieux des cellules Zygarde de son éditeur `SAV_ZygardeCell.cs` lus par `completion_gen7.py`, statues des Grands Souterrains de DÉ/PS, `UgItemUtil.cs` et `text_ug_item_fr.txt`, lues par `completion_gen8.py`), légalité, bloc PokéAthlon d'HG / SS (`Pokeathlon4` : médailles, records, compteurs, seuils des trophées de l'Amitié, lus par `CompletionPokeathlon.cs`) ; images d'objets « Big Items » et « Artwork Items » (`outils/images.py`) ; images des rubans (`PKHeX.Drawing.Misc/Resources/img/ribbons`, `wwwroot/images/rubans`, par `outils/images.py rubans`) | GPL-3.0 ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [PokéAPI sprites](https://github.com/PokeAPI/sprites) | Images des Pokémon (normales et chromatiques, formes, femelles, Méga-Évolutions, Gigamax), de la plupart des objets et des CT (`wwwroot/images`) ; sprites de Rouge / Bleu, Jaune, Or, Argent, Cristal, Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille, Diamant / Perle, Platine, HeartGold / SoulSilver et Noire / Blanche des living dex, formes comprises (`versions/generation-i` à `generation-v`, `wwwroot/images/livingdex`) ; sprites de dos et chromatiques de Rubis / Saphir, Émeraude et Rouge Feu / Vert Feuille des combats (`back/`, `shiny/`) | CC0 1.0 pour le dépôt ; images © The Pokémon Company |
-| [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) | BSD-3-Clause |
+| [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) ; descriptions françaises des talents et des capacités de la fiche Pokémon des combats (`ability_flavor_text`, `move_flavor_text`, lues par `outils/combats_textes.py`, reprises dans `BattleDexData.cs`) | BSD-3-Clause ; textes des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
 | [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert, et tout le désert (sable, falaises, eau, cascade, herbe, cactus, rochers, acacias, plantes) ; îlots et rochers animés de l'océan ; sol, parois, eau, cristaux, stalagmites et torches de la grotte ; herbes, hauteurs à flancs de pierre, rivière, pont de bois, sapins et nids de la montagne ; murs, dallage, bassins d'égout, piliers, pics, objets, or, coffres et petit pont de l'extension Dungeons ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; herbes hautes, champignons et rochers moussus de l'extension ShroomLands (forêt profonde) ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
+| Bande originale de *Pokémon HeartGold / SoulSilver* (GAME FREAK, 2009 ; Shota Kageyama, Junichi Masuda), pistes « Trade », « Evolution » et « Congratulations! Your Pokémon Evolved! », et « Battle! » (Rival, Champion, Frontier Brain, Gym Leader Kanto et Johto), fournies par l'utilisateur | Musiques de l'animation d'échange (`wwwroot/images/sons/` : `echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; musiques des combats rangées pour plus tard (`combat-*.mp3`) ; hors Git, jamais redistribuées avec le code | © Nintendo / GAME FREAK ; non libre |
 | [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
+| [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; formes, traits et noms des formes de chaque espèce (`data/cobblemon/species`), repris dans `CobblemonPokemon` et `AllTheMonsLivingDex` ; modèles et textures des coupes de Couafarel et des motifs de Prismillon propres à Cobblemon, rendus en images par `outils/rendu-cobblemon.py` (`wwwroot/minecraft/pokemon/`) | MPL-2.0 (le mod) ; modèles : CC BY-NC 3.0 (fichiers `license` des modèles) |
+| [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) (modpack 2.1.0, mod `allthemons` de LobsterJonn), [Complete Cobblemon Collection](https://www.curseforge.com/minecraft/mc-mods/complete-cobblemon-collection) (Xcavalier), [Cobblemon: Mega Showdown](https://www.curseforge.com/minecraft/mc-mods/cobblemon-mega-showdown) et zamega (Yajat Kaul, Navas) | Logo du modpack, jaquette du living dex All the Mons (`wwwroot/minecraft/all-the-mons.png`, fourni par l'utilisateur) ; espèces et formes du modpack (Piglich, Creepyon, Stari Patrickyu ; espèces rendues disponibles ; Méga) relevées dans les mods pour `AllTheMonsLivingDex` ; modèles et textures de Piglich, Creepyon (texture du Creeper de Minecraft) et Patrickyu rendus en images (`wwwroot/minecraft/pokemon/`) | All Rights Reserved (`allthemons`, Complete Cobblemon Collection), Mega Showdown License v2.1 ; Minecraft © Mojang ; usage de fan, non commercial |
+| Livre de quêtes d'All the Mons ([All the Mods Team](https://www.curseforge.com/minecraft/modpacks/all-the-mons), FTB Quests) et succès (advancements) de Minecraft et des mods du modpack | Identifiants et **titres seulement** (jamais les descriptions) des quêtes et des succès, relevés par `outils/completion_allthemons.py` dans `AllTheMonsCompletionData.cs` pour la complétion All the Mons | Quêtes : All Rights Reserved (All the Mods Team) ; succès : licences de chaque mod, Minecraft © Mojang ; usage de fan, non commercial |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
-| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus ») et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
+| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |
 | [SQLite](https://sqlite.org) | Base de données | Domaine public |
 | [xUnit](https://xunit.net), [coverlet](https://github.com/coverlet-coverage/coverlet) | Tests, couverture des tests (envoyée à SonarCloud) | Apache-2.0, MIT |
+| [bUnit](https://bunit.dev) (Egil Hansen et contributeurs), avec [AngleSharp](https://anglesharp.github.io) | Tests des pages et composants Blazor (`PageTestContext`) ; AngleSharp lit aussi les pages HTML dans `SiteTests` | MIT, MIT |
+| [Microsoft.AspNetCore.Mvc.Testing](https://learn.microsoft.com/aspnet/core/test/integration-tests) (Microsoft) | Site entier démarré dans les tests (`SiteFactory`, WebApplicationFactory) | MIT |
 | [SonarScanner for .NET](https://github.com/SonarSource/sonar-scanner-msbuild) (SonarSource), [SonarCloud](https://sonarcloud.io) | Revue de la qualité du code dans la CI (`.github/workflows/ci.yml`), service en ligne gratuit pour les projets publics | LGPL-3.0 (scanner) |
 | [Caddy](https://caddyserver.com), [Docker](https://www.docker.com) | Mise en ligne (HTTPS, conteneurs) | Apache-2.0 |
 | [GitHub Actions](https://github.com/features/actions) : [actions/checkout](https://github.com/actions/checkout), [actions/setup-dotnet](https://github.com/actions/setup-dotnet) | Tests et déploiement (`.github/workflows/ci.yml`, `cd.yml`) | MIT |
+| [pokered](https://github.com/pret/pokered) et [pokeyellow](https://github.com/pret/pokeyellow) (pret) | Désassemblages de Rouge / Bleu et de Jaune : numéros des drapeaux d'événements, objets du décor, objets cachés, équipes des dresseurs, échanges et adresses de la sauvegarde, lus par `outils/completion_gen1.py` pour les tables de la complétion (`Services/Completion/Gen1CompletionData.cs`) ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [pokegold](https://github.com/pret/pokegold) et [pokecrystal](https://github.com/pret/pokecrystal) (pret) | Désassemblages d'Or / Argent et de Cristal : drapeaux d'événements, objets, objets cachés, cadeaux, équipes des dresseurs, échanges et octets de la WRAM (scènes, Zarbi), lus par `outils/completion_gen2.py` pour `Services/Completion/Gen2CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [pokeruby](https://github.com/pret/pokeruby), [pokeemerald](https://github.com/pret/pokeemerald) et [pokefirered](https://github.com/pret/pokefirered) (pret) | Désassemblages de Rubis / Saphir, d'Émeraude et de Rouge Feu / Vert Feuille : drapeaux, objets au sol et cachés, cadeaux, dresseurs et leurs équipes, sections des cartes, lus par `outils/completion_gen3.py` pour `Services/Completion/Gen3CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [pokediamond](https://github.com/pret/pokediamond), [pokeplatinum](https://github.com/pret/pokeplatinum) et [pokeheartgold](https://github.com/pret/pokeheartgold) (pret) | Désassemblages de Diamant / Perle (fichiers binaires du jeu qu'il contient : événements des cartes, scripts compilés, table des objets cachés), de Platine et d'HeartGold / SoulSilver : drapeaux, objets au sol et cachés, cadeaux, dresseurs et leurs équipes, lieux des cartes, capacités des CT, lus par `outils/completion_gen4.py` pour `Services/Completion/Gen4CompletionData.cs` ; les dépôts ne sont pas copiés dans le projet | Aucune licence déclarée ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| Check-lists de complétion d'Or / Argent, de Cristal, de Rubis / Saphir, d'Émeraude, de Rouge Feu / Vert Feuille, de Diamant / Perle, de Platine, d'HeartGold / SoulSilver, de Noire / Blanche, de Noire 2 / Blanche 2, de X / Y, de Rubis Oméga / Saphir Alpha, de Soleil / Lune, d'Ultra-Soleil / Ultra-Lune, de Let's Go, d'Épée / Bouclier, de Diamant Étincelant / Perle Scintillante, de Légendes Arceus et d'Écarlate / Violet (fichiers de l'utilisateur, d'après [Pokébip](https://www.pokebip.com), Eternia et Bulbapedia) | Choix des étapes de l'histoire, des rencontres uniques et des quêtes annexes de la 2e à la 9e génération, ordre des lieux de la 3e à la 8e, CT / CS et Méga-Gemmes de la 6e, CT, cristaux Z, Scanner des Îles et Experts de la 7e, CT, DT et lieux des Zarbi de la 8e, Pokédex, CT et lieux des légendaires de la 9e (`outils/completion_gen2.py` à `completion_gen9.py`, `completion_gen3_ordre.json` à `completion_gen7_ordre.json`) | Consultées, textes réécrits |
+| [pokebw2](https://github.com/fuddlesworth/pokebw2) (fuddlesworth et contributeurs) | Désassemblage en cours de Noire 2 / Blanche 2 : zones, événements des cartes, scripts, dresseurs et leurs équipes, constantes (objets, espèces, lieux), macros des scripts (servent aussi à lire ceux de Noire / Blanche), lus par `outils/completion_gen5.py` pour `Services/Completion/Gen5CompletionData.cs` ; le dépôt n'est pas copié dans le projet | GPL-3.0 ; données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [FlagsEditorEXPlugin](https://github.com/fattard/FlagsEditorEXPlugin) (fattard) | Listes des drapeaux de Noire / Blanche, de Noire 2 / Blanche 2, de X / Y, de Rubis Oméga / Saphir Alpha, de Soleil / Lune, d'Ultra-Soleil / Ultra-Lune, de Let's Go, d'Épée / Bouclier, de Diamant Étincelant / Perle Scintillante, de Légendes Arceus et d'Écarlate / Violet (`flags_gen5bw_en.txt`, `flags_gen5b2w2_en.txt`, `flags_gen6xy_en.txt`, `flags_gen6oras_en.txt`, `flags_gen7sm_en.txt`, `flags_gen7usum_en.txt`, `flags_gen7blgpe_en.txt`, `flags_gen8swsh_en.txt`, `flags_gen8bdsp_en.txt`, `flags_gen8la_en.txt`, `flags_gen9sv_en.txt`) : noms internes des drapeaux et variables de l'histoire, contenu et lieu des objets au sol, cachés et (X / Y, Let's Go) des cadeaux, rencontres et échanges de la 7e et de la 8e génération, Taupiqueur d'Alola, dresseurs d'Écarlate / Violet, lus par `outils/completion_gen5.py` à `completion_gen9.py` ; blocs des objets cachés d'Épée / Bouclier repris de `FlagsGen8SWSH.cs`, listes des objets au sol et des dresseurs d'Écarlate / Violet de `FlagsGen9SV.cs` ; les fichiers ne sont pas copiés dans le projet | GPL-3.0 |
+| ROM de Pokémon Version Noire et de Pokémon Version Blanche 2 (cartouches françaises de l'utilisateur) | Noire / Blanche n'a pas de désassemblage : zones, événements, scripts, dresseurs et noms des lieux lus dans la cartouche de Noire ; noms français des médailles et des parures lus dans celle de Blanche 2 (`outils/completion_gen5_rom.py`) ; rien des ROM n'est copié dans le projet, seulement les tables générées | Données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| ROM de Pokémon X et de Pokémon Rubis Oméga (cartouches de l'utilisateur, déchiffrées) | Pas de désassemblage pour la 3DS : dresseurs (classes et noms français, équipes), zones où on les combat, scripts des zones (drapeaux levés, combats des champions) lus par `outils/completion_gen6_rom.py` ; rien des ROM n'est copié dans le projet, seulement les tables générées | Données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| ROM de Pokémon Soleil, Lune, Ultra-Soleil et Ultra-Lune (cartouches de l'utilisateur, déchiffrées) | Dresseurs de la 7e génération (classes et noms français, équipes, zones où on les combat, lieux des zones ; combats lancés par les scripts d'événements et zones qui lancent ces scripts) lus par `outils/completion_gen7_rom.py` ; le format des blocs de dresseurs et la table des numéros de script ont été trouvés en désassemblant le module `FieldRo.cro` et le `code.bin` du jeu (devkitARM) ; Ultra-Lune a servi à vérifier qu'elle a les mêmes dresseurs qu'Ultra-Soleil ; rien des ROM n'est copié dans le projet, seulement les tables générées | Données des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
+| [pk3DS](https://github.com/kwsch/pk3DS) (Kaphotics et contributeurs) | Formats de la 3DS consultés pour écrire `outils/completion_gen6_rom.py` (repris par `completion_gen7_rom.py`) : archives GARC, numéros des archives des dresseurs et des zones, données des dresseurs, textes chiffrés, décompression des scripts ; aucun code repris | GPL-3.0 |
 | [Bulbapedia](https://bulbapedia.bulbagarden.net) | Référence consultée pour vérifier l'ordre des Noigrumes d'Or/Argent/Cristal | — |
+| [Pokébip](https://www.pokebip.com/page/jeux-video/pokemon-heartgold-soulsilver/guide-pokeathlon/salles-musee), « Salles du musée » (guide du PokéAthlon) | Trophées et objets exposés des quatre salles du musée du Dôme Pokéathlon et leurs seuils (scores des parcours, records des épreuves, compteurs), comptés par la complétion d'HG / SS (`Services/Completion/CompletionPokeathlon.cs`) | Consultée, seuils repris, textes réécrits ; contenu © Pokébip |
+| [Pokébip](https://www.pokebip.com/page/general/tous-les-rubans), « Tous les rubans » | Liste des rubans, leurs noms français et leurs familles (Panthéon, Concours, Installations de combat, Commémoratifs, Cadeaux), base de ceux que compte le suivi des rubans (`Services/Ribbons.cs` ; façons de les obtenir réécrites) | Consultée, rien de recopié tel quel ; contenu © Pokébip |
 | [Bulbagarden Archives](https://archives.bulbagarden.net) | Jaquettes officielles de Pokémon Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu, Vert Feuille, Diamant, Perle, Platine, HeartGold, SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y, Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier, Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate et Violet (versions anglaises réduites, « Red/Blue/Yellow/Gold/Silver/Crystal/Ruby/Sapphire/Emerald/FireRed/LeafGreen/Diamond/Pearl/Platinum/HeartGold/SoulSilver/Black/White/Black 2/White 2/X/Y/Omega Ruby/Alpha Sapphire/Sun/Moon/Ultra Sun/Ultra Moon/Lets Go Pikachu/Lets Go Eevee/Sword/Shield/Brilliant Diamond/Shining Pearl/Legends Arceus/Scarlet/Violet EN boxart », Émeraude, Diamant, Perle, HeartGold et SoulSilver en JPEG), images des living dex (`wwwroot/images/livingdex/jaquettes`, par `outils/images.py livingdex`) | Images © Nintendo / Creatures Inc. / GAME FREAK Inc. ; usage de fan, non commercial |
 
 Pokémon et tous les noms et images associés sont des marques et créations de Nintendo, Creatures Inc., GAME FREAK Inc. et

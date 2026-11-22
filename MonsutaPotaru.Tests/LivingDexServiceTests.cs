@@ -18,6 +18,12 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class LivingDexServiceTests : IDisposable
 {
+    /// <summary>Premières et dernières cases des trois Pokédex de Kalos.</summary>
+    private static readonly int[] KalosStarts = [0, 152, 153, 456];
+
+    /// <summary>Première et 400e case d'un Pokédex régional.</summary>
+    private static readonly int[] FirstAndFourHundredth = [0, 399];
+
     private readonly TestDatabase _db = new("sacha", "ondine", "pierre");
     private readonly StoredSaveService _saves;
     private readonly LivingDexService _dex;
@@ -40,14 +46,22 @@ public sealed class LivingDexServiceTests : IDisposable
     }
 
     [Fact]
-    public void FirstGeneration_OnlyHasTheNationalMode_Of151()
+    public void FirstGeneration_OnlyHasTheRegionalMode_Of151()
     {
         foreach (var game in LivingDexGames.All.Where(g => g.Generation == 1))
         {
-            Assert.Equal([LivingDexMode.National], LivingDexGames.Modes(game)); // une région, aucune forme : Régional et Complet cachés
-            Assert.Equal(151, LivingDexGames.Slots(game, LivingDexMode.National).Count);
+            // Une région, aucune forme : les trois modes sont identiques, il ne reste que le Régional (Kanto).
+            Assert.Equal([LivingDexMode.Regional], LivingDexGames.Modes(game));
+            Assert.True(LivingDexGames.RegionalOnly(game));
+            Assert.Equal(151, LivingDexGames.Slots(game, LivingDexMode.Regional).Count);
+            Assert.Equal(LivingDexGames.Slots(game, LivingDexMode.National), LivingDexGames.Slots(game, LivingDexMode.Regional));
             Assert.Equal(LivingDexGames.Slots(game, LivingDexMode.National), LivingDexGames.Slots(game, LivingDexMode.Complete));
+            Assert.Equal("Kanto", game.Region);
         }
+        // Pas les autres living dex qui n'ont qu'un mode : chromatiques des jeux, Let's Go, globaux.
+        Assert.False(LivingDexGames.RegionalOnly(LivingDexGames.Get(LivingDexGame.Gold, shiny: true)));
+        Assert.False(LivingDexGames.RegionalOnly(LivingDexGames.Get(LivingDexGame.LetsGoPikachu)));
+        Assert.False(LivingDexGames.RegionalOnly(GlobalLivingDex.Game));
         Assert.Equal("images/livingdex/rouge-bleu/", LivingDexGames.Get(LivingDexGame.Blue).SpriteFolder);
         Assert.Equal("images/livingdex/jaune/", LivingDexGames.Get(LivingDexGame.Yellow).SpriteFolder);
         Assert.Equal("images/livingdex/jaquettes/rouge.png", LivingDexGames.Get(LivingDexGame.Red).Cover);
@@ -162,7 +176,7 @@ public sealed class LivingDexServiceTests : IDisposable
         var x = LivingDexGames.Get(LivingDexGame.X);
         // Kalos : Centre, Côtes, Montagnes, chacun numéroté à partir de 1.
         Assert.Equal([("Kalos Centre", 1), ("Kalos Centre", 153), ("Kalos Côtes", 1), ("Kalos Montagnes", 151)],
-            new[] { 0, 152, 153, 456 }.Select(i => LivingDexGames.RegionalNumber(x, i)));
+            KalosStarts.Select(i => LivingDexGames.RegionalNumber(x, i)));
         Assert.Equal(((string?)null, 1), LivingDexGames.RegionalNumber(LivingDexGames.Get(LivingDexGame.OmegaRuby), 0));
 
         var oras = LivingDexGames.Get(LivingDexGame.OmegaRuby);
@@ -310,7 +324,7 @@ public sealed class LivingDexServiceTests : IDisposable
         Assert.Equal((664, 733), (paldea.Count, national.Count));
         Assert.Subset(national.Select(s => s.Species).ToHashSet(), paldea.Select(s => s.Species).ToHashSet());
         Assert.Equal([906, 907, 908], paldea.Take(3).Select(s => (int)s.Species)); // Poussacha, Matourgeon, Miascarade
-        Assert.Equal([("Paldea", 1), ("Paldea", 400)], new[] { 0, 399 }.Select(i => LivingDexGames.RegionalNumber(game, i)));
+        Assert.Equal([("Paldea", 1), ("Paldea", 400)], FirstAndFourHundredth.Select(i => LivingDexGames.RegionalNumber(game, i)));
         Assert.Equal(("Septentria", "Myrtille"), (LivingDexGames.RegionalNumber(game, 400).Section, LivingDexGames.RegionalNumber(game, 663).Section));
 
         var slots = LivingDexGames.Slots(game, LivingDexMode.Complete);
@@ -342,7 +356,7 @@ public sealed class LivingDexServiceTests : IDisposable
     {
         var sword = LivingDexGames.Get(LivingDexGame.Sword);
         // Galar, puis ce que l'Isolarmure et la Couronneige ajoutent, avec leurs numéros (sans les Pokémon déjà vus).
-        Assert.Equal([("Galar", 1), ("Galar", 400)], new[] { 0, 399 }.Select(i => LivingDexGames.RegionalNumber(sword, i)));
+        Assert.Equal([("Galar", 1), ("Galar", 400)], FirstAndFourHundredth.Select(i => LivingDexGames.RegionalNumber(sword, i)));
         Assert.Equal("Isolarmure", LivingDexGames.RegionalNumber(sword, 400).Section);
         Assert.Equal("Couronneige", LivingDexGames.RegionalNumber(sword, 583).Section);
         Assert.Equal(584, sword.Regional.Distinct().Count());
@@ -627,7 +641,12 @@ public sealed class LivingDexServiceTests : IDisposable
             (await _dex.CreateAsync("sacha", blue, LivingDexGame.Red)).Message);
         Assert.True((await _dex.CreateAsync("sacha", blue, LivingDexGame.Blue)).Ok);
 
-        Assert.Equal(["Pokémon Rouge", "Pokémon Bleu", "Pokémon Épée"], (await _dex.ListAsync("sacha")).Select(d => d.Game.Name));
+        Assert.Equal(["Pokémon Rouge", "Pokémon Bleu", "Pokémon Épée"], (await _dex.ListAsync("sacha", LivingDexMode.Regional)).Select(d => d.Game.Name));
+        // 1re génération : seulement en Régional, ni en National ni en Complet.
+        Assert.Equal(["Pokémon Épée"], (await _dex.ListAsync("sacha")).Select(d => d.Game.Name));
+        Assert.Equal(["Pokémon Épée"], (await _dex.ListAsync("sacha", LivingDexMode.Complete)).Select(d => d.Game.Name));
+        var redView = (await _dex.GetAsync("sacha", created.Id!.Value))!; // demandé en National : son seul mode
+        Assert.Equal((LivingDexMode.Regional, 151), (redView.Mode, redView.Entries.Count));
         Assert.Empty(await _dex.ListAsync("ondine"));
         Assert.False(await _dex.DeleteAsync("ondine", created.Id!.Value));
         Assert.True(await _dex.DeleteAsync("sacha", created.Id!.Value));
@@ -640,9 +659,9 @@ public sealed class LivingDexServiceTests : IDisposable
         var red = await Store("sacha", "rouge.sav");
         var id = (await _dex.CreateAsync("sacha", red, LivingDexGame.Red)).Id!.Value;
 
-        var view = await _dex.GetAsync("sacha", id, LivingDexMode.Complete); // pas proposé en 1re génération : National
+        var view = await _dex.GetAsync("sacha", id, LivingDexMode.Complete); // pas proposé en 1re génération : Régional
         Assert.NotNull(view);
-        Assert.Equal(LivingDexMode.National, view.Mode);
+        Assert.Equal(LivingDexMode.Regional, view.Mode);
         Assert.Equal(151, view.Entries.Count);
         Assert.Equal(Enumerable.Range(1, 151), view.Entries.Select(e => (int)e.Species));
 
@@ -652,7 +671,7 @@ public sealed class LivingDexServiceTests : IDisposable
                 .Select(p => new { p.Species, p.Id, p.Location }).AsEnumerable().Select(p => (p.Species, p.Id, p.Location)).ToList();
         var species = pokemon.Select(p => p.Species).Distinct().ToList();
         Assert.Equal(species.Count, view.Owned);
-        Assert.Equal(species.Count, Assert.Single(await _dex.ListAsync("sacha")).Owned);
+        Assert.Equal(species.Count, Assert.Single(await _dex.ListAsync("sacha", LivingDexMode.Regional)).Owned);
 
         // Chaque espèce possédée : son premier exemplaire (équipe, puis boîtes), en couleur ; les autres manquent.
         var first = pokemon.First();
@@ -827,8 +846,9 @@ public sealed class LivingDexServiceTests : IDisposable
         Assert.Equal("Violet, Blue, Black, Red, Silver", Order(LivingDexSort.Completion, false));
         Assert.Equal("Red, Silver, Black, Blue, Violet", Order(LivingDexSort.Completion, true));
 
-        Assert.Equal((LivingDexSort.Completion, "completion"), (LivingDexGames.SortFromSlug("completion"), LivingDexGames.SortSlug(LivingDexSort.Completion)));
-        Assert.Equal((LivingDexSort.Generation, (string?)null), (LivingDexGames.SortFromSlug("n-importe-quoi"), LivingDexGames.SortSlug(LivingDexSort.Generation)));
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Completion), SiteSorts.LivingDexFromQuery(new("completion", null)));
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Generation), SiteSorts.LivingDexFromQuery(new("n-importe-quoi", null)));
+        Assert.Equal("generation", SiteSorts.Slug(LivingDexSort.Generation));
     }
 
     [Theory]
@@ -843,7 +863,7 @@ public sealed class LivingDexServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task List_CountsInTheChosenMode_NationalWhenTheGameHasNotIt()
+    public async Task List_CountsInTheChosenMode_FirstGenerationOnlyInRegional()
     {
         var red = await Store("sacha", "rouge.sav");
         var silver = await Store("sacha", "argent.sav");
@@ -853,12 +873,14 @@ public sealed class LivingDexServiceTests : IDisposable
         foreach (var mode in new[] { LivingDexMode.Regional, LivingDexMode.National, LivingDexMode.Complete })
         {
             var cards = await _dex.ListAsync("sacha", mode);
-            // Rouge n'a que le National ; Argent compte comme sa page dans ce mode.
-            Assert.Equal((LivingDexMode.National, 151), (cards[0].Mode, cards[0].Total));
+            // Rouge n'a que le Régional : montré seulement dans ce mode ; Argent compte comme sa page dans chaque mode.
+            Assert.Equal(mode == LivingDexMode.Regional ? 2 : 1, cards.Count);
+            if (mode == LivingDexMode.Regional)
+                Assert.Equal((LivingDexGame.Red, LivingDexMode.Regional, 151), (cards[0].Game.Game, cards[0].Mode, cards[0].Total));
             var page = (await _dex.GetAsync("sacha", silverId, mode))!;
-            Assert.Equal((mode, page.Owned, page.Entries.Count), (cards[1].Mode, cards[1].Owned, cards[1].Total));
+            Assert.Equal((mode, page.Owned, page.Entries.Count), (cards[^1].Mode, cards[^1].Owned, cards[^1].Total));
         }
-        Assert.Equal(276, (await _dex.ListAsync("sacha", LivingDexMode.Complete))[1].Total); // 251 + 25 lettres de Zarbi
+        Assert.Equal(276, Assert.Single(await _dex.ListAsync("sacha", LivingDexMode.Complete)).Total); // 251 + 25 lettres de Zarbi
     }
 
     [Fact]

@@ -22,7 +22,8 @@ public sealed class TradeHubTests : IDisposable
     public void Dispose() => _hub.Dispose();
 
     private static TradeCandidate Pokemon(ushort species) =>
-        new(new TradeSlot(0, species), $"empreinte-{species}", species, $"n°{species}", $"n°{species}", 10, false, false, "", "Boîte 1");
+        new(new TradeSlot(0, species), $"empreinte-{species}", species, $"n°{species}", $"n°{species}", 10, false, false, "", "Boîte 1",
+            new PokemonFilterTraits(species, false, $"n°{species}", $"n°{species}", 10, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, FormKind.Standard, false));
 
     private TradeSession Started()
     {

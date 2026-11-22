@@ -50,7 +50,10 @@ public sealed record PokemonCriteria
     public bool IsEmpty => !ExcludesEggs && Egg is null;
 
     /// <summary>Applique les filtres à une requête de la collection (traduite en SQL).</summary>
-    public IQueryable<BankPokemon> Apply(IQueryable<BankPokemon> query)
+    public IQueryable<BankPokemon> Apply(IQueryable<BankPokemon> query) => ApplyFlags(ApplyIvs(ApplyLists(query)));
+
+    /// <summary>Œufs, puis les listes à cocher : générations, types, sexes, natures, talents, formes.</summary>
+    private IQueryable<BankPokemon> ApplyLists(IQueryable<BankPokemon> query)
     {
         if (ExcludesEggs)
             query = query.Where(p => !p.IsEgg);
@@ -86,6 +89,12 @@ public sealed record PokemonCriteria
             var forms = Forms.ToList();
             query = query.Where(p => forms.Contains(p.FormKind));
         }
+        return query;
+    }
+
+    /// <summary>IV minimums, stat par stat (0 : pas de minimum).</summary>
+    private IQueryable<BankPokemon> ApplyIvs(IQueryable<BankPokemon> query)
+    {
         var iv = MinIvs;
         if (iv[0] > 0) query = query.Where(p => p.IvHp >= iv[0]);
         if (iv[1] > 0) query = query.Where(p => p.IvAtk >= iv[1]);
@@ -93,6 +102,12 @@ public sealed record PokemonCriteria
         if (iv[3] > 0) query = query.Where(p => p.IvSpA >= iv[3]);
         if (iv[4] > 0) query = query.Where(p => p.IvSpD >= iv[4]);
         if (iv[5] > 0) query = query.Where(p => p.IvSpe >= iv[5]);
+        return query;
+    }
+
+    /// <summary>Niveaux, surnom, Méga-Évolution possible, chromatique.</summary>
+    private IQueryable<BankPokemon> ApplyFlags(IQueryable<BankPokemon> query)
+    {
         if (MinLevel is { } minLevel)
             query = query.Where(p => p.Level >= minLevel);
         if (MaxLevel is { } maxLevel)
@@ -197,7 +212,7 @@ public sealed record PokemonCriteria
     private static HashSet<byte> Ids(string? value, IReadOnlyList<(byte Id, string Slug)> slugs) =>
         Split(value).SelectMany(s => slugs.Where(x => x.Slug == s).Select(x => x.Id)).ToHashSet();
 
-    private static IEnumerable<string> Split(string? value) =>
+    private static string[] Split(string? value) =>
         (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static string? Join(IEnumerable<string> values) => string.Join(',', values) is { Length: > 0 } joined ? joined : null;

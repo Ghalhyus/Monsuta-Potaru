@@ -14,8 +14,9 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
-<PageTitle>@(!Visitor ? "Ma collection" : player is null ? "Joueur introuvable" : $"Collection de {player.Pseudo}")</PageTitle>
+<PageTitle>@PageName</PageTitle>
 
 @* Tous les Pokémon de l'utilisateur sur une seule page, sans boîtes : ceux du stockage interne et ceux des sauvegardes
    stockées (lecture seule, gérées dans « Mes sauvegardes »). Seules les lignes visibles à l'écran (plus une petite marge) sont rendues et lues
@@ -64,7 +65,8 @@ else
             <option value="@s.Id">💾 @(Visitor ? s.Label : s.LabelAndFile)</option>
         }
     </select>
-    @* Tri : critère, puis sens (les œufs restent à la fin). *@
+    @* Tri : critère, puis sens (les œufs restent à la fin) ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »).
+       La quantité n'est proposée qu'en mode compact. *@
     <div class="collection-sort">
         <select class="form-select form-select-sm" aria-label="Trier par" value="@SortChoices.First(c => c.By == sort.By).Slug" @onchange="SortChanged">
             @foreach (var choice in SortChoices)
@@ -73,6 +75,11 @@ else
             }
         </select>
         <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" title="Inverser l'ordre" @onclick="ReverseSort">@OrderLabel</button>
+    </div>
+    @* Mode compact : un dossier par espèce, gardé dans l'adresse (?compact=1). *@
+    <div class="form-check form-switch small collection-compact" title="Regroupe les Pokémon d'une même espèce dans un dossier">
+        <input class="form-check-input" type="checkbox" role="switch" id="collection-compact" checked="@compact" @onchange="CompactChanged" />
+        <label class="form-check-label" for="collection-compact">Mode compact</label>
     </div>
     @if (!Visitor)
     {
@@ -91,27 +98,45 @@ else
 @if (total == 0)
 {
     <p class="text-muted">
-        @(string.IsNullOrWhiteSpace(search) && source == "" && criteria.IsEmpty ? "Ta collection est vide pour l'instant. Dépose des Pokémon depuis « Transfert » ou ajoute une sauvegarde dans « Mes sauvegardes »." : "Aucun Pokémon ne correspond.")
+        @(string.IsNullOrWhiteSpace(search) && source == "" && criteria.IsEmpty ? "Ta collection est vide pour l'instant. Dépose des Pokémon depuis « Dépôt / Retrait » ou ajoute une sauvegarde dans « Mes sauvegardes »." : "Aucun Pokémon ne correspond.")
     </p>
 }
 else
 {
     <div class="collection" style="--columns: @columns">
         @* Changer de recherche, d'origine ou de nombre de colonnes recrée la liste (et remonte en haut). *@
-        <Virtualize @key="listVersion" TItem="BankListItem[]" ItemsProvider="LoadRows" Context="row" ItemSize="60" OverscanCount="4">
+        <Virtualize @key="listVersion" @ref="list" TItem="CollectionCell[]" ItemsProvider="LoadRows" Context="row" ItemSize="60" OverscanCount="4">
             <ItemContent>
                 <div class="collection-row">
-                    @foreach (var p in row)
+                    @foreach (var cell in row)
                     {
-                        var item = p;
-                        var stored = item.StoredSaveId is { } sid ? saves.FirstOrDefault(x => x.Id == sid) : null;
-                        <PokemonSlot Sprite="@item.SpriteUrl"
-                                     Title="@($"{item.Nickname} ({item.SpeciesName}) N.{item.Level}{(stored is null ? "" : $" — sauvegarde {(Visitor ? stored.Label : stored.LabelAndFile)}")}")"
-                                     Level="item.Level"
-                                     Shiny="item.IsShiny"
-                                     Marker="@(item.StoredSaveId is null ? null : "💾")"
-                                     Selected="@(selected?.Id == item.Id)"
-                                     OnClick="() => Open(item)" />
+                        if (cell.Folder is { } folder)
+                        {
+                            @* Dossier du mode compact : un clic l'ouvre (ses Pokémon prennent les cases suivantes) ou le referme. *@
+                            var open = layout.IsOpen(folder);
+                            <PokemonSlot Sprite="@folder.SpriteUrl"
+                                         Title="@FolderTitle(folder, open)"
+                                         Count="folder.Count"
+                                         Expanded="open"
+                                         Class="@(open ? "folder open" : "folder")"
+                                         OnClick="() => ToggleFolder(folder.Key)" />
+                        }
+                        else if (cell.Item is { } item)
+                        {
+                            var stored = item.StoredSaveId is { } sid ? saves.FirstOrDefault(x => x.Id == sid) : null;
+                            <PokemonSlot Sprite="@item.SpriteUrl"
+                                         Title="@SlotTitle(item, stored)"
+                                         Level="item.Level"
+                                         Shiny="item.IsShiny"
+                                         Marker="@(item.StoredSaveId is null ? null : "💾")"
+                                         Selected="@(selected?.Id == item.Id)"
+                                         Class="@(cell.InFolder ? "in-folder" : null)"
+                                         OnClick="() => Open(item)" />
+                        }
+                        else
+                        {
+                            <div class="slot empty"></div>
+                        }
                     }
                 </div>
             </ItemContent>
@@ -149,12 +174,13 @@ else
                 else
                 {
                     <small class="text-muted">Déposé le @selected.DepositedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
-                    @if (!Visitor)
+                    @* Pokémon de Minecraft : pas de fichier à télécharger (il ne sort que vers un monde All the Mons). *@
+                    @if (CanDownload)
                     {
                         <button class="btn btn-outline-secondary btn-sm ms-auto" @onclick="DownloadPkm">Télécharger le fichier .@selected.Extension</button>
                     }
                 }
-                <button class="btn btn-secondary btn-sm @(selected.StoredSaveId is null && !Visitor ? "" : "ms-auto")" @onclick="Close">Fermer</button>
+                <button class="btn btn-secondary btn-sm @(CanDownload ? "" : "ms-auto")" @onclick="Close">Fermer</button>
             </div>
         </PokemonCard>
     </div>
@@ -162,6 +188,17 @@ else
 }
 
 @code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Ma collection";
+            return player is null ? "Joueur introuvable" : $"Collection de {player.Pseudo}";
+        }
+    }
+
     private const string BankSource = "banque";
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
@@ -180,20 +217,21 @@ else
     [SupplyParameterFromQuery(Name = GridColumns.QueryName)] private int? ColumnsFromQuery { get; set; }
     /// <summary>Origine affichée, gardée dans l'adresse : vide (tout), « banque » ou l'identifiant d'une sauvegarde stockée.</summary>
     [SupplyParameterFromQuery(Name = "source")] private string? SourceFromQuery { get; set; }
-    /// <summary>Tri gardé dans l'adresse : « arrivee » (absent), « nom » ou « pokedex ».</summary>
+    /// <summary>Tri gardé dans l'adresse : « arrivee » (absent), « nom », « pokedex » ou, en mode compact, « quantite ».</summary>
     [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
     /// <summary>Sens gardé dans l'adresse (« asc », « desc ») quand il n'est pas celui du critère (récents d'abord, ou croissant).</summary>
     [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+    /// <summary>Mode compact gardé dans l'adresse (« ?compact=1 ») : un dossier par espèce.</summary>
+    [SupplyParameterFromQuery(Name = CompactQueryName)] private string? CompactFromQuery { get; set; }
 
-    /// <summary>Nom de chaque critère dans l'adresse et dans la liste.</summary>
-    private static readonly (CollectionSortBy By, string Slug, string Label)[] SortChoices =
-    [
-        (CollectionSortBy.Arrival, "arrivee", "Arrivée"),
-        (CollectionSortBy.Name, "nom", "Nom"),
-        (CollectionSortBy.Dex, "pokedex", "N° Pokédex"),
-    ];
+    private const string CompactQueryName = "compact";
+
+    /// <summary>Nom de chaque critère dans l'adresse et dans la liste (la quantité en plus en mode compact).</summary>
+    private IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> SortChoices =>
+        compact ? SiteSorts.CollectionCompactChoices : SiteSorts.CollectionChoices;
 
     private CollectionSort sort;
+    private CollectionSort defaultSort; // tri par défaut du compte qui regarde (visiteur compris)
 
     private string userId = "";
     private string search = "";
@@ -206,6 +244,21 @@ else
     private int total;
     private int listVersion;   // clé de Virtualize : l'incrémenter recrée la liste
     private int reloadRequest;
+    private Virtualize<CollectionCell[]>? list;
+
+    // ---------- Mode compact ----------
+    private bool compact;
+    private readonly HashSet<CollectionGroupKey> openFolders = []; // dossiers ouverts (non gardés dans l'adresse)
+    private List<CollectionGroup> groups = [];
+    private CollectionFolderLayout layout = CollectionFolderLayout.Empty;
+
+    /// <summary>
+    /// Case de la grille : un Pokémon (<paramref name="InFolder"/> s'il est le contenu d'un dossier ouvert), un dossier du
+    /// mode compact, ou une case vide (Pokémon disparu entre-temps).
+    /// </summary>
+    private sealed record CollectionCell(BankListItem? Item, CollectionGroup? Folder = null, bool InFolder = false);
+
+    private static readonly CollectionCell Gone = new(null);
 
     private List<StoredSaveInfo> saves = []; // pour le filtre et l'origine affichée des Pokémon stockés
     private PokemonCriteria criteria = PokemonCriteria.None; // filtres des pastilles, gardés dans l'adresse
@@ -219,13 +272,36 @@ else
     private BankPokemon? selected;
     private PokemonView? selectedView;
 
-    private CollectionFilter Filter =>
-        (source == BankSource ? CollectionFilter.Bank
-        : int.TryParse(source, out var id) ? CollectionFilter.Save(id)
-        : CollectionFilter.All) with { Criteria = criteria };
+    private CollectionFilter Filter => SourceFilter with { Criteria = criteria };
+
+    /// <summary>Origine choisie : le stockage interne, une sauvegarde, ou tout.</summary>
+    private CollectionFilter SourceFilter
+    {
+        get
+        {
+            if (source == BankSource)
+                return CollectionFilter.Bank;
+            return int.TryParse(source, out var id) ? CollectionFilter.Save(id) : CollectionFilter.All;
+        }
+    }
+
+    /// <summary>Bulle d'un Pokémon : surnom, espèce, niveau, et sa sauvegarde s'il y est.</summary>
+    private string SlotTitle(BankListItem item, StoredSaveInfo? stored)
+    {
+        var title = $"{item.Nickname} ({item.SpeciesName}) N.{item.Level}";
+        if (stored is null)
+            return title;
+        return $"{title} — sauvegarde {(Visitor ? stored.Label : stored.LabelAndFile)}";
+    }
+
+    /// <summary>Bulle d'un dossier : son espèce, son nombre de Pokémon et ce que fait un clic.</summary>
+    private static string FolderTitle(CollectionGroup folder, bool open) =>
+        $"{folder.Label} : {folder.Count} Pokémon — clique pour {(open ? "refermer" : "ouvrir")} le dossier";
 
     protected override async Task OnInitializedAsync()
     {
+        // Le tri par défaut est celui du joueur connecté, même sur la collection d'un autre : sa façon de lire une liste.
+        defaultSort = (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).Collection;
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Collection);
@@ -246,31 +322,32 @@ else
     {
         columns = GridColumns.Clamp(ColumnsFromQuery ?? screenColumns);
         var fromQuery = SourceFromQuery ?? "";
-        var sortFromQuery = SortFromAddress();
+        var compactFromQuery = CompactFromQuery == "1";
+        var sortFromQuery = SortFromAddress(compactFromQuery);
         var query = QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query);
         var criteriaFromQuery = PokemonCriteria.FromQuery(name => query.TryGetValue(name, out var value) ? value.ToString() : null);
-        if (!sourceInitialized || fromQuery != source || sortFromQuery != sort || criteriaFromQuery.Key != criteria.Key)
+        if (!sourceInitialized || fromQuery != source || sortFromQuery != sort || criteriaFromQuery.Key != criteria.Key || compactFromQuery != compact)
         {
             sourceInitialized = true;
             source = fromQuery;
             sort = sortFromQuery;
             criteria = criteriaFromQuery;
+            compact = compactFromQuery;
             await Reload();
         }
     }
 
-    /// <summary>Tri lu dans l'adresse : sens par défaut du critère, sauf « ordre » contraire.</summary>
-    private CollectionSort SortFromAddress()
+    /// <summary>
+    /// Tri lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; sans tri, celui du compte, comme pour
+    /// la quantité hors mode compact.
+    /// </summary>
+    private CollectionSort SortFromAddress(bool compactMode)
     {
-        var by = SortChoices.FirstOrDefault(c => c.Slug == SortFromQuery, SortChoices[0]).By;
-        var descending = OrderFromQuery is "asc" or "desc" ? OrderFromQuery == "desc" : DescendingByDefault(by);
-        return new(by, descending != DescendingByDefault(by));
+        var fromAddress = SiteSorts.CollectionFromQuery(new(SortFromQuery, OrderFromQuery), compact: true);
+        return fromAddress is { } s && (compactMode || s.By != CollectionSortBy.Quantity) ? s : defaultSort;
     }
 
-    /// <summary>L'arrivée montre les plus récents d'abord ; le nom et le numéro sont croissants.</summary>
-    private static bool DescendingByDefault(CollectionSortBy by) => by == CollectionSortBy.Arrival;
-
-    private bool Descending => DescendingByDefault(sort.By) != sort.Reversed;
+    private bool Descending => SiteSorts.IsDescending(sort);
 
     /// <summary>Texte du bouton de sens : l'ordre affiché (cliquer l'inverse).</summary>
     private string OrderLabel => (sort.By, Descending) switch
@@ -279,6 +356,8 @@ else
         (CollectionSortBy.Arrival, false) => "↑ Anciens d'abord",
         (CollectionSortBy.Name, false) => "↑ A → Z",
         (CollectionSortBy.Name, true) => "↓ Z → A",
+        (CollectionSortBy.Quantity, true) => "↓ Plus nombreux d'abord",
+        (CollectionSortBy.Quantity, false) => "↑ Moins nombreux d'abord",
         (_, false) => "↑ Croissant",
         (_, true) => "↓ Décroissant",
     };
@@ -298,32 +377,107 @@ else
 
     private async Task ApplySort()
     {
-        var slug = SortChoices.First(c => c.By == sort.By).Slug;
-        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
-        {
-            ["tri"] = sort.By == CollectionSortBy.Arrival ? null : slug,
-            ["ordre"] = sort.Reversed ? (Descending ? "desc" : "asc") : null,
-        }), replace: true);
+        // Rien dans l'adresse pour le tri du compte ; sinon critère et sens en entier (« ?tri=arrivee » si le compte trie par nom).
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.CollectionQuery(sort), SiteSorts.CollectionQuery(defaultSort))), replace: true);
         await Reload();
     }
 
     /// <summary>Appelé par Virtualize pour les lignes à afficher : on ne lit que ces Pokémon-là en base.</summary>
-    private async ValueTask<ItemsProviderResult<BankListItem[]>> LoadRows(ItemsProviderRequest request)
+    private async ValueTask<ItemsProviderResult<CollectionCell[]>> LoadRows(ItemsProviderRequest request)
     {
         var cols = columns;
-        var items = await BankStore.GetRangeAsync(userId, search, request.StartIndex * cols, request.Count * cols, Filter, sort, request.CancellationToken);
+        var first = request.StartIndex * cols;
+        if (compact)
+        {
+            var current = layout; // celle de la demande, même si un dossier s'ouvre pendant la lecture
+            var cells = await LoadCompactCells(current, first, first + request.Count * cols, request.CancellationToken);
+            return new ItemsProviderResult<CollectionCell[]>(cells.Chunk(cols), (current.CellCount + cols - 1) / cols);
+        }
+        var items = await BankStore.GetRangeAsync(userId, search, first, request.Count * cols, Filter, sort, request.CancellationToken);
         var rowCount = (total + cols - 1) / cols;
-        return new ItemsProviderResult<BankListItem[]>(items.Chunk(cols), rowCount);
+        return new ItemsProviderResult<CollectionCell[]>(items.Select(i => new CollectionCell(i)).Chunk(cols), rowCount);
     }
 
-    /// <summary>Nouvelle recherche ou origine : recompte, puis recrée la liste.</summary>
+    /// <summary>
+    /// Cases [<paramref name="first"/>, <paramref name="end"/>[ du mode compact : les dossiers, les Pokémon seuls de leur
+    /// espèce (lus en une requête), et la tranche visible du contenu de chaque dossier ouvert.
+    /// </summary>
+    private async Task<List<CollectionCell>> LoadCompactCells(CollectionFolderLayout current, int first, int end, CancellationToken ct)
+    {
+        var parts = current.Slice(first, end);
+        var singleIds = parts.Where(p => p.IsHead && p.Group.IsSingle).Select(p => p.Group.FirstId).ToList();
+        var singles = (await BankStore.GetItemsAsync(userId, singleIds, ct)).ToDictionary(i => i.Id);
+        var cells = new List<CollectionCell>();
+        foreach (var part in parts)
+        {
+            if (part.IsHead)
+            {
+                if (!part.Group.IsSingle)
+                    cells.Add(new(null, part.Group));
+                else
+                    cells.Add(singles.TryGetValue(part.Group.FirstId, out var item) ? new(item) : Gone);
+                continue;
+            }
+            var members = await BankStore.GetRangeAsync(userId, search, part.MemberSkip, part.MemberCount,
+                Filter with { Group = part.Group.Key }, sort, ct);
+            cells.AddRange(members.Select(m => new CollectionCell(m, InFolder: true)));
+            cells.AddRange(Enumerable.Repeat(Gone, part.MemberCount - members.Count)); // la suite reste à sa place
+        }
+        return cells;
+    }
+
+    /// <summary>Nouvelle recherche ou origine : recompte (ou regroupe, en mode compact), puis recrée la liste.</summary>
     private async Task Reload()
     {
         var request = ++reloadRequest;
-        var count = await BankStore.CountAsync(userId, search, Filter);
-        if (request != reloadRequest) return; // une demande plus récente a déjà relancé le chargement
-        total = count;
+        if (compact)
+        {
+            var found = await BankStore.GetGroupsAsync(userId, search, Filter, sort);
+            if (request != reloadRequest) return;
+            groups = found;
+            layout = new(groups, openFolders);
+            total = layout.PokemonCount;
+        }
+        else
+        {
+            var count = await BankStore.CountAsync(userId, search, Filter);
+            if (request != reloadRequest) return; // une demande plus récente a déjà relancé le chargement
+            total = count;
+        }
         listVersion++;
+    }
+
+    /// <summary>
+    /// Interrupteur du mode compact : nouvelle adresse (sans ajout à l'historique), dossiers refermés, rechargement. Le tri
+    /// par quantité n'existe qu'en mode compact : en le quittant, c'est le tri du compte qui reprend (et quitte l'adresse).
+    /// </summary>
+    private async Task CompactChanged(ChangeEventArgs e)
+    {
+        compact = e.Value is true;
+        openFolders.Clear();
+        var parameters = new Dictionary<string, object?> { [CompactQueryName] = compact ? "1" : null };
+        if (!compact && sort.By == CollectionSortBy.Quantity)
+        {
+            sort = defaultSort;
+            parameters["tri"] = null;
+            parameters["ordre"] = null;
+        }
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(parameters), replace: true);
+        await Reload();
+    }
+
+    /// <summary>
+    /// Ouvre ou referme un dossier : ses Pokémon prennent (ou libèrent) les cases qui le suivent. La liste est relue sans
+    /// être recréée, pour rester à la même hauteur de défilement.
+    /// </summary>
+    private async Task ToggleFolder(CollectionGroupKey key)
+    {
+        if (!openFolders.Remove(key))
+            openFolders.Add(key);
+        layout = new(groups, openFolders);
+        if (list is not null)
+            await list.RefreshDataAsync();
     }
 
     private async Task SourceChanged()
@@ -379,7 +533,10 @@ else
                 await screenWatcher.InvokeVoidAsync("dispose");
                 await screenWatcher.DisposeAsync();
             }
-            catch (JSDisconnectedException) { } // onglet fermé : plus rien à nettoyer côté navigateur
+            catch (JSDisconnectedException)
+            {
+                // onglet fermé : plus rien à nettoyer côté navigateur
+            }
         }
         selfRef?.Dispose();
     }
@@ -399,10 +556,9 @@ else
     private async Task Open(BankListItem item)
     {
         var entry = await BankStore.GetAsync(userId, item.Id);
-        var pk = entry is null ? null : BankService.ToPkm(entry);
-        if (entry is null || pk is null) return;
+        if (entry is null || BankService.Describe(Info, entry) is not { } view) return;
         selected = entry;
-        selectedView = Info.Describe(pk, entry.IsLegal);
+        selectedView = view;
     }
 
     private void Close()
@@ -411,12 +567,14 @@ else
         selectedView = null;
     }
 
+    /// <summary>Fichier .pkX téléchargeable : ni pour un visiteur, ni d'une sauvegarde stockée, ni de Minecraft.</summary>
+    private bool CanDownload => !Visitor && selected is { StoredSaveId: null } && !BankService.IsCobblemon(selected);
+
     private async Task DownloadPkm()
     {
-        if (Visitor)
-            return; // pas de copie des Pokémon d'un autre joueur
-        if (selected is null || selected.StoredSaveId is not null) return; // lecture seule pour les sauvegardes stockées
-        await Download($"{selected.Species:000} - {selected.Nickname}.{selected.Extension}", selected.Data);
+        if (!CanDownload)
+            return; // pas de copie des Pokémon d'un autre joueur ; lecture seule pour les sauvegardes stockées
+        await Download($"{selected!.Species:000} - {selected.Nickname}.{selected.Extension}", selected.Data);
     }
 
     private async Task Download(string fileName, byte[] data)

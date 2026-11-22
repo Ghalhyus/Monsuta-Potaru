@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace MonsutaPotaru.Data;
@@ -17,11 +17,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SyncPairingCode> SyncPairingCodes => Set<SyncPairingCode>();
     public DbSet<SyncSaveLocation> SyncSaveLocations => Set<SyncSaveLocation>();
     public DbSet<LivingDex> LivingDexes => Set<LivingDex>();
+    public DbSet<Completion> Completions => Set<Completion>();
+    public DbSet<RibbonTracker> RibbonTrackers => Set<RibbonTracker>();
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
     public DbSet<BattleRecord> BattleRecords => Set<BattleRecord>();
+    public DbSet<GtsPokemon> GtsPokemon => Set<GtsPokemon>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -48,6 +51,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(b => b.FirstId);
             e.HasIndex(b => b.SecondId);
+        });
+
+        builder.Entity<GtsPokemon>(e =>
+        {
+            e.HasIndex(g => new { g.Status, g.Species }); // recherche des offres
+            e.HasIndex(g => g.OwnerId);
+            e.HasIndex(g => g.StoredSaveId);
+            e.HasOne(g => g.Owner).WithMany().HasForeignKey(g => g.OwnerId).OnDelete(DeleteBehavior.Cascade);
+            // La suppression de la sauvegarde retire d'abord l'offre (StoredSaveService.RemoveAsync) ; le lien tombe ensuite.
+            e.HasOne(g => g.StoredSave).WithMany().HasForeignKey(g => g.StoredSaveId).OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<FriendRequest>(e =>
@@ -131,11 +144,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<LivingDex>(e =>
         {
-            e.HasIndex(d => new { d.OwnerId, d.Game }).IsUnique(); // un living dex par jeu et par compte
+            e.HasIndex(d => new { d.OwnerId, d.Game, d.Shiny }).IsUnique(); // un normal et un chromatique par jeu et par compte
             e.HasIndex(d => d.StoredSaveId).IsUnique(); // une sauvegarde ne sert qu'à un living dex
             e.HasOne(d => d.Owner).WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             // La sauvegarde est supprimée : son living dex aussi (la confirmation de suppression le signale).
             e.HasOne(d => d.StoredSave).WithMany().HasForeignKey(d => d.StoredSaveId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Completion>(e =>
+        {
+            e.HasIndex(c => new { c.OwnerId, c.Game }).IsUnique(); // une complétion par jeu et par compte
+            e.HasIndex(c => c.StoredSaveId).IsUnique(); // une sauvegarde ne sert qu'à une complétion
+            e.HasOne(c => c.Owner).WithMany().HasForeignKey(c => c.OwnerId).OnDelete(DeleteBehavior.Cascade);
+            // La sauvegarde est supprimée : sa complétion aussi (la confirmation de suppression le signale).
+            e.HasOne(c => c.StoredSave).WithMany().HasForeignKey(c => c.StoredSaveId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<RibbonTracker>(e =>
+        {
+            e.HasIndex(r => new { r.OwnerId, r.Fingerprint }).IsUnique(); // un suivi par Pokémon et par compte
+            e.HasOne(r => r.Owner).WithMany().HasForeignKey(r => r.OwnerId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<SyncPairingCode>(e =>

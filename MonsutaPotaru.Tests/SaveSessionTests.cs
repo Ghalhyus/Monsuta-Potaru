@@ -82,7 +82,7 @@ public class SaveSessionTests
 
         Assert.Null(session.GetSlot(0, 0));
         var deposit = Assert.Single(session.Deposits);
-        Assert.Equal(25, deposit.Pokemon.Species);
+        Assert.Equal(25, deposit.Pokemon!.Species);
 
         // La sauvegarde réécrite doit être relisible et sans le Pikachu.
         var reloaded = LoadedSession(session.Save!.Write().ToArray());
@@ -170,6 +170,17 @@ public class SaveSessionTests
     }
 
     [Fact]
+    public void WithdrawalProblem_SaysWhy_WithoutWriting()
+    {
+        var session = LoadedSession();
+        var before = session.Save!.Write().ToArray();
+        Assert.Null(session.WithdrawalProblem(CreatePk5(25, 5)));
+        Assert.Contains("n'existe pas dans cette génération", session.WithdrawalProblem(new PK6 { Species = 700 }));
+        Assert.Equal(before, session.Save.Write().ToArray());
+        Assert.Empty(session.Withdrawals);
+    }
+
+    [Fact]
     public void Deposit_OfJustWithdrawn_CancelsTheWithdrawal()
     {
         var session = LoadedSession();
@@ -210,8 +221,9 @@ public class SaveSessionTests
     public void WriteSampleSave_WhenRequested()
     {
         var path = Environment.GetEnvironmentVariable("MONSUTA_POTARU_SAMPLE_OUT");
-        if (string.IsNullOrEmpty(path)) return;
-        File.WriteAllBytes(path, CreateBw2Save());
+        if (!string.IsNullOrEmpty(path))
+            File.WriteAllBytes(path, CreateBw2Save());
+        Assert.True(string.IsNullOrEmpty(path) || File.Exists(path));
     }
 
     /// <summary>

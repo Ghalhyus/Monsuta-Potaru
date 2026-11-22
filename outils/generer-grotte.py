@@ -274,15 +274,21 @@ for rang, ligne in enumerate(range(0, H, PAS_TORCHES[1])):
         torche_vers(colonne, ligne)
 # Ce que la grille laisse sans lumière à une taille (derrière un lac, ou une torche encore cachée) : une torche de plus sur le
 # sol de la zone le plus loin de celles qu'on y voit, jusqu'à ce qu'il n'y en ait plus à plus de PORTEE_TORCHE cases
-for zone_, sol in SOLS:
+def eclairer(zone_, sol):
+    """Ajoute des torches sur le sol de la zone, la plus loin possible de celles qu'on y voit, jusqu'à ce qu'aucune case ne
+    soit à plus de PORTEE_TORCHE cases d'une torche."""
     reste = {c for c in sol - LAC if dans(zone_, *c)}
     while True:
         vues = [c for c in TORCHES if all((c[0], c[1] + j) in sol for j in range(3))]
-        loin = max(reste, key=lambda c: (min(math.dist(c, torche_) for torche_ in vues), c))
+        loin = max(reste, key=lambda c, vues=vues: (min(math.dist(c, torche_) for torche_ in vues), c))
         if min(math.dist(loin, torche_) for torche_ in vues) <= PORTEE_TORCHE:
-            break
+            return
         if not torche_vers(*loin, sol):
             reste.remove(loin)
+
+
+for zone_, sol in SOLS:
+    eclairer(zone_, sol)
 
 
 def sol_de(x, y):
@@ -299,13 +305,18 @@ def fissures(sol_, libre):
     for y in range(0, H, 3):
         for x in range(0, L, 3):
             r = tirage(x, y, 9)
-            if r.random() > 0.2:
-                continue
-            nom, px, py = r.choice(("sol_1", "sol_2")), x + r.randrange(2), y + r.randrange(2)
-            if all((px + i, py + j) in libre for i in range(3) for j in range(3)):
-                for i in range(3):
-                    for j in range(3):
-                        sol_[py + j][px + i] = t(nom, (2 + j) * 3 + i)
+            if r.random() <= 0.2:
+                poser_plaque(sol_, libre, x, y, r)
+
+
+def poser_plaque(sol_, libre, x, y, r):
+    """Une plaque de fissures (3 × 3) près de la case x, y, si elle tient tout entière sur le sol libre."""
+    nom, px, py = r.choice(("sol_1", "sol_2")), x + r.randrange(2), y + r.randrange(2)
+    if not all((px + i, py + j) in libre for i in range(3) for j in range(3)):
+        return
+    for i in range(3):
+        for j in range(3):
+            sol_[py + j][px + i] = t(nom, (2 + j) * 3 + i)
 
 
 def taille(zone, libres_avant):
@@ -329,19 +340,34 @@ def taille(zone, libres_avant):
         sol_[y][x], bloque_[y][x] = t("murs", tirage(x, 0, 6).choice(MURS)[j]), True
     for x, y in sol_libre:
         sol_[y][x] = sol_de(x, y)
-    for x, y in lac:
-        sol_[y][x] = t("eau", PIED_DANS_L_EAU if (x, y) in pied else EAU)
-        bloque_[y][x] = (x, y) not in bord_lac
-    # Pierres du bord : on y marche, sauf là où le lac s'étendra plus tard (elles redeviennent de l'eau)
-    for (x, y), i in bord_lac.items():
-        decors_[y][x] = t("murs", i)
-        bloque_[y][x] = (x, y) not in bord_des_lacs
+    poser_lac(lac, bord_lac, pied, (sol_, decors_, bloque_))
     for x, y in (LAC & sol_libre) - lac:
         decors_[y][x], bloque_[y][x] = eboulis(x, y), True
     sol_terre = sol_libre - lac
     fissures(sol_, {c for c in sol_terre if not decors_[c[1]][c[0]]})
-    # Objets tout entiers sur le sol libre, sans bloquer une case libre de la taille d'avant
-    grilles = {"decors": decors_, "devant": devant_}
+    lumieres = poser_objets({"decors": decors_, "devant": devant_}, bloque_, sol_terre, libres_avant)
+    # Poches enfermées (entre les piliers, le lac et les objets) : un éboulis, personne n'y va
+    gardees = carte.boucher_poches(zone, decors_, bloque_, eboulis)
+    perdues = libres_avant - gardees
+    if perdues:
+        sys.exit(f"Zone {zone} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
+    return sol_, decors_, devant_, bloque_, gardees, eau_libre(zone, lac, decors_, bloque_, gardees), lumieres
+
+
+def poser_lac(lac, bord_lac, pied, grilles):
+    """L'eau du lac (bloquée), et les pierres du bord : on y marche, sauf là où le lac s'étendra plus tard (elles
+    redeviennent de l'eau)."""
+    sol_, decors_, bloque_ = grilles
+    for x, y in lac:
+        sol_[y][x] = t("eau", PIED_DANS_L_EAU if (x, y) in pied else EAU)
+        bloque_[y][x] = (x, y) not in bord_lac
+    for (x, y), i in bord_lac.items():
+        decors_[y][x] = t("murs", i)
+        bloque_[y][x] = (x, y) not in bord_des_lacs
+
+
+def poser_objets(grilles, bloque_, sol_terre, libres_avant):
+    """Objets tout entiers sur le sol libre, sans bloquer une case libre de la taille d'avant ; rend leurs lumières."""
     lumieres = []
     for objet_ in objets:
         tuiles = objet_["tuiles"]
@@ -353,17 +379,16 @@ def taille(zone, libres_avant):
             bloque_[y][x] = bloque_[y][x] or bloquee
         if "lumiere" in objet_:
             lumieres.append(objet_["lumiere"])
-    # Poches enfermées (entre les piliers, le lac et les objets) : un éboulis, personne n'y va
-    gardees = carte.boucher_poches(zone, decors_, bloque_, eboulis)
-    perdues = libres_avant - gardees
-    if perdues:
-        sys.exit(f"Zone {zone} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
-    # L'eau libre (bloquée, sans objet) doit toucher les pierres du bord où l'on marche : les nageurs y entrent (parc.js)
-    zx, zy, zl, zh = zone
+    return lumieres
+
+
+def eau_libre(zone, lac, decors_, bloque_, gardees):
+    """L'eau libre (bloquée, sans objet) : elle doit toucher les pierres du bord où l'on marche, les nageurs y entrent
+    (parc.js)."""
     eau = {(x, y) for x, y in lac if bloque_[y][x] and not decors_[y][x] and dans(zone, x, y)}
-    if eau and not eau <= relies(eau | gardees):
+    if eau and not eau.issubset(relies(eau | gardees)):
         sys.exit(f"Zone {zone} : de l'eau du lac n'est pas reliée aux pierres du bord où l'on marche")
-    return sol_, decors_, devant_, bloque_, gardees, eau, lumieres
+    return eau
 
 
 # --- Écriture des .tmx -----------------------------------------------------------------------

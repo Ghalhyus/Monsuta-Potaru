@@ -16,7 +16,7 @@
 @inject PlayerService Players
 @inject DebugService Debug
 
-<PageTitle>@(!Visitor ? "Parc" : player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}")</PageTitle>
+<PageTitle>@PageName</PageTitle>
 
 @* De 20 à 80 Pokémon de la collection (selon les agrandissements achetés) se promènent sur une carte faite dans Tiled
    (wwwroot/parc/{carte}-{taille}.json, outils/generer-parc.py, generer-plage.py et carte-parc.py) : l'affichage (Phaser)
@@ -38,11 +38,16 @@ else
     <PlayerHeader Player="player" Current="PublicPages.Park" />
 }
 <PageHeader Title="Parc" Count="@($"{members.Count} / {Capacity}")" Small="Visitor" Icon="@(Visitor ? null : "bi-tree-nav-menu")">
-    <Description>
-        @(Visitor ? $"Les Pokémon de {player!.Pseudo} vivent ici" : "Tes Pokémon vivent ici") : ils se promènent, se reposent,
-        rendent visite à leur famille et dorment quand ils sont fatigués (plus tôt le soir). Clique sur l'un d'eux pour voir sa fiche,
-        fais glisser la carte pour explorer les alentours.
-    </Description>
+    <Help>
+        <p>
+            @(Visitor ? $"Les Pokémon de {player!.Pseudo} vivent ici" : "Tes Pokémon vivent ici") : ils se promènent, se reposent,
+            rendent visite à leur famille et dorment quand ils sont fatigués (plus tôt le soir).
+        </p>
+        <ul>
+            <li>Clique sur l'un d'eux pour voir sa fiche.</li>
+            <li>Fais glisser la carte pour explorer les alentours.</li>
+        </ul>
+    </Help>
     <Actions>
         @if (parks.Count > 1)
         {
@@ -80,9 +85,11 @@ else
     </Actions>
 </PageHeader>
 
+@* data-hors-mesure : parc.js ne compte pas ce message dans la hauteur du parc (sinon, affiché au redémarrage après un
+   agrandissement ou un achat, il rétrécirait la carte jusqu'à l'actualisation de la page). *@
 @if (message is not null)
 {
-    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert" data-hors-mesure>
         @message
         <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
     </div>
@@ -106,11 +113,16 @@ else
         <div class="collection-backdrop" @onclick="CloseDetail"></div>
         <div class="collection-dialog" role="dialog" aria-modal="true" aria-label="@selectedView.Nickname">
             <PokemonCard Pokemon="@selectedView" HideTrainerId="Visitor" Portrait="@selectedPortrait"
-                         PortraitTitle="@selectedMood?.Message">
+                         PortraitTitle="@(selectedMalus ?? selectedMood?.Message)">
                 <Summary>
                     @if (selectedMood is not null)
                     {
                         <div class="small mt-1 park-mood park-mood-@selectedMood.Mood.ToString().ToLowerInvariant()">@selectedMood.Message</div>
+                    }
+                    @if (selectedMalus is not null)
+                    {
+                        @* Malus « attaqué » (ParkService.RecordAttackAsync) : l'humeur affichée par le portrait *@
+                        <div class="small mt-1 park-mood park-mood-sad park-malus">@selectedMalus</div>
                     }
                 </Summary>
                 <ChildContent>
@@ -148,14 +160,15 @@ else
 @* ---------- Choix des Pokémon du parc ---------- *@
 @if (candidates is not null)
 {
-    var shown = candidates.Where(Matches).ToList();
+    var shown = candidates.Where(Matches).OrderBy(c => c.Locked).ToList(); // ceux qui ne peuvent pas venir à la fin, grisés
     <div class="dialog-backdrop" @onclick="CloseChooser"></div>
     <div class="dialog-panel card" role="dialog" aria-modal="true" aria-label="Pokémon du parc">
         <div class="card-body">
             <h5>Pokémon du parc@(parks.Count > 1 ? $" « {current?.Name} »" : "") <small class="text-muted">· @chosen.Count / @Capacity</small></h5>
             <p class="small text-muted">
                 Tes Pokémon du stockage interne et de tes sauvegardes stockées (💾) : clique pour en ajouter ou en retirer.
-                Ceux dont les sprites n'existent pas encore (🔒) ne peuvent pas venir.
+                Ceux qui ne peuvent pas venir sont grisés, à la fin de la liste : leurs sprites n'existent pas encore, ou ce paysage
+                ne leur convient pas (la raison s'affiche au survol ou au clic).
                 @if (parks.Count > 1)
                 {
                     @($"Ceux d'un autre parc ({string.Join(", ", parks.Where(p => p.Id != ParkId).Select(p => $"{ParkLandscapes.Icon(p.Landscape)} {ParkLandscapes.Where(p.Landscape)}"))}) le quittent pour venir ici.")
@@ -168,11 +181,11 @@ else
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <input type="search" class="form-control form-control-sm flex-grow-1 w-auto" placeholder="Rechercher (espèce ou surnom)…"
                        aria-label="Rechercher un Pokémon" @bind="search" @bind:event="oninput" />
-                <div class="form-check form-switch mb-0 small text-nowrap">
-                    <input class="form-check-input" type="checkbox" role="switch" id="parkOnly"
-                           checked="@(parkOnly is not null)" @onchange="ToggleParkOnly" />
-                    <label class="form-check-label" for="parkOnly">Seulement ceux du parc</label>
-                </div>
+                <select class="form-select form-select-sm w-auto park-shown" aria-label="Pokémon affichés" @bind="shownFilter">
+                    <option value="@ShownFilter.All">Tous les Pokémon</option>
+                    <option value="@ShownFilter.ThisPark">Ceux de ce parc</option>
+                    <option value="@ShownFilter.NoPark">Dans aucun parc</option>
+                </select>
             </div>
             <div class="mb-2">
                 <CollectionFilterChips Value="criteria" ValueChanged="CriteriaChanged" Abilities="abilities" />
@@ -183,7 +196,7 @@ else
             }
             else if (shown.Count == 0)
             {
-                <p class="text-muted small">@(parkOnly is { Count: 0 } ? "Aucun Pokémon n'est choisi pour le parc." : "Aucun Pokémon ne correspond.")</p>
+                <p class="text-muted small">@(EmptyMessage())</p>
             }
             else
             {
@@ -196,7 +209,7 @@ else
                                      Level="c.Level"
                                      Shiny="c.IsShiny"
                                      Marker="@Marker(c)"
-                                     Locked="@(!c.HasSprites || c.Refusal is not null)"
+                                     Locked="c.Locked"
                                      Selected="@chosen.Contains(c.Id)"
                                      OnClick="() => Toggle(c)" />
                     }
@@ -255,7 +268,7 @@ else
                 {
                     <span class="text-danger">
                         Il manque @InventoryService.FormatMoney(ParkService.ExpansionPrice - balance) : retire de l'argent d'une
-                        sauvegarde depuis <a href="inventaire">« Inventaire »</a>.
+                        sauvegarde depuis <a href="inventaire">« Banque d'objets »</a>.
                     </span>
                 }
             </p>
@@ -303,7 +316,7 @@ else
                 {
                     <span class="text-danger">
                         Il manque @InventoryService.FormatMoney(ParkService.ParkPrice - wallet) : retire de l'argent d'une
-                        sauvegarde depuis <a href="inventaire">« Inventaire »</a>.
+                        sauvegarde depuis <a href="inventaire">« Banque d'objets »</a>.
                     </span>
                 }
             </p>
@@ -320,6 +333,17 @@ else
 }
 
 @code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Parc";
+            return player is null ? "Joueur introuvable" : $"Parc de {player.Pseudo}";
+        }
+    }
+
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/parc) : son parc, en lecture seule.</summary>
@@ -360,15 +384,16 @@ else
     private PokemonCriteria criteria = PokemonCriteria.None; // pastilles de la fenêtre de choix
     private List<int> abilities = []; // talents de la collection, pour la pastille « Talent »
     private string? chooserMessage;
-    // « Seulement ceux du parc » : les Pokémon choisis au moment où l'interrupteur est allumé. La liste reste figée : un
-    // Pokémon décoché ne disparaît pas, on peut le recocher.
-    private HashSet<int>? parkOnly;
+    // Liste « Pokémon affichés » : d'après le parc enregistré (InPark, OtherPark), pas d'après les cases cochées : la liste
+    // ne bouge pas avant « Valider », un Pokémon décoché reste affiché pour pouvoir le recocher. « Tous » à chaque ouverture.
+    private ShownFilter shownFilter = ShownFilter.All;
     private bool confirmClear; // fenêtre de confirmation de « Vider le parc »
 
     private BankPokemon? selected;
     private PokemonView? selectedView;
     private ParkMoodResult? selectedMood; // humeur du Pokémon de la fiche, selon les habitats du parc (ParkHabitats)
     private string? selectedPortrait; // son portrait Donjon Mystère (Normal, Happy, Sad), à la place du sprite
+    private string? selectedMalus; // son malus « attaqué » en cours, prêt à afficher (ParkMalus.Message), ou null
 
     protected override async Task OnInitializedAsync()
     {
@@ -444,6 +469,8 @@ else
             size = expansions + 1,
             fullscreen = parkBlock,
         });
+        // Relue : temps restant des malus « attaqué » (ParkPokemon.Malus) à jour, même longtemps après le chargement
+        members = await Parks.ListAsync(userId, ParkId);
         await engine.InvokeVoidAsync("setPokemon", members);
         if (showHabitats)
             await engine.InvokeVoidAsync("showHabitats", HabitatColors());
@@ -545,9 +572,43 @@ else
         selectedView = Info.Describe(pk, entry.IsLegal);
         // Humeur selon les types de cases de ce parc (son paysage, sa taille : ses agrandissements)
         selectedMood = ParkHabitats.MoodOf(entry.Type1, entry.Type2, ParkHabitats.Map(current.Landscape, expansions + 1));
-        selectedPortrait = PokemonSprites.DonjonPortraitUrl(entry, selectedMood.Portrait);
+        ShowMalus(await Parks.GetMalusAsync(userId, ParkId, id));
         StateHasChanged();
     });
+
+    /// <summary>Portrait et ligne du malus « attaqué » de la fiche ouverte (humeur de l'habitat abaissée, ou non).</summary>
+    private void ShowMalus(ParkMalus? malus)
+    {
+        if (selected is null || selectedMood is null)
+            return;
+        var now = DateTime.UtcNow;
+        var mood = malus is null ? selectedMood.Mood : ParkHabitats.WithMalus(selectedMood.Mood, malus.Levels);
+        selectedMalus = malus?.Message(selectedMood.Mood, now);
+        selectedPortrait = PokemonSprites.DonjonPortraitUrl(selected, mood.ToString());
+    }
+
+    /// <summary>
+    /// Un Pokémon de ce parc vient d'être attaqué (parc.js, page du propriétaire seulement) : son malus est enregistré
+    /// (le numéro vient du navigateur : le service revérifie qu'il est dans ce parc du joueur) et rendu à parc.js, qui
+    /// abaisse son humeur ; null pour un visiteur ou un Pokémon qui n'est pas là.
+    /// </summary>
+    [JSInvokable]
+    public async Task<ParkMalusInfo?> OnPokemonAttacked(int id)
+    {
+        ParkMalus? malus = null;
+        await InvokeAsync(async () =>
+        {
+            if (Visitor || current is null)
+                return;
+            malus = await Parks.RecordAttackAsync(userId, ParkId, id);
+            if (malus is not null && selected?.Id == id)
+            {
+                ShowMalus(malus); // fiche ouverte sur lui : portrait et ligne à jour
+                StateHasChanged();
+            }
+        });
+        return malus?.Info(DateTime.UtcNow);
+    }
 
     /// <summary>Mode debug : la fiche se ferme et le Pokémon attaque le plus proche (dans le navigateur seulement).</summary>
     private async Task AttackSelected()
@@ -566,6 +627,7 @@ else
         selectedView = null;
         selectedMood = null;
         selectedPortrait = null;
+        selectedMalus = null;
     }
 
     private async Task RemoveSelected()
@@ -602,7 +664,7 @@ else
             return;
         search = "";
         chooserMessage = null;
-        parkOnly = null;
+        shownFilter = ShownFilter.All;
         criteria = PokemonCriteria.None;
         abilities = await BankStore.ListAbilitiesAsync(userId);
         candidates = await Parks.ListCandidatesAsync(userId, ParkId);
@@ -648,11 +710,25 @@ else
         chooserMessage = null;
     }
 
-    private void ToggleParkOnly(ChangeEventArgs e) => parkOnly = e.Value is true ? [.. chosen] : null;
+    /// <summary>Choix de la liste « Pokémon affichés » de la fenêtre de choix.</summary>
+    private enum ShownFilter { All, ThisPark, NoPark }
 
     private bool Matches(ParkCandidate c) =>
-        (parkOnly is null || parkOnly.Contains(c.Id))
+        shownFilter switch
+        {
+            ShownFilter.ThisPark => c.InPark,
+            ShownFilter.NoPark => !c.InPark && c.OtherPark is null,
+            _ => true,
+        }
         && MatchesSearch(c);
+
+    /// <summary>Message quand la recherche, les pastilles et la liste « Pokémon affichés » ne laissent aucun Pokémon.</summary>
+    private string EmptyMessage() =>
+        !string.IsNullOrWhiteSpace(search) || !criteria.IsEmpty
+            ? "Aucun Pokémon ne correspond."
+            : shownFilter == ShownFilter.ThisPark
+                ? "Ce parc n'a pas encore de Pokémon."
+                : "Tous tes Pokémon vivent déjà dans un parc.";
 
     private bool MatchesSearch(ParkCandidate c) =>
         string.IsNullOrWhiteSpace(search)

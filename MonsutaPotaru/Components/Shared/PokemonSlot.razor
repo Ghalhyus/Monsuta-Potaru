@@ -1,11 +1,12 @@
 @* Une case de boîte : sprite + niveau, cliquable, et glissable / zone de dépôt pour le glisser-déposer.
    Un <div> plutôt qu'un <button> : Firefox ne sait pas faire glisser un bouton. *@
 
-<div class="slot @(Selected ? "selected" : "") @(Pending ? "pending" : "") @(Locked ? "locked" : "") @(Sprite is null ? "empty" : "") @(DropTarget ? "drop-target" : "") @(Dragging ? "dragging" : "")"
+<div class="slot @(Selected ? "selected" : "") @(Pending ? "pending" : "") @(Locked ? "locked" : "") @(Sprite is null ? "empty" : "") @(DropTarget ? "drop-target" : "") @(Dragging ? "dragging" : "") @Class"
      role="button"
      tabindex="@(IsClickable ? 0 : -1)"
      aria-disabled="@(!IsClickable)"
      aria-pressed="@Selected"
+     aria-expanded="@(Expanded is { } expanded ? (expanded ? "true" : "false") : null)"
      title="@Title"
      draggable="@(CanDrag ? "true" : "false")"
      data-drag-count="@(DragCount > 1 ? DragCount : null)"
@@ -22,6 +23,7 @@
         @if (Shiny) { <span class="shiny" aria-label="Chromatique">★</span> }
         @if (Level > 0) { <span class="lvl">N.@Level</span> }
         @if (Marker is not null) { <span class="marker" aria-hidden="true">@Marker</span> }
+        @if (Count is { } count) { <span class="count">@count</span> }
     }
     else if (Locked)
     {
@@ -39,6 +41,12 @@
     [Parameter] public bool Locked { get; set; }
     /// <summary>Petit pictogramme dans le coin (ex. Pokémon d'une sauvegarde stockée) ; l'explication va dans <see cref="Title"/>.</summary>
     [Parameter] public string? Marker { get; set; }
+    /// <summary>Nombre affiché dans le coin (dossier du mode compact de « Ma collection »), à la place du niveau.</summary>
+    [Parameter] public int? Count { get; set; }
+    /// <summary>Dossier ouvert ou fermé (aria-expanded) ; null pour une case ordinaire.</summary>
+    [Parameter] public bool? Expanded { get; set; }
+    /// <summary>Classes CSS en plus (ex. « folder », « in-folder »).</summary>
+    [Parameter] public string? Class { get; set; }
     /// <summary>Les touches Ctrl / Cmd / Maj servent à la sélection multiple.</summary>
     [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
 

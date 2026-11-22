@@ -18,6 +18,8 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     [Inject] private FriendService Friends { get; set; } = default!;
     [Inject] private TradeHub Trades { get; set; } = default!;
     [Inject] private BattleHub Battles { get; set; } = default!;
+    [Inject] private GtsService Gts { get; set; } = default!;
+    [Inject] private GtsEvents GtsEvents { get; set; } = default!;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
@@ -28,20 +30,42 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     protected int pendingRequests; // demandes d'ami reçues, relues à chaque navigation
     protected int tradeRequests; // demandes d'échange reçues (en direct, TradeHub)
     protected int battleRequests; // demandes de combat reçues (en direct, BattleHub)
+    protected int gtsInbox; // Pokémon dans la boîte de réception de la GTS (relus à chaque navigation, et en direct)
 
-    /// <summary>Toutes les demandes reçues : la pastille du menu « Multijoueurs ».</summary>
-    protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests;
+    /// <summary>Toutes les demandes reçues, et la boîte de réception de la GTS : la pastille du menu « Multijoueurs ».</summary>
+    protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests + gtsInbox;
 
-    /// <summary>Menu « Sauvegardes » ouvert : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
-    protected bool savesOpen => currentUrl is { } url && (url == "sauvegardes" || url.StartsWith("sauvegardes/") || url.StartsWith("sauvegardes?"));
+    // Rubriques du menu : fermées, chacune ouverte d'elle-même sur l'une de ses pages (puis ouvertes et fermées d'un clic).
 
-    /// <summary>Menu « Multijoueurs » ouvert : sur la recherche ou les pages d'un joueur.</summary>
-    protected bool playersOpen => currentUrl is { } url
-        && (url == "joueurs" || url.StartsWith("joueurs/") || url.StartsWith("joueurs?") || url == "amis" || url.StartsWith("amis?")
-            || url == "echanges" || url.StartsWith("echanges?") || url == "combats" || url.StartsWith("combats?"));
+    /// <summary>Rubrique « Mes Pokémon » ouverte : sur « Ma collection », « Parc », « Dépôt / Retrait » ou « Échange interne ».</summary>
+    protected bool pokemonOpen => IsOn("collection", "parc", "transfert", "banque", "echange-interne");
+
+    /// <summary>Rubrique « Inventaire » ouverte : sur « Banque d'objets » ou « Transfert d'inventaire ».</summary>
+    protected bool inventoryOpen => IsOn("inventaire");
+
+    /// <summary>Rubrique « Défis » ouverte : sur les living dex, les rubans ou les complétions (la liste ou l'un d'eux).</summary>
+    protected bool challengesOpen => IsOn("livingdex", "rubans", "completion");
+
+    /// <summary>Rubrique « Sauvegardes » ouverte : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
+    protected bool savesOpen => IsOn("sauvegardes");
+
+    /// <summary>Rubrique « Multijoueurs » ouverte : sur la recherche, les pages d'un joueur, « Amis », « Échange », « GTS » ou « Combat ».</summary>
+    protected bool playersOpen => IsOn("joueurs", "amis", "echanges", "gts", "combats");
+
+    /// <summary>
+    /// La page affichée est l'une de ces pages ou une page sous elles (« livingdex/3 », « collection?tri=nom ») ; la
+    /// collection d'un autre joueur (« joueurs/sacha/collection ») relève de « joueurs ».
+    /// </summary>
+    private bool IsOn(params string[] pages)
+    {
+        if (currentUrl is not { } url)
+            return false;
+        var first = url.Split(['/', '?', '#'])[0];
+        return pages.Any(p => string.Equals(first, p, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Menu du pseudo ouvert : sur les paramètres du profil ou les statistiques.</summary>
-    protected bool accountOpen => currentUrl is { } url && (url.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase) || url == "statistiques");
+    protected bool accountOpen => currentUrl is { } url && (url.StartsWith("Account/Manage", StringComparison.OrdinalIgnoreCase) || IsOn("statistiques"));
 
     protected override async Task OnInitializedAsync()
     {
@@ -51,8 +75,9 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Friends.Changed += OnFriendsChanged;
         Trades.RequestsChanged += OnTradeRequestsChanged;
         Battles.RequestsChanged += OnBattleRequestsChanged;
+        GtsEvents.InboxChanged += OnGtsInboxChanged;
 
-        // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Inventaire » après un retrait).
+        // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Banque d'objets » après un retrait).
         userId = AuthState is null ? null : (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId is not null)
         {
@@ -60,7 +85,19 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
             pendingRequests = await Friends.PendingCountAsync(userId);
             tradeRequests = Trades.Incoming(userId).Count;
             battleRequests = Battles.Incoming(userId).Count;
+            gtsInbox = await Gts.InboxCountAsync(userId);
         }
+    }
+
+    private void OnGtsInboxChanged(string user)
+    {
+        if (user != userId)
+            return;
+        InvokeAsync(async () =>
+        {
+            gtsInbox = await Gts.InboxCountAsync(user);
+            StateHasChanged();
+        });
     }
 
     private void OnBattleRequestsChanged(string user)
@@ -98,17 +135,29 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         if (userId is not null)
+        {
             pendingRequests = await Friends.PendingCountAsync(userId);
+            gtsInbox = await Gts.InboxCountAsync(userId);
+        }
         StateHasChanged();
     });
 
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Se désabonne des événements (navigation, porte-monnaie, demandes reçues).</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing)
+            return;
         NavigationManager.LocationChanged -= OnLocationChanged;
         Wallet.Changed -= OnWalletChanged;
         Friends.Changed -= OnFriendsChanged;
         Trades.RequestsChanged -= OnTradeRequestsChanged;
         Battles.RequestsChanged -= OnBattleRequestsChanged;
-        GC.SuppressFinalize(this);
+        GtsEvents.InboxChanged -= OnGtsInboxChanged;
     }
 }

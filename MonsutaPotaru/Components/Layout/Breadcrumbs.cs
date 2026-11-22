@@ -5,31 +5,43 @@ public sealed record Crumb(string Label, string? Href);
 
 /// <summary>
 /// Fil d'Ariane de la barre du haut du thème Ardoise (<c>ArdoiseLayout</c>) : le chemin de la page dans le menu
-/// (« Multijoueurs › Échanges », « Multijoueurs › Rechercher un joueur › Sacha › Parc »), déduit de son adresse.
+/// (« Mes Pokémon › Dépôt / Retrait », « Multijoueurs › Rechercher un joueur › Sacha › Parc »), déduit de son adresse.
 /// </summary>
 public static class Breadcrumbs
 {
+    // Rubriques du menu (simples titres, sans page à elles : pas de lien).
+    private const string MyPokemon = "Mes Pokémon";
+    private const string Inventory = "Inventaire";
+    private const string Challenges = "Défis";
+    private const string Multiplayer = "Multijoueurs";
+    private const string Saves = "Sauvegardes";
+
     /// <summary>Étapes pour une adresse relative à la racine du site (« joueurs/Sacha/parc?x=1 ») ; vide pour une page inconnue.</summary>
     public static IReadOnlyList<Crumb> For(string? relativeUrl)
     {
-        var path = (relativeUrl ?? "").Split('?', '#')[0];
+        var path = (relativeUrl ?? "").Split(['?', '#'])[0];
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
             return [new("Accueil", null)];
 
         return Lower(parts[0]) switch
         {
-            "transfert" or "banque" => [new("Transfert", null)],
-            "collection" => [new("Ma collection", null)],
-            "parc" => [new("Parc", null)],
-            "inventaire" => [new("Inventaire", null)],
-            "livingdex" => LivingDex(parts.Skip(1).ToArray(), "livingdex"),
-            "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new("Sauvegardes", null), new("Synchronisation 3DS", null)],
-            "sauvegardes" => [new("Sauvegardes", null), new("Mes sauvegardes", null)],
+            "collection" => [new(MyPokemon, null), new("Ma collection", null)],
+            "parc" => [new(MyPokemon, null), new("Parc", null)],
+            "transfert" or "banque" => [new(MyPokemon, null), new("Dépôt / Retrait", null)],
+            "echange-interne" => [new(MyPokemon, null), new("Échange interne", null)],
+            "inventaire" when parts.Length > 1 && Lower(parts[1]) == "transfert" => [new(Inventory, null), new("Transfert d'inventaire", null)],
+            "inventaire" => [new(Inventory, null), new("Banque d'objets", null)],
+            "livingdex" => [new(Challenges, null), .. LivingDex(parts.Skip(1).ToArray(), "livingdex")],
+            "rubans" => parts.Length == 1 ? [new(Challenges, null), new("Rubans", null)] : [new(Challenges, null), new("Rubans", "rubans"), new("Détail", null)],
+            "completion" => [new(Challenges, null), .. Completion(parts.Skip(1).ToArray(), "completion")],
             "joueurs" => Player(parts),
-            "amis" => [new("Multijoueurs", null), new("Amis", null)],
-            "echanges" => [new("Multijoueurs", null), new("Échanges", null)],
-            "combats" => [new("Multijoueurs", null), new("Combats", null)],
+            "amis" => [new(Multiplayer, null), new("Amis", null)],
+            "echanges" => [new(Multiplayer, null), new("Échange", null)],
+            "gts" => [new(Multiplayer, null), new("GTS", null)],
+            "combats" => [new(Multiplayer, null), new("Combat", null)],
+            "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new(Saves, null), new("Synchronisation 3DS", null)],
+            "sauvegardes" => [new(Saves, null), new("Mes sauvegardes", null)],
             "administration" => [new("Administration", null)],
             "statistiques" => [new("Mon compte", "Account/Manage"), new("Statistiques", null)],
             "account" => Account(parts.Skip(1).ToArray()),
@@ -43,10 +55,16 @@ public static class Breadcrumbs
     private static List<Crumb> LivingDex(string[] rest, string href) =>
         rest.Length == 0 ? [new("Living dex", null)] : [new("Living dex", href), new("Détail", null)];
 
+    /// <summary>« Complétion (100 %) », ou « Complétion (100 %) › Détail » pour l'une d'elles ; <paramref name="href"/> : la liste.</summary>
+    private static List<Crumb> Completion(string[] rest, string href) =>
+        rest.Length == 0 ? [new(CompletionTitle, null)] : [new(CompletionTitle, href), new("Détail", null)];
+
+    private const string CompletionTitle = "Complétion (100 %)";
+
     /// <summary>Recherche d'un joueur, sa page, puis l'une de ses pages publiques (collection, inventaire, parc, living dex).</summary>
     private static List<Crumb> Player(string[] parts)
     {
-        List<Crumb> crumbs = [new("Multijoueurs", null)];
+        List<Crumb> crumbs = [new(Multiplayer, null)];
         if (parts.Length == 1)
         {
             crumbs.Add(new("Rechercher un joueur", null));
@@ -67,6 +85,8 @@ public static class Breadcrumbs
             "inventaire" => [new Crumb("Inventaire", null)],
             "parc" => [new Crumb("Parc", null)],
             "livingdex" => LivingDex(parts.Skip(3).ToArray(), playerHref + "/livingdex"),
+            "completion" => Completion(parts.Skip(3).ToArray(), playerHref + "/completion"),
+            "statistiques" => [new Crumb("Statistiques", null)],
             _ => [],
         });
         return crumbs;
@@ -97,6 +117,7 @@ public static class Breadcrumbs
             "email" => [new Crumb("Adresse mail", null)],
             "changepassword" => [new Crumb("Mot de passe", null)],
             "themes" => [new Crumb("Thèmes", null)],
+            "preferences" => [new Crumb("Préférences", null)],
             "visibility" => [new Crumb("Visibilité", null)],
             "personaldata" => [new Crumb("Données personnelles", null)],
             "deletepersonaldata" => [new Crumb("Données personnelles", "Account/Manage/PersonalData"), new Crumb("Suppression du compte", null)],

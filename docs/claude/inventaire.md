@@ -16,12 +16,26 @@ README : « Inventaire ». Code : `SaveBag`, `InventoryService`.
 - 3e génération : `ItemConverter.GetItemOld3` / `GetItemFuture3` ; 2e : `GetItemFuture2` (128 : sans équivalent) /
   `GetItemOld2` ; Rouge/Bleu : table `SaveBag.Gen1Items` (PKHeX n'a rien).
 - Depuis PKHeX 26, la 2e génération sort directement dans la numérotation des jeux suivants (Noigrumes Bleue/Jaune : 486/487).
+- **Objet tenu** : `PKM.HeldItem` est le numéro du jeu du Pokémon (139 : Baie Oran en 3e génération, Lettre Invit
+  ensuite ; 173 : la « Baie » d'Argent). Pour le nommer ou l'afficher, passer par `SaveBag.HeldItem(pk)` (numéro de 4e
+  génération et suivantes, 0 sans équivalent) : `PokemonInfo.Describe` (fiche d'un Pokémon, choix de l'équipe d'un
+  combat) et `BattleTeam.ToSet`. Bug corrigé le 2026-11-14 : la fiche affichait « Lettre Invit » pour une Baie Oran.
+  Restent au numéro du jeu, exprès : `BankPokemon.HeldItem` et `RibbonTracker.HeldItem` (ils ne servent qu'à l'image
+  d'une Méga-Évolution ou d'une Primo-Résurgence, objets de la 6e génération et suivantes, numéros au-delà de ceux des
+  vieux jeux), l'évolution par échange (`TradeService.Everstone`, `evo.Argument` : numéros du jeu).
 
 ## CT
 - Un même numéro n'apprend pas la même capacité selon le jeu : stockage par capacité (`SaveBag.MachineKey`).
 - Correspondances dans `SaveBag` ; Épée/Bouclier et Écarlate/Violet ont un ordre particulier (commentés), vérifiés par
   des valeurs connues dans les tests (Séisme : CT26, DT10, CT149).
 - Les CS ne sont jamais touchées.
+
+## Tri d'un onglet
+- Dans l'adresse (`?tri=nom&ordre=desc`, pour l'onglet affiché), sinon le tri par défaut du compte pour cet onglet
+  (« Préférences », voir `comptes.md`) ; plus de `localStorage` (l'ancienne clé `monsuta-potaru.inventaire.tris` n'est
+  plus lue). Un tri changé reste pour la visite (`sorts`) ; changer d'onglet réécrit `tri` / `ordre` pour le nouvel onglet.
+- `ItemSortBy` / `ItemSort` sont dans `Services/SortPreferences.cs` ; les noms des onglets dans l'adresse :
+  `SiteSorts.InventoryTabs` (aussi les clés des préférences).
 
 ## Ajouter une catégorie d'objets
 Même modèle que les Pokéballs, médicaments, baies et CT :
@@ -32,3 +46,27 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   une nouvelle catégorie (les bonbons, envisagée) se teste avant elle dans `CategoryOf`.
 - Objets rares, Lettres, Cristaux Z et CS : jamais touchés.
 - Pas de migration : la table `OwnedItems` stocke une clé par objet.
+
+## Transfert entre deux sauvegardes (`Pages/InventoryTransfer.razor`)
+- Service : `InventoryService.TransferBetweenSavesAsync(owner, gauche, droite, SaveItemMove[])`, un déplacement par
+  (sauvegarde de départ, endroit de départ, endroit d'arrivée, objet). Dans chaque sauvegarde : `SaveBag.Withdraw` de tous
+  les endroits, puis `SaveBag.Deposit` (un objet envoyé libère sa place), fichier relu (`Written`), puis
+  `SaveServerChangeAsync` avec **les deux** changements (liste) : une transaction, deux traces `SaveModification`.
+- Page : les objets en attente sont gardés par (colonne, endroit de départ, endroit d'arrivée, objet). Renvoyer un objet
+  vers l'endroit d'où il vient annule d'abord l'envoi inverse. Le maximum d'une ligne (`Sendable`) reprend
+  `ItemSource.CapacityIn` et `LockedMachines` de l'autre sauvegarde, sur l'état après les envois en attente ; ce que la page
+  ne voit pas (20 objets différents dans le sac de Rouge / Bleu, seuil de 80 CT avec l'autre endroit) est refusé par le
+  service à la validation, avec son message.
+- **Cacher les grisés** (demandé le 2026-11-15) : interrupteur au-dessus des colonnes, commun aux deux, dans l'adresse
+  (`?invalides=caches`, absent : montrés). Cache **toutes** les lignes grisées (`Row.Problem` : inconnu de l'autre jeu,
+  CT absente, refus du PC, sac plein, seuil de 80 CT : choix de l'utilisateur), **sauf celles qui bougent**
+  (`Hideable` : badge + ou −, sinon la ligne envoyée disparaîtrait quand le sac d'en face se remplit). Compteur des
+  grisés / cachés à côté (endroits affichés, tous onglets) ; pastilles des onglets sur les seules lignes visibles ;
+  onglet vide par ce filtre : « Tous les objets de cet onglet sont cachés… » ; à l'ouverture, premier onglet qui a des
+  objets visibles.
+- Tri : un par colonne et par onglet, pour la visite seulement (pas dans l'adresse : deux colonnes), au départ celui du
+  compte (`PreferencesService`, `SortPreferences.InventoryFor`), comme la page « Banque d'objets ».
+- Glisser : `wwwroot/js/transfert-objets.js` (module, `init(root, dotnet)` → `dispose`), appelle `Drop(colonne, objet)`
+  (`[JSInvokable]`, revérifié). Champ du compteur recréé à chaque saisie (`@key` avec `typed`) : sinon un nombre ramené
+  dans les bornes à la même valeur qu'avant reste affiché tel que tapé (Blazor ne réécrit pas un attribut inchangé).
+- Le glisser au doigt n'a pas pu être essayé sur un vrai téléphone (l'émulation du navigateur envoie des clics de souris).

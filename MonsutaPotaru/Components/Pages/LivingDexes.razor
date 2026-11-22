@@ -9,8 +9,9 @@
 @inject LivingDexService Dexes
 @inject NavigationManager Navigation
 @inject PlayerService Players
+@inject PreferencesService Preferences
 
-<PageTitle>@(!Visitor ? "Living dex" : player is null ? "Joueur introuvable" : $"Living dex de {player.Pseudo}")</PageTitle>
+<PageTitle>@PageName</PageTitle>
 
 @* Living dex du compte : une carte par jeu (jaquette, sauvegarde, progression), et la création d'un nouveau sur une
    sauvegarde stockée de 1re à 9e génération ; ou le living dex global, sur le stockage interne, toujours en tête. *@
@@ -37,16 +38,13 @@ else
 else
 {
     <PageHeader Title="Living dex" Icon="bi-book-nav-menu">
-        <Description>
-            Un exemplaire de chaque Pokémon du Pokédex d'un jeu, dans l'équipe et les boîtes d'une de tes sauvegardes stockées : il
-            se met à jour avec elle (« Mettre à jour » dans « Mes sauvegardes », ou depuis ta 3DS). Un living dex par jeu ; pour
-            l'instant les jeux de 1re à 9e génération (Rouge, Bleu, Jaune, Or, Argent, Cristal, Rubis, Saphir, Émeraude, Rouge Feu,
-            Vert Feuille, Diamant, Perle, Platine, Or HeartGold, Argent SoulSilver, Noire, Blanche, Noire 2, Blanche 2, X, Y,
-            Rubis Oméga, Saphir Alpha, Soleil, Lune, Ultra-Soleil, Ultra-Lune, Let's Go Pikachu, Let's Go Évoli, Épée, Bouclier,
-            Diamant Étincelant, Perle Scintillante, Légendes Arceus, Écarlate, Violet). Le <strong>living dex global</strong>, lui,
-            compte les Pokémon de ton stockage interne (« Transfert »), tous jeux confondus, avec un mode de plus : Ultime, chaque
-            forme de chaque espèce ; le <strong>global chromatique</strong>, pareil avec tes chromatiques.
-        </Description>
+        <Help>
+            <p>Un exemplaire de chaque Pokémon d'un jeu, dans une de tes sauvegardes stockées, qui se met à jour avec elle.</p>
+            <ul>
+                <li>Le living dex <strong>global</strong> compte ton stockage interne, tous jeux confondus.</li>
+                <li>Les living dex <strong>chromatiques</strong> ne comptent que tes chromatiques.</li>
+            </ul>
+        </Help>
     </PageHeader>
 }
 
@@ -66,50 +64,20 @@ else
             @* D'abord le jeu (un living dex par jeu), puis les sauvegardes stockées qui peuvent être une partie de ce jeu
                (Rouge / Bleu : PKHeX ne distingue pas les deux, une sauvegarde Rouge / Bleu va avec l'un comme l'autre). *@
             @* Générations repliées au départ, dépliées une à une par leur titre ; repliée, celle du jeu choisi le montre encore. *@
+            @* Normal ou chromatique d'abord : chromatique, le global chromatique et les jeux qui en ont un (pas la 1re génération). *@
+            <div class="btn-group btn-group-sm mb-3 livingdex-choice" role="group" aria-label="Type de living dex">
+                <button type="button" class="btn @(!shinyKind ? "btn-primary" : "btn-outline-primary")" @onclick="() => KindChosen(false)">Normal</button>
+                <button type="button" class="btn @(shinyKind ? "btn-primary" : "btn-outline-primary")" @onclick="() => KindChosen(true)">Chromatique</button>
+            </div>
             <div class="form-label">Jeu</div>
-            <div class="livingdex-games mb-3">
-                @foreach (var info in new[] { GlobalLivingDex.Game, GlobalLivingDex.ShinyGame })
-                {
-                    var value = info.Game;
-                    var globalTaken = taken.Contains(value);
-                    <label class="livingdex-game @(game == value ? "selected" : "") @(globalTaken ? "taken" : "")" title="@(globalTaken ? "Tu as déjà ce living dex" : null)">
-                        <input type="radio" class="visually-hidden" name="dexGame" checked="@(game == value)" disabled="@globalTaken" @onchange="() => GameChosen(value)" />
-                        <LivingDexCover Game="info" />
-                        <span>@info.Name@(globalTaken ? " (déjà créé)" : "")</span>
-                    </label>
-                }
-            </div>
-            @foreach (var generation in LivingDexGames.All.GroupBy(g => g.Generation))
-            {
-            var number = generation.Key;
-            var open = openGenerations.Contains(number);
-            var shownGames = open ? generation.ToList() : generation.Where(g => g.Game == game).ToList();
-            <div class="mb-2">
-                <button type="button" class="livingdex-generation-toggle" aria-expanded="@(open ? "true" : "false")"
-                        @onclick="() => ToggleGeneration(number)">
-                    <span class="chevron" aria-hidden="true">▸</span>@(number == 1 ? "1re" : $"{number}e") génération (@generation.Count() jeux)
-                </button>
-            </div>
-            @if (shownGames.Count > 0)
-            {
-            <div class="livingdex-games mb-3">
-                @foreach (var info in shownGames)
-                {
-                    var value = info.Game;
-                    var isTaken = taken.Contains(value);
-                    <label class="livingdex-game @(game == value ? "selected" : "") @(isTaken ? "taken" : "")" title="@(isTaken ? "Tu as déjà ce living dex" : null)">
-                        <input type="radio" class="visually-hidden" name="dexGame" checked="@(game == value)" disabled="@isTaken" @onchange="() => GameChosen(value)" />
-                        <img src="@info.Cover" alt="" data-cacher-si-absente />
-                        <span>@info.Name@(isTaken ? " (déjà créé)" : "")</span>
-                    </label>
-                }
-            </div>
-            }
-            }
+            <GamePicker Ungrouped="[shinyKind ? GlobalLivingDex.ShinyGame : GlobalLivingDex.Game]"
+                        Games="CreatableGames"
+                        Selected="game" OnChosen="GameChosen" IsTaken="IsTaken" Name="dexGame"
+                        TakenTitle="Tu as déjà ce living dex" TakenSuffix="(déjà créé)" />
             @if (game is { } globalGame && GlobalLivingDex.IsGlobal(globalGame))
             {
                 <p class="small text-muted mb-3">
-                    Il compte les Pokémon de ton stockage interne (« Transfert »), pas ceux des sauvegardes : pas de sauvegarde à
+                    Il compte les Pokémon de ton stockage interne (« Dépôt / Retrait »), pas ceux des sauvegardes : pas de sauvegarde à
                     choisir. Modes National, Complet et Ultime (toutes les formes, femelles, Méga, Gigamax...).
                     @(globalGame == LivingDexGame.GlobalShiny
                         ? "Seuls tes chromatiques comptent ; ce qui n'a jamais existé en chromatique n'est pas demandé."
@@ -118,10 +86,27 @@ else
             }
             else if (game is { } chosenGame)
             {
-                @if (Saves.Count == 0)
+                @if (AllTheMonsLivingDex.Is(chosenGame))
+                {
+                    <p class="small text-muted mb-3">
+                        Il compte l'équipe et le PC d'un de tes mondes Minecraft stockés, chromatiques compris. Modes National,
+                        Complet et Ultime, comme le living dex global, avec ce que le modpack ajoute (Méga de Légendes Z-A,
+                        Piglich, Creepyon...).
+                    </p>
+                }
+                @if (shinyKind)
+                {
+                    <p class="small text-muted mb-3">
+                        Seuls les chromatiques de la sauvegarde comptent, dans son Pokédex régional (Let's Go : son Pokédex) ; ce qui
+                        n'a jamais existé en chromatique n'est pas demandé. Il lui faut sa propre sauvegarde : pas celle d'un autre
+                        living dex.
+                    </p>
+                }
+                @if (Saves().Count == 0)
                 {
                     <p class="text-muted mb-3">
-                        Aucune sauvegarde de @LivingDexGames.Get(chosenGame).Name disponible : stockes-en une dans
+                        @(AllTheMonsLivingDex.Is(chosenGame) ? $"Aucun monde {LivingDexGames.Get(chosenGame).Name} disponible : stockes-en un dans"
+                            : $"Aucune sauvegarde de {LivingDexGames.Get(chosenGame).Name} disponible : stockes-en une dans")
                         <a href="sauvegardes">« Mes sauvegardes »</a> (une sauvegarde qui a déjà son living dex ne compte pas).
                     </p>
                 }
@@ -129,7 +114,7 @@ else
                 {
                     <label class="form-label" for="dexSave">Sauvegarde</label>
                     <select id="dexSave" class="form-select mb-3" value="@saveId" @onchange="SaveChosen">
-                        @foreach (var c in Saves)
+                        @foreach (var c in Saves())
                         {
                             <option value="@c.SaveId">@c.Label</option>
                         }
@@ -138,7 +123,7 @@ else
             }
             <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-primary" @onclick="Create"
-                        disabled="@(busy || game is not { } g || !GlobalLivingDex.IsGlobal(g) && Saves.All(c => c.SaveId != saveId))">Créer</button>
+                        disabled="@(busy || game is not { } g || !GlobalLivingDex.IsGlobal(g) && Saves().All(c => c.SaveId != saveId))">Créer</button>
                 <button type="button" class="btn btn-outline-secondary" @onclick="() => creating = false">Annuler</button>
             </div>
         </div>
@@ -157,15 +142,25 @@ else
 {
     <p class="text-muted">Chargement…</p>
 }
-else if (taken.Count == 0)
+else if (taken.Count == 0 && takenShiny.Count == 0)
 {
     <p class="text-muted">@(Visitor ? $"{player!.Pseudo} n'a pas encore de living dex." : "Tu n'as pas encore de living dex.")</p>
 }
 else
 {
     @* Progression de toutes les cartes dans un mode, gardé dans l'adresse (?mode=regional) ; une carte s'ouvre dans ce mode.
-       Tri à côté, gardé aussi (?tri=completion&ordre=desc) : par complétion, dans le mode affiché. *@
+       Filtre Tous / Normaux / Chromatiques (?filtre=chromatiques) et tri à côté, gardés aussi (?tri=completion&ordre=desc) :
+       par complétion, dans le mode affiché ; sans tri dans l'adresse, celui du compte (« Mon compte » → « Préférences »). *@
     <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Living dex affichés">
+            @foreach (var (k, label) in Kinds)
+            {
+                var value = k;
+                <button type="button" class="btn @(kind == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetKind(value)">
+                    @label
+                </button>
+            }
+        </div>
         <div class="btn-group btn-group-sm livingdex-choice" role="group" aria-label="Progression affichée">
             @foreach (var m in AllModes)
             {
@@ -177,22 +172,26 @@ else
         </div>
         <div class="d-flex align-items-center gap-2 livingdex-choice">
             <label class="small text-nowrap" for="dexSort">Trier par</label>
-            <select id="dexSort" class="form-select form-select-sm w-auto" value="@LivingDexGames.SortSlug(sort)" @onchange="SortChosen">
-                <option value="">Génération</option>
-                <option value="completion">Complétion</option>
+            <select id="dexSort" class="form-select form-select-sm w-auto" value="@SiteSorts.Slug(sort)" @onchange="SortChosen">
+                @foreach (var (_, slug, label) in SiteSorts.LivingDexChoices)
+                {
+                    <option value="@slug">@label</option>
+                }
             </select>
             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleOrder"
                     title="@(descending ? "Décroissant : clique pour trier en croissant" : "Croissant : clique pour trier en décroissant")"
                     aria-label="@(descending ? "Ordre décroissant" : "Ordre croissant")">@(descending ? "↓" : "↑")</button>
         </div>
     </div>
-    @if (dexes.Count == 0)
+    var shownDexes = dexes.Where(d => LivingDexGames.Matches(d.Game, kind)).ToList();
+    @if (shownDexes.Count == 0)
     {
-        @* Ultime : seuls les living dex qui ont ce mode sont montrés. *@
-        <p class="text-muted">Seuls les living dex globaux ont le mode Ultime@(Visitor ? "." : " : crée-en un avec « + Créer un living dex ».")</p>
+        @* Ultime : seuls les living dex qui ont ce mode sont montrés ; ceux de 1re génération, seulement en Régional ; le
+           filtre peut aussi ne rien laisser. *@
+        <p class="text-muted">@EmptyMessage</p>
     }
     <div class="livingdex-cards">
-        @foreach (var d in LivingDexGames.Sort(dexes, sort, descending))
+        @foreach (var d in LivingDexGames.Sort(shownDexes, sort, descending))
         {
             <a class="livingdex-card" href="@CardLink(d)">
                 <LivingDexCover Game="d.Game" Alt="@(GlobalLivingDex.IsGlobal(d.Game.Game) ? d.Game.Name : $"Jaquette de {d.Game.Name}")" />
@@ -204,7 +203,7 @@ else
                         @d.Owned / @d.Total
                         @if (d.Mode != mode)
                         {
-                            <span class="text-muted ms-1" title="Ce jeu n'a pas le mode @LivingDexGames.ModeName(mode)">· @LivingDexGames.ModeName(d.Mode) seul</span>
+                            <span class="text-muted ms-1" title="@(d.Game.Shiny ? "Ce living dex chromatique" : "Ce jeu") n'a pas le mode @LivingDexGames.ModeName(mode)">· @LivingDexGames.ModeName(d.Mode) seul</span>
                         }
                     </div>
                 </div>
@@ -215,6 +214,17 @@ else
 }
 
 @code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Living dex";
+            return player is null ? "Joueur introuvable" : $"Living dex de {player.Pseudo}";
+        }
+    }
+
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/livingdex) : ses living dex, en lecture seule.</summary>
@@ -226,29 +236,43 @@ else
     [SupplyParameterFromQuery(Name = "mode")] private string? ModeFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "filtre")] private string? KindFromQuery { get; set; }
 
     private static readonly LivingDexMode[] AllModes = [LivingDexMode.Regional, LivingDexMode.National, LivingDexMode.Complete, LivingDexMode.Ultimate];
 
+    private static readonly (LivingDexKind Kind, string Label)[] Kinds =
+        [(LivingDexKind.All, "Tous"), (LivingDexKind.Normal, "Normaux"), (LivingDexKind.Shiny, "Chromatiques")];
+
     private string userId = "";
     private LivingDexMode mode = LivingDexMode.National;
+    private LivingDexKind kind;
     private LivingDexSort sort;
     private bool descending;
-    private readonly HashSet<byte> openGenerations = [];
+    private LivingDexOrder? defaultOrder; // tri par défaut du compte qui regarde (visiteur compris) ; null : pas encore lu
     private List<LivingDexSummary>? dexes;
-    private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex (tous, même cachés par le mode Ultime)
+    private HashSet<LivingDexGame> taken = []; // jeux qui ont déjà leur living dex normal (globaux compris, même cachés par le mode Ultime)
+    private HashSet<LivingDexGame> takenShiny = []; // jeux qui ont déjà leur living dex chromatique
     private List<LivingDexCandidate> candidates = [];
     private bool creating;
+    private bool shinyKind; // création d'un living dex chromatique
     private int saveId;
     private LivingDexGame? game;
     private bool busy;
     private string? message;
     private bool messageIsError;
 
+    /// <summary>Jeux proposés à la création : ceux du type choisi (normal ou chromatique), puis All the Mons (normal seulement).</summary>
+    private IEnumerable<LivingDexGameInfo> CreatableGames =>
+        LivingDexGames.All.Where(g => !shinyKind || LivingDexGames.HasShiny(g)).Select(g => LivingDexGames.Get(g.Game, shinyKind))
+            .Concat(shinyKind ? [] : [AllTheMonsLivingDex.Game]);
+
     /// <summary>Sauvegardes qui peuvent recevoir le living dex du jeu choisi.</summary>
-    private List<LivingDexCandidate> Saves => game is { } g ? candidates.Where(c => c.Games.Contains(g)).ToList() : [];
+    private List<LivingDexCandidate> Saves() => game is { } g ? candidates.Where(c => c.Games.Contains(g)).ToList() : [];
 
     protected override async Task OnParametersSetAsync()
     {
+        // Le tri par défaut est celui du joueur connecté, même chez un autre joueur : sa façon de lire une liste.
+        defaultOrder ??= (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).LivingDex;
         if (Visitor)
         {
             player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.LivingDex);
@@ -260,23 +284,49 @@ else
         else
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         mode = LivingDexGames.ModeFromSlug(ModeFromQuery);
-        sort = LivingDexGames.SortFromSlug(SortFromQuery);
-        descending = OrderFromQuery == "desc";
+        (sort, descending) = SiteSorts.LivingDexFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultOrder.Value;
+        kind = LivingDexGames.KindFromSlug(KindFromQuery);
         dexes = await Dexes.ListAsync(userId, mode);
         taken = await Dexes.TakenGamesAsync(userId);
+        takenShiny = await Dexes.TakenGamesAsync(userId, shiny: true);
     }
 
     private void SetMode(LivingDexMode value) =>
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("mode", LivingDexGames.ModeSlug(value)), replace: true);
 
+    /// <summary>Filtre Tous / Normaux / Chromatiques, gardé dans l'adresse (« Tous » n'y est pas écrit).</summary>
+    private void SetKind(LivingDexKind value) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("filtre", LivingDexGames.KindSlug(value)), replace: true);
+
+    /// <summary>
+    /// Aucune carte à montrer : mode Ultime sans living dex global, living dex de 1re génération seuls hors du Régional, ou
+    /// filtre qui ne laisse rien.
+    /// </summary>
+    private string EmptyMessage
+    {
+        get
+        {
+            var create = Visitor ? "." : " : crée-en un avec « + Créer un living dex ».";
+            if (mode == LivingDexMode.Ultimate)
+                return kind == LivingDexKind.Shiny ? $"Seul le living dex global chromatique a le mode Ultime{create}"
+                    : $"Seuls les living dex globaux et All the Mons ont le mode Ultime{create}";
+            if (kind != LivingDexKind.Shiny && taken.Any(g => LivingDexGames.RegionalOnly(LivingDexGames.Get(g))))
+                return "Les living dex de 1re génération n'ont que le mode Régional : choisis « Régional » pour les voir.";
+            return kind == LivingDexKind.Shiny ? $"Aucun living dex chromatique{create}" : $"Aucun living dex normal{create}";
+        }
+    }
+
     /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
     private void SortChosen(ChangeEventArgs e) =>
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tri",
-            LivingDexGames.SortSlug(LivingDexGames.SortFromSlug(e.Value?.ToString()))), replace: true);
+        ApplyOrder(new(SiteSorts.LivingDexChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.LivingDexChoices[0]).By, descending));
 
-    /// <summary>Inverse le sens du tri (croissant par défaut, absent de l'adresse).</summary>
-    private void ToggleOrder() =>
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("ordre", descending ? null : "desc"), replace: true);
+    /// <summary>Inverse le sens du tri.</summary>
+    private void ToggleOrder() => ApplyOrder(new(sort, !descending));
+
+    /// <summary>Tri gardé dans l'adresse : rien pour celui du compte, sinon critère et sens en entier (« ?tri=generation »).</summary>
+    private void ApplyOrder(LivingDexOrder order) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.LivingDexQuery(order), SiteSorts.LivingDexQuery(defaultOrder ?? default))), replace: true);
 
     /// <summary>Page du living dex, dans le mode de la vue générale s'il le propose (le National n'est pas écrit).</summary>
     private string CardLink(LivingDexSummary d)
@@ -285,29 +335,38 @@ else
         return LivingDexGames.ModeSlug(d.Mode) is { } slug ? $"{page}?mode={slug}" : page;
     }
 
-    private void ToggleGeneration(byte generation)
-    {
-        if (!openGenerations.Remove(generation))
-            openGenerations.Add(generation);
-    }
+    /// <summary>Jeu qui a déjà ce living dex : les globaux dans <see cref="taken"/>, les jeux dans celui du type choisi.</summary>
+    private bool IsTaken(LivingDexGame value) =>
+        (GlobalLivingDex.IsGlobal(value) || !shinyKind ? taken : takenShiny).Contains(value);
 
     private async Task OpenCreation()
     {
         if (Visitor)
             return;
         message = null;
+        shinyKind = false;
         candidates = await Dexes.ListCandidatesAsync(userId);
         game = null;
         saveId = 0;
-        openGenerations.Clear(); // toutes repliées au départ
         creating = true;
+    }
+
+    /// <summary>Normal ou chromatique : les jeux et les sauvegardes proposés changent, le jeu choisi est oublié.</summary>
+    private async Task KindChosen(bool shiny)
+    {
+        if (shiny == shinyKind)
+            return;
+        shinyKind = shiny;
+        candidates = await Dexes.ListCandidatesAsync(userId, shiny);
+        game = null;
+        saveId = 0;
     }
 
     /// <summary>Jeu choisi : la première de ses sauvegardes est proposée d'office.</summary>
     private void GameChosen(LivingDexGame value)
     {
         game = value;
-        saveId = Saves.FirstOrDefault()?.SaveId ?? 0;
+        saveId = Saves().FirstOrDefault()?.SaveId ?? 0;
     }
 
     private void SaveChosen(ChangeEventArgs e) => saveId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
@@ -318,7 +377,7 @@ else
             return;
         busy = true;
         var result = GlobalLivingDex.IsGlobal(chosenGame) ? await Dexes.CreateGlobalAsync(userId, chosenGame == LivingDexGame.GlobalShiny)
-            : await Dexes.CreateAsync(userId, saveId, chosenGame);
+            : await Dexes.CreateAsync(userId, saveId, chosenGame, shinyKind);
         busy = false;
         if (result.Ok)
         {

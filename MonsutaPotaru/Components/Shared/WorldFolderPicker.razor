@@ -1,0 +1,104 @@
+@using MonsutaPotaru.Services
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@*
+    Bouton qui fait choisir le dossier d'un monde Minecraft (All the Mons). Le navigateur trie (wwwroot/js/app.js,
+    watchWorldFolder) : seuls level.dat, le dossier pokemon, les statistiques et les succès du joueur, et ses quêtes FTB partent ; le serveur revérifie
+    et en fait un zip (CobblemonSave.ZipFromFolder), rendu à la page par OnChosen. Pas d'InputFile : il enverrait au
+    serveur le nom et la taille de tous les fichiers du dossier.
+*@
+
+<label class="@CssClass @(Disabled ? "disabled" : "")" title="@Title">
+    @Label
+    <input type="file" class="d-none" webkitdirectory directory @ref="input" disabled="@Disabled" />
+</label>
+
+@code {
+    /// <summary>Monde reçu : nom de fichier (« Kantalia.zip ») et zip des fichiers utiles, vérifiés.</summary>
+    public sealed record WorldFolder(string FileName, byte[] Zip);
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string CssClass { get; set; } = "btn btn-primary mb-0";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<WorldFolder> OnChosen { get; set; }
+
+    /// <summary>Refus, avec le message prêt à afficher.</summary>
+    [Parameter] public EventCallback<string> OnError { get; set; }
+
+    public const string NotAWorldMessage =
+        "Ce dossier n'est pas un monde Minecraft : choisis le dossier de ton monde, dans « saves » (celui qui contient level.dat).";
+
+    public const string TooBigMessage = "Les fichiers Pokémon de ce monde sont trop gros pour être envoyés.";
+
+    /// <summary>Plus gros envoi lu depuis le navigateur (8 Mo, comme une sauvegarde).</summary>
+    private const long MaxPayloadBytes = StoredSaveService.MaxFileBytes;
+
+    private ElementReference input;
+    private DotNetObjectReference<WorldFolderPicker>? selfRef;
+    private IJSObjectReference? watcher;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        selfRef = DotNetObjectReference.Create(this);
+        watcher = await JS.InvokeAsync<IJSObjectReference?>("watchWorldFolder", input, selfRef);
+    }
+
+    /// <summary>Le navigateur a préparé les fichiers du dossier : on les lit (8 Mo au plus) et on les vérifie.</summary>
+    [JSInvokable]
+    public async Task OnWorldChosen(string folder)
+    {
+        if (watcher is null)
+            return;
+        try
+        {
+            var stream = await watcher.InvokeAsync<IJSStreamReference>("take");
+            if (stream.Length > MaxPayloadBytes)
+            {
+                await OnError.InvokeAsync(TooBigMessage);
+                return;
+            }
+            await using var read = await stream.OpenReadStreamAsync(MaxPayloadBytes);
+            using var payload = new MemoryStream();
+            await read.CopyToAsync(payload);
+            await ReceiveAsync(folder, payload.ToArray());
+        }
+        catch (Exception e) when (e is JSException or IOException or InvalidOperationException)
+        {
+            await OnError.InvokeAsync("Lecture du dossier impossible : recommence.");
+        }
+    }
+
+    /// <summary>Contenu préparé par le navigateur : revérifié, remis en zip, puis rendu à la page (public pour les tests).</summary>
+    public async Task ReceiveAsync(string folder, byte[] payload)
+    {
+        if (CobblemonSave.ZipFromFolder(payload, out var error) is { } zip)
+            await OnChosen.InvokeAsync(new WorldFolder(CobblemonSave.FolderFileName(folder), zip));
+        else
+            await OnError.InvokeAsync(error);
+    }
+
+    /// <summary>Le navigateur a refusé le dossier sans rien lire (code fixe, jamais un texte venu de la page).</summary>
+    [JSInvokable]
+    public Task OnWorldRefused(string code) =>
+        OnError.InvokeAsync(code == "trop-gros" ? TooBigMessage : NotAWorldMessage);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (watcher is not null)
+        {
+            try
+            {
+                await watcher.InvokeVoidAsync("dispose");
+                await watcher.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // circuit fermé : plus rien à détacher
+            }
+        }
+        selfRef?.Dispose();
+    }
+}

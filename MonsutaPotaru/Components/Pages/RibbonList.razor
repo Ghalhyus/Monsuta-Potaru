@@ -1,0 +1,195 @@
+@page "/rubans"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Services
+@inject RibbonService RibbonStore
+@inject NavigationManager Navigation
+@inject PreferencesService Preferences
+@inject StoredSaveService Saves
+
+<PageTitle>Rubans</PageTitle>
+
+@* Suivi des rubans : une carte par Pokémon suivi (rubans obtenus sur le total), et l'ajout de n'importe quel Pokémon de la
+   collection (stockage interne ou sauvegarde stockée), choisi comme au dépôt GTS (CollectionPicker). Recherche par nom et tri
+   (ajout, nom, complétion) au-dessus des cartes. *@
+<PageHeader Title="Rubans" Icon="bi-award-nav-menu">
+    <Help>
+        <p>
+            Suis les rubans de tes Pokémon : choisis-en un dans ta collection (stockage interne ou sauvegarde stockée), et sa page
+            montre les rubans qu'il a et ceux qui lui manquent.
+        </p>
+        <p>
+            Il se met à jour avec ta collection, même s'il change de sauvegarde ; s'il la quitte, son suivi garde ses derniers
+            rubans connus.
+        </p>
+        <p>
+            Sont comptés les @Ribbons.Total rubans que n'importe quel Pokémon peut obtenir en jouant, ceux de Pokémon Colosseum et
+            XD compris (pas ceux des distributions, les Marques ni Exceptionnel).
+        </p>
+        <p>
+            Les rubans de concours et de combat de 3e et 4e génération sont réunis comme dans les jeux récents, en Souvenir
+            Concours et Souvenir Combat, mais chacun compte.
+        </p>
+    </Help>
+</PageHeader>
+
+@if (message is not null)
+{
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+        @message
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+    </div>
+}
+
+@if (adding)
+{
+    @* Choix dans toute la collection, comme le dépôt GTS : recherche, origine, tri, colonnes et pastilles de « Ma collection ».
+       Œufs, Pokémon sans empreinte et déjà suivis grisés (un clic donne la raison). *@
+    <div class="card mb-3">
+        <div class="card-body">
+            <h2 class="h5">Suivre un Pokémon</h2>
+            <p class="small text-muted">
+                Choisis un Pokémon de ta collection (stockage interne ou sauvegarde stockée 💾). Ceux qui ne peuvent pas être suivis
+                sont grisés : les œufs, et ceux que tu suis déjà.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || picked is null)">
+                    @(picked is null ? "Suivre" : $"Suivre {picked.Nickname}")
+                </button>
+                <button type="button" class="btn btn-outline-secondary" @onclick="() => adding = false">Annuler</button>
+            </div>
+            <CollectionPicker @key="pickerKey" UserId="@userId" Saves="saves" DefaultSort="defaultSort" SelectedId="picked?.Id"
+                              OnPick="item => picked = item" Problem="item => unavailable.GetValueOrDefault(item.Id)"
+                              @bind-Columns="pickerColumns" />
+        </div>
+    </div>
+}
+else
+{
+    @* Juste au-dessus de la liste, à gauche : plus visible. *@
+    <div class="mb-3">
+        <button type="button" class="btn btn-primary" @onclick="OpenAdding">+ Suivre un Pokémon</button>
+    </div>
+}
+
+@if (trackers is null)
+{
+    <p class="text-muted">Chargement…</p>
+}
+else if (trackers.Count == 0)
+{
+    <p class="text-muted">Tu ne suis encore aucun Pokémon.</p>
+}
+else
+{
+    @* Recherche (sur la page seulement) ; tri gardé dans l'adresse (?tri=completion&ordre=desc), sans tri : celui du compte. *@
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <input type="search" class="form-control form-control-sm w-auto" placeholder="Rechercher un Pokémon" aria-label="Rechercher un Pokémon suivi"
+               value="@search" @oninput="e => search = e.Value?.ToString()" />
+        <div class="d-flex align-items-center gap-2 livingdex-choice">
+            <label class="small text-nowrap" for="ribbonSort">Trier par</label>
+            <select id="ribbonSort" class="form-select form-select-sm w-auto" value="@SiteSorts.Slug(sort)" @onchange="SortChosen">
+                @foreach (var (_, slug, label) in SiteSorts.RibbonChoices)
+                {
+                    <option value="@slug">@label</option>
+                }
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleOrder"
+                    title="@(descending ? "Décroissant : clique pour trier en croissant" : "Croissant : clique pour trier en décroissant")"
+                    aria-label="@(descending ? "Ordre décroissant" : "Ordre croissant")">@(descending ? "↓" : "↑")</button>
+        </div>
+    </div>
+    var shown = RibbonService.Sort(trackers.Where(t => RibbonService.Matches(t, search)), sort, descending);
+    @if (shown.Count == 0)
+    {
+        <p class="text-muted">Aucun Pokémon suivi ne correspond à « @search ».</p>
+    }
+    <div class="livingdex-cards">
+        @foreach (var t in shown)
+        {
+            <a class="livingdex-card" href="rubans/@t.Id">
+                <img class="ribbon-sprite" src="@t.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
+                <div class="livingdex-card-body">
+                    <strong>@t.Nickname@(t.IsShiny ? " ★" : "")</strong>
+                    <div class="small text-muted">@(t.HasNickname ? $"{t.SpeciesName}, " : "")niveau @t.Level</div>
+                    <div class="small text-muted text-truncate" title="@t.Location">@(t.Location ?? "Plus dans ta collection")</div>
+                    <LivingDexProgress Owned="t.Owned" Total="t.Total" Class="mt-2" />
+                    <div class="small mt-1">@t.Owned / @t.Total</div>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+
+    private string userId = "";
+    private List<RibbonSummary>? trackers;
+    private RibbonSort sort;
+    private bool descending;
+    private RibbonOrder? defaultOrder; // tri par défaut du compte ; null : pas encore lu
+    private string? search;
+    private bool adding;
+    private List<StoredSaveInfo> saves = [];
+    private CollectionSort defaultSort;
+    private Dictionary<int, string> unavailable = []; // raison de chaque Pokémon grisé dans le choix
+    private BankListItem? picked;
+    private int? pickerColumns; // colonnes choisies au curseur (null : selon la fenêtre), gardées le temps de la page
+    private int pickerKey; // change à chaque ouverture : le choix repart de zéro (recherche, filtres, tri du compte)
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        defaultOrder ??= (await Preferences.SortsAsync(userId)).Ribbons;
+        (sort, descending) = SiteSorts.RibbonFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultOrder.Value;
+        trackers = await RibbonStore.ListAsync(userId);
+    }
+
+    /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
+    private void SortChosen(ChangeEventArgs e) =>
+        ApplyOrder(new(SiteSorts.RibbonChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.RibbonChoices[0]).By, descending));
+
+    private void ToggleOrder() => ApplyOrder(new(sort, !descending));
+
+    /// <summary>Tri gardé dans l'adresse : rien pour celui du compte, sinon critère et sens en entier.</summary>
+    private void ApplyOrder(RibbonOrder order) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.RibbonQuery(order), SiteSorts.RibbonQuery(defaultOrder ?? default))), replace: true);
+
+    private async Task OpenAdding()
+    {
+        message = null;
+        picked = null;
+        saves = await Saves.ListAsync(userId);
+        defaultSort = (await Preferences.SortsAsync(userId)).Collection;
+        unavailable = await RibbonStore.UnavailableAsync(userId);
+        pickerKey++;
+        adding = true;
+    }
+
+    private async Task Add()
+    {
+        if (picked is null)
+            return;
+        busy = true;
+        var result = await RibbonStore.AddAsync(userId, picked.Id);
+        busy = false;
+        if (result.Ok)
+        {
+            Navigation.NavigateTo($"rubans/{result.Id}");
+            return;
+        }
+        message = result.Message;
+        messageIsError = true;
+        picked = null;
+        unavailable = await RibbonStore.UnavailableAsync(userId); // ajouté entre-temps ailleurs : grisé à son tour
+    }
+}

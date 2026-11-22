@@ -25,6 +25,11 @@ public enum WalletOperationKind
     DebugCredit = 6,
     /// <summary>Achat d'un nouveau parc (un autre paysage), payé avec le porte-monnaie.</summary>
     BuyPark = 7,
+    /// <summary>
+    /// Objets passés directement d'une sauvegarde stockée à une autre (page « Transfert d'inventaire ») : une ligne par
+    /// sauvegarde, montant nul, ce qu'elle a envoyé et reçu dans les détails.
+    /// </summary>
+    TransferItemsBetweenSaves = 8,
 }
 
 /// <summary>Ligne du journal des opérations de l'inventaire : argent et objets (jamais modifiée ni supprimée).</summary>

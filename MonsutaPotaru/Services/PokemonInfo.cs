@@ -21,7 +21,11 @@ public sealed record PokemonView(
     string OriginGame,
     bool IsLegal,
     string Format,
-    string SpriteUrl);
+    string SpriteUrl)
+{
+    /// <summary>Légalité vérifiée par PKHeX : faux pour un Pokémon de Minecraft (ni « Légal » ni « Illégal » sur sa fiche).</summary>
+    public bool HasLegality { get; init; } = true;
+}
 
 /// <summary>Traduit un PKM de PKHeX en informations lisibles.</summary>
 public sealed partial class PokemonInfo
@@ -40,6 +44,10 @@ public sealed partial class PokemonInfo
 
     public string GameName(GameVersion version) =>
         GroupNames.TryGetValue(version, out var name) ? name : Get(_strings.gamelist, (int)version, version.ToString());
+
+    /// <summary>Nom du jeu d'une sauvegarde ; certaines ne précisent pas la version exacte (« Any » pour PKHeX).</summary>
+    public string GameName(SaveFile sav) =>
+        sav.Version == GameVersion.Any ? $"Jeu de génération {sav.Generation}" : GameName(sav.Version);
 
     /// <summary>
     /// Noms des groupes de jeux, absents des listes de PKHeX : une sauvegarde de Rouge/Bleu, d'Or/Argent, de Rubis/Saphir,
@@ -63,10 +71,6 @@ public sealed partial class PokemonInfo
         [GameVersion.DPPt] = "Diamant / Perle / Platine",
         [GameVersion.HGSS] = "Or HeartGold / Argent SoulSilver",
     };
-
-    /// <summary>Nom du jeu d'une sauvegarde ; certaines ne précisent pas la version exacte (« Any » pour PKHeX).</summary>
-    public string GameName(SaveFile sav) =>
-        sav.Version == GameVersion.Any ? $"Jeu de génération {sav.Generation}" : GameName(sav.Version);
 
     /// <summary>Nom français d'un objet par sa clé (voir <see cref="SaveBag"/>) : « Super Ball », « CT/DT Séisme ».</summary>
     public string ItemName(int key) =>
@@ -92,14 +96,39 @@ public sealed partial class PokemonInfo
         : $"images/objets/{key}.png";
 
     /// <summary>Type d'une capacité dans les jeux récents (Charme est de type Fée depuis la 6e génération).</summary>
-    private static byte MoveType(ushort move) =>
-        move < MoveInfo.GetTypeTable(EntityContext.Gen9).Length ? MoveInfo.GetType(move, EntityContext.Gen9)
-        : move < MoveInfo.GetTypeTable(EntityContext.Gen9a).Length ? MoveInfo.GetType(move, EntityContext.Gen9a)
-        : (byte)0;
+    private static byte MoveType(ushort move)
+    {
+        if (move < MoveInfo.GetTypeTable(EntityContext.Gen9).Length)
+            return MoveInfo.GetType(move, EntityContext.Gen9);
+        return move < MoveInfo.GetTypeTable(EntityContext.Gen9a).Length ? MoveInfo.GetType(move, EntityContext.Gen9a) : (byte)0;
+    }
 
     private static readonly IReadOnlyList<string> EnglishTypes = GameInfo.GetStrings("en").types;
 
+    /// <summary>« Œuf », le surnom, sinon le nom de l'espèce.</summary>
+    private static string DisplayName(PKM pk, string speciesName)
+    {
+        if (pk.IsEgg)
+            return "Œuf";
+        return pk.IsNicknamed ? pk.Nickname : speciesName;
+    }
+
     public static bool IsLegal(PKM pk) => new LegalityAnalysis(pk, StorageSlotType.Box).Valid;
+
+    /// <summary>
+    /// Nom de l'objet tenu (« — » : aucun), le même que dans l'inventaire : par son numéro de 4e génération et suivantes
+    /// (<see cref="SaveBag.HeldItem"/>), pas par le numéro du jeu du Pokémon (2e et 3e génération). Un objet d'Or, Argent ou
+    /// Cristal sans équivalent ensuite garde le nom qu'il a dans son jeu.
+    /// </summary>
+    private string HeldItemName(PKM pk)
+    {
+        if (pk.HeldItem == 0)
+            return "—";
+        if (SaveBag.HeldItem(pk) is > 0 and var item)
+            return Get(_items, item);
+        var own = _strings.GetItemStrings(pk.Context, pk.Version);
+        return (uint)pk.HeldItem < (uint)own.Length && !string.IsNullOrWhiteSpace(own[pk.HeldItem]) ? own[pk.HeldItem] : "?";
+    }
 
     public PokemonView Describe(PKM pk, bool? isLegal = null)
     {
@@ -108,14 +137,14 @@ public sealed partial class PokemonInfo
             pk.Species,
             pk.Form,
             speciesName,
-            pk.IsEgg ? "Œuf" : pk.IsNicknamed ? pk.Nickname : speciesName,
+            DisplayName(pk, speciesName),
             pk.CurrentLevel,
             pk.IsShiny,
             pk.IsEgg,
             pk.Gender switch { 0 => "♂", 1 => "♀", _ => "" },
             Get(_strings.natures, PokemonTraits.Nature(pk)), // 1re et 2e génération : celle de leur transfert
             Get(_strings.abilitylist, pk.Ability),
-            pk.HeldItem == 0 ? "—" : Get(_items, pk.HeldItem),
+            HeldItemName(pk),
             new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 }.Where(m => m != 0).Select(m => Get(_strings.movelist, m)).ToList(),
             pk.OriginalTrainerName,
             pk.DisplayTID.ToString("00000"),
@@ -123,6 +152,41 @@ public sealed partial class PokemonInfo
             isLegal ?? IsLegal(pk),
             pk.Extension.ToUpperInvariant(),
             PokemonSprites.Url(pk));
+    }
+
+    /// <summary>
+    /// Fiche d'un Pokémon de Minecraft (Cobblemon) : noms français de PKHeX quand il les connaît, sinon l'identifiant du
+    /// mod (objet de Minecraft, espèce ou capacité ajoutée par un autre mod). <paramref name="trainerName"/> : le dresseur
+    /// affiché (voir <see cref="BankService.TrainerName"/>).
+    /// </summary>
+    public PokemonView Describe(CobblemonPokemon mon, string trainerName)
+    {
+        var speciesName = mon.Species == 0 ? CobblemonPokemon.ShortId(mon.SpeciesId) : SpeciesName.GetSpeciesName(mon.Species, French);
+        var heldItem = mon.HeldItemId is not { } itemId ? "—"
+            : mon.HeldItem > 0 ? Get(_items, mon.HeldItem)
+            : CobblemonPokemon.ShortId(itemId);
+        return new PokemonView(
+            mon.Species,
+            mon.Form,
+            speciesName,
+            mon.Nickname ?? speciesName,
+            mon.Level,
+            mon.IsShiny,
+            false,
+            mon.Gender switch { 0 => "♂", 1 => "♀", _ => "" },
+            mon.Nature is { } nature ? Get(_strings.natures, nature) : "?",
+            mon.Ability > 0 ? Get(_strings.abilitylist, mon.Ability) : CobblemonPokemon.ShortId(mon.Nbt.Compound("Ability")?.String("AbilityName") ?? "?"),
+            heldItem,
+            mon.Moves.Select(m => m.Move > 0 ? Get(_strings.movelist, m.Move) : CobblemonPokemon.ShortId(m.Id)).ToList(),
+            trainerName,
+            "",
+            CobblemonSave.GameName,
+            true,
+            "Cobblemon",
+            PokemonSprites.Url(mon))
+        {
+            HasLegality = false,
+        };
     }
 
     private static string Get(IReadOnlyList<string> list, int index, string fallback = "?") =>

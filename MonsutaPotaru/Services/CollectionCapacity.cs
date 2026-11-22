@@ -4,7 +4,7 @@ using MonsutaPotaru.Data;
 
 namespace MonsutaPotaru.Services;
 
-/// <summary>Occupation de la collection : Pokémon de la banque + Pokémon des sauvegardes stockées (œufs compris).</summary>
+/// <summary>Occupation de la collection : Pokémon de la banque + Pokémon des sauvegardes stockées (œufs compris) + Pokémon confiés à la GTS.</summary>
 public readonly record struct CollectionUsage(int Used, int Limit)
 {
     public int Free => Math.Max(0, Limit - Used);
@@ -34,7 +34,8 @@ public static class CollectionCapacity
     /// </summary>
     public static async Task<CollectionUsage> GetUsageAsync(ApplicationDbContext db, string ownerId)
     {
-        var used = await db.BankPokemon.CountAsync(p => p.OwnerId == ownerId);
+        // Les Pokémon confiés à la GTS (offres et boîte de réception) gardent leur place.
+        var used = await db.BankPokemon.CountAsync(p => p.OwnerId == ownerId) + await db.GtsPokemon.CountAsync(g => g.OwnerId == ownerId);
         var limit = await db.Users.Where(u => u.Id == ownerId).Select(u => u.CollectionLimit).FirstOrDefaultAsync();
         return new CollectionUsage(used, limit);
     }

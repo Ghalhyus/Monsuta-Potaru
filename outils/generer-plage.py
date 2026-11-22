@@ -78,7 +78,7 @@ def nettoyer_cote(sable_):
 
 sable = nettoyer_cote(sable)
 terre = plus_grand_morceau(sable)  # la côte ; le reste : les îlots
-ilots = [m for m in morceaux_de(sable - terre)]
+ilots = list(morceaux_de(sable - terre))
 
 # Bordure d'origine (carte entière) : cocoteraie le long du haut et des côtés à terre, rochers le long des bords en mer.
 # EPAISSEUR : 3,5 à 5,3 cases cachées, pour deux rangées de palmiers et 2 à 3 cases de rochers au moins à la dernière
@@ -102,13 +102,18 @@ def sol_de(sable_):
             if (x, y) not in sable_:
                 sol_[y][x] = t("eau_details", r.randrange(3)) if r.random() < 0.04 else t("eau_unie", 0)
                 continue
-            i = bordure(forme, x, y, *PLAGE[1:])
-            if i is not None:
-                sol_[y][x] = t("plage", i)
+            sol_[y][x], est_bord = tuile_de_sable(forme, x, y, r)
+            if est_bord:
                 bord.add((x, y))
-            else:
-                sol_[y][x] = t("sable_details", r.randrange(4)) if r.random() < 0.1 else t("plage", 31)
     return sol_, bord
+
+
+def tuile_de_sable(forme, x, y, r):
+    """Sable : son bord (de l'écume), sinon parfois un détail, sinon du sable uni. Rend (tuile, bord ?)."""
+    i = bordure(forme, x, y, *PLAGE[1:])
+    if i is not None:
+        return t("plage", i), True
+    return (t("sable_details", r.randrange(4)) if r.random() < 0.1 else t("plage", 31)), False
 
 
 sol, ecume = sol_de(sable)
@@ -138,7 +143,10 @@ debut = max(y for y in range(H) if (PONTON_X, y) in terre and (PONTON_X + 1, y) 
 fin = debut + 7
 tuiles = []
 for y in range(debut, fin + 1):
-    gauche_, droite_ = (28, 29) if y == fin else ((0, 1) if (y - debut) % 2 == 0 else (5, 6))
+    if y == fin:
+        gauche_, droite_ = 28, 29  # les poteaux du bout
+    else:
+        gauche_, droite_ = (0, 1) if (y - debut) % 2 == 0 else (5, 6)
     tuiles += [("decors", PONTON_X, y, t("ponton", gauche_), y == fin), ("decors", PONTON_X + 1, y, t("ponton", droite_), y == fin)]
 for _, x, y, tuile, _ in tuiles:
     carte.occupe_decors.add((x, y))
@@ -255,19 +263,29 @@ def planter_recif(cache, sable_, grilles, bloque_):
 def planter_bordure(cache, terre_, grilles, bloque_):
     """Le reste de ce qui est caché : des buissons sous les palmiers, des rochers serrés dans la mer et sur l'écume. Le
     bord de la bordure d'origine dans la zone, sans palmier, reste du sable où l'on marche."""
-    decors_, devant_ = grilles["decors"], grilles["devant"]
     for x, y in cache:
         r = tirage(x, y, 2)
         if (x, y) in terre_:
-            if (x, y) in bordure_carte and not decors_[y][x] and not devant_[y][x]:
-                continue
-            bloque_[y][x] = True
-            if not decors_[y][x] and (not devant_[y][x] or r.random() < 0.85):
-                decors_[y][x] = t("decors", r.choice((86, 87, 88)))
+            planter_buisson(x, y, r, grilles, bloque_)
         else:
-            bloque_[y][x] = True
-            if not decors_[y][x] and r.random() < 0.7:
-                decors_[y][x] = t("decors", r.choice(PETITS_RECIFS))
+            poser_recif(x, y, r, grilles["decors"], bloque_)
+
+
+def planter_buisson(x, y, r, grilles, bloque_):
+    """Case cachée sur la terre : un buisson sous les palmiers (rien au bord de la bordure d'origine sans palmier)."""
+    decors_, devant_ = grilles["decors"], grilles["devant"]
+    if (x, y) in bordure_carte and not decors_[y][x] and not devant_[y][x]:
+        return
+    bloque_[y][x] = True
+    if not decors_[y][x] and (not devant_[y][x] or r.random() < 0.85):
+        decors_[y][x] = t("decors", r.choice((86, 87, 88)))
+
+
+def poser_recif(x, y, r, decors_, bloque_):
+    """Case cachée dans la mer ou sur l'écume : souvent un petit rocher, bloquée."""
+    bloque_[y][x] = True
+    if not decors_[y][x] and r.random() < 0.7:
+        decors_[y][x] = t("decors", r.choice(PETITS_RECIFS))
 
 
 def poser_objets(cache, libres_avant, grilles, bloque_):

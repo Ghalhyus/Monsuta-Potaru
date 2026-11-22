@@ -219,6 +219,10 @@ namespace MonsutaPotaru.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SortPreferences")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Theme")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
@@ -405,6 +409,36 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("BattleRecords");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Game")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StoredSaveId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoredSaveId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerId", "Game")
+                        .IsUnique();
+
+                    b.ToTable("Completions");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.FriendRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -450,6 +484,120 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("Friendships");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.GtsPokemon", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ArrivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Context")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Extension")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("FamilyContext")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("FamilyRegion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Form")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Gender")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HeldItem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsLegal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsShiny")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Nickname")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<ushort>("Species")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SpeciesName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("StoredSaveId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TradeShow")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte?>("WantedGender")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WantedLegalOnly")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte?>("WantedMaxLevel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte?>("WantedMinLevel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("WantedShiny")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<ushort>("WantedSpecies")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("StoredSaveId");
+
+                    b.HasIndex("Status", "Species");
+
+                    b.ToTable("GtsPokemon");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.LivingDex", b =>
                 {
                     b.Property<int>("Id")
@@ -466,6 +614,9 @@ namespace MonsutaPotaru.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Shiny")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("StoredSaveId")
                         .HasColumnType("INTEGER");
 
@@ -474,7 +625,7 @@ namespace MonsutaPotaru.Migrations
                     b.HasIndex("StoredSaveId")
                         .IsUnique();
 
-                    b.HasIndex("OwnerId", "Game")
+                    b.HasIndex("OwnerId", "Game", "Shiny")
                         .IsUnique();
 
                     b.ToTable("LivingDexes");
@@ -528,6 +679,12 @@ namespace MonsutaPotaru.Migrations
                     b.Property<DateTime>("AddedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("MalusLevels")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("MalusUntil")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("OwnerId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -544,6 +701,64 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("ParkMembers");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.RibbonTracker", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Context")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Form")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte?>("Gender")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HeldItem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsShiny")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Nickname")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<ushort>("Species")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SpeciesName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "Fingerprint")
+                        .IsUnique();
+
+                    b.ToTable("RibbonTrackers");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.SaveModification", b =>
                 {
                     b.Property<string>("IdentityKey")
@@ -551,6 +766,9 @@ namespace MonsutaPotaru.Migrations
 
                     b.Property<string>("DataHash")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("GtsChanged")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("ItemsChanged")
                         .HasColumnType("INTEGER");
@@ -902,6 +1120,25 @@ namespace MonsutaPotaru.Migrations
                     b.Navigation("StoredSave");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MonsutaPotaru.Data.StoredSave", "StoredSave")
+                        .WithMany()
+                        .HasForeignKey("StoredSaveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+
+                    b.Navigation("StoredSave");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.FriendRequest", b =>
                 {
                     b.HasOne("MonsutaPotaru.Data.ApplicationUser", "From")
@@ -938,6 +1175,24 @@ namespace MonsutaPotaru.Migrations
                     b.Navigation("Friend");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MonsutaPotaru.Data.GtsPokemon", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MonsutaPotaru.Data.StoredSave", "StoredSave")
+                        .WithMany()
+                        .HasForeignKey("StoredSaveId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Owner");
+
+                    b.Navigation("StoredSave");
                 });
 
             modelBuilder.Entity("MonsutaPotaru.Data.LivingDex", b =>
@@ -997,6 +1252,17 @@ namespace MonsutaPotaru.Migrations
                     b.Navigation("BankPokemon");
 
                     b.Navigation("Park");
+                });
+
+            modelBuilder.Entity("MonsutaPotaru.Data.RibbonTracker", b =>
+                {
+                    b.HasOne("MonsutaPotaru.Data.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("MonsutaPotaru.Data.StoredSave", b =>

@@ -21,6 +21,9 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   `ParkLandscapes` ; `ParkHabitats.Load` et la fenêtre d'achat le prennent d'eux-mêmes. Un paysage réservé à certains
   Pokémon : `ParkLandscapes.Refusal` (raison courte, ou null), repris par `ListCandidatesAsync` (`ParkCandidate.Refusal` :
   grisé) et revérifié par `SetAsync` (`ParkService.RefusalMessage`).
+- Fenêtre de choix : `ParkCandidate.Locked` (pas de sprites ou `Refusal`) → `PokemonSlot Locked`, rangés après les
+  autres (`OrderBy` stable : chaque groupe garde son ordre). Le gris (`.slot.locked img` : noir et blanc, opacité 0,45)
+  est le style commun des cases verrouillées : il vaut aussi pour les cases bloquées de « Dépôt / Retrait ».
 - **Règle de l'utilisateur pour tout nouveau parc (2026-11-01) : une bordure de carte comme celle de la forêt, 2 à 3
   cases de large à l'œil** (arbres, palmiers ou rochers serrés, sans trou), à vérifier sur l'aperçu de la dernière taille.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
@@ -37,7 +40,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   (« Forêt : 20 → 40 Pokémon ») ; achat d'un parc : `BuyPark` (libellés dans `Inventory.razor`).
 - `SetAsync` au-dessus de la capacité : accepté seulement si les Pokémon voulus sont tous déjà au parc (anciens parcs de
   30 ou de 25). La fenêtre de choix suit la même règle (`!c.InPark`).
-- Après l'achat, `Park.razor` rafraîchit `WalletState` (solde du menu) et redémarre le parc (`StartEngine` : `dispose`
+- Après l'achat, `Park.razor` rafraîchit `WalletState` (porte-monnaie de la barre du haut) et redémarre le parc (`StartEngine` : `dispose`
   puis `create` avec `map` = `ParkLandscapes.MapName` et `size = Expansions + 1`) ; de même après un achat ou un
   changement de parc dans la liste.
 - **Planches gardées par le module** (`sheets`) d'un jeu de Phaser à l'autre : une texture doit être recréée dans chaque
@@ -569,13 +572,31 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   puis événement `fullscreenchange`), ou demander à l'utilisateur.
 - Textures : planches de SpriteCollab ajoutées à Phaser (`textures.addImage`, une image par case) ; textes à
   `resolution: k` (nets à la caméra).
+- **Redémarrage** (`StartEngine` de `Park.razor` : agrandissement, achat, changement de parc) : le parc se remesure, donc
+  rien de passager ne doit compter dans sa taille (bug du 2026-11-08 : parc plus petit jusqu'à l'actualisation).
+  - Le message au-dessus du parc porte `data-hors-mesure` : `measure` retire sa hauteur (`transientAbove`). Sans ça, il
+    poussait le parc vers le bas, le zoom tombait d'un cran (×4 → ×3 en 1700 × 1320), et le fermer ne remesurait rien :
+    la position change mais pas la taille, le `ResizeObserver` ne voit rien.
+  - `dispose` retire l'ancien canvas tout de suite : `game.destroy` ne le fait qu'à l'image suivante, et pendant ce temps
+    deux canvas allongeaient la page, la barre de défilement rétrécissait la nouvelle mesure.
+  - Nouveau message ou bandeau au-dessus du parc : lui mettre aussi `data-hors-mesure`.
+- **Panneau du navigateur caché** : `requestAnimationFrame` ne tourne pas, Phaser ne démarre pas sa scène (`started`
+  jamais résolu, pas d'écoute de `resize`) ni ne détruit l'ancien jeu. On ne peut y vérifier que la mesure de départ
+  (taille du canvas après `create`), pas les redimensionnements.
 
 ## Déplacer un Pokémon (`parc.js`, propriétaire)
 - `create(container, component, { canMove })` : `Park.razor` passe `canMove = !Visitor`. Rien côté serveur (positions
   jamais enregistrées).
-- `pointerdown` sur un Pokémon (`at`) : `drag.target`. Souris : au-delà de `DRAG_THRESHOLD`, `pickUp` au lieu de faire
-  glisser la vue. Doigt (`pointer.wasTouch`) : `tick` soulève après `LONG_PRESS` sans avoir bougé ; avant, un glissement
-  fait défiler la vue. Clic sans bouger : fiche, comme avant.
+- `pointerdown` sur un Pokémon (`at`) : `drag.target`, `drag.offset` (écart pointeur-Pokémon à l'appui). Souris et doigt
+  pareil (demande du 2026-11-14 : « qu'on ne prenne pas un Pokémon lorsque l'on souhaite juste bouger la caméra ») :
+  `tick` soulève après `LONG_PRESS` (0,5 s, d'abord 1 s : trop long) sans avoir dépassé `DRAG_THRESHOLD` (`pressing()`) ; avant, un glissement fait
+  défiler la vue. Il peut marcher pendant l'appui : `pickUp(p, pointer, drag.offset)` le ramène sous le pointeur à
+  l'endroit où on l'avait pris. Clic sans bouger (relâché avant 0,5 s) : fiche, comme avant. (Avant : la souris le
+  soulevait dès qu'on bougeait, le doigt après 0,3 s.)
+- **Cercle de l'appui** (`ring`, `drawPressRing`, `PRESS_RING`) : à droite du Pokémon (à hauteur de son milieu, suit un
+  volant), rempli selon `elapsed / LONG_PRESS` depuis midi, montré après `delay` (150 ms : rien sur un simple clic).
+  Tailles en pixels CSS, converties par `devicePixelRatio / k` (le même à tous les zooms). Profondeur 6,2 (devant la nuit).
+  Redessiné à chaque image tant qu'il est montré, caché dès que l'appui cesse, bouge ou soulève.
 - `held` : `{ p, from, dx, dy, pointer }` ; état `"held"` (animation `Charge` par `ANIMATION_OF`, `OPTIONAL` : planche
   absente = Idle ; `update` ne fait rien), dessiné `LIFT` px plus haut, profondeur `HELD_DEPTH` (3,5 : devant le
   brouillard, sous la nuit). `carry` à chaque image (Vector2 gardé : pas de déchets) suit le pointeur même quand la vue
@@ -584,7 +605,9 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Essais : `MouseEvent` (`mousedown`, `mousemove` sur le canvas, `mouseup` sur `window`) ; doigt : `resize_window`
   « mobile », recharger la page, `new Touch(...)` + `TouchEvent` sur le canvas. Panneau masqué : la caméra n'est à jour
   qu'après un dessin (capture d'écran) : sans, `getWorldPoint` vise à côté et le Pokémon n'est pas pris ; l'appui long
-  attend aussi une image (`tick`).
+  attend aussi une image (`tick`). Essai du 2026-11-14 (panneau masqué, `create` dans une page, un Pikachu posé par
+  `place`, avec 1 s) : capture, `mousedown`, 0,5 s → toujours `idle`, cercle visible ; après 1 s et une capture → `held` ;
+  `mousedown` + `mousemove` de 30 px → vue défilée, toujours `idle` après 1,2 s ; clic de 80 ms → `OnPokemonClicked`.
 
 ## Nage et vol (`parc.js`, demande du 2026-11-01)
 - `ParkHabitats.MovementOf(type1, type2)` → `ParkPokemon.Moves` : « swim » si l'un des types est Eau, sinon « fly » si
@@ -625,6 +648,26 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   chemin). États joués une fois : `ONCE` (`play`, dernière image gardée, `then` ensuite). Soulever un Pokémon annule
   `prey`, `hit` et `then`. Debug : `attack(id)` (le plus proche, famille comprise, quel que soit le bonheur), bouton
   de la fiche dans `Park.razor`. Planches Attack / Hurt absentes : Idle (`OPTIONAL`).
+- **Malus « attaqué »** (demande du 2026-11-14 ; choix de l'utilisateur : sur le serveur, un malheureux du malus attaque
+  comme les autres, fiche + signe au parc) : `ParkMember.MalusUntil` / `MalusLevels`, migration `ParkAttackMalus` (écrite à
+  la main : `dotnet ef` absent ; designer copié du snapshot). `RecordAttackAsync` : une seule `ExecuteUpdate` avec des
+  `CASE` (malus en cours : niveau + 1 jusqu'à `MaxMalusLevels` = 2, fin + 15 min par `AddMinutes` de SQLite ; sinon 1
+  niveau, maintenant + 15 min). **Arrondi** : la fin calculée par SQLite n'a que des millisecondes ; `SecondsLeft`
+  arrondit au plus proche (au-dessus, un test donnait parfois « 26 min » au lieu de 25). `SetAsync` efface le malus d'un
+  Pokémon qui change de parc.
+  `ParkPokemon.Mood` reste l'humeur de l'habitat, `ParkPokemon.Malus` (`ParkMalusInfo` : niveaux, secondes restantes) à
+  côté ; `parc.js` : `setMalus` (fin = `Date.now()` + secondes ; `skew` avance avec `simulate`), `moodOf(p)` (liste
+  `MOODS`, même règle que `ParkHabitats.WithMalus`) partout où `p.mood` comptait, malus fini → `p.malus = null`.
+  Frappé (`p.hit` → `hurt`) : `reportAttack` → `OnPokemonAttacked` de la page (rien si `canMove` est faux : visiteur),
+  qui rend le nouveau malus. `StartEngine` relit la liste (temps restants à jour).
+  Fiche : `GetMalusAsync`, portrait de l'humeur abaissée, ligne `.park-malus` (`ParkMalus.Message` : « Attaqué : neutre au
+  lieu d'heureux encore 15 min. », « déjà malheureux, son malus dure encore… »), mise à jour si la fiche est ouverte.
+- **Nuage d'orage** (`STORM`, `drawStorm`, `stormOf`) au-dessus de tout malheureux (`moodOf`, habitat ou malus) : dessin en
+  pixels de sprite (une case de `spriteK` pixels, image à l'échelle 1/k, refaite si `spriteK` change, comme les ombres),
+  pluie sur deux images qui alternent (0,25 s), éclair double toutes les 2,5 à 5 s, léger balancement ; profondeur 6 ; bas
+  du nuage à `h × 0,6 + 2` au-dessus des pieds. Essai du 2026-11-14 (module dans une page, faux composant qui rend
+  `{ levels: 2, seconds: 900 }`) : `attack(1)` → `OnPokemonAttacked(2)` appelé, Évoli « happy » → « sad » avec son nuage ;
+  malus de 5 s fini → humeur de l'habitat, plus de nuage.
 - **Cache du navigateur** (2026-10-31, « les animations ne se jouent pas ») : `/images` n'avait aucun `Cache-Control`,
   le navigateur gardait l'ancien `AnimData.xml` (sans Attack ni Hurt) des Pokémon déjà vus, et jouait Idle. Depuis :
   `loadSheets` demande `AnimData.xml?animations=<ANIMATIONS>` (nouvelle adresse dès que la liste change) et `Program.cs`
@@ -671,5 +714,285 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   pour que le parc accepte des Pokémon ; supprimer `wwwroot/images` après (vérifier d'abord qu'il ne contient que ces
   faux fichiers). Pour `ParkServiceTests` : `PokemonSprites.Load` sur un dossier temporaire du même genre, le temps de
   l'essai, puis remettre le test (`Sprites_AndFamilies` exige les vrais fichiers).
-- Fenêtre de choix : « Seulement ceux du parc » fige la liste des choisis à l'allumage (un Pokémon décoché reste affiché) ;
-  « Tout retirer » ne change rien avant « Valider » ; « Vider le parc » : `ParkService.ClearAsync`, après confirmation.
+- Fenêtre de choix : liste « Pokémon affichés » (`select.park-shown`, `ShownFilter`, 2026-11-08) d'après le parc
+  **enregistré** (`ParkCandidate.InPark`, `OtherPark`), pas d'après les cases cochées : rien ne bouge avant « Valider »
+  (un Pokémon décoché reste affiché pour le recocher). « Dans aucun parc » : `!InPark && OtherPark is null`, les trois
+  choix même avec la Forêt seule ; « Tous » à chaque ouverture. Filtre dans la page seulement : `SetAsync` revérifie tout.
+  `ParkPageTests.Chooser_ShowsAllPokemon_ThoseOfThisPark_OrThoseInNoPark`. « Tout retirer » ne change rien avant
+  « Valider » ; « Vider le parc » : `ParkService.ClearAsync`, après confirmation.
+- **Panneau du navigateur de test masqué** : Phaser ne démarre pas (pas de `requestAnimationFrame`), et « Valider » dans
+  la fenêtre de choix fait tomber le circuit (`setPokemon` → `addTextures` : « Cannot read properties of null (reading
+  'renderer') »). Faire une capture d'écran après le chargement du parc (la carte dessinée) avant d'essayer.
+
+## Description complète (ancienne section « Parc » du README, déplacée le 2026-11-08)
+
+Le README n'en garde que les règles ; le mode d'emploi pour les joueurs est dans le guide du joueur (Google Doc).
+Peut recouper les sections ci-dessus : en cas de désaccord, le code fait foi, corriger la fiche.
+
+Le menu « Parc » (`/parc`) est une carte en pixel art (forêt tout autour, chemins, étangs, prairie fleurie) qui prend
+toute la largeur de la page, où vivent jusqu'à **20 Pokémon** de la
+collection, stockage interne ou sauvegardes stockées, de **toutes les générations** (hors œufs ; `ParkService.BaseCapacity`).
+**Agrandir le parc** (bouton sous le titre, propriétaire seulement) : **25 000 ₽** du porte-monnaie (40 000 ₽ jusqu'au 2026-11-07 ; `ParkService.ExpansionPrice`) pour **20 Pokémon de
+plus**, trois fois au plus pour l'instant (**80 Pokémon**, `ParkService.ExpandAsync`). Une fenêtre confirme le prix et le
+solde (bouton grisé s'il manque de l'argent, avec un lien vers « Banque d'objets ») ; la taille et le débit sont vérifiés dans
+les mises à jour elles-mêmes (deux achats simultanés ne dépassent ni la plus grande taille ni le solde), l'achat entre au
+journal de l'inventaire (« Agrandissement du parc », « Forêt : 20 → 40 Pokémon »), et le parc se recharge avec sa nouvelle
+carte. Un parc qui avait déjà plus de Pokémon que sa capacité (30 avant les agrandissements, 25 ensuite) les garde : on peut en
+retirer, pas en ajouter tant qu'il dépasse.
+**Plusieurs parcs**, un par **paysage** (`ParkLandscape`, table `Parks`, index unique sur le compte et le paysage) : la
+**Forêt** d'abord (créée à la première visite de la page ; la migration `ParkLandscapes` a fait du parc de chaque compte sa
+Forêt, avec ses agrandissements et ses Pokémon), puis **« Acheter un parc »** (sous le titre, tant qu'il reste un paysage
+à acheter) : une fenêtre propose les paysages pas encore achetés (la **Plage**, le **Volcan**, le **Désert**, l'**Océan**, la **Grotte**, la **Montagne**, le **Donjon** et la **Forêt profonde**), au prix d'un agrandissement
+(**25 000 ₽**, `ParkService.ParkPrice`), même confirmation du solde. `ParkService.BuyAsync` revérifie le paysage (valeur
+venue du navigateur), insère le parc (`INSERT OR IGNORE` : un paysage déjà acheté est refusé, même pour deux achats
+simultanés) et débite dans la même transaction ; journal : « Achat d'un parc », « Nouveau parc : Plage ». Le nouveau parc
+s'affiche, vide, avec 20 places ; **chaque parc a sa taille** et s'agrandit à part (3 fois). Une **liste déroulante**
+(« Forêt (8 / 20) », « Plage (2 / 20) ») apparaît sous le titre dès le deuxième parc, pour le propriétaire comme pour les
+visiteurs (sans adresse propre à chaque parc : on arrive sur la Forêt). « Agrandir », « Choisir », « Vider » et les
+boutons debug agissent sur le parc affiché ; chaque méthode du service revérifie que le parc (numéro venu du navigateur)
+est bien à ce joueur. **Un Pokémon vit dans un seul parc** : dans la fenêtre de choix, ceux d'un autre parc portent son
+pictogramme (🌳 forêt, 🏝️ plage, 🌋 volcan, 🏜️ désert, 🌊 océan, 🦇 grotte, ⛰️ montagne, 🏚️ donjon, 🌲 forêt profonde, avec 💾 s'il y a lieu ; « vit à la plage » dans l'infobulle) et le choisir l'y fait
+quitter (« Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc. »). Nom, carte et textes de chaque paysage :
+`ParkLandscapes` (un nouveau paysage : une valeur de l'énumération, ses quatre cartes, une ligne par méthode).
+« Choisir les Pokémon » ouvre la collection avec la recherche, les pastilles de filtres de « Ma collection » (génération,
+type, forme...) et le compteur. Les espèces dont SpriteCollab n'a pas encore les sprites (64, surtout de 9e génération)
+y sont grisées (🔒) et refusées ; elles viendront quand il les aura (relancer `outils/images.py donjon`, puis
+`images-serveur`). **Carte** : faite dans [Tiled](https://www.mapeditor.org) avec les tuiles du pack Cute Fantasy (voir
+« Crédits »), 80 × 60 tuiles de 16 pixels, affichée par **Phaser** (moteur de jeu 2D, `wwwroot/lib/phaser`). Ses
+calques : « Sol », « Décors », « Devant » (feuillages : un Pokémon plus haut que le tronc passe derrière l'arbre, plus bas devant), « Collisions » (cases où l'on ne
+passe pas : eau, arbres, rochers, buissons, bancs) et « Zones » : le rectangle **« Départ »** (24 × 20 tuiles, la vue de
+départ) et le rectangle **« Parc »**, où vivent les Pokémon. **Une carte par taille** (`wwwroot/parc/parc-1-1.json` à
+`parc-1-4.json` : 24 × 20, 40 × 30, 56 × 40 tuiles centrées sur l'étang, puis toute la carte, entourée de sa forêt) :
+chaque agrandissement fait reculer la forêt et dévoile un anneau de plus, sans rien reprendre de la taille d'avant. Autour de la zone, tout est de
+la **forêt dense** (lisière irrégulière, buissons) qui s'assombrit en s'éloignant : on ne voit pas ce qu'il reste à
+débloquer. On **fait glisser la carte** (souris ou doigt) pour parcourir le parc ; la vue s'arrête à 6 cases de forêt
+au-delà de la zone. La hauteur du parc est le plus grand nombre entier de
+fois la zone « Départ » en pixels d'écran qui tient dans la hauteur visible (3, soit 960 pixels, sur un écran de 1440 à
+150 %) ; sur un téléphone, pas plus que la zone entière en largeur. Les sprites sont dessinés aux deux tiers des pixels de
+la carte, arrondis à un nombre entier de pixels d'écran (×2 quand la carte est à ×3, jamais moins de ×2) : dessin net,
+sans pixels de tailles inégales. **Zoom et plein écran** : boutons **−**, **+** et **plein écran** en haut à gauche de la
+carte (visiteurs compris). Le zoom va par crans entiers, du zoom de départ (le plus grand) jusqu'à ×1 ; les sprites
+suivent en arrondi (à ×2 et ×1 ils sont un peu plus gros par rapport à la carte). Dézoomé au-delà des bords, la carte
+est centrée (la forêt continue jusqu'au bord de la carte). La **molette** zoome autour du pointeur quand la souris est sur le parc (la page ne défile pas tant qu'elle y est). En
+plein écran (la carte et la fiche d'un Pokémon cliqué), la hauteur de l'écran donne le zoom de départ (×4 sur un écran de
+1440) ; Échap ou le même bouton en sort. Sur téléphone,
+**pincement** à deux doigts (pas de plein écran sur iPhone : bouton caché). Le zoom n'est pas retenu d'une visite à
+l'autre. **Nouvelle carte** : la dessiner dans Tiled (vue orthogonale, tuiles de 16 px, taille
+fixe, jeux de tuiles incorporés, mêmes calques ; un feuillage dans « Devant » au-dessus de son tronc, posé dans
+« Décors » et bloqué dans « Collisions »), puis `python outils/carte-parc.py <carte .tmx>` : la carte va dans
+`wwwroot/parc/<nom du fichier>.json` (`Parc_1-2.tmx` → `parc-1-2.json` ; dans Git : rien que des numéros de tuiles), les
+planches du pack qu'elle utilise dans `wwwroot/images/parc/tuiles/` (hors Git : le pack ne se redistribue pas), et
+`deploy\fond-parc.cmd` les envoie sur le serveur. Sans les planches, le parc est sur de l'herbe unie, sans erreur.
+`ParkMapTests` vérifie les quatre cartes de chaque parc (calques, « Départ » dans « Parc », dans la carte, au moins une
+quinzaine de cases libres par Pokémon, chaque case libre accessible, et chaque taille garde les cases libres de la
+précédente). Les cartes actuelles, `Parc_1-1.tmx` à `Parc_1-4.tmx`, sont faites par
+`python outils/generer-parc.py <dossier Cute_Fantasy du pack> <dossier de sortie>` (Python avec Pillow ; mêmes tirages
+à chaque fois : relancé sans changement, il redonne les mêmes cartes ; le parc entier est tiré une fois, chaque taille en
+garde sa zone), puis passées une à une par `outils/carte-parc.py`.
+**Plage** (deuxième paysage, à acheter) : `Plage_1-1.tmx` à
+`Plage_1-4.tmx` (`plage-1-1.json` à `plage-1-4.json`), faites par `outils/generer-plage.py` (mêmes arguments). Une côte,
+le sable au nord, la mer au sud : environ **65 % de mer et 35 % de sable** dans la zone des tailles 2 à 4 (les types Eau
+y sont heureux ; Feu, Roche, Acier, Électrik, Sol et Fée malheureux), îlots, ponton et barque, palmiers (extension Desert
+du pack), rochers. Zones : la vue de départ (24 × 20, moitié plage moitié mer : 52,5 % de mer, les Eau encore heureux),
+40 × 31, 56 × 43, puis toute la carte. La mer et le bord du sable (écume) sont bloqués : 8 à 10 cases de sable libres par
+Pokémon aux trois premières tailles (le test en exige 7 pour la plage), les types Eau nagent en plus dans la mer. Ce qui
+n'est pas acheté est caché par une cocoteraie dense côté plage et un récif de gros rochers côté mer ; les îlots pas encore
+achetés n'apparaissent pas. `ParkMapTests` vérifie aussi la part de mer (60 à 70 % des tailles 2 à 4, un peu plus de la
+moitié à la taille 1).
+**Volcan** (troisième paysage, à acheter) : `Volcan_1-1.tmx` à `Volcan_1-4.tmx` (`volcan-1-1.json` à `volcan-1-4.json`),
+faites par `outils/generer-volcan.py` (mêmes arguments) avec l'extension Volcano du pack. Un plateau de roche volcanique
+où un **grand lac de lave** déborde en trois **cascades** qui nourrissent des **coulées** finissant en **mares** (une
+cascade a toujours un lac en amont et une coulée en aval, `ParkMapTests` le vérifie ; dessin repris de la carte retouchée
+par l'utilisateur, `Volcan_1-4_modele.tmx`), un pont de pierre sur chaque coulée (celui de la
+vue de départ, puis deux autres aux tailles 3 et 4), des arbres et des plantes de braise, des rochers (dans la lave aussi). Tout est de type **volcan** : les
+Feu, Roche et Dragon y sont heureux, la plupart des autres malheureux (choix de l'utilisateur). Mêmes zones que la Forêt.
+17 à 31 % de **lave** dans la zone (17 % dans la vue de départ : sa cascade, le bas du grand lac et la mare sous le pont),
+bloquée : 14 à 20 cases de roche libres par Pokémon aux trois premières tailles (le test en exige 14, comme pour la
+forêt). Ce qui n'est pas acheté est un champ de gros rochers ; la lave qui en sort est coupée à la lisière (le grand lac
+continue sous les rochers), une cascade n'apparaît que tout entière. Les **cascades** et des **bulles** de lave (calque « Bulles »,
+hors des décors) sont des tuiles animées de Tiled, jouées par `parc.js`. `ParkMapTests` vérifie le type volcan partout,
+la part de lave libre, que toute case bloquée hors de la lave porte un décor (sinon `parc.js` la prendrait pour de la
+lave) et les animations.
+**Désert** (quatrième paysage, à acheter) : `Desert_1-1.tmx` à `Desert_1-4.tmx` (`desert-1-1.json` à
+`desert-1-4.json`), faites par `outils/generer-desert.py` (mêmes arguments ; `--seulement <taille>` pour une seule) avec
+l'extension Desert du pack (teinte 1, sable doré). Un désert **aride** avec **un seul point d'eau** : un **plateau** à deux
+étages au fond (flanc de 3 cases au milieu, deux escaliers dans la vue de départ, une marche plus basse autour) porte un
+**lac** qui se resserre en ruisseau et tombe en **cascade** (animée) dans l'**oasis** au pied du flanc, derrière une
+corniche de sable. L'herbe n'est qu'autour de l'eau (palmiers) ; ailleurs, cactus, acacias, rochers, herbes sèches. La
+taille 4 est la carte retouchée par l'utilisateur dans Tiled (plateau, raccords de la cascade), reprise à l'identique par le
+générateur, qui en a tiré les autres tailles ; les quatre ont ensuite été retouchées à la main : **ne plus relancer le
+générateur** sur ces cartes (il les écraserait), seulement `carte-parc.py` après une retouche. Sable : 52 / 71 / 76 / 87 % (plus de la moitié partout : les Sol heureux ;
+Feu, Roche, Acier, Eau, Poison, Plante et Fée malheureux d'après la feuille « Habitat »). Mêmes zones que la Forêt. L'eau
+et son bord de sable sont bloqués, les types Eau y nagent ; 11,3 cases libres par Pokémon dans la vue de départ (le test
+en exige 11 au désert), 19 à 38 ensuite. Ce qui n'est pas acheté est un champ serré de cactus et de rochers ; l'eau qui en
+sort est coupée à la lisière, son bord caché porte de petits rochers. `ParkMapTests` vérifie la part de sable, les humeurs,
+les animations et la cascade (lac au-dessus, eau en dessous).
+**Océan** (cinquième paysage, à acheter) : `Ocean_1-1.tmx` à `Ocean_1-4.tmx` (`ocean-1-1.json` à `ocean-1-4.json`),
+faites par `outils/generer-ocean.py` (mêmes arguments). La **pleine mer, sans plage** : **trois îlots de sable** (bord d'écume de `Beach_Tiles`, compté comme de l'eau ; d'herbe bordée de
+pierre avant le 2026-11-07),
+placés à la main dans le générateur, **aucun dans la vue de départ** (toute en eau) ; 97 à 100 %
+d'eau. **Seuls les
+Pokémon qui nagent** (type Eau, Eau/Vol et Feu/Eau compris : `ParkLandscapes.Refusal`) peuvent y vivre : les autres sont
+grisés dans la fenêtre de choix (« ne nage pas » dans l'infobulle, message au clic) et refusés par `ParkService.SetAsync`
+(la liste vient du navigateur). Les îlots ne sont pas bloqués : les nageurs y sortent de l'eau (environ un quart du temps),
+y vont d'un îlot à l'autre à la nage ; sans terre (la vue de départ), `parc.js` les garde dans l'eau (eau libre comptée
+depuis le centre de la vue de départ). Des **rochers animés** (bloqués) dans l'eau. Mêmes zones que le volcan. Ce qui n'est pas acheté est un **récif** de
+rochers serrés, qui fait aussi la bordure de la carte entière ; un îlot qui déborde de la zone est coupé à la lisière.
+`ParkMapTests` vérifie la part d'eau, que la terre des îlots est exactement les cases libres (aucune dans la vue de
+départ), qu'on va d'un îlot à l'autre par l'eau libre, et les animations.
+**Grotte** (sixième paysage, à acheter) : `Grotte_1-1.tmx` à `Grotte_1-4.tmx` (`grotte-1-1.json` à `grotte-1-4.json`),
+faites par `outils/generer-grotte.py` (mêmes arguments). Une **grotte naturelle** (planches `Tiles/Cave` du pack) : une
+grande caverne au sol de terre, des **piliers de roche** (aucun dans la vue de départ), un **lac souterrain** qu'on
+découvre à la taille 2 et qui s'étend aux tailles 3 et 4 (un deuxième, plus petit, à la taille 3), des **cristaux**
+colorés, des **stalagmites**, des rochers et des **torches** (flamme animée) réparties régulièrement (grille en quinconce, 9 cases au moins entre deux). La roche vue de dessus n'a pas de tuile :
+cases transparentes sur la **couleur de fond** de la carte (`backgroundcolor`, que `parc.js` met sous la carte à la place
+de l'herbe). Le bord d'une salle est un anneau de pierres, avec un mur de deux rangées sous son bord du haut ; la salle de
+chaque taille s'arrête juste hors de la zone, si bien que la zone reste libre (23 cases par Pokémon dans la vue de
+départ, 24 à 32 ensuite). Les pierres du bord du lac sont **praticables** : les nageurs y entrent dans l'eau (`parc.js`
+relie l'eau libre à la terre case par case) ; celles qu'un agrandissement changera en eau sont bloquées dès avant. Eau
+libre : 0 / 4,5 / 8,7 / 5,6 % de la zone. Tout le reste est de type cave : Sol, Roche, Ténèbres, Spectre et Dragon heureux, Vol, Eau, Feu et Fée
+malheureux. **Pénombre** : un calque d'objets « Lumières » (un point par torche ou bouquet de cristaux, avec son rayon et
+sa couleur) ; `parc.js` y dessine une seule fois un voile sombre (`SHADE`, devant les Pokémon, sous le brouillard), éclairci
+autour de chaque lumière et teinté de sa couleur. `ParkMapTests` vérifie la part de cave, les humeurs, que les nageurs
+atteignent toute l'eau du lac depuis le bord, la couleur de fond, les lumières, l'écart entre les torches et leur animation.
+**Montagne** (septième paysage, à acheter) : `Montagne_1-1.tmx` à `Montagne_1-4.tmx` (`montagne-1-1.json` à
+`montagne-1-4.json`), faites par `outils/generer-montagne.py` (mêmes arguments). **Tous les Pokémon** y vont (ils marchent
+dans la vallée, les Eau nagent dans la rivière), mais **seuls les volants** (type Vol) montent sur la montagne ; **à la
+montagne, tout type Vol vole**, Feu/Vol et Eau/Vol compris (ailleurs, ils vont dans la lave ou nagent :
+`ParkHabitats.MovementOf(type1, type2, paysage)`). Une
+vallée d'herbe bleutée traversée d'ouest en est par une **rivière** qui entre et sort par les bords de la carte, à
+toutes les tailles (la forêt de ce qui n'est pas acheté ne la couvre jamais), avec **trois ponts de bois** (un dans la vue
+de départ, deux à la taille 3), des **massifs aux
+flancs de pierre sur deux étages**, sans escalier : un plateau (herbe verte) et parfois un sommet posé dessus (herbe vert
+jaune), des sapins, des rochers et des nids là-haut. Les plateaux viennent des tuiles de hauteur de `Grass_Tiles` : rebord
+d'après les quatre coins de chaque case, flanc de 2 à 4 lignes sous le bord du bas (bas plat : la planche n'a pas de coin
+rentrant avec un flanc). Le dessus des plateaux et des sommets est bloqué pour la marche, mais un volant s'y pose : calque
+**« Sommets »** ; rebords et flancs, qu'il survole sans s'y arrêter (en hauteur, comme au-dessus de l'eau) : calque
+**« Survol »** (`SUMMIT` et `AIR` dans `parc.js`). Ce qui n'est pas acheté est une **forêt de sapins**, qui fait aussi la
+bordure de la carte entière (les massifs restent hors de cette bordure). **Un massif n'est montré que tout entier** : à
+une taille où il déborde de la zone, la forêt le cache (un au départ, trois à la taille 2, neuf à la taille 3 ; la carte
+entière n'en ajoute pas, l'anneau entre la bordure et la taille 3 est trop mince) ; aucun sapin de la forêt ne cache le
+pied de leurs flancs. La vallée est reliée à pied (les ponts relient ses deux rives) : 11,3 / 17,1 / 19,7 / 28,7 cases de
+terre par Pokémon, plus 29 à 200 cases de sommets pour les
+volants. Surtout de la végétation et des flancs (falaise) : les
+volants y sont heureux. Essai du 2026-11-07 (instance de test : achat et choix dans la vraie page, puis 15 min simulées aux
+tailles 1, 2 et 4 avec 14 volants, 3 nageurs et 3 marcheurs) : volants 22 à 27 % du temps sur les sommets, 8 à 11 %
+au-dessus des flancs ; nageurs 55 à 69 % dans la rivière ; marcheurs jamais en haut ; aucune case interdite.
+`ParkMapTests` vérifie les calques « Sommets » et « Survol » (cases bloquées, toutes atteintes en volant), qu'aucun sommet
+n'est perdu à l'agrandissement et les humeurs.
+**Donjon** (huitième paysage, à acheter) : `Donjon_1-1.tmx` à `Donjon_1-4.tmx` (`donjon-1-1.json` à `donjon-1-4.json`),
+faites par `outils/generer-donjon.py` (mêmes arguments), avec l'extension Dungeons du pack (teinte Dungeon_1, pierres
+rondes). Un **souterrain délaissé** ouvert à tous : des **salles et des couloirs** de pierre creusés dans la roche (la
+roche vue de dessus est la couleur de fond de la carte, comme la grotte), le dessus du mur tout autour, sa face sous le
+bord du haut ; chaque salle et chaque couloir appartient à une taille et n'est montré que tout entier (la grande salle à
+piliers de la vue de départ ; deux longues salles à la taille 2 ; quatre salles aux coins, deux cryptes et deux salles
+d'égout, et deux galeries à la taille 3 ; à la carte entière, les grandes salles des bords, qui se rejoignent dans les
+coins : une galerie tout autour). Des **bassins d'égout** (eau
+bloquée, où les nageurs vont ; leur rebord de pierre se parcourt), deux avec un petit pont de bois ; des piliers brisés,
+des tombes, une statue, quelques pots, caisses, os et gravats (peu : le sol reste dégagé), des pics du sol animés, de l'or
+et des coffres oubliés. **Pénombre** comme la grotte : des torches contre les murs (flamme animée) et des candélabres jusqu'à ce
+qu'aucune case de dallage ne soit à plus de 7 cases d'une lumière. La face des murs et l'ombre à son pied sont bloquées
+(on ne marche pas au bas des murs) ; les couloirs horizontaux et les galeries ont cinq rangées, dont deux où l'on marche.
+Un objet bloquant a toujours du dallage tout autour. 14,5 / 14,1 / 18,0 / 24,2 cases libres par Pokémon. Tout est de
+type donjon (sauf l'eau des bassins et les ponts) : Spectre, Ténèbres, Poison, Psy, Acier et Dragon heureux, Normal, Vol,
+Eau, Plante et Fée malheureux. `ParkMapTests` vérifie la part de donjon, les humeurs, que les nageurs atteignent l'eau de
+chaque bassin, la couleur de fond, les lumières et les animations.
+**Forêt profonde** (neuvième paysage, à acheter) : `Foret_profonde_1-1.tmx` à `Foret_profonde_1-4.tmx`
+(`foret-profonde-1-1.json` à `foret-profonde-1-4.json`), faites par `outils/generer-foret-profonde.py` (mêmes arguments),
+avec le pack et les herbes hautes et champignons de l'extension ShroomLands. Un **labyrinthe végétal** sans aucun point
+d'eau, ouvert à tous : des **clairières reliées par des sentiers sinueux** (3 cases de large au moins), avec des boucles et
+des culs-de-sac, entre des **murs d'arbres serrés** (sapins et chênes en quinconce, grands arbres au milieu des bois, une
+haie de buissons au bord, des herbes hautes sombres entre les troncs) ; chaque clairière et chaque sentier appartient à une
+taille et n'est montré que tout entier (deux clairières autour d'un bosquet dans la vue de départ, de nouvelles clairières
+et de nouveaux sentiers à chaque agrandissement). Le feuillage déborde sur le bord des clairières (on passe derrière), jamais
+sur un sentier. Grands champignons (les bleus luisent), rochers moussus, souches, petits champignons, touffes d'herbe
+animées et quelques fleurs ; peu d'objets qui bloquent, et jamais en travers d'un sentier. **Pénombre verte** (le voile de
+la grotte, sa couleur et son opacité en propriétés du calque « Lumières ») : un puits de lumière au milieu de chaque
+clairière, et des champignons lumineux sur les sentiers jusqu'à ce qu'aucune case ne soit à plus de 8 cases d'une lumière.
+15,4 / 18,1 / 21,2 / 24,9 cases libres par Pokémon (« il faut un peu plus de place » : clairières agrandies de 15 % au plus,
+sentiers élargis ; puis les gros blocs de forêt, au bord de la zone comme entre les clairières, reculent jusqu'à ne plus
+dépasser 8 cases d'épaisseur environ). Tout est de type végétation : Plante, Insecte, Fée, Poison, Normal,
+Vol, Acier, Électrik, Combat et Psy heureux, Eau et Roche malheureux. Essai (2026-11-21, instance de test : achat dans la
+vraie page, puis 15 min simulées aux tailles 1, 2 et 4 avec 20 Pokémon dont 2 nageurs et 3 volants) : aucune case
+interdite, 12 / 21 / 48 secteurs de 8 × 8 cases parcourus, les nageurs marchent comme les autres. `ParkMapTests` vérifie
+qu'il n'y a que de la végétation et pas d'eau, qu'au moins un tiers de la zone reste en forêt, le voile, les lumières et
+les animations.
+Les neuf générateurs partagent leur moteur (`outils/parc_carte.py` : jeux de tuiles, tuiles animées, calques, formes,
+écriture des cartes).
+**Types de cases** (pour le bonheur des Pokémon, ci-dessous) : sable, cave, falaise, végétation, eau, donjon, volcan, ou
+aucun (chemins, ponts). `outils/carte-parc.py` les déduit des planches (`HABITAT_RULES` : herbe, haies, arbres... → végétation ;
+eau ; chemins → aucun ; falaises, caves, plages, et les extensions désert, volcan, donjons) et les écrit dans le champ
+`habitats` de la carte (une chaîne par ligne, un chiffre par case). Une case prend le type de sa tuile de « Sol », qu'une
+planche de sol dans « Décors » remplace ; objets, arbres et fleurs gardent le type du dessous. Une planche sans règle
+arrête le script. Ce que chaque type de Pokémon **aime ou non** vient de la feuille « Habitat » de l'utilisateur, recopiée
+dans `ParkHabitats` (par exemple Eau : aime l'eau, aucun autre habitat ; Roche : aime cave et volcan, pas le sable, la
+végétation ni l'eau). `ParkHabitats.Map(paysage, taille)` donne le type de chaque case et leur nombre dans la zone « Parc »
+(cartes lues au démarrage) ; dans le navigateur, `habitatAt(x, y)` de `parc.js`. En **mode debug**, le bouton
+« Habitats (debug) » colore chaque case selon son type, avec la légende et le nombre de cases de chaque type.
+**Bonheur** (`ParkHabitats.MoodOf`) : d'après les types du Pokémon, ce qu'il aime ou non (un double type aime un habitat
+si l'un de ses types l'aime, même si l'autre le déteste). Il est **malheureux** si un habitat qu'il n'aime pas couvre
+50 % ou plus de la zone « Parc » (toutes ses cases : chemins, eau et forêt de la lisière comprises), sinon **heureux** si
+un habitat qu'il aime en couvre plus de 50 %, sinon **normal**. Le parc compte selon son paysage et sa taille. La fiche d'un Pokémon du
+parc montre son **portrait** Donjon Mystère Happy, Normal ou Sad (SpriteCollab, dans le dossier le plus proche de sa
+forme, chromatique, femelle ; sinon son portrait Normal ; sans portrait : le sprite) à la place du sprite, et la raison
+sous son nom (« Heureux : aime la végétation (80 % du parc). »). Dans la Forêt (69 à 80 % de végétation) :
+les Pokémon qui aiment la végétation sont heureux, les Roche et les Eau (sans second type qui l'aime) malheureux, les
+autres normaux ; à la Plage (65 % d'eau), les Eau sont heureux, ceux qui n'aiment pas l'eau malheureux ; au Volcan (tout
+de type volcan), les Feu, Roche et Dragon heureux, les autres malheureux sauf ceux qu'il laisse indifférents.
+Pour gérer son parc : la liste déroulante de la fenêtre, à droite de la recherche, montre **« Tous les Pokémon »** (par
+défaut, à chaque ouverture), **« Ceux de ce parc »** ou **« Dans aucun parc »** (ni ici ni dans un autre parc), avec la
+recherche et les pastilles ; elle suit le parc enregistré : cocher ou décocher ne la change pas avant « Valider », un
+Pokémon décoché reste affiché pour pouvoir le recocher. **« Tout retirer »** décoche tout (rien ne change avant « Valider »), et **« Vider le parc »**, à
+côté de « Choisir les Pokémon », le vide d'un coup après confirmation (`ParkService.ClearAsync`) : ses Pokémon restent dans
+la collection. Ni l'un ni l'autre pour un visiteur. Un clic sur un Pokémon du parc le fait se tourner vers toi et ouvre sa fiche, avec « Retirer du parc ». La fiche n'est
+donnée que pour un Pokémon de ce parc (`ParkService.GetMemberAsync`) : le numéro vient du navigateur, et un visiteur ne
+doit pas lire ainsi le reste de la collection.
+Un Pokémon qui quitte la collection (retiré, sauvegarde mise à jour ou supprimée) quitte le parc (table `ParkMembers`,
+suppression en cascade).
+
+Animation dans le navigateur (`wwwroot/js/parc.js`, Phaser), avec les sprites Donjon Mystère Idle, Walk, Sleep, Charge, Attack et Hurt (8 directions)
+de la **forme** du Pokémon (Raichu d'Alola, Ponyta de Galar, Zarbi B...) ou de sa **Méga-Évolution** s'il tient sa gemme,
+chromatique et femelle quand SpriteCollab les a, sinon ceux de l'espèce (`PokemonSprites.DonjonFolder` : noms de formes de
+PKHeX rapprochés de ceux de SpriteCollab, `images/donjon/formes.json`). Pour qu'ils aient l'air de vivre :
+- une **énergie** qui baisse en marchant et remonte en dormant (3 à 5 minutes d'activité, puis une sieste d'une minute) ;
+- des **intentions** : explorer un endroit du parc, rendre visite à un Pokémon de sa famille d'évolution (`ParkService.Family`)
+  et rester un moment avec lui, observer autour de soi, aller dormir près d'un congénère ;
+- un **caractère** tiré de la nature (Vitesse augmentée : plus actif ; diminuée : plus dormeur ; Déf. Spé. : plus sociable) ;
+- la **nuit** (heure de l'appareil, 22 h – 6 h, progressive le soir et à l'aube) : le parc s'assombrit, ils s'endorment plus
+  tôt et dorment longtemps ;
+- la **curiosité** : un Pokémon éveillé se tourne vers le pointeur de la souris, et vient souvent voir de près ;
+- le **malheur** (humeur « malheureux », voir « Bonheur ») : toutes les 45 s à 1 min 30 environ, il marche jusqu'au
+  Pokémon le plus proche à 8 cases au plus (pas de sa famille, éveillé ou endormi) et l'**attaque** (animation Attack) ;
+  le Pokémon frappé a mal (Hurt, un dormeur se réveille), puis **s'enfuit** deux fois plus vite à 6 à 10 cases de
+  l'attaquant, sans répliquer. Immobile, un malheureux **boude** aussi (Hurt seul) toutes les 40 s environ. Un **nuage
+  d'orage** pleut au-dessus de chaque malheureux. Le Pokémon frappé prend le **malus « attaqué »** : un niveau de bonheur
+  en moins pendant 15 min, un de plus et 15 min de plus s'il est attaqué de nouveau (jamais sous malheureux), enregistré
+  par la page du propriétaire ; devenu malheureux, il attaque à son tour. L'humeur est
+  donnée par la page (`ParkPokemon.Mood`, `Malus`) ; les attaques se passent dans le navigateur (un visiteur voit les siennes, sans malus). En
+  **mode debug**, « Attaquer (debug) » dans la fiche d'un Pokémon le fait attaquer le plus proche, quel que soit son
+  bonheur ;
+- des **chemins** qui contournent les obstacles (recherche de chemin sur les cases de la carte, lissée en lignes droites) :
+  jamais sur une case bloquée, ni hors de la zone « Parc » ;
+- l'**eau** : les Pokémon de type **Eau** (l'un de leurs deux types) **nagent** dans l'eau libre (sans rocher, nénuphar
+  ni récif ; plus le bord qui la touche, comme l'écume de la plage), environ deux promenades sur trois, et y dorment ; dans
+  l'eau, le bas du sprite est caché et des remous remplacent l'ombre. Les types **Vol** la **survolent** (raccourci, et
+  de temps en temps un tour au-dessus de l'eau), plus haut que leur ombre, mais ne s'y arrêtent pas : ils se posent et
+  dorment sur la terre ferme. Un Eau/Vol nage. Les autres ne vont pas dans l'eau ; un malheureux qui ne nage pas
+  n'attaque pas un Pokémon dans l'eau. La façon de se déplacer vient de la page (`ParkPokemon.Moves`,
+  `ParkHabitats.MovementOf`) ;
+- la **lave** (Volcan) : les types **Feu** y vont **de temps en temps** (une promenade sur quatre, `LAVA_BATH` dans
+  `parc.js` : bien moins que les Eau dans l'eau, choix de l'utilisateur), s'y enfoncent comme un nageur, avec des remous
+  dorés ; ils n'y dorment pas (fatigués, ils en sortent d'abord) et arrivent au parc sur la roche. Un Feu/Vol va dans la
+  lave plutôt que de voler ; un Feu/Eau nage et va dans la lave. Les types **Vol** la survolent comme l'eau ;
+- le nom au survol, des « z » au-dessus des dormeurs, les plus bas dessinés devant (devant les arbres aussi : chaque
+  feuillage est trié selon la ligne de son tronc). Les positions ne sont pas gardées.
+
+**Déplacer un Pokémon** (propriétaire du parc seulement ; pas les visiteurs) : un **appui d'une demi-seconde** sur lui sans
+bouger (souris ou doigt) le **soulève**, un cercle se remplit à côté de lui pendant l'appui ; bouger avant fait défiler la
+vue, relâcher avant ouvre sa fiche. Il
+suit le pointeur, un peu au-dessus de son ombre, devant tout, avec son animation **Charge** (Idle quand SpriteCollab ne
+l'a pas) ; la case visée est encadrée en clair si on peut l'y poser, en **rouge** sinon (eau, sauf pour un type Eau ; lave,
+sauf pour un type Feu ; arbre, rocher, banc, hors de la zone « Parc »). Lâché sur une case interdite, il **revient à sa place** ; posé, il reste quelques secondes
+immobile puis reprend sa vie (un dormeur soulevé se réveille). Près du bord de la vue, la vue défile. Deux doigts pendant
+le transport : pincement, le Pokémon revient à sa place. Rien n'est enregistré : comme les positions, le déplacement ne
+vaut que dans ce navigateur.

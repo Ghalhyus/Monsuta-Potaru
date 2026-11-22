@@ -39,6 +39,10 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
     /// <summary>Empreinte d'un mot de passe quelconque, vérifiée pour une adresse inconnue (voir <see cref="FindForLoginAsync"/>).</summary>
     private static string? unknownAccountHash;
 
+    /// <summary><see cref="unknownAccountHash"/>, calculée au premier besoin.</summary>
+    private static string UnknownAccountHash(IPasswordHasher<ApplicationUser> hasher, ApplicationUser unknown) =>
+        unknownAccountHash ??= hasher.HashPassword(unknown, Guid.NewGuid().ToString());
+
     /// <summary>Réglages d'Identity du site (aussi ceux des tests).</summary>
     public static void ConfigureIdentity(IdentityOptions options)
     {
@@ -63,11 +67,8 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
     {
         if (pseudo.Length < PseudoMinLength || pseudo.Length > PseudoMaxLength)
             return $"Le pseudo doit faire de {PseudoMinLength} à {PseudoMaxLength} caractères.";
-        foreach (var rune in pseudo.EnumerateRunes())
-        {
-            if (!Rune.IsLetterOrDigit(rune) && rune.Value is not (' ' or '-' or '.' or '_'))
-                return $"Le pseudo ne peut pas contenir « {rune} » : lettres, chiffres, espaces, tirets, points et tirets bas seulement.";
-        }
+        foreach (var rune in pseudo.EnumerateRunes().Where(r => !Rune.IsLetterOrDigit(r) && r.Value is not (' ' or '-' or '.' or '_')))
+            return $"Le pseudo ne peut pas contenir « {rune} » : lettres, chiffres, espaces, tirets, points et tirets bas seulement.";
         if (!pseudo.EnumerateRunes().Any(Rune.IsLetterOrDigit))
             return "Le pseudo doit contenir au moins une lettre ou un chiffre.";
         return null;
@@ -93,7 +94,8 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
         result = await userManager.AddToRoleAsync(user, SiteRoles.Standard);
         if (!result.Succeeded) // le compte existe : il recevra son rôle d'un administrateur
             logger.LogError("Compte {User} créé sans rôle : {Errors}", user.Id, Describe(result));
-        logger.LogInformation("Compte {User} créé.", user.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} créé.", user.Id);
         await PromoteIfFirstAdminAsync(user, pseudo);
         return new(true, $"Bienvenue, {pseudo} !", user);
     }
@@ -111,8 +113,7 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
         if (user is null)
         {
             var unknown = new ApplicationUser();
-            unknownAccountHash ??= userManager.PasswordHasher.HashPassword(unknown, Guid.NewGuid().ToString());
-            userManager.PasswordHasher.VerifyHashedPassword(unknown, unknownAccountHash, password);
+            userManager.PasswordHasher.VerifyHashedPassword(unknown, UnknownAccountHash(userManager.PasswordHasher, unknown), password);
             return null;
         }
 
@@ -169,7 +170,8 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
         var result = await userManager.SetUserNameAsync(user, pseudo);
         if (!result.Succeeded)
             return new(false, Describe(result));
-        logger.LogInformation("Compte {User} : pseudo choisi.", user.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : pseudo choisi.", user.Id);
         await PromoteIfFirstAdminAsync(user, pseudo);
         return new(true, $"Bienvenue, {pseudo} !", user);
     }
@@ -189,7 +191,8 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
         var result = await userManager.SetEmailAsync(user, newEmail);
         if (!result.Succeeded)
             return new(false, Describe(result));
-        logger.LogInformation("Compte {User} : adresse mail changée.", user.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : adresse mail changée.", user.Id);
         return new(true, "Ton adresse mail a été changée : utilise-la pour te connecter.", user);
     }
 
@@ -218,7 +221,8 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
     private async Task PromoteIfFirstAdminAsync(ApplicationUser user, string pseudo)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        if (await AdminService.PromoteFirstAdminAsync(db, configuration, user.Id, pseudo))
+        var promoted = await AdminService.PromoteFirstAdminAsync(db, configuration, user.Id, pseudo);
+        if (promoted && logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Compte {User} ({Pseudo}) : administrateur (Bank:AdminPseudo).", user.Id, pseudo);
     }
 

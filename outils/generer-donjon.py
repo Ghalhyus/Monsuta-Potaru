@@ -105,20 +105,35 @@ def forme_de(n):
 
 
 # --- Murs : dessus (dans la roche) et face (sous le bord du haut) -------------------------------
+COTES = (("s", (0, 1)), ("n", (0, -1)), ("e", (1, 0)), ("o", (-1, 0)), ("se", (1, 1)), ("so", (-1, 1)), ("ne", (1, -1)),
+         ("no", (-1, -1)))
+
+
+def dessus_des_murs(forme):
+    """Dessus du mur de chaque case de roche voisine de la forme {case : tuile}."""
+    dessus = {}
+    for x, y in TOUT - forme:
+        cote = next((c for c, (dx, dy) in COTES if (x + dx, y + dy) in forme), None)
+        if cote:
+            dessus[(x, y)] = ANNEAU[cote]
+    return dessus
+
+
+def colonne_de_face(haut, x, y):
+    """Colonne de la planche pour la face du mur : 0 au bout gauche, 2 au bout droit, 1 entre les deux."""
+    if (x - 1, y) not in haut:
+        return 0
+    return 2 if (x + 1, y) not in haut else 1
+
+
 def murs(forme):
     """Dessus du mur de chaque case de roche voisine de la forme {case : tuile} ; face et ombre {case : tuile} ; les cases
     de face (bloquées)."""
-    dessus = {}
-    for x, y in TOUT - forme:
-        v = lambda dx, dy: (x + dx, y + dy) in forme
-        cote = next((c for c, (dx, dy) in (("s", (0, 1)), ("n", (0, -1)), ("e", (1, 0)), ("o", (-1, 0)), ("se", (1, 1)),
-                                           ("so", (-1, 1)), ("ne", (1, -1)), ("no", (-1, -1))) if v(dx, dy)), None)
-        if cote:
-            dessus[(x, y)] = ANNEAU[cote]
+    dessus = dessus_des_murs(forme)
     haut = {(x, y) for x, y in forme if (x, y - 1) not in forme}
     face, faces = {}, set()
     for x, y in haut:
-        col = 0 if (x - 1, y) not in haut else 2 if (x + 1, y) not in haut else 1
+        col = colonne_de_face(haut, x, y)
         for j, ligne in enumerate(FACE):
             if (x, y + j) in forme:
                 face[(x, y + j)] = ligne + col
@@ -143,10 +158,20 @@ def bassin(x0, y0, x1, y1):
     tuiles = {}
     for x in range(x0 - 1, x1 + 2):
         for y in range(y0 - 1, y1 + 2):
-            cx = 0 if x == x0 - 1 else 4 if x == x1 + 1 else 1 if x == x0 else 3 if x == x1 else 2
-            cy = 0 if y == y0 - 1 else 4 if y == y1 + 1 else 1 if y == y0 else 3 if y == y1 else 2
-            tuiles[(x, y)] = cy * 13 + 2 + cx
+            tuiles[(x, y)] = rang_du_bassin(y, y0, y1) * 13 + 2 + rang_du_bassin(x, x0, x1)
     return tuiles, rectangle(x0, y0, x1, y1)
+
+
+def rang_du_bassin(v, v0, v1):
+    """Colonne (ou ligne) de la planche d'Egout : 0 le rebord avant, 1 le premier rang d'eau, 2 le milieu, 3 le dernier
+    rang, 4 le rebord après."""
+    if v == v0 - 1:
+        return 0
+    if v == v1 + 1:
+        return 4
+    if v == v0:
+        return 1
+    return 3 if v == v1 else 2
 
 
 bassins = []
@@ -205,26 +230,31 @@ def essayer(taille_, n, fonction, rng):
 
 
 LUMIERE_TORCHE, LUMIERE_BOUGIES = (88, "#ffb35c"), (60, "#ffd27a")
-for taille_ in range(1, 5):
-    rng = random.Random(100 + taille_)
-    forme = forme_de(taille_)
-    _, _, faces = murs(forme)
-    # Torches contre le mur du haut (flamme et manche sur la face, le pied sur l'ombre), une toutes les huit
-    # cases environ, sur les bords du haut apparus à cette taille
-    bords = sorted((x, y) for x, y in forme if (x, y - 1) not in forme and (x, y) in faces
-                   and piece_de(x, y)[0] == taille_ and (x, y + 2) in forme)
+PORTEE = 7  # aucune case de dallage à plus de PORTEE cases d'une lumière (candélabres)
+
+
+def poser_torches(taille_, bords):
+    """Torches contre le mur du haut (flamme et manche sur la face, le pied sur l'ombre), une toutes les huit cases
+    environ, sur les bords du haut apparus à cette taille."""
     for x, y in bords:
         if x % 8 == 3 and all((x + dx, y + dy) not in occupees for dx in (-1, 0, 1) for dy in (0, 1, 2)):
             tuiles = [("decors", x, y + j, t("torche", j * 8), j < 2) for j in range(3)]
             occupees.update((x, y + j) for j in range(3))
             objets.append({"taille": taille_, "tuiles": tuiles,
                            "lumiere": (x * 16 + 8, y * 16 + 6, *LUMIERE_TORCHE)})
-    # Toiles d'araignée dans les coins du haut des salles (sur la face du mur)
+
+
+def poser_toiles(taille_, forme, bords, rng):
+    """Toiles d'araignée dans les coins du haut des salles (sur la face du mur)."""
     for x, y in bords:
         if ((x - 1, y) not in forme or (x + 1, y) not in forme) and tirage(x, y, 11).random() < 0.6 and (x, y) not in occupees:
             tuiles = [("decors", x, y, t("objets", rng.choice((7, 25))), False)]
             occupees.add((x, y))
             objets.append({"taille": taille_, "tuiles": tuiles})
+
+
+def poser_salles(taille_, rng):
+    """Piliers en rangées dans la grande salle (taille 1), cryptes (taille 3), or et coffres oubliés (taille 4)."""
     # Piliers (1 × 3 : chapiteau et fût dans « Devant », base bloquée), surtout brisés : en rangées dans la grande salle
     if taille_ == 1:
         for x in range(32, 49, 4):
@@ -244,8 +274,11 @@ for taille_ in range(1, 5):
         essayer(4, 3, lambda x, y: poser(4, "or", rng.choice((0, 2)), 0, 2, 2, x, y, devant=1, bloque=(1,)), rng)
         essayer(4, 3, lambda x, y: poser(4, "coffre", 0, 1, 2, 1, x, y, bloque=(0,)), rng)
         essayer(4, 4, lambda x, y: poser(4, "or", rng.randrange(4), 2, 1, 1, x, y, marge=0), rng)
-    # Pots, caisses, armoires renversées (bloqués) ; os et gravats (on y marche) ; pics du sol (animés, bloqués). Peu
-    # (« trop d'objets au sol », 2026-11-07) ; moins encore à la taille 2, qui laisse juste 14 cases libres par Pokémon
+
+
+def poser_debris(taille_, rng):
+    """Pots, caisses, armoires renversées (bloqués) ; os et gravats (on y marche) ; pics du sol (animés, bloqués). Peu
+    (« trop d'objets au sol », 2026-11-07) ; moins encore à la taille 2, qui laisse juste 14 cases libres par Pokémon."""
     n = {1: 1, 2: 1, 3: 2, 4: 3}[taille_]
     essayer(taille_, 2 * n, lambda x, y: poser(taille_, "objets", *rng.choice(((5, 1), (5, 2), (5, 5), (6, 5), (0, 3), (1, 0))),
                                                1, 1, x, y, bloque=(0,)), rng)
@@ -253,14 +286,21 @@ for taille_ in range(1, 5):
     essayer(taille_, 2 * n, lambda x, y: poser(taille_, "objets", *rng.choice(((2, 0), (4, 1), (3, 2), (4, 2), (2, 3))),
                                                1, 1, x, y, marge=0), rng)
     essayer(taille_, 0 if taille_ == 2 else n, lambda x, y: all(poser(taille_, "pics", 0, 1, 1, 1, x + i, y, bloque=(0,), marge=0) for i in range(2)), rng)
-    # Candélabres (1 × 2, la flamme dans « Devant ») jusqu'à ce qu'aucune case de dallage de cette taille ne soit à plus de
-    # PORTEE cases d'une lumière
-    PORTEE = 7
+
+
+def distance_a_la_lumiere(c, lumieres):
+    """Distance du centre de la case c à la lumière la plus proche (99 sans lumière)."""
+    return min((math.dist((c[0] + 0.5, c[1] + 0.5), lu) for lu in lumieres), default=99)
+
+
+def poser_candelabres(taille_, forme):
+    """Candélabres (1 × 2, la flamme dans « Devant ») jusqu'à ce qu'aucune case de dallage de cette taille ne soit à plus
+    de PORTEE cases d'une lumière."""
     lumieres = [(o["lumiere"][0] / 16, o["lumiere"][1] / 16) for o in objets if "lumiere" in o]
     reste = sorted(c for c in DALLE if c in forme and piece_de(*c)[0] == taille_)
     while reste:
-        loin = max(reste, key=lambda c: (min((math.dist((c[0] + 0.5, c[1] + 0.5), lu) for lu in lumieres), default=99), c))
-        if min((math.dist((loin[0] + 0.5, loin[1] + 0.5), lu) for lu in lumieres), default=99) <= PORTEE:
+        loin = max(reste, key=lambda c: (distance_a_la_lumiere(c, lumieres), c))
+        if distance_a_la_lumiere(loin, lumieres) <= PORTEE:
             break
         x, y = loin
         if poser(taille_, "objets", 2, 1, 1, 2, x, y - 1, devant=1, bloque=(1,), marge=1,
@@ -268,6 +308,24 @@ for taille_ in range(1, 5):
             lumieres.append((x + 0.5, y - 0.25))
         else:
             reste.remove(loin)
+
+
+def placer_objets(taille_):
+    """Objets apparus à cette taille, posés dans l'ordre (le tirage de chaque taille en dépend)."""
+    rng = random.Random(100 + taille_)
+    forme = forme_de(taille_)
+    _, _, faces = murs(forme)
+    bords = sorted((x, y) for x, y in forme if (x, y - 1) not in forme and (x, y) in faces
+                   and piece_de(x, y)[0] == taille_ and (x, y + 2) in forme)
+    poser_torches(taille_, bords)
+    poser_toiles(taille_, forme, bords, rng)
+    poser_salles(taille_, rng)
+    poser_debris(taille_, rng)
+    poser_candelabres(taille_, forme)
+
+
+for taille_ in range(1, 5):
+    placer_objets(taille_)
 
 
 # --- Carte de chaque taille --------------------------------------------------------------------
@@ -291,7 +349,18 @@ def taille(n, libres_avant):
         decors_[y][x] = t("donjon", i)
     for x, y in forme:
         sol_[y][x] = t("donjon", face.get((x, y), DALLAGE + x % 3 + 13 * (y % 3)))
-    # Bassins de cette taille : l'eau bloquée (les nageurs y vont), le rebord où l'on marche, le pont
+    poser_bassins(n, sol_, decors_, bloque_)
+    lumieres = poser_objets(n, {"decors": decors_, "devant": devant_}, bloque_)
+    # Poches enfermées (entre les objets) : des gravats, personne n'y va
+    gardees = carte.boucher_poches(zone, decors_, bloque_, gravats)
+    perdues = libres_avant - gardees
+    if perdues:
+        sys.exit(f"Taille {n} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
+    return sol_, decors_, devant_, bloque_, gardees, eau_libre(n, zone, forme, decors_, gardees), lumieres
+
+
+def poser_bassins(n, sol_, decors_, bloque_):
+    """Bassins de la taille n : l'eau bloquée (les nageurs y vont), le rebord où l'on marche, le pont."""
     for b in bassins:
         if b["taille"] > n:
             continue
@@ -301,7 +370,10 @@ def taille(n, libres_avant):
         for (x, y), i in b["pont"].items():
             decors_[y][x] = t("pont", i)
             bloque_[y][x] = False
-    grilles = {"decors": decors_, "devant": devant_}
+
+
+def poser_objets(n, grilles, bloque_):
+    """Objets de la taille n et des plus petites ; rend leurs lumières."""
     lumieres = []
     for objet_ in objets:
         if objet_["taille"] > n:
@@ -311,15 +383,15 @@ def taille(n, libres_avant):
             bloque_[y][x] = bloque_[y][x] or bloquee
         if "lumiere" in objet_:
             lumieres.append(objet_["lumiere"])
-    # Poches enfermées (entre les objets) : des gravats, personne n'y va
-    gardees = carte.boucher_poches(zone, decors_, bloque_, gravats)
-    perdues = libres_avant - gardees
-    if perdues:
-        sys.exit(f"Taille {n} : cases libres de la taille d'avant bloquées : {sorted(perdues)[:10]}")
+    return lumieres
+
+
+def eau_libre(n, zone, forme, decors_, gardees):
+    """Eau des bassins de la taille n où l'on nage, reliée au rebord où l'on marche."""
     eau = {(x, y) for x, y in EAU & forme if not decors_[y][x] and dans(zone, x, y) and any(b["taille"] <= n and (x, y) in b["eau"] for b in bassins)}
-    if eau and not eau <= relies(eau | gardees):
+    if eau and not eau.issubset(relies(eau | gardees)):
         sys.exit(f"Taille {n} : de l'eau d'un bassin n'est pas reliée au rebord où l'on marche")
-    return sol_, decors_, devant_, bloque_, gardees, eau, lumieres
+    return eau
 
 
 # --- Écriture des .tmx -----------------------------------------------------------------------

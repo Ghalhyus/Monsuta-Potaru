@@ -1,0 +1,686 @@
+@page "/gts"
+@attribute [Authorize]
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Data
+@using MonsutaPotaru.Services
+@inject GtsService GtsStore
+@inject GtsEvents Events
+@inject StoredSaveService Saves
+@inject PreferencesService Preferences
+
+<PageTitle>GTS</PageTitle>
+
+@* Multijoueurs → GTS : un joueur dépose un Pokémon de sa collection et demande une espèce en échange (niveaux, sexe,
+   chromatique, légalité) ; les autres cherchent parmi les offres et acceptent s'ils ont le Pokémon demandé, dans un jeu
+   qui échange avec l'offre (GtsService). Le Pokémon reçu par le déposant, et celui d'une offre expirée, annulée ou retirée
+   avec sa sauvegarde, attendent dans sa boîte de réception. Rien dans l'adresse : les étapes restent en mémoire. *@
+
+<PageHeader Title="GTS" Icon="bi-globe-nav-menu">
+    <Help>
+        <p>La GTS échange des Pokémon avec tous les joueurs du site, sans rendez-vous.</p>
+        <p>
+            Dépose un Pokémon et dis lequel tu veux en échange : il quitte ta collection pendant @GtsService.Lifetime.Days jours au
+            plus. Un joueur qui a le Pokémon demandé peut accepter : l'échange se fait aussitôt.
+        </p>
+        <p>Le Pokémon que tu reçois, ou le tien si personne n'en veut, t'attend dans ta boîte de réception.</p>
+    </Help>
+</PageHeader>
+
+@if (message is not null)
+{
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+        @message
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+    </div>
+}
+
+@switch (mode)
+{
+    case Mode.Home:
+        @if (inbox.Count > 0)
+        {
+            <Block Title="Boîte de réception" Count="@inbox.Count.ToString()" Class="gts-inbox">
+                <Help>
+                    <p>Les Pokémon reçus en échange, et les tiens quand une offre se termine sans échange.</p>
+                    <p>
+                        Récupère-les dans ton stockage interne, ou dans une de tes sauvegardes (première case libre des boîtes) :
+                        télécharge-la ensuite pour avoir le Pokémon dans ton jeu.
+                    </p>
+                </Help>
+                <ChildContent>
+                    <div class="gts-cards">
+                        @foreach (var item in inbox)
+                        {
+                            var it = item;
+                            <div class="card gts-card">
+                                <div class="card-body">
+                                    @Pokemon(it.Pokemon)
+                                    <p class="small mt-2 mb-2">@it.Note</p>
+                                    <label class="form-label small mb-1" for="gts-destination-@it.Id">Récupérer dans</label>
+                                    <select id="gts-destination-@it.Id" class="form-select form-select-sm gts-destination"
+                                            value="@destinations.GetValueOrDefault(it.Id, "")" @onchange="e => destinations[it.Id] = e.Value?.ToString() ?? string.Empty">
+                                        <option value="">Stockage interne</option>
+                                        @foreach (var save in it.Saves)
+                                        {
+                                            <option value="@save.SaveId">💾 @save.Label</option>
+                                        }
+                                    </select>
+                                    <button type="button" class="btn btn-primary btn-sm mt-2" disabled="@busy" @onclick="() => Retrieve(it)">Récupérer</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </ChildContent>
+            </Block>
+        }
+
+        <Block Title="Mes offres" Count="@($"{myOffers.Count} / {GtsService.MaxOffers}")" Class="gts-mine">
+            <Help>
+                <p>Tes Pokémon en ligne, @GtsService.MaxOffers au plus en même temps. Une offre dure @GtsService.Lifetime.Days jours.</p>
+                <p>Annuler une offre met son Pokémon dans ta boîte de réception.</p>
+            </Help>
+            <Actions>
+                <button type="button" class="btn btn-primary" disabled="@(busy || myOffers.Count >= GtsService.MaxOffers)" @onclick="StartDeposit">Déposer un Pokémon</button>
+            </Actions>
+            <ChildContent>
+                @if (myOffers.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Aucune offre en ligne.</p>
+                }
+                else
+                {
+                    <div class="gts-cards">
+                        @foreach (var offer in myOffers)
+                        {
+                            var o = offer;
+                            @Offer(o, mine: true, @<button type="button" class="btn btn-outline-danger btn-sm mt-2" disabled="@busy" @onclick="() => Cancel(o)">Annuler</button>)
+                        }
+                    </div>
+                }
+            </ChildContent>
+        </Block>
+
+        <Block Title="Chercher un Pokémon" Class="gts-search">
+            <Help>
+                <p>Les offres des autres joueurs, les plus récentes d'abord : le Pokémon proposé répond à tes critères.</p>
+                <p>
+                    « Échanger » est possible si tu as le Pokémon demandé, dans une sauvegarde qui échange avec les jeux de l'offre
+                    (comme sur console) ou dans ton stockage interne.
+                </p>
+            </Help>
+            <ChildContent>
+                <form class="gts-form" @onsubmit="Search" @onsubmit:preventDefault>
+                    @WantedFields(searchForm, "gts-search", GtsService.AllSpecies, "Tous")
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="gts-search-owned" @bind="onlyOwned" />
+                        <label class="form-check-label" for="gts-search-owned">Uniquement si je possède le Pokémon demandé</label>
+                    </div>
+                    <div>
+                        <button type="submit" class="btn btn-primary" disabled="@busy">Chercher</button>
+                    </div>
+                </form>
+                @if (results is null)
+                {
+                    <p class="text-muted small mt-3 mb-0">Recherche…</p>
+                }
+                else if (results.Count == 0)
+                {
+                    <p class="text-muted small mt-3 mb-0">Aucune offre ne correspond.</p>
+                }
+                else
+                {
+                    <p class="small text-muted mt-3">@ResultsCount</p>
+                    <div class="gts-cards gts-results">
+                        @foreach (var offer in results)
+                        {
+                            var o = offer;
+                            @Offer(o, mine: false, @<button type="button" class="btn btn-primary btn-sm mt-2" disabled="@(busy || !o.Owned)"
+                                                            title="@(o.Owned ? null : "Tu n'as aucun Pokémon qui réponde à la demande, dans un jeu compatible.")"
+                                                            @onclick="() => StartAccept(o)">Échanger</button>)
+                        }
+                    </div>
+                }
+            </ChildContent>
+        </Block>
+        break;
+
+    case Mode.DepositPick:
+        <Block Title="1. Choisis le Pokémon à déposer">
+            <Help>
+                <p>Un Pokémon de ton stockage interne, ou de l'équipe et des boîtes d'une sauvegarde stockée. Pas d'œuf.</p>
+                <p>Un Pokémon d'une sauvegarde la quitte dès le dépôt : il faudra la télécharger.</p>
+            </Help>
+            <Actions>
+                <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="BackHome">← Retour</button>
+                <button type="button" class="btn btn-primary" disabled="@(busy || picked is null)" @onclick="ValidatePick">Valider</button>
+            </Actions>
+            <ChildContent>
+                <CollectionPicker UserId="@userId" Saves="saves" DefaultSort="defaultSort" SelectedId="picked?.Id"
+                                  OnPick="item => picked = item" Problem="GtsService.PickProblem" @bind-Columns="pickerColumns" />
+            </ChildContent>
+        </Block>
+        break;
+
+    case Mode.DepositWanted:
+        <Block Title="2. Choisis le Pokémon demandé">
+            <Actions>
+                <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="() => mode = Mode.DepositPick">← Retour</button>
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Deposit">Déposer</button>
+            </Actions>
+            <ChildContent>
+                <div class="card mb-3 gts-chosen">
+                    <div class="card-body py-2">
+                        <div class="small text-muted mb-1">Tu déposes</div>
+                        @Pokemon(depositChoice!.Pokemon)
+                        <div class="small text-muted mt-1">@depositChoice.Origin · pour : @depositChoice.Games</div>
+                    </div>
+                </div>
+                <div class="gts-form">
+                    @WantedFields(wantedForm, "gts-wanted", depositChoice.Species, null)
+                </div>
+                @if (depositChoice.FromSave)
+                {
+                    <div class="alert alert-warning small mt-3 mb-0">
+                        Ce Pokémon quitte « @depositChoice.Origin » dès le dépôt, sur la copie du serveur : <strong>ton jeu l'a encore.</strong>
+                        Télécharge ensuite cette sauvegarde depuis « Mes sauvegardes » et remplace celle de ton jeu.
+                    </div>
+                }
+            </ChildContent>
+        </Block>
+        break;
+
+    case Mode.AcceptPick:
+        <Block Title="Choisis le Pokémon que tu donnes">
+            <Actions>
+                <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="BackHome">← Retour</button>
+                <button type="button" class="btn btn-primary" disabled="@(busy || given is null)" @onclick="ValidateGiven">Valider</button>
+            </Actions>
+            <ChildContent>
+                <div class="gts-cards mb-3">
+                    @Offer(accepting!, mine: false, null)
+                </div>
+                @if (candidates is null)
+                {
+                    <p class="text-muted small mb-0">Chargement…</p>
+                }
+                else if (candidates.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Tu n'as aucun Pokémon qui réponde à la demande.</p>
+                }
+                else
+                {
+                    <div class="trade-candidates">
+                        @foreach (var candidate in candidates)
+                        {
+                            var c = candidate;
+                            <button type="button" class="trade-candidate @(given == c ? "selected" : "")" title="@(c.Problem ?? c.Origin)"
+                                    disabled="@(busy || c.Problem is not null)" @onclick="() => given = c">
+                                <img src="@c.Pokemon.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
+                                <span class="trade-candidate-name">@c.Pokemon.Name@(c.Pokemon.IsShiny ? " ✨" : "")</span>
+                                <span class="small text-muted">N.@c.Pokemon.Level @c.Pokemon.Gender · @c.Origin</span>
+                                @if (c.Problem is not null)
+                                {
+                                    <span class="small text-danger">Impossible</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+            </ChildContent>
+        </Block>
+        break;
+
+    case Mode.AcceptConfirm:
+        <Block Title="Confirme l'échange">
+            <Actions>
+                <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="BackToCandidates">← Retour</button>
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Accept">Échanger</button>
+            </Actions>
+            <ChildContent>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="small text-muted mb-1">Tu donnes (@given!.Origin)</div>
+                                @Pokemon(given.Pokemon)
+                                @if (preview?.GivenEvolution is { } givenEvolution)
+                                {
+                                    <div class="small mt-2">✨ @givenEvolution</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="small text-muted mb-1">Tu reçois de @(accepting!.Pseudo ?? "un dresseur"), dans @preview!.Arrival</div>
+                                @Pokemon(accepting.Pokemon)
+                                @if (preview.ReceivedEvolution is { } receivedEvolution)
+                                {
+                                    <div class="small mt-2">✨ @receivedEvolution</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @if (given.Origin != GtsService.InternalStorage)
+                {
+                    <div class="alert alert-warning small mb-0">
+                        Seule la copie du serveur est modifiée : <strong>ton jeu n'a pas encore cet échange.</strong> Après l'échange,
+                        télécharge la sauvegarde depuis « Mes sauvegardes » et remplace celle de ton jeu.
+                    </div>
+                }
+            </ChildContent>
+        </Block>
+        break;
+}
+
+@if (show is not null)
+{
+    <TradeAnimation Show="show" OnClosed="() => show = null" />
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private enum Mode { Home, DepositPick, DepositWanted, AcceptPick, AcceptConfirm }
+
+    /// <summary>Champs d'une demande : celle d'un dépôt, ou les critères d'une recherche.</summary>
+    private sealed class WantedForm
+    {
+        public string Species { get; set; } = "";
+        public int? MinLevel { get; set; }
+        public int? MaxLevel { get; set; }
+        /// <summary>Vide : peu importe ; « 0 » mâle, « 1 » femelle.</summary>
+        public string Gender { get; set; } = "";
+        /// <summary>Vide : peu importe ; « oui », « non ».</summary>
+        public string Shiny { get; set; } = "";
+        public bool LegalOnly { get; set; }
+
+        public GtsWanted ToWanted(ushort? species) => GtsWanted.Create(species, MinLevel, MaxLevel,
+            byte.TryParse(Gender, out var g) ? g : null, Shiny switch { "oui" => true, "non" => false, _ => null }, LegalOnly);
+    }
+
+    private Mode mode;
+    private string userId = "";
+    private List<StoredSaveInfo> saves = [];
+    private CollectionSort defaultSort;
+    private List<GtsInboxItem> inbox = [];
+    private readonly Dictionary<int, string> destinations = []; // sauvegarde choisie pour chaque Pokémon de la boîte (vide : stockage interne)
+    private List<GtsOfferView> myOffers = [];
+    private List<GtsOfferView>? results;
+    private readonly WantedForm searchForm = new();
+    private bool onlyOwned;
+    private WantedForm wantedForm = new();
+    private BankListItem? picked;
+    private int? pickerColumns; // colonnes choisies au curseur du dépôt (null : selon la fenêtre), gardées le temps de la page
+    private GtsDepositChoice? depositChoice;
+    private GtsOfferView? accepting;
+    private List<GtsCandidate>? candidates;
+    private GtsCandidate? given;
+    private GtsPreview? preview;
+    private TradeShow? show; // animation de l'échange : offre acceptée, ou Pokémon reçu récupéré
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    private string ResultsCount => results!.Count switch
+    {
+        1 => "1 offre.",
+        GtsService.MaxResults => $"Les {GtsService.MaxResults} offres les plus récentes : précise ta recherche pour en voir d'autres.",
+        var n => $"{n} offres.",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        Events.InboxChanged += OnInboxChanged;
+        await GtsStore.ExpireAsync();
+        await LoadMine();
+        await Search();
+    }
+
+    /// <summary>La boîte de réception et les offres du joueur (elles changent quand un autre joueur accepte).</summary>
+    private async Task LoadMine()
+    {
+        inbox = await GtsStore.InboxAsync(userId);
+        myOffers = await GtsStore.MyOffersAsync(userId);
+    }
+
+    private void OnInboxChanged(string user)
+    {
+        if (user != userId)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            await LoadMine();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Events.InboxChanged -= OnInboxChanged;
+
+    private void Show(string text, bool error)
+    {
+        message = text;
+        messageIsError = error;
+    }
+
+    private async Task Search()
+    {
+        ushort? species = null;
+        if (!string.IsNullOrWhiteSpace(searchForm.Species))
+        {
+            species = GtsService.FindSpecies(searchForm.Species);
+            if (species is null)
+            {
+                Show($"« {searchForm.Species} » n'est pas un Pokémon : choisis-le dans la liste.", error: true);
+                return;
+            }
+        }
+        results = null;
+        results = await GtsStore.SearchAsync(userId, searchForm.ToWanted(species), onlyOwned);
+    }
+
+    private async Task Retrieve(GtsInboxItem item)
+    {
+        if (busy)
+            return;
+        busy = true;
+        try
+        {
+            int? saveId = int.TryParse(destinations.GetValueOrDefault(item.Id), out var id) ? id : null;
+            var result = await GtsStore.RetrieveAsync(userId, item.Id, saveId);
+            Show(result.Message, !result.Ok);
+            show = result.Show;
+            destinations.Remove(item.Id);
+            await LoadMine();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task Cancel(GtsOfferView offer)
+    {
+        if (busy)
+            return;
+        busy = true;
+        try
+        {
+            var result = await GtsStore.CancelAsync(userId, offer.Id);
+            Show(result.Message, !result.Ok);
+            await LoadMine();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task BackHome()
+    {
+        mode = Mode.Home;
+        picked = null;
+        depositChoice = null;
+        accepting = null;
+        candidates = null;
+        given = null;
+        preview = null;
+        await LoadMine();
+    }
+
+    // ---------- Dépôt ----------
+
+    private async Task StartDeposit()
+    {
+        message = null;
+        saves = await Saves.ListAsync(userId);
+        defaultSort = (await Preferences.SortsAsync(userId)).Collection;
+        picked = null;
+        wantedForm = new();
+        mode = Mode.DepositPick;
+    }
+
+    private async Task ValidatePick()
+    {
+        if (picked is null || busy)
+            return;
+        message = null;
+        var choice = await GtsStore.DepositChoiceAsync(userId, picked.Id);
+        if (choice is null)
+        {
+            Show("Ce Pokémon n'est plus dans ta collection : choisis-en un autre.", error: true);
+            picked = null;
+            return;
+        }
+        if (choice.Problem is { } problem)
+        {
+            Show(problem, error: true);
+            return;
+        }
+        depositChoice = choice;
+        mode = Mode.DepositWanted;
+    }
+
+    private async Task Deposit()
+    {
+        if (picked is null || depositChoice is null || busy)
+            return;
+        var species = GtsService.FindSpecies(wantedForm.Species, depositChoice.Species);
+        if (species is null)
+        {
+            Show(string.IsNullOrWhiteSpace(wantedForm.Species)
+                ? "Choisis le Pokémon que tu demandes en échange."
+                : $"« {wantedForm.Species} » n'est pas un Pokémon de ce jeu : choisis-le dans la liste.", error: true);
+            return;
+        }
+        busy = true;
+        try
+        {
+            var result = await GtsStore.DepositAsync(userId, picked.Id, wantedForm.ToWanted(species));
+            Show(result.Message, !result.Ok);
+            if (result.Ok)
+            {
+                await BackHome();
+                await Search();
+            }
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    // ---------- Échange ----------
+
+    private async Task StartAccept(GtsOfferView offer)
+    {
+        if (!offer.Owned || busy)
+            return;
+        message = null;
+        accepting = offer;
+        given = null;
+        mode = Mode.AcceptPick;
+        candidates = null;
+        candidates = await GtsStore.CandidatesAsync(userId, offer.Id);
+    }
+
+    private async Task BackToCandidates()
+    {
+        if (accepting is null)
+            return;
+        mode = Mode.AcceptPick;
+        preview = null;
+        candidates = await GtsStore.CandidatesAsync(userId, accepting.Id);
+        given = candidates.FirstOrDefault(c => c == given && c.Problem is null);
+    }
+
+    private async Task ValidateGiven()
+    {
+        if (accepting is null || given is null || busy)
+            return;
+        message = null;
+        var check = await GtsStore.PreviewAsync(userId, accepting.Id, given.BankId);
+        if (check.Problem is { } problem)
+        {
+            await Failed(problem);
+            return;
+        }
+        preview = check;
+        mode = Mode.AcceptConfirm;
+    }
+
+    private async Task Accept()
+    {
+        if (accepting is null || given is null || busy)
+            return;
+        busy = true;
+        try
+        {
+            var result = await GtsStore.AcceptAsync(userId, accepting.Id, given.BankId);
+            if (!result.Ok)
+            {
+                await Failed(result.Message);
+                return;
+            }
+            Show(result.Message, error: false);
+            show = result.Show;
+            await BackHome();
+            await Search();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    /// <summary>Échange impossible : on rechoisit le Pokémon si l'offre est toujours là, sinon retour à la recherche.</summary>
+    private async Task Failed(string problem)
+    {
+        Show(problem, error: true);
+        if (accepting is not null && await GtsStore.OfferAsync(userId, accepting.Id) is { Owned: true } still)
+        {
+            accepting = still;
+            await BackToCandidates();
+            return;
+        }
+        await BackHome();
+        await Search();
+    }
+
+    // ---------- Affichage ----------
+
+    /// <summary>Image, nom, niveau, sexe et légalité d'un Pokémon.</summary>
+    private static RenderFragment Pokemon(GtsPokemonView pokemon) => __builder =>
+    {
+        <div class="d-flex align-items-center gap-2">
+            <img src="@pokemon.SpriteUrl" alt="" width="56" height="56" class="trade-pokemon-sprite" data-remplacement="images/pokemon/inconnu.png" />
+            <div>
+                <strong>@pokemon.Name@(pokemon.IsShiny ? " ✨" : "")</strong>
+                @if (pokemon.Name != pokemon.SpeciesName)
+                {
+                    <span class="text-muted"> (@pokemon.SpeciesName)</span>
+                }
+                <div class="small text-muted">
+                    N.@pokemon.Level @pokemon.Gender
+                    @if (!pokemon.IsLegal)
+                    {
+                        <span class="badge bg-danger ms-1" title="Selon l'analyse de légalité de PKHeX">Illégal</span>
+                    }
+                </div>
+            </div>
+        </div>
+    };
+
+    /// <summary>Une offre : le Pokémon proposé, la demande, les jeux, qui l'a déposée et jusqu'à quand.</summary>
+    private static RenderFragment Offer(GtsOfferView offer, bool mine, RenderFragment? actions) => __builder =>
+    {
+        <div class="card gts-card gts-offer">
+            <div class="card-body">
+                @Pokemon(offer.Pokemon)
+                <div class="small mt-2 d-flex align-items-center gap-1">
+                    <span>Contre :</span>
+                    <img src="@offer.WantedSpriteUrl" alt="" width="32" height="32" class="gts-wanted-sprite" data-remplacement="images/pokemon/inconnu.png" />
+                    <strong>@offer.Wanted</strong>
+                </div>
+                <div class="small text-muted">Pour : @offer.Games</div>
+                <div class="small text-muted">
+                    @if (mine)
+                    {
+                        <span>@offer.Origin · </span>
+                    }
+                    else if (offer.Pseudo is { } pseudo)
+                    {
+                        <span>De <a href="@PlayerService.Link(pseudo)">@pseudo</a> · </span>
+                    }
+                    else
+                    {
+                        <span>D'un dresseur · </span>
+                    }
+                    jusqu'au @offer.ExpiresAt.ToLocalTime().ToString("dd/MM/yyyy")
+                </div>
+                @if (!mine && offer.Owned)
+                {
+                    <span class="badge text-bg-success mt-1">Tu as ce Pokémon</span>
+                }
+                @actions
+            </div>
+        </div>
+    };
+
+    /// <summary>
+    /// Champs d'une demande : l'espèce (parmi <paramref name="species"/>, liste de suggestions), les niveaux, le sexe, chromatique
+    /// et la légalité. <paramref name="anySpecies"/> : texte d'aide d'une espèce facultative (recherche).
+    /// </summary>
+    private RenderFragment WantedFields(WantedForm form, string id, IReadOnlyList<GtsSpecies> species, string? anySpecies) => __builder =>
+    {
+        <div class="gts-fields">
+            <div>
+                <label class="form-label small mb-1" for="@id-species">Pokémon</label>
+                <input id="@id-species" class="form-control form-control-sm gts-species" list="@id-species-list" autocomplete="off"
+                       placeholder="@(anySpecies ?? "Nom du Pokémon")" @bind="form.Species" @bind:event="oninput" />
+                <datalist id="@id-species-list">
+                    @foreach (var s in species)
+                    {
+                        <option value="@s.Name"></option>
+                    }
+                </datalist>
+            </div>
+            <div>
+                <span class="form-label small mb-1 d-block">Niveau</span>
+                <div class="d-flex align-items-center gap-1">
+                    <input type="number" min="1" max="100" class="form-control form-control-sm gts-level" aria-label="Niveau minimal"
+                           placeholder="de" @bind="form.MinLevel" />
+                    <span>–</span>
+                    <input type="number" min="1" max="100" class="form-control form-control-sm gts-level" aria-label="Niveau maximal"
+                           placeholder="à" @bind="form.MaxLevel" />
+                </div>
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="@id-gender">Sexe</label>
+                <select id="@id-gender" class="form-select form-select-sm" @bind="form.Gender">
+                    <option value="">Peu importe</option>
+                    <option value="0">Mâle ♂</option>
+                    <option value="1">Femelle ♀</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="@id-shiny">Chromatique</label>
+                <select id="@id-shiny" class="form-select form-select-sm" @bind="form.Shiny">
+                    <option value="">Peu importe</option>
+                    <option value="oui">Oui</option>
+                    <option value="non">Non</option>
+                </select>
+            </div>
+            <div class="form-check align-self-end">
+                <input class="form-check-input" type="checkbox" id="@id-legal" @bind="form.LegalOnly" />
+                <label class="form-check-label" for="@id-legal">Refuser les Pokémon illégaux</label>
+            </div>
+        </div>
+    };
+}

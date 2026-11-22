@@ -24,7 +24,10 @@ public sealed class BattleHubTests : IDisposable
     private static readonly BattleParty Sacha = new("sacha", "Sacha", 1, "Vert Feuille — David");
     private static readonly BattleParty Ondine = new("ondine", "Ondine", 2, "Rouge Feu — Carfil");
 
-    public BattleHubTests() => _hub = new BattleHub(_time, BattleTests.Showdown(), NullLogger.Instance, ticking: false);
+    // Graine fixe : le combat se déroule toujours pareil. Au hasard, un coup critique de Bulbidou au tour 1 mettait parfois
+    // (3 fois sur 40) le premier Pokémon d'Ondine K.O. : Ondine devait le remplacer, Sacha attendait, et le « tour 2 » où
+    // tous deux choisissent n'arrivait jamais.
+    public BattleHubTests() => _hub = new BattleHub(_time, BattleTests.Showdown(), NullLogger.Instance, ticking: false, seed: [1, 2, 3, 4]);
 
     public void Dispose() => _hub.Dispose();
 
@@ -68,20 +71,20 @@ public sealed class BattleHubTests : IDisposable
         _hub.Finished += finished.Add;
         var session = Fighting();
         Assert.Equal(2, session.OtherIllegal("sacha")); // montré à Sacha : l'équipe d'Ondine en a 2
-        Assert.Contains("Go ! Piafou !", session.Steps("sacha", 0).Select(s => s.Text));
-        Assert.Contains("Sacha envoie Piafou !", session.Steps("ondine", 0).Select(s => s.Text));
+        Assert.Contains("Go ! Bulbidou !", session.Steps("sacha", 0).Select(s => s.Text));
+        Assert.Contains("Sacha envoie Bulbidou !", session.Steps("ondine", 0).Select(s => s.Text));
 
         // Choix vérifiés avant d'aller au simulateur.
-        Assert.Equal("Cette capacité n'existe pas.", _hub.Choose(session, "sacha", BattleChoice.Move(9)));
-        Assert.Equal("Ce Pokémon est déjà au combat.", _hub.Choose(session, "sacha", BattleChoice.SwitchTo(1)));
-        Assert.Equal("Le combat n'est pas en cours.", _hub.Choose(session, "pierre", BattleChoice.Move(1)));
+        Assert.Equal("Cette capacité n'existe pas.", BattleHub.Choose(session, "sacha", BattleChoice.Move(9)));
+        Assert.Equal("Ce Pokémon est déjà au combat.", BattleHub.Choose(session, "sacha", BattleChoice.SwitchTo(1)));
+        Assert.Equal("Le combat n'est pas en cours.", BattleHub.Choose(session, "pierre", BattleChoice.Move(1)));
 
         // Un tour : chacun attaque ; le temps pour choisir commence après les étapes à jouer.
-        Assert.Null(_hub.Choose(session, "sacha", BattleChoice.Move(1)));
-        Assert.Equal("Ce n'est pas le moment de choisir.", _hub.Choose(session, "sacha", BattleChoice.Move(1))); // déjà choisi
-        Assert.Null(_hub.Choose(session, "ondine", BattleChoice.Move(1)));
+        Assert.Null(BattleHub.Choose(session, "sacha", BattleChoice.Move(1)));
+        Assert.Equal("Ce n'est pas le moment de choisir.", BattleHub.Choose(session, "sacha", BattleChoice.Move(1))); // déjà choisi
+        Assert.Null(BattleHub.Choose(session, "ondine", BattleChoice.Move(1)));
         WaitUntil(() => session.Snapshot("sacha").Scene is not null && ReadyToChoose(session, "sacha") && ReadyToChoose(session, "ondine"), "tour 2");
-        Assert.Contains("Piafou utilise Picpic !", session.Steps("sacha", 0).Select(s => s.Text));
+        Assert.Contains("Bulbidou utilise Charge !", session.Steps("sacha", 0).Select(s => s.Text));
         var deadline = session.Snapshot("sacha").Deadline!.Value;
         Assert.True(deadline > _time.GetUtcNow().UtcDateTime + BattleTiming.Decision); // + la durée des étapes du tour
 
@@ -101,7 +104,7 @@ public sealed class BattleHubTests : IDisposable
     public void Forfeit_TheOtherWins()
     {
         var session = Fighting();
-        _hub.Forfeit(session, "ondine");
+        BattleHub.Forfeit(session, "ondine");
         WaitUntil(() => session.Stage == BattleStage.Done, "fin du combat");
         Assert.Equal(BattleOutcome.Won, session.Snapshot("sacha").Outcome);
         Assert.Contains("Ondine abandonne le combat.", session.Steps("sacha", 0).Select(s => s.Text));
@@ -121,6 +124,7 @@ public sealed class BattleHubTests : IDisposable
         _hub.RequestsChanged += changed.Add;
         var (session, message) = _hub.Request(Sacha, Ondine, Format);
         Assert.Equal("Demande envoyée à Ondine : en attente de sa réponse.", message);
+        Assert.NotNull(session);
         Assert.Equal([session], _hub.Incoming("ondine"));
         Assert.Equal(["ondine"], changed);
         Assert.Equal("Tu as déjà un combat en cours.", _hub.Request(Sacha, Ondine, Format).Message);
@@ -171,8 +175,8 @@ public sealed class BattleHubTests : IDisposable
         Assert.Empty(await service.SavePairsAsync("sacha", "pierre")); // pas son ami
 
         var candidates = await service.CandidatesAsync("sacha", leafGreen);
-        Assert.Equal(9, candidates.Count);
-        Assert.Equal(("Piafou", "Équipe 1"), (candidates[0].Name, candidates[0].Location));
+        Assert.Equal(27, candidates.Count);
+        Assert.Equal(("Bulbidou", "Équipe 1"), (candidates[0].Name, candidates[0].Location));
         Assert.Empty(await service.CandidatesAsync("ondine", leafGreen)); // pas la sienne
         Assert.Equal(6, BattleService.TeamSize(candidates.Count));
         Assert.Equal(4, BattleService.TeamSize(4));
@@ -199,7 +203,7 @@ public sealed class BattleHubTests : IDisposable
         var at = DateTime.UtcNow;
 
         var won = Fighting();
-        _hub.Forfeit(won, "ondine");
+        BattleHub.Forfeit(won, "ondine");
         WaitUntil(() => won.Stage == BattleStage.Done, "fin du combat");
         await BattleRecorder.RecordAsync(db.Factory, won, at);
 
@@ -249,7 +253,7 @@ public sealed class BattleHubTests : IDisposable
         var recorder = new BattleRecorder(_hub, factory, NullLogger<BattleRecorder>.Instance);
         await recorder.StartAsync(CancellationToken.None);
         var session = Fighting();
-        _hub.Forfeit(session, "sacha");
+        BattleHub.Forfeit(session, "sacha");
         await factory.Saved.Task.WaitAsync(TimeSpan.FromSeconds(15)); // combat enregistré, sans lire la base pendant l'écriture
         await recorder.StopAsync(CancellationToken.None);
         await using var check = db.NewContext();

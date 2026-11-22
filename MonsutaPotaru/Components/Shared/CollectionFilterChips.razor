@@ -2,7 +2,7 @@
 @using MonsutaPotaru.Services
 @inject PokemonInfo Info
 
-@* Filtres de « Ma collection » en pastilles : « Type : Feu, Eau ▾ × ». Un clic sur la pastille ouvre ses
+@* Filtres de « Ma collection » (et des Pokémon à choisir : PokemonPickerSearch) en pastilles : « Type : Feu, Eau ▾ × ». Un clic sur la pastille ouvre ses
    valeurs, la croix retire le filtre, « + Filtre » en ajoute un. Chaque changement s'applique tout de suite. *@
 <div class="filter-chips">
     @foreach (var criterion in Visible)
@@ -145,6 +145,9 @@
     /// <summary>Talents présents dans la collection : les seuls proposés (près de 300 existent).</summary>
     [Parameter] public IReadOnlyCollection<int> Abilities { get; set; } = [];
 
+    /// <summary>Liste sans œufs (équipe de combat) : pas de filtre « Œuf ».</summary>
+    [Parameter] public bool NoEggs { get; set; }
+
     /// <summary>Filtres, dans l'ordre des pastilles.</summary>
     private enum Criterion { Generation, Type, Gender, Nature, Ability, Iv, Level, Form, Mega, Shiny, Nickname, Egg }
 
@@ -156,8 +159,9 @@
     private static readonly System.Globalization.CompareInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR").CompareInfo;
     private static readonly StringComparer FrenchOrder = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("fr-FR"), ignoreCase: true);
 
-    private IEnumerable<Criterion> Visible => Enum.GetValues<Criterion>().Where(c => added.Contains(c) || IsActive(c));
-    private IEnumerable<Criterion> Hidden => Enum.GetValues<Criterion>().Except(Visible);
+    private IEnumerable<Criterion> Offered => Enum.GetValues<Criterion>().Where(c => !NoEggs || c != Criterion.Egg);
+    private IEnumerable<Criterion> Visible => Offered.Where(c => added.Contains(c) || IsActive(c));
+    private IEnumerable<Criterion> Hidden => Offered.Except(Visible);
 
     private bool IsActive(Criterion c) => c switch
     {

@@ -1,0 +1,63 @@
+@using MonsutaPotaru.Services
+
+@* Complétions (100 %) du joueur (page « Statistiques », onglet « Défis ») : la moyenne de leurs pourcentages globaux,
+   puis de chaque section sur les complétions qui l'ont (pas de quêtes annexes en 1re génération), avec le nombre de
+   complétions comptées, et combien sont à 100 %. *@
+<Block Title="Complétion (100 %)" Count="@(Stats.Count > 0 ? Stats.Count.ToString() : null)">
+    @if (Stats.Count == 0)
+    {
+        <p class="text-muted mb-0">
+            Aucune complétion pour l'instant.
+            @if (!Visitor)
+            {
+                <text>@(" ")Crées-en une dans <a href="completion">Complétion (100 %)</a>.</text>
+            }
+        </p>
+    }
+    else
+    {
+        <p class="text-muted small">
+            Moyenne de @(Visitor ? "ses" : "tes") complétions ; chaque section ne compte que les jeux qui l'ont (Rouge, Bleu et
+            Jaune n'ont pas de quêtes annexes).
+        </p>
+        <div class="stat-bars">
+            @foreach (var (label, average) in Rows)
+            {
+                <div class="stat-bar-label">@label</div>
+                @if (average.Count == 0)
+                {
+                    <div class="stat-bar-none text-muted small">Aucune complétion n'a cette section.</div>
+                }
+                else
+                {
+                    <LivingDexProgress Owned="average.Tenths" Total="1000" ValueText="@($"{average.Percent}, moyenne de {Completions(average.Count)}")" />
+                    <div class="stat-bar-count text-muted small">@Completions(average.Count)</div>
+                }
+            }
+        </div>
+        <div class="stat-tiles mt-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="small text-muted">Complétions à 100 %</div>
+                    <div class="stat-value">@Stats.General.Completed / @Stats.Count</div>
+                </div>
+            </div>
+        </div>
+    }
+</Block>
+
+@code {
+    [Parameter, EditorRequired] public CompletionStats Stats { get; set; } = default!;
+
+    /// <summary>Statistiques d'un autre joueur : « ses », sans lien vers la création.</summary>
+    [Parameter] public bool Visitor { get; set; }
+
+    private IEnumerable<(string, LivingDexAverage)> Rows =>
+        [("Générale", Stats.General), .. Stats.Sections.Select(s => (Label(s.Section), s.Average))];
+
+    /// <summary>Nom de la section ; celles d'All the Mons disent d'où elles viennent (« Quêtes » seul se confondrait avec les quêtes annexes).</summary>
+    private static string Label(CompletionSection section) =>
+        CompletionSections.IsModpack(section) ? $"{CompletionSections.Name(section)} (All the Mons)" : CompletionSections.Name(section);
+
+    private static string Completions(int count) => count == 1 ? "1 complétion" : $"{count} complétions";
+}

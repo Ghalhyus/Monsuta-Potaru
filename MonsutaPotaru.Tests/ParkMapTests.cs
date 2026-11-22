@@ -430,7 +430,8 @@ public sealed class ParkMapTests
         double Distance(double ax, double ay, double bx, double by) => Math.Sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by));
         var closest = torches.SelectMany((a, i) => torches.Take(i).Select(b => Distance(a.X, a.Y, b.X, b.Y))).Min();
         Assert.True(closest >= 9, $"deux torches à {closest:0.0} cases");
-        var farthest = free.Max(c => torches.Min(torch => Distance(c.x + 0.5, c.y + 0.5, torch.X, torch.Y)));
+        double Nearest(double x, double y) => torches.Min(torch => Distance(x, y, torch.X, torch.Y));
+        var farthest = free.Max(c => Nearest(c.x + 0.5, c.y + 0.5));
         Assert.True(farthest <= 16, $"une case libre à {farthest:0.0} cases de la torche la plus proche");
 
         // Torches animées (animations de Tiled, jouées par parc.js), rien d'autre

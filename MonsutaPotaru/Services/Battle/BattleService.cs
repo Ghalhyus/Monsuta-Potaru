@@ -12,7 +12,8 @@ public sealed record BattleSavePair(StoredSaveInfo Mine, StoredSaveInfo Theirs, 
 /// (<see cref="PokemonFingerprint"/>) pour vérifier au début du combat qu'il n'a pas changé entre-temps.
 /// </summary>
 public sealed record BattleCandidate(TradeSlot Slot, string Fingerprint, ushort Species, string Name, string SpeciesName, int Level,
-    string Gender, bool IsShiny, bool IsLegal, string SpriteUrl, string Location, string Item, string Ability, IReadOnlyList<string> Moves);
+    string Gender, bool IsShiny, bool IsLegal, string SpriteUrl, string Location, string Item, string Ability, IReadOnlyList<string> Moves,
+    PokemonFilterTraits Traits);
 
 /// <summary>Combats terminés du joueur : victoires, défaites, matchs nuls, et contre combien d'adversaires différents.</summary>
 public sealed record BattleRecordStats(int Won, int Lost, int Draws, int Opponents)
@@ -71,7 +72,8 @@ public sealed class BattleService(IDbContextFactory<ApplicationDbContext> dbFact
             var slot = new TradeSlot(c.Box, c.Slot);
             var location = slot.InParty ? $"Équipe {slot.Slot + 1}" : $"Boîte {slot.Box + 1}, case {slot.Slot + 1}";
             return new BattleCandidate(slot, PokemonFingerprint.Of(c.Pokemon), c.Pokemon.Species, view.Nickname, view.SpeciesName,
-                c.Pokemon.CurrentLevel, view.Gender, view.IsShiny, view.IsLegal, view.SpriteUrl, location, view.HeldItem, view.Ability, view.Moves);
+                c.Pokemon.CurrentLevel, view.Gender, view.IsShiny, view.IsLegal, view.SpriteUrl, location, view.HeldItem, view.Ability, view.Moves,
+                PokemonFilterTraits.Of(c.Pokemon, view));
         }).ToList();
     }
 

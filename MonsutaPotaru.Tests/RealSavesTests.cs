@@ -11,6 +11,8 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class RealSavesTests : IDisposable
 {
+    private static readonly bool[] NormalAndShiny = [false, true];
+
     private const string Owner = "sacha";
     private readonly TestDatabase _db = new(Owner);
 
@@ -18,10 +20,15 @@ public sealed class RealSavesTests : IDisposable
 
     private static readonly string Folder = Path.Combine(AppContext.BaseDirectory, "Sauvegardes");
 
-    /// <summary>Noms des fichiers du dossier ; « » seul quand il n'y en a pas (xUnit refuse une liste vide).</summary>
+    /// <summary>
+    /// Noms des sauvegardes de jeu du dossier ; « » seul quand il n'y en a pas (xUnit refuse une liste vide). Sans les zips
+    /// des mondes Minecraft (<c>all-the-mons.zip</c>), testés par <see cref="CobblemonTests"/>.
+    /// </summary>
     public static TheoryData<string> Files()
     {
-        var files = Directory.Exists(Folder) ? Directory.GetFiles(Folder).Select(Path.GetFileName).OfType<string>().Order().ToList() : [];
+        var files = Directory.Exists(Folder)
+            ? Directory.GetFiles(Folder).Select(Path.GetFileName).OfType<string>().Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).Order().ToList()
+            : [];
         return new TheoryData<string>(files.Count > 0 ? files : [""]);
     }
 
@@ -75,9 +82,10 @@ public sealed class RealSavesTests : IDisposable
         // 1re et 2e génération : le jeu ne prépare ses boîtes qu'au premier changement de boîte (zone à FF jusque-là) et
         // garde la boîte en cours à part ; PKHeX écrit des boîtes vides en règle et resynchronise la boîte en cours.
         // Le fichier change donc, pas son contenu.
-        // HeartGold / SoulSilver : PKHeX marque toutes les boîtes comme modifiées (le jeu n'enregistre que celles-là), et
-        // donne leur somme de contrôle aux blocs annexes vides ; le fichier change la première fois, puis plus.
-        if (sav is SAV4HGSS)
+        // 4e génération : PKHeX donne leur somme de contrôle aux blocs annexes que le jeu n'a jamais écrits (Panthéon de
+        // perle.sav) et, en HeartGold / SoulSilver, marque toutes les boîtes comme modifiées (le jeu n'enregistre que
+        // celles-là) ; le fichier change la première fois, puis plus.
+        if (sav is SAV4)
             Assert.True(Open(written.ToArray(), file).Write().Span.SequenceEqual(written), $"{file} : réécrit différemment par PKHeX");
         else if (sav.Generation >= 3)
             Assert.True(written.AsSpan().SequenceEqual(data), $"{file} : réécrit différemment par PKHeX");
@@ -101,11 +109,45 @@ public sealed class RealSavesTests : IDisposable
     }
 
     /// <summary>Images du site (outils/images.py) : chaque espèce connue de PKHeX a la sienne, normale et chromatique.</summary>
+    /// <summary>
+    /// Objet tenu : nommé par son numéro de 4e génération et suivantes, comme dans l'inventaire. Un Pokémon de 2e ou de 3e
+    /// génération garde le numéro de son jeu (139 : Baie Oran en 3e génération, Lettre Invit ensuite).
+    /// </summary>
+    [Fact]
+    public void HeldItem_IsNamedLikeInTheBag_WhateverTheGameNumbers()
+    {
+        var info = new PokemonInfo();
+        var strings = GameInfo.GetStrings("fr");
+        var french = strings.itemlist;
+        string[] Held(string file, params ushort[] species)
+        {
+            var sav = Open(Read(file)!, file);
+            var all = sav.PartyData.Concat(sav.BoxData).ToList();
+            return [.. species.Select(s => all.FirstOrDefault(p => p.Species == s && p.HeldItem != 0) is { } pk ? info.Describe(pk, isLegal: true).HeldItem : "(sans objet)")];
+        }
+        // Vert Feuille : Rondoudou (139 dans le jeu) et Paras (103)
+        Assert.Equal([french[155], french[86]], Held("vert-feuille.sav", 39, 46));
+        // Argent : Florizarre (117), Octillery (107), Rhinoféros (73), Insolourdo (173, la « Baie » devenue Baie Oran)
+        Assert.Equal([french[239], french[246], french[217], french[155]], Held("argent.sav", 3, 224, 112, 206));
+        // 4e génération et suivantes : le numéro du jeu est déjà le bon
+        Assert.Equal([french[296], french[223]], Held("perle.sav", 406, 395));
+
+        // Appât Ball d'Or/Argent/Cristal (160), que PKHeX ne convertit pas ; objet sans équivalent ensuite : son nom dans son jeu
+        var pk2 = new PK2 { Species = 25, HeldItem = 160 };
+        Assert.Equal((494, french[494]), (SaveBag.HeldItem(pk2), info.Describe(pk2, isLegal: true).HeldItem));
+        var own = strings.GetItemStrings(pk2.Context, pk2.Version);
+        pk2.HeldItem = Enumerable.Range(1, 255).First(i => i != 160 && ItemConverter.GetItemFuture2((byte)i) == 128 && !string.IsNullOrWhiteSpace(own[i]));
+        Assert.Equal((0, own[pk2.HeldItem]), (SaveBag.HeldItem(pk2), info.Describe(pk2, isLegal: true).HeldItem));
+        // Rien à tenir en 1re génération, ni sans objet
+        Assert.Equal((0, "—"), (SaveBag.HeldItem(new PK1 { Species = 25 }), info.Describe(new PK4 { Species = 25 }, isLegal: true).HeldItem));
+        Assert.Equal(155, SaveBag.HeldItem(new PK3 { Species = 39, HeldItem = 139 }));
+    }
+
     [Fact]
     public void Pokemon_AllSpeciesHaveAnImage()
     {
         var missing = Enumerable.Range(1, (int)Species.MAX_COUNT - 1)
-            .SelectMany(s => new[] { false, true }.Select(shiny => PokemonSprites.Url((ushort)s, 0, EntityContext.Gen9, false, 0, shiny)))
+            .SelectMany(s => NormalAndShiny.Select(shiny => PokemonSprites.Url((ushort)s, 0, EntityContext.Gen9, false, 0, shiny)))
             .Where(url => !File.Exists(Path.Combine(WebRootWithImages(), url)))
             .ToList();
         Assert.True(missing.Count == 0, $"images manquantes (outils/images.py) : {string.Join(", ", missing.Take(10))}");

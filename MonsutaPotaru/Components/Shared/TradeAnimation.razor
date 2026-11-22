@@ -1,0 +1,147 @@
+@using MonsutaPotaru.Services
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Animation d'échange, à la manière de la 4e génération : le Pokémon envoyé rentre dans sa Poké Ball, qui part ; celle
+   de l'autre arrive et s'ouvre ; puis chaque évolution par échange (silhouette blanche qui passe d'une forme à l'autre,
+   de plus en plus vite, éclair, nouvelle forme). Le déroulé, les textes tapés lettre à lettre et les musiques sont dans
+   wwwroot/js/echange.js ; ici, la scène, les textes prêts à afficher, et les musiques présentes sur le serveur
+   (TradeSounds : hors Git ; sans fichier, rien n'est joué ni demandé).
+   L'échange est déjà écrit quand l'animation se joue : « Passer » ne change rien, il ferme seulement. *@
+
+<div class="trade-show-backdrop"></div>
+<div class="trade-show" role="dialog" aria-modal="true" aria-label="Échange" @ref="root"
+     data-musique-echange="@tradeMusic" data-musique-evolution="@(evolutions.Count > 0 ? evolutionMusic : null)"
+     data-musique-felicitations="@(evolutions.Count > 0 ? congratulationsMusic : null)">
+    <div class="trade-show-screen">
+        <div class="trade-show-sky"></div>
+        <div class="trade-show-actor" data-acteur="envoye">@Body(Show.Sent.SpriteUrl, Show.Sent.Nickname)</div>
+        <div class="trade-show-actor" data-acteur="recu">@Body(Show.Received.SpriteUrl, Show.Received.Nickname)</div>
+        @foreach (var (evolution, i) in evolutions.Select((e, i) => (e, i)))
+        {
+            <div class="trade-show-actor" data-acteur="evolution-@i">
+                <img class="trade-show-sprite" data-forme="avant" src="@evolution.SpriteUrl" alt="@evolution.Nickname" data-remplacement="images/pokemon/inconnu.png" />
+                <img class="trade-show-sprite" data-forme="apres" src="@evolution.EvolvedSpriteUrl" alt="@evolution.EvolvedSpecies" data-remplacement="images/pokemon/inconnu.png" />
+            </div>
+        }
+        <div class="trade-show-ball"></div>
+        <div class="trade-show-flash"></div>
+        <div class="trade-show-text" aria-live="polite"></div>
+    </div>
+
+    @* Le texte de chaque moment, lu par echange.js (et par un lecteur d'écran qui ne voit pas l'animation). *@
+    <ol class="visually-hidden trade-show-script">
+        @foreach (var (key, line) in Lines)
+        {
+            <li data-ligne="@key">@line</li>
+        }
+    </ol>
+
+    <div class="trade-show-controls">
+        @if (HasSound)
+        {
+            <button type="button" class="btn btn-sm btn-light" @onclick="ToggleSound" title="@(muted ? "Remettre le son" : "Couper le son")"
+                    aria-label="@(muted ? "Remettre le son" : "Couper le son")">@(muted ? "🔇" : "🔊")</button>
+        }
+        <button type="button" class="btn btn-sm @(ended ? "btn-primary" : "btn-light")" @onclick="Close">@(ended ? "Continuer" : "Passer")</button>
+    </div>
+</div>
+
+@code {
+    /// <summary>Ce qui est montré : le Pokémon envoyé, le Pokémon reçu et les évolutions.</summary>
+    [Parameter, EditorRequired] public TradeShow Show { get; set; } = default!;
+
+    /// <summary>« Passer » ou « Continuer » : la page retire l'animation.</summary>
+    [Parameter] public EventCallback OnClosed { get; set; }
+
+    private ElementReference root;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<TradeAnimation>? selfRef;
+    private List<TradeShowPokemon> evolutions = [];
+    private bool muted;
+    private bool ended;
+    private string? tradeMusic, evolutionMusic, congratulationsMusic;
+
+    /// <summary>Une musique sera jouée : le bouton du son a un sens.</summary>
+    private bool HasSound => tradeMusic is not null || (evolutions.Count > 0 && (evolutionMusic ?? congratulationsMusic) is not null);
+
+    protected override void OnInitialized()
+    {
+        tradeMusic = TradeSounds.TradeUrl;
+        evolutionMusic = TradeSounds.EvolutionUrl;
+        congratulationsMusic = TradeSounds.CongratulationsUrl;
+    }
+
+    protected override void OnParametersSet() => evolutions = [.. Show.Evolutions];
+
+    /// <summary>Texte de chaque moment, dans l'ordre : clé lue par echange.js (« envoi », « evolution-0-fin »...), phrase.</summary>
+    public IEnumerable<(string Key, string Line)> Lines
+    {
+        get
+        {
+            var sent = Show.Sent;
+            var received = Show.Received;
+            yield return ("envoi", sent.IsEgg ? $"Envoi d'un œuf à {Show.Partner}." : $"Envoi de {sent.Nickname} à {Show.Partner}.");
+            yield return ("envoi", sent.IsEgg ? "Au revoir, petit œuf !" : $"Au revoir, {sent.Nickname} !");
+            yield return ("arrivee", received.IsEgg ? $"{Show.Partner} t'envoie un œuf." : $"{Show.Partner} t'envoie {received.Nickname}.");
+            yield return ("arrivee", received.IsEgg ? "Prends bien soin de cet œuf !" : $"Prends bien soin de {received.Nickname} !");
+            foreach (var (evolution, i) in evolutions.Select((e, i) => (e, i)))
+            {
+                yield return ($"evolution-{i}-debut", $"Hein ? {evolution.Nickname} évolue !");
+                yield return ($"evolution-{i}-fin", $"Félicitations ! Ton {evolution.Nickname} a évolué en {evolution.EvolvedSpecies} !");
+            }
+        }
+    }
+
+    /// <summary>L'image du Pokémon, ou un œuf dessiné (l'image d'un œuf révélerait son espèce).</summary>
+    private static RenderFragment Body(string? spriteUrl, string name) => spriteUrl is null
+        ? @<div class="trade-show-egg" role="img" aria-label="Œuf"></div>
+        : @<img class="trade-show-sprite" src="@spriteUrl" alt="@name" data-remplacement="images/pokemon/inconnu.png" />;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/echange.js");
+        if (module is null)
+            return; // JavaScript simulé (tests)
+        muted = await module.InvokeAsync<bool>("muted");
+        StateHasChanged();
+        selfRef = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("play", root, selfRef);
+    }
+
+    /// <summary>Fin de l'animation (echange.js) : « Passer » devient « Continuer ».</summary>
+    [JSInvokable]
+    public void Ended()
+    {
+        ended = true;
+        StateHasChanged();
+    }
+
+    private async Task ToggleSound()
+    {
+        muted = !muted;
+        if (module is not null)
+            await module.InvokeVoidAsync("setMuted", root, muted);
+    }
+
+    private Task Close() => OnClosed.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("stop", root);
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // page fermée : plus rien à arrêter
+            }
+        }
+        selfRef?.Dispose();
+    }
+}

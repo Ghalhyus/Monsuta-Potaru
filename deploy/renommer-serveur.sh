@@ -12,11 +12,11 @@ set -euo pipefail
 OLD="$HOME/pokebank"
 NEW="$HOME/monsuta-potaru"
 
-if [ -f "$NEW/.env" ]; then
+if [[ -f "$NEW/.env" ]]; then
     echo "Déjà fait : $NEW/.env existe. Lance « Run workflow » si le site n'est pas encore reparti."
     exit 0
 fi
-if [ ! -f "$OLD/.env" ]; then
+if [[ ! -f "$OLD/.env" ]]; then
     echo "$OLD/.env introuvable : rien à renommer sur ce serveur."
     exit 1
 fi
@@ -30,17 +30,18 @@ echo "== 2/6 Arrêt de l'ancien site"
 echo "== 3/6 Copie des volumes"
 # Volumes créés avec les étiquettes de docker compose : il les reconnaît comme les siens (pas d'avertissement).
 copy_volume() {
-    local from="pokebank_$1" to="monsuta-potaru_$2"
+    local old_name="$1" new_name="$2"
+    local from="pokebank_$old_name" to="monsuta-potaru_$new_name"
     if ! docker volume inspect "$from" > /dev/null 2>&1; then
         echo "  $from absent : ignoré"
         return
     fi
-    docker volume create --label com.docker.compose.project=monsuta-potaru --label "com.docker.compose.volume=$2" "$to" > /dev/null
+    docker volume create --label com.docker.compose.project=monsuta-potaru --label "com.docker.compose.volume=$new_name" "$to" > /dev/null
     docker run --rm -v "$from":/de:ro -v "$to":/vers alpine sh -c 'cp -a /de/. /vers/'
     local before after
     before=$(docker run --rm -v "$from":/v:ro alpine sh -c 'find /v | wc -l')
     after=$(docker run --rm -v "$to":/v:ro alpine sh -c 'find /v | wc -l')
-    if [ "$before" != "$after" ]; then
+    if [[ "$before" != "$after" ]]; then
         echo "  $from -> $to : $before fichiers avant, $after après. Arrêt : rien n'est supprimé, relance l'ancien site avec"
         echo "  cd ~/pokebank && docker compose up -d"
         exit 1
@@ -52,7 +53,7 @@ copy_volume caddy-data caddy-data
 copy_volume caddy-config caddy-config
 
 echo "== 4/6 Dossier des images"
-if [ -d "$HOME/pokebank-images" ] && [ ! -e "$HOME/monsuta-potaru-images" ]; then
+if [[ -d "$HOME/pokebank-images" ]] && [[ ! -e "$HOME/monsuta-potaru-images" ]]; then
     mv "$HOME/pokebank-images" "$HOME/monsuta-potaru-images"
     echo "  ~/pokebank-images -> ~/monsuta-potaru-images"
 else

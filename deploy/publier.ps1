@@ -22,9 +22,10 @@ scp $archive "${Serveur}:monsuta-potaru.tgz"
 if ($LASTEXITCODE -ne 0) { throw "Envoi impossible (adresse, utilisateur ou connexion SSH ?)." }
 
 Write-Host "== Mise à jour sur le serveur"
+# Après la reconstruction : anciennes images et cache de construction de plus de 3 jours retirés (comme cd.yml).
 # Dossier des images créé avant Docker : sinon Docker le crée au nom de root et le script des images ne peut plus y écrire.
 $commande = "mkdir -p $Dossier ~/monsuta-potaru-images && rm -rf $Dossier/MonsutaPotaru/wwwroot/images && tar -xzf monsuta-potaru.tgz -C $Dossier && cd $Dossier && " +
-    "if [ -f .env ]; then docker compose up -d --build && docker image prune -f > /dev/null && echo 'Monsuta Potaru est à jour.'; " +
+    "if [ -f .env ]; then docker compose up -d --build && docker image prune -f > /dev/null && docker builder prune -f --filter until=72h > /dev/null && echo 'Monsuta Potaru est à jour.'; " +
     "else echo 'Première installation : connecte-toi au VPS et lance  bash ~/$Dossier/deploy/installer-serveur.sh'; fi"
 ssh $Serveur $commande
 if ($LASTEXITCODE -ne 0) { throw "La mise à jour sur le serveur a échoué (voir les messages ci-dessus)." }

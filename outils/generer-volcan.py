@@ -169,14 +169,25 @@ def sol_de(lave_, cascades_):
         for x in range(L):
             r = tirage(x, y, 3)
             if (x, y) in lave_:
-                i = bordure(forme, x, y, *LAVE[1:])
-                sol_[y][x] = t("volcan", i if i is not None else
-                               (r.choice(LAVE_CROUTE) if r.random() < 0.07 else LAVE_UNIE))
-            elif (x, y) in pres and r.random() < 0.22:
-                sol_[y][x] = t("volcan", r.choice(SOL_BRULANT))
+                sol_[y][x] = t("volcan", tuile_de_lave(forme, x, y, r))
             else:
-                sol_[y][x] = t("volcan", r.choice(SOL_LISSE) if r.random() < 0.72 else r.choice(SOL_CRAQUELE))
+                sol_[y][x] = t("volcan", tuile_de_roche(pres, x, y, r))
     return sol_
+
+
+def tuile_de_lave(forme, x, y, r):
+    """Lave : son bord, sinon parfois une croûte, sinon de la lave unie."""
+    i = bordure(forme, x, y, *LAVE[1:])
+    if i is not None:
+        return i
+    return r.choice(LAVE_CROUTE) if r.random() < 0.07 else LAVE_UNIE
+
+
+def tuile_de_roche(pres, x, y, r):
+    """Roche : parfois fendue de lave près de la lave, sinon lisse ou craquelée."""
+    if (x, y) in pres and r.random() < 0.22:
+        return r.choice(SOL_BRULANT)
+    return r.choice(SOL_LISSE) if r.random() < 0.72 else r.choice(SOL_CRAQUELE)
 
 
 # --- Objets : cascades, pont, arbres, rochers, plantes ---------------------------------------

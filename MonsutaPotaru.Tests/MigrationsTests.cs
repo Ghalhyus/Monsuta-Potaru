@@ -4,12 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using MonsutaPotaru.Data;
+using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
 /// <summary>Migrations qui modifient des données (pas seulement le schéma), passées sur une vraie base SQLite en mémoire.</summary>
 public sealed class MigrationsTests : IDisposable
 {
+    private static readonly string[] Owners = ["sacha", "ondine"];
+
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly DbContextOptions<ApplicationDbContext> _options;
 
@@ -27,7 +30,7 @@ public sealed class MigrationsTests : IDisposable
     /// Compte ajouté en SQL, avec les seules colonnes d'origine d'Identity : le modèle actuel a des colonnes (Theme...) que
     /// la base, migrée seulement jusqu'à une étape plus ancienne, n'a pas encore.
     /// </summary>
-    private static Task AddUserAsync(ApplicationDbContext db, string id, string userName, string? phone = null, bool twoFactor = false) =>
+    private static Task<int> AddUserAsync(ApplicationDbContext db, string id, string userName, string? phone = null, bool twoFactor = false) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO AspNetUsers (Id, UserName, EmailConfirmed, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
             VALUES ({id}, {userName}, 0, {phone}, {phone is not null}, {twoFactor}, 1, 0)
@@ -166,6 +169,55 @@ public sealed class MigrationsTests : IDisposable
     }
 
     [Fact]
+    public async Task StatisticsVisibility_ChecksTheNewPage_ForEveryAccount()
+    {
+        const string before = "20261108182428_SortPreferences"; // juste avant StatisticsVisibility
+        using (var db = NewContext())
+        {
+            // Comptes ajoutés avant Friends : ensuite, des colonnes sans valeur par défaut (Audience) demanderaient le modèle actuel.
+            await db.GetService<IMigrator>().MigrateAsync("20261026185115_ProfileVisibility");
+            await AddUserAsync(db, "sacha", "Sacha");
+            await AddUserAsync(db, "ondine", "Ondine");
+            await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET PublicPages = 2 WHERE Id = 'ondine';"); // le parc seul
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            Assert.Equal([PublicPages.Park | PublicPages.Statistics | PublicPages.Completion, PublicPages.All],
+                await db.Users.OrderBy(u => u.Id).Select(u => u.PublicPages).ToListAsync());
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : la case disparaît
+            Assert.Equal([2, 15], await db.Database.SqlQueryRaw<int>("SELECT PublicPages AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+        }
+    }
+
+    [Fact]
+    public async Task CompletionChallenge_ChecksTheNewPage_ForEveryAccount()
+    {
+        const string before = "20261111103253_RibbonTrackers"; // juste avant CompletionChallenge
+        using (var db = NewContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync("20261026185115_ProfileVisibility");
+            await AddUserAsync(db, "sacha", "Sacha");
+            await AddUserAsync(db, "ondine", "Ondine");
+            await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET PublicPages = 2 WHERE Id = 'ondine';"); // le parc seul
+            await db.GetService<IMigrator>().MigrateAsync(before);
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            Assert.Equal([PublicPages.Park | PublicPages.Statistics | PublicPages.Completion, PublicPages.All],
+                await db.Users.OrderBy(u => u.Id).Select(u => u.PublicPages).ToListAsync());
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : la case et la table disparaissent
+            Assert.Equal([18, 31], await db.Database.SqlQueryRaw<int>("SELECT PublicPages AS Value FROM AspNetUsers ORDER BY Id").ToListAsync());
+            Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sqlite_master WHERE name = 'Completions'").SingleAsync());
+        }
+    }
+
+    [Fact]
     public async Task ParkLandscapes_TurnsEachPark_IntoAForest()
     {
         const string before = "20261031095313_ParkExpansions"; // juste avant ParkLandscapes
@@ -176,7 +228,7 @@ public sealed class MigrationsTests : IDisposable
             await AddUserAsync(db, "sacha", "Sacha");
             await AddUserAsync(db, "ondine", "Ondine");
             await db.Database.ExecuteSqlRawAsync("UPDATE AspNetUsers SET ParkExpansions = 2 WHERE Id = 'sacha';");
-            var pokemon = new[] { "sacha", "ondine" }.Select(owner => new BankPokemon
+            var pokemon = Owners.Select(owner => new BankPokemon
             {
                 OwnerId = owner, Species = 25, SpeciesName = "Pikachu", Nickname = "Pikachu", Level = 10, DepositedAt = DateTime.UtcNow, Data = [1],
             }).ToList();
@@ -231,4 +283,53 @@ public sealed class MigrationsTests : IDisposable
             Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM AspNetUsers WHERE ProfilePrivate = 1").SingleAsync());
         }
     }
+
+    [Fact]
+    public async Task HybridBattleDefault_KeepsStackedScreens_ForExistingAccounts()
+    {
+        const string before = "20261111174335_CompletionChallenge"; // juste avant HybridBattleDefault
+        (string Id, string? Json)[] users =
+        [
+            ("sacha", null), // rien choisi : empilés, l'ancien défaut
+            ("ondine", """{"collection":{"tri":"nom"}}"""), // des tris, pas de disposition : empilés aussi
+            ("pierre", """{"combat":"cote"}"""), // disposition choisie : gardée
+            ("flora", """{"combat":"hybride"}"""),
+            ("major", "pas du json"), // illisible (donc empilés) : réécrit
+        ];
+        using (var db = NewContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync(before);
+            // Table des comptes inchangée depuis : le modèle actuel convient
+            db.Users.AddRange(users.Select(u => new ApplicationUser { Id = u.Id, UserName = u.Id, SortPreferences = u.Json }));
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = NewContext())
+        {
+            await db.Database.MigrateAsync();
+            var migrated = await PreferencesAsync(db);
+            Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(migrated["sacha"]).Battle);
+            var ondine = SortPreferences.FromJson(migrated["ondine"]);
+            Assert.Equal((BattleLayout.Stacked, CollectionSortBy.Name), (ondine.Battle, ondine.Collection.By));
+            Assert.Equal(BattleLayout.SideBySide, SortPreferences.FromJson(migrated["pierre"]).Battle);
+            Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson(migrated["flora"]).Battle);
+            Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(migrated["major"]).Battle);
+            db.Users.Add(new ApplicationUser { Id = "aurore", UserName = "aurore" }); // compte créé après : rien d'enregistré, hybride
+            await db.SaveChangesAsync();
+            Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson((await PreferencesAsync(db))["aurore"]).Battle);
+
+            await db.GetService<IMigrator>().MigrateAsync(before); // et retour : « empile » redevient implicite
+            var back = await PreferencesAsync(db);
+            Assert.Null(back["sacha"]);
+            Assert.Equal("""{"collection":{"tri":"nom"}}""", back["ondine"]);
+            Assert.Equal("""{"combat":"cote"}""", back["pierre"]);
+            Assert.Equal("""{"combat":"hybride"}""", back["flora"]);
+            Assert.Equal("""{"combat":"hybride"}""", back["aurore"]);
+        }
+    }
+
+    private static async Task<Dictionary<string, string?>> PreferencesAsync(ApplicationDbContext db) =>
+        await db.Database.SqlQueryRaw<PreferencesRow>("SELECT Id, SortPreferences FROM AspNetUsers").ToDictionaryAsync(r => r.Id, r => r.SortPreferences);
+
+    private sealed class PreferencesRow { public string Id { get; init; } = ""; public string? SortPreferences { get; init; } }
 }

@@ -68,6 +68,8 @@ public class SaveModification
     public bool ItemsChanged { get; set; }
     /// <summary>Un Pokémon a été échangé (Multijoueurs → Échanges) depuis la dernière version envoyée par le joueur.</summary>
     public bool PokemonTraded { get; set; }
+    /// <summary>Un Pokémon est parti sur la GTS, ou en est revenu, depuis la dernière version envoyée par le joueur.</summary>
+    public bool GtsChanged { get; set; }
     public DateTime ModifiedAt { get; set; }
 
     public static string Hash(ReadOnlySpan<byte> data) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data));

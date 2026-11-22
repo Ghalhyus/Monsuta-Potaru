@@ -32,6 +32,9 @@ public static class PokemonFingerprint
     /// <summary>Plus grand nombre de Pokémon nommés dans un refus (« ... et 3 autres »).</summary>
     public const int MaxNamed = 5;
 
+    /// <summary>Origine d'un exemplaire confié à la GTS (offre ou boîte de réception).</summary>
+    public const string GtsLabel = "GTS";
+
     public static string Of(PKM pk) => pk is GBPKM gb
         ? $"g12:{gb.DV16:X4}:{gb.TID16}:{gb.OriginalTrainerName}:{ParkService.Family(gb.Species)}"
         : $"pid:{pk.PID:X8}:{pk.ID32:X8}";
@@ -39,7 +42,7 @@ public static class PokemonFingerprint
     /// <summary>
     /// Pokémon du compte qui ont l'une de ces empreintes : stockage interne et sauvegardes stockées, sauf
     /// <paramref name="exceptSaveId"/> (la sauvegarde qu'on met à jour), et seulement le stockage interne si
-    /// <paramref name="internalOnly"/>. Jamais ceux des autres comptes.
+    /// <paramref name="internalOnly"/> ; ceux de la GTS toujours (<see cref="GtsLabel"/>). Jamais ceux des autres comptes.
     /// </summary>
     public static async Task<List<DuplicateCopy>> FindAsync(ApplicationDbContext db, string ownerId, IEnumerable<string> fingerprints,
         int? exceptSaveId = null, bool internalOnly = false)
@@ -60,9 +63,14 @@ public static class PokemonFingerprint
                 Label = p.StoredSave == null ? null : p.StoredSave.GameName + " — " + p.StoredSave.TrainerName,
             })
             .ToListAsync();
+        // Les Pokémon confiés à la GTS (offres, boîte de réception) sont encore au compte : une vieille copie de leur sauvegarde
+        // ne doit pas les faire revenir.
+        var online = await db.GtsPokemon.AsNoTracking().Where(g => g.OwnerId == ownerId && wanted.Contains(g.Fingerprint))
+            .OrderBy(g => g.Id).Select(g => new { g.Fingerprint, g.SpeciesName, g.Level }).ToListAsync();
         // Un exemplaire par empreinte : un Pokémon de la sauvegarde = un doublon, même s'il est à plusieurs endroits.
-        return rows.DistinctBy(r => r.Fingerprint)
-            .Select(r => new DuplicateCopy(r.Fingerprint!, r.SpeciesName, r.Level, r.IsEgg, r.Label))
+        return rows.Select(r => new DuplicateCopy(r.Fingerprint!, r.SpeciesName, r.Level, r.IsEgg, r.Label))
+            .Concat(online.Select(g => new DuplicateCopy(g.Fingerprint, g.SpeciesName, g.Level, false, GtsLabel)))
+            .DistinctBy(c => c.Fingerprint)
             .ToList();
     }
 
@@ -76,7 +84,9 @@ public static class PokemonFingerprint
         if (copies.Count == 0)
             return null;
         var names = string.Join(", ", copies.Take(MaxNamed).Select(c => c.Describe()));
-        var more = copies.Count > MaxNamed ? $" et {copies.Count - MaxNamed} autre{(copies.Count - MaxNamed > 1 ? "s" : "")}" : "";
+        var others = copies.Count - MaxNamed;
+        var plural = others > 1 ? "s" : "";
+        var more = others > 0 ? $" et {others} autre{plural}" : "";
         var count = copies.Count == 1
             ? "1 Pokémon de cette sauvegarde est déjà ailleurs dans ton compte"
             : $"{copies.Count} Pokémon de cette sauvegarde sont déjà ailleurs dans ton compte";

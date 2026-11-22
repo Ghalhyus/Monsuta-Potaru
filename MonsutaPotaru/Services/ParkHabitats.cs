@@ -178,12 +178,6 @@ public static class ParkHabitats
         habitat == Habitat.None || !Sheet.TryGetValue((MoveType)type, out var row) ? HabitatOpinion.Neutral
         : row[(int)habitat - 1] switch { 'o' => HabitatOpinion.Likes, 'x' => HabitatOpinion.Dislikes, _ => HabitatOpinion.Neutral };
 
-    /// <summary>Types de cases qu'aime le type de Pokémon.</summary>
-    public static IEnumerable<Habitat> Liked(byte type) => All.Where(h => OpinionOf(type, h) == HabitatOpinion.Likes);
-
-    /// <summary>Types de cases que n'aime pas le type de Pokémon.</summary>
-    public static IEnumerable<Habitat> Disliked(byte type) => All.Where(h => OpinionOf(type, h) == HabitatOpinion.Dislikes);
-
     /// <summary>
     /// Avis d'un Pokémon à un ou deux types (comme <c>BankPokemon.Type1</c> et <c>Type2</c> : deux fois le même pour un
     /// seul type) : il aime un habitat si l'un de ses types l'aime, même si l'autre le déteste (choix de l'utilisateur).
@@ -191,10 +185,18 @@ public static class ParkHabitats
     public static HabitatOpinion OpinionOf(byte type1, byte type2, Habitat habitat)
     {
         HabitatOpinion first = OpinionOf(type1, habitat), second = OpinionOf(type2, habitat);
-        return first == HabitatOpinion.Likes || second == HabitatOpinion.Likes ? HabitatOpinion.Likes
-            : first == HabitatOpinion.Dislikes || second == HabitatOpinion.Dislikes ? HabitatOpinion.Dislikes
-            : HabitatOpinion.Neutral;
+        if (first == HabitatOpinion.Likes || second == HabitatOpinion.Likes)
+            return HabitatOpinion.Likes;
+        if (first == HabitatOpinion.Dislikes || second == HabitatOpinion.Dislikes)
+            return HabitatOpinion.Dislikes;
+        return HabitatOpinion.Neutral;
     }
+
+    /// <summary>Types de cases qu'aime le type de Pokémon.</summary>
+    public static IEnumerable<Habitat> Liked(byte type) => All.Where(h => OpinionOf(type, h) == HabitatOpinion.Likes);
+
+    /// <summary>Types de cases que n'aime pas le type de Pokémon.</summary>
+    public static IEnumerable<Habitat> Disliked(byte type) => All.Where(h => OpinionOf(type, h) == HabitatOpinion.Dislikes);
 
     /// <summary>
     /// Humeur d'un Pokémon dans un parc, d'après la part de chaque habitat dans la zone « Parc » (toutes ses cases) :
@@ -217,6 +219,33 @@ public static class ParkHabitats
             ?? Find(HabitatOpinion.Likes, count => count * 2 > total)
             ?? new(ParkMood.Normal, Habitat.None, 0);
     }
+
+    /// <summary>
+    /// Humeur abaissée de <paramref name="levels"/> niveaux (malus « attaqué », <see cref="ParkService.RecordAttackAsync"/>) :
+    /// heureux, neutre, malheureux ; jamais plus bas que malheureux. Même règle dans parc.js (<c>moodOf</c>).
+    /// </summary>
+    public static ParkMood WithMalus(ParkMood mood, int levels) =>
+        (Rank(mood) - Math.Max(0, levels)) switch
+        {
+            >= 2 => ParkMood.Happy,
+            1 => ParkMood.Normal,
+            _ => ParkMood.Sad,
+        };
+
+    private static int Rank(ParkMood mood) => mood switch
+    {
+        ParkMood.Happy => 2,
+        ParkMood.Normal => 1,
+        _ => 0,
+    };
+
+    /// <summary>« heureux », « neutre », « malheureux ».</summary>
+    public static string Adjective(ParkMood mood) => mood switch
+    {
+        ParkMood.Happy => "heureux",
+        ParkMood.Sad => "malheureux",
+        _ => "neutre",
+    };
 
     private static Dictionary<(ParkLandscape, int), ParkHabitatMap> _maps = [];
 

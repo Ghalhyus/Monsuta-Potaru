@@ -19,10 +19,12 @@
     --ard-accent-dark: #c9620f;
     --ard-accent-ink: #a5520c; /* texte orange lisible sur fond clair */
     --ard-accent-soft: #fdf0e4;
+    --ard-accent-soft-rgb: 253, 240, 228; /* la même, pour les fonds des badges (bg-primary de Bootstrap) */
     --ard-accent-ring: rgba(232, 117, 26, .3);
     --ard-bg: #f2f4f7;
     --ard-line: #dfe3e9;
     --ard-head: #f6f7f9;
+    --ard-head-rgb: 246, 247, 249;
     --ard-ink: #1f2933;
     --ard-muted: #66727f;
     --ard-link: #1d6fa5;
@@ -154,6 +156,25 @@ a.ardoise-link.active {
 .ardoise-group.ouvert > .ardoise-subitems { display: flex; }
 .ardoise-subitems .ardoise-link { min-height: 2.1rem; font-size: .85rem; }
 .ardoise-subitems-title { display: none; }
+
+/* Le compte, en bas du menu (au-dessus de « Replier le menu ») : rubrique au pseudo, ou inscription et connexion. La
+   pastille tient la place d'une icône (le pseudo reste aligné sur les autres noms). */
+.ardoise-side-account {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: .5rem .5rem 0;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.ardoise-side-account .ardoise-avatar {
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: 0 -.25rem;
+    font-size: .8rem;
+}
+.ardoise-side-account form { margin: 0; }
 
 /* « Replier le menu » : en bas, double chevron tourné quand le menu est replié */
 .ardoise-collapse {
@@ -331,6 +352,9 @@ a.ardoise-link.active {
         border-radius: 0 .4rem .4rem 0;
         box-shadow: .5rem .5rem 1.5rem rgba(0, 0, 0, .25);
     }
+    /* Le compte, en bas : ses pages s'ouvrent vers le haut (pas sous le bord de la fenêtre) */
+    html[data-menu="replie"] .ardoise-side-account .ardoise-group:hover > .ardoise-subitems,
+    html[data-menu="replie"] .ardoise-side-account .ardoise-group:focus-within > .ardoise-subitems { top: auto; bottom: 0; }
     html[data-menu="replie"] .ardoise-subitems .ardoise-link { justify-content: flex-start; padding: 0 .6rem; }
     html[data-menu="replie"] .ardoise-subitems .ardoise-label { display: block; }
     html[data-menu="replie"] .ardoise-subitems-title {
@@ -344,8 +368,8 @@ a.ardoise-link.active {
     }
 }
 
-/* Téléphone : le menu s'ouvre par-dessus la page avec le bouton de la barre du haut ; le fil d'Ariane ne garde que la
-   page affichée. */
+/* Téléphone : le menu s'ouvre par-dessus la page avec le bouton de la barre du haut, et le fil d'Ariane ne garde que
+   la page affichée. */
 @media (max-width: 640.98px) {
     .ardoise-menu {
         position: fixed;
@@ -361,6 +385,7 @@ a.ardoise-link.active {
     html[data-menu-ouvert] .ardoise-menu { transform: none; box-shadow: .5rem 0 1.5rem rgba(0, 0, 0, .3); }
     html[data-menu-ouvert] .ardoise-backdrop { position: fixed; inset: 0; z-index: 1044; background: rgba(15, 20, 28, .45); }
     .ardoise-collapse { display: none; }
+    .ardoise-side-account { padding-bottom: .5rem; } /* « Replier le menu » caché : le compte est tout en bas */
     .ardoise-burger {
         display: block;
         flex: none;
@@ -574,6 +599,14 @@ a.ardoise-link.active {
 [data-theme="ardoise"] .drag-ghost { border-color: var(--ard-accent); }
 [data-theme="ardoise"] .drag-count { background: var(--ard-accent); }
 
+/* Barre d'outils de « Ma collection » : un bandeau comme l'en-tête de page */
+[data-theme="ardoise"] main .collection-toolbar {
+    padding: .75rem 1rem;
+    border: 1px solid var(--ard-line);
+    border-radius: .5rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+
 /* Filtres de « Ma collection » */
 [data-theme="ardoise"] main .filter-chip.active { border-color: var(--ard-accent); }
 [data-theme="ardoise"] main .filter-chip-caret,
@@ -617,11 +650,11 @@ a.ardoise-link.active {
 [data-theme="ardoise"] main .page-header-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
 [data-theme="ardoise"] main .page-header-small .page-header-title { font-size: 1.25rem; }
 [data-theme="ardoise"] main .badge.page-header-count {
-    background-color: var(--ard-accent-soft) !important;
+    --bs-primary-rgb: var(--ard-accent-soft-rgb); /* fond de bg-primary */
     color: var(--ard-accent-ink);
     font-weight: 600;
 }
-[data-theme="ardoise"] main .page-header-description { margin-top: .35rem; max-width: 70rem; color: var(--ard-muted) !important; }
+[data-theme="ardoise"] main .page-header-description { margin-top: .35rem; max-width: 70rem; --bs-secondary-color: var(--ard-muted); /* text-muted */ }
 [data-theme="ardoise"] main .page-header-back { display: inline-block; margin-bottom: .15rem; }
 /* Page d'un autre joueur, sous son en-tête : un simple titre, pas un second bandeau */
 [data-theme="ardoise"] main .page-header-small { padding: 0; background: none; border: 0; box-shadow: none; }
@@ -650,7 +683,7 @@ a.ardoise-link.active {
     border-bottom: 1px solid var(--ard-line);
 }
 [data-theme="ardoise"] main .block-title { font-size: 1rem; font-weight: 600; }
-[data-theme="ardoise"] main .block-count { background-color: var(--ard-head) !important; color: var(--ard-muted) !important; border: 1px solid var(--ard-line); }
+[data-theme="ardoise"] main .block-count { --bs-primary-rgb: var(--ard-head-rgb); color: var(--ard-muted); border: 1px solid var(--ard-line); }
 [data-theme="ardoise"] main .block-body { padding: 1rem; }
 /* Contenu collé aux bords : listes et tableaux sans leur propre cadre */
 [data-theme="ardoise"] main .block-flush > .block-body { padding: 0; }

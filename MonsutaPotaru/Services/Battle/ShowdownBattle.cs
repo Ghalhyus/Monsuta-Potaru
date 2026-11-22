@@ -104,9 +104,9 @@ public sealed class ShowdownBattle : IAsyncDisposable
         {
             chunk = JsonSerializer.Deserialize<string>(line);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            logger.LogWarning("Simulateur de combat : ligne illisible.");
+            logger.LogWarning(ex, "Simulateur de combat : ligne illisible.");
             return;
         }
         if (chunk is not null)
@@ -146,8 +146,9 @@ public sealed class ShowdownBattle : IAsyncDisposable
                 }
             }
         }
-        catch (InvalidOperationException) // jamais démarré, ou déjà libéré
+        catch (InvalidOperationException)
         {
+            // jamais démarré, ou déjà libéré : rien à arrêter
         }
         process.Dispose();
     }

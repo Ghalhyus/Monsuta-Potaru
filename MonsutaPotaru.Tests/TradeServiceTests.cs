@@ -28,7 +28,7 @@ public sealed class TradeServiceTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     /// <summary>Noire 2 de <paramref name="ot"/> : l'équipe, puis la boîte 1 (Pokémon propres au dresseur : pas de doublons).</summary>
-    private static byte[] Bw2(string ot, ushort tid, ushort[] party, params ushort[] box)
+    internal static byte[] Bw2(string ot, ushort tid, ushort[] party, params ushort[] box)
     {
         var sav = new SAV5B2W2 { OT = ot, TID16 = tid, SID16 = 1, PlayedHours = 10 };
         var n = 0;
@@ -94,6 +94,18 @@ public sealed class TradeServiceTests : IDisposable
         Assert.True(outcome.Ok, outcome.FirstMessage);
         Assert.Contains("Stari", outcome.FirstMessage);
         Assert.Contains("tu as reçu Kadabra, qui a évolué en Alakazam", outcome.SecondMessage);
+
+        // Animation : chacun voit le Pokémon qu'il envoie et celui qu'il reçoit ; seule Ondine voit l'évolution (de son Kadabra).
+        var sachaShow = outcome.FirstShow!;
+        Assert.Equal(("ondine", "Kadabra", "Stari"), (sachaShow.Partner, sachaShow.Sent.Nickname, sachaShow.Received.Nickname));
+        Assert.Empty(sachaShow.Evolutions);
+        Assert.EndsWith("/64.png", sachaShow.Sent.SpriteUrl);
+        var ondineShow = outcome.SecondShow!;
+        Assert.Equal(("sacha", "Stari", "Kadabra"), (ondineShow.Partner, ondineShow.Sent.Nickname, ondineShow.Received.Nickname));
+        var evolution = Assert.Single(ondineShow.Evolutions);
+        Assert.Equal("Alakazam", evolution.EvolvedSpecies);
+        Assert.EndsWith("/64.png", evolution.SpriteUrl); // image avant l'évolution
+        Assert.EndsWith("/65.png", evolution.EvolvedSpriteUrl);
 
         var sacha = await Read(sachaSave);
         Assert.Equal(120, sacha.GetBoxSlotAtIndex(0, 0).Species); // le Stari à la place du Kadabra

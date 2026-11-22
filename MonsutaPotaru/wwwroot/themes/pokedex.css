@@ -34,6 +34,13 @@ html[data-theme="pokedex"] main > .top-row {
     background: linear-gradient(rgba(0, 0, 0, .18), rgba(0, 0, 0, .18)), var(--dex-red);
     border-bottom: 2px solid var(--dex-hinge);
 }
+/* Porte-monnaie sur le rouge de la barre du haut */
+html[data-theme="pokedex"] main > .top-row .top-wallet {
+    color: #fff;
+    border-color: rgba(255, 255, 255, .45);
+}
+html[data-theme="pokedex"] main > .top-row .top-wallet:hover { border-color: #fff; color: #fff; }
+html[data-theme="pokedex"] main > .top-row .top-wallet .bi { filter: none; }
 /* Lentille bleue cerclée de blanc, puis trois voyants (rouge, jaune, vert), devant le nom du site */
 html[data-theme="pokedex"] .sidebar .navbar-brand {
     display: flex;
@@ -150,7 +157,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
     background-color: var(--dex-red);
     border-color: var(--dex-red);
 }
-[data-theme="pokedex"] main .nav-link.active .badge.text-bg-light { color: var(--dex-red) !important; }
+/* La couleur de text-bg-light est imposée (#000 !important) : celle du texte peint passe par -webkit-text-fill-color. */
+[data-theme="pokedex"] main .nav-link.active .badge.text-bg-light { -webkit-text-fill-color: var(--dex-red); }
 [data-theme="pokedex"] main .nav-pills .nav-link { color: var(--dex-frame); }
 [data-theme="pokedex"] main .nav-pills .nav-link.active { color: #fff; background-color: var(--dex-frame); }
 
@@ -189,6 +197,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
     --bs-list-group-bg: #fff;
     --bs-list-group-border-color: var(--dex-screen-line);
     --bs-list-group-action-hover-bg: #f4f7f9;
+    --bs-list-group-active-bg: var(--dex-frame);
+    --bs-list-group-active-border-color: var(--dex-frame);
 }
 [data-theme="pokedex"] main .list-group-item-action:not(:disabled):hover { box-shadow: inset 4px 0 0 var(--dex-red); }
 
@@ -225,8 +235,8 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
 /* ---------- Le reste du site ---------- */
 
 /* Liens (app.css les fixe en bleu) : bleu de la lentille, rouge au survol */
-[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card) { color: #1a6f9a; }
-[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):hover { color: var(--dex-red); }
+[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):not(.top-wallet) { color: #1a6f9a; }
+[data-theme="pokedex"] main a:not(.btn):not(.nav-link):not(.livingdex-card):not(.top-wallet):hover { color: var(--dex-red); }
 
 /* Cases à cocher, barres de progression, listes : plus de bleu de Bootstrap */
 [data-theme="pokedex"] main .form-check-input:checked {
@@ -235,7 +245,6 @@ html[data-theme="pokedex"] .sidebar a.nav-link.active .bi { filter: invert(1); }
 }
 [data-theme="pokedex"] main .form-check-input:focus { box-shadow: 0 0 0 .2rem rgba(48, 167, 215, .3); border-color: var(--dex-lens); }
 [data-theme="pokedex"] main .progress { --bs-progress-bg: #d5dee4; --bs-progress-bar-bg: var(--dex-red); }
-[data-theme="pokedex"] main .list-group { --bs-list-group-active-bg: var(--dex-frame); --bs-list-group-active-border-color: var(--dex-frame); }
 [data-theme="pokedex"] main .btn-light {
     --bs-btn-bg: var(--dex-screen);
     --bs-btn-border-color: var(--dex-frame);

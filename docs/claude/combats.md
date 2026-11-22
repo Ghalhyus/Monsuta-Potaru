@@ -2,9 +2,19 @@
 
 README : « Combats ».
 
+## Musiques (pas encore jouées)
+- L'utilisateur a déposé le 2026-11-15 cinq pistes « Battle! » de la bande originale de HeartGold / SoulSilver, rangées
+  hors Git dans `wwwroot/images/sons/` : `combat-rival.mp3` (134 s), `combat-champion.mp3` (122 s),
+  `combat-meneur-de-zone.mp3` (Frontier Brain, 191 s), `combat-champion-arene-kanto.mp3` (141 s),
+  `combat-champion-arene-johto.mp3` (145 s). Il a demandé de **ne rien brancher pour l'instant**.
+- Pour plus tard, questions déjà posées sans réponse : piste au hasard (la même pour les deux) ou choisie dans
+  « Préférences », boucle (les pistes finissent par un fondu : reprise au début ou points de boucle), fin du combat (fondu,
+  victoire.mp3 si fournie), bouton du son (à côté d'« Agrandir », réglage partagé avec l'animation d'échange). Modèle à
+  suivre : `TradeSounds` et la classe `Music` de `wwwroot/js/echange.js` (`docs/claude/multijoueurs.md`).
+
 ## Moteur
-- Simulateur de Pokémon Showdown (`showdown/`, `@pkmn/sim` en version fixée ; `npm ci --prefix showdown` en local et dans
-  la CI ; étape `node` du `Dockerfile`). Aucune mécanique de combat réécrite en C# : le site traduit le protocole
+- Simulateur de Pokémon Showdown (`showdown/`, `@pkmn/sim` en version fixée ; `npm ci --ignore-scripts --prefix showdown` en local et
+  dans la CI ; étape `node` du `Dockerfile`). Aucune mécanique de combat réécrite en C# : le site traduit le protocole
   (`BattleView`) et dessine l'interface.
 - Nouveau format (génération) : `BattleTeam.Format`.
 - `combat.js` reçoit les Pokémon **par numéros** (PKHeX) et les traduit en noms de Showdown : `byNum` préfère l'entrée
@@ -20,6 +30,10 @@ README : « Combats ».
 - Recensement des lignes produites par Showdown : en Node (`BattleStreams`, équipes au hasard en « gen3customgame » :
   `@pkmn/sim` n'a pas le générateur d'équipes aléatoires).
 
+## Choix de l'équipe
+- Recherche et pastilles de « Ma collection » au-dessus des Pokémon (`PokemonPickerSearch`, `NoEggs`) : voir
+  `multijoueurs.md`, « Recherche des Pokémon à choisir ». L'équipe (`team`) n'est jamais réduite par un filtre.
+
 ## Combat en direct
 - `BattleHub` tient l'état sous `BattleSession.Gate` (le simulateur écrit sur son propre fil) ; les pages lisent par
   `Snapshot` et `Steps` (copies).
@@ -33,6 +47,69 @@ README : « Combats ».
   connexion SQLite, que deux fils ne doivent jamais utiliser en même temps (échecs au hasard en CI, « SQLite Error 5:
   'not an error' » dans `CreateFunction`, le 2026-11-01).
 
+## Interface (deux écrans, façon 4e génération)
+- Tout est dessiné en CSS (`app.css`, « Combats ») d'après des captures d'écran fournies par l'utilisateur (carte
+  Trello 108) : disposition, formes et couleurs reprises, **aucun graphisme découpé d'un jeu**, police du site (son choix).
+- Les deux écrans ont la même largeur (`--ecran`) en 4:3 ; leur contenu se mesure en `em` (1em = 1/32 de la largeur) et
+  en % : ne jamais y mettre de `rem` ni de `px` (les proportions casseraient à une autre taille).
+- Disposition : `BattleLayout` (empilés, côte à côte, hybride par défaut depuis le 2026-11-14), boutons `.battle-layout`
+  et « Préférences » ; retenue dans le compte (`docs/claude/comptes.md`, « Préférences »). `.battle-zone` est un conteneur CSS : sous 40rem de
+  large, toujours empilés sur toute la largeur et boutons cachés, quel que soit le mode choisi.
+- **Mode hybride** (`.battle.hybride`, maquette de l'utilisateur du 2026-11-14) : même page, mêmes éléments, seul le CSS
+  change (bloc `@container` « Mode hybride ») : le terrain en grand, `.battle-bottom` réduit à un panneau à droite (44 %
+  de la largeur du terrain, même hauteur) où tout passe en colonne (`position: relative`, `inset: auto` sur les boutons
+  placés en absolu ailleurs). Ce que la page change pour lui : ABANDONNER rendu après POKéMON (ordre de la colonne).
+  La ligne des sauvegardes et les boutons de disposition restent **au-dessus** du combat, comme dans les autres modes
+  (l'utilisateur a refusé de les passer dessous pour gagner de la hauteur, le 2026-11-14). Dans le panneau : barre des Pokéballs toujours affichée, sur deux lignes ; équipe sur
+  une ligne par Pokémon, sans niveau ni boîte de message. Un bouton ajouté au menu doit aussi tenir dans cette colonne.
+- **Mode agrandi** (maquette de l'utilisateur du 2026-11-14, « comme un plein écran sans cacher l'interface du site ») :
+  bouton « Agrandir » / « Réduire » (`.battle-agrandir`, `aria-pressed`) dans les actions du bloc « Combat contre … »,
+  **juste à côté du titre**, sur sa ligne (demandé par l'utilisateur le 2026-11-14 ; ni sous le titre, règle des autres
+  blocs, ni collé à droite comme sur la maquette) : classe `.en-cours` du bloc, qui passe `.block-header` en ligne. Le
+  bouton n'existe qu'une fois le combat commencé (pendant la demande et le choix des équipes : « Annuler le combat »,
+  sous le titre comme ailleurs, et pas de classe `.agrandi`).
+  Classe `.agrandi` sur le bloc (`.battle-block`, conteneur CSS nommé `combat-bloc`) : CSS seul (bloc « Mode agrandi »
+  après le mode hybride) ; cache `.battle-saves` et `.battle-layout`, enlève les tailles maximales (34/48/56rem) et
+  réduit `--dessus`. Le bouton est caché quand le bloc fait moins de 42.2rem (zone sous 40rem + marges intérieures
+  d'Ardoise : rien à agrandir). Retenu dans le compte (`BattleEnlarged`).
+- `.battle-btn` pose `gap` (donc `row-gap`) : dans une grille serrée (`.battle-member` du mode hybride), le remettre à
+  zéro, sinon la dernière ligne déborde et se fait rogner.
+- Zone large : la taille fait tenir les écrans dans la hauteur de la fenêtre, `--dessus` étant la hauteur de ce que la
+  page affiche au-dessus et au-dessous (mesurée dans Ardoise ; `--alertes` compte les alertes, posé par la page) :
+  24rem en taille normale, 19.1rem en mode agrandi (limites mesurées : 23.9 et 19.0). Un élément ajouté au-dessus des
+  écrans : corriger `--dessus` (les deux), sinon la page défile ; mesure : `document.documentElement.scrollHeight` doit
+  valoir `innerHeight`. À 2293×850 px CSS (écran de l'utilisateur), avec une alerte : terrain de 545 px CSS de large en
+  hybride, 650 agrandi (la hauteur limite : marges sur les côtés).
+- Boutons du jeu : `.battle-btn` (deux tons `--haut` / `--bas`, coins rouges au survol et au focus clavier). Les
+  capacités prennent la couleur du type par `--type`. Plus de bouton SAC depuis le 2026-11-14 (inutile pour l'instant,
+  choix de l'utilisateur) : ABANDONNER à gauche et POKéMON à droite se partagent le bas de l'écran tactile.
+- Le menu de l'équipe prend tout l'écran du bas (`ShowsTeam`, classe `.equipe`) : la barre de Pokéballs, toujours
+  rendue, est cachée par le CSS (sauf en mode hybride) et le minuteur passe dans la boîte de message. Un Pokémon K.O. n'a plus ses PV maximum dans la requête de Showdown (« 0 fnt ») : pas de « 0/159 ».
+
+## Fiche d'un Pokémon de l'équipe (carte Trello 111)
+- Quatre écrans de l'écran du bas (`Menu.Member`, `Summary`, `MemberMoves`, `MoveDetail`), ouverts depuis le menu
+  POKéMON : sélection (`pokemon_selectionne.png`), résumé (`resume.png`), capacités (`move.png`) ; le détail d'une
+  capacité n'a pas de maquette (proposé le 2026-11-14, à valider par l'utilisateur). Pas de ligne d'expérience sur le
+  résumé (choix de l'utilisateur : les combats n'en donnent pas). Consultable pendant son propre choix seulement.
+- `BattleSheet.Of(membre de la requête)` : rien n'est relu dans la sauvegarde. La requête de Showdown ne donne ni les PP
+  d'un Pokémon resté dans sa Ball, ni les PV maximum d'un K.O. (« 0 fnt »), ni les types : `combat.js` les ajoute
+  (`Pokemon.prototype.getSwitchRequestData` : `pp`, `maxhp`, `types`) et écrit la puissance de Puissance Cachée au bout
+  de son identifiant (« hiddenpowerdark70 »). Statistiques : `stats` de la requête (hors modificateurs de combat).
+- Identifiants de capacités de la requête : « return102 », « frustration1 », « hiddenpowerdark70 » ;
+  `BattleNames.ParseMove` en tire le numéro, le type de Puissance Cachée et la puissance écrite. Catégorie de Puissance
+  Cachée : d'après son type (règle de la 3e génération, `BattleSheet.PhysicalTypes`).
+- `BattleDexData.cs` est généré par `outils/combats_textes.py` (réseau et `showdown/node_modules` nécessaires) : puissance,
+  précision et catégorie du simulateur pour la génération donnée ; descriptions françaises de PokéAPI, du plus ancien jeu
+  qui en a une : Rubis/Saphir pour 70 des 76 talents (style court, « Augmente attaques PLANTE. »), Noir/Blanc pour les
+  six autres et pour toutes les capacités (PokéAPI n'a pas de texte français de capacité avant). Une nouvelle génération
+  de combats : relancer le script avec son numéro (une seule table aujourd'hui).
+- `BattleNames.Index` saute les noms sans lettre (« ??? ») : sinon un objet vide (« ») trouvait le premier numéro
+  inutilisé (114) et la fiche demandait `images/objets/114.png`.
+- CSS : `.battle-sheet*`, `.battle-stat`, `.battle-shift` (bloc « Fiche d'un Pokémon de l'équipe ») ; en mode hybride le
+  résumé passe sur une grille à deux colonnes (`display: contents` sur ses deux blocs, ordre par `order`) et le minuteur
+  des fiches est caché (il est déjà dans la barre des Pokéballs). Couleurs des types : `.battle .type-<type>` pose
+  `--type` (capacités du menu, capacités et types de la fiche).
+
 ## Sprites (`BattleSprites`)
 - Ceux du jeu **de celui qui regarde** (sa sauvegarde, connue quand son équipe est acceptée : `BattleTeamResult.Sprites`),
   dans les dossiers des living dex de 3e génération (`dos/`, `chromatique/`, `outils/images.py combats`).
@@ -42,9 +119,25 @@ README : « Combats ».
 
 ## Tests
 - Les tests de combat lancent le vrai simulateur (`BattleTests.Showdown()` : échec clair s'il n'est pas installé ; il faut Node 22+).
+- Le simulateur tire au hasard (coups critiques, précision) : un test qui attend un menu choisit des attaques sans
+  dégâts (`BattlesPageTests` : Sécrétion contre Groz'Yeux). Un K.O. force un remplacement, sans menu ni ABANDONNER (échec en
+  CI le 2026-11-13 : Balayage critique de Férosinge sur Chenipan niveau 4).
+- Sinon, une graine fixe : `BattleHub(..., seed: [1, 2, 3, 4])` rejoue toujours le même combat (`BattleHubTests` : Charge
+  critique de Bulbidou au tour 1, premier Pokémon d'Ondine K.O. 3 fois sur 40, le « tour 2 » n'arrivait jamais ;
+  2026-11-15). Le site garde `BattleSetup.NewSeed`.
 
 ## Essai à deux dans le navigateur
 - Sacha sur `127.0.0.1:5299`, Ondine sur `localhost:5299` ; chacune a une sauvegarde de 3e génération dans la base de
   test (Vert Feuille, Rouge Feu).
-- Clics par `javascript_tool` (un script ne dépasse pas 45 s : découper les attentes). « Fuite » : remplacer
+- Clics par `javascript_tool` (un script ne dépasse pas 45 s : découper les attentes). « ABANDONNER » : remplacer
   `window.confirm` avant de cliquer. Le minuteur se vérifie sans rien choisir pendant ~70 s.
+- Le volet du navigateur est petit (environ 608×346 px CSS) : pour voir l'écran du bas en entier, réduire `--ecran`
+  (370px) puis `scrollIntoView({block: 'end'})` ; pour le mode hybride, émuler une fenêtre de 900×512, replier le menu
+  du site et forcer `--ecran` à 500px (la zone doit dépasser 40rem). Changer de disposition ou d'écran ne recharge rien.
+- Taille de l'écran de l'utilisateur : `resize_window` 2293×850 (le volet réduit l'image) ; le bouton « Agrandir » y est
+  visible. Mesurer `--dessus` dans les deux modes par `scrollHeight` (essai d'une valeur : `style.setProperty('--dessus', …)`
+  sur `.battle`, sans recharger).
+- Recharger la page pendant un combat le fait perdre (le circuit fermé quitte le combat) : une retouche de CSS se
+  regarde au combat suivant. Pour voir les détails, agrandir les écrans le temps d'une capture
+  (`.battle` : `style.setProperty('--ecran', '520px')`) ; chaque joueur n'a que 60 secondes par choix.
+- Pas de champ pour demander en ami sur « Amis » sans code : passer par `/joueurs/<pseudo>`, « Demander en ami ».

@@ -51,8 +51,12 @@ const SPRITE_SIZE = 2 / 3;
 const WALK_SPEED = 27; // vitesse de marche (pixels de la carte par seconde), selon le caractère
 const WALK_ANIMATION_SPEED = 30; // vitesse à laquelle l'animation de marche joue à son rythme normal (pieds sans glisser),
                                  // pour des sprites à la taille des pixels de la carte (plus petits : foulée plus courte)
-const DRAG_THRESHOLD = 6; // pixels (CSS) avant qu'un clic devienne un glissement de la vue (ou soulève un Pokémon)
-const LONG_PRESS = 300; // ms d'appui sans bouger, au doigt, pour soulever un Pokémon (sinon le doigt fait glisser la vue)
+const DRAG_THRESHOLD = 6; // pixels (CSS) avant qu'un clic devienne un glissement de la vue
+// Appui sans bouger (souris ou doigt) pour soulever un Pokémon : un glissement avant fait défiler la vue (on ne prend pas un
+// Pokémon en voulant seulement bouger la vue)
+const LONG_PRESS = 500; // ms
+// Cercle qui se remplit à côté du Pokémon pendant l'appui (pixels CSS), montré après <delay> ms (rien sur un simple clic)
+const PRESS_RING = { delay: 150, radius: 8, width: 3, gap: 4 };
 const LIFT = 8; // hauteur (pixels de la carte) d'un Pokémon soulevé au-dessus de son ombre
 const HELD_DEPTH = 3.5; // un Pokémon soulevé passe devant tout (feuillages, brouillard), sous la nuit (4)
 const EDGE_SCROLL = { margin: 48, speed: 420 }; // en le portant près du bord (pixels CSS) : la vue défile (pixels CSS / s)
@@ -64,6 +68,34 @@ const ONCE = new Set(["attack", "hurt"]);
 // Pokémon malheureux (habitats du parc : Services/ParkHabitats.cs) : de temps en temps, il attaque un Pokémon proche
 // (secondes entre deux attaques ; sans cible à portée, il réessaie un peu plus tard) et boude (Hurt joué seul, immobile)
 const SAD = { attackEvery: [45, 90], retry: [5, 10], reach: 128, sulkEvery: [30, 50] };
+// Humeurs, de la plus basse à la plus haute : le malus « attaqué » (ParkPokemon.Malus, ParkService.RecordAttackAsync)
+// descend de ses niveaux dans cette liste, jamais plus bas que « sad » (même règle que ParkHabitats.WithMalus)
+const MOODS = ["sad", "normal", "happy"];
+// Nuage d'orage au-dessus d'un Pokémon malheureux (habitat ou malus), en pixels de sprite : « + » haut éclairé, « # »
+// nuage, « - » dessous sombre ; trois images sous le nuage, la pluie (deux images qui alternent) et l'éclair (un instant
+// de temps en temps). <cloud> : lignes du nuage seul (le bas du nuage est posé au-dessus de la tête).
+const STORM = {
+    cloud: [
+        "     +++       ",
+        "   ++###+ ++   ",
+        "  +######+##+  ",
+        " +###########+ ",
+        "+#############+",
+        "+#############+",
+        " -###########- ",
+        "  -----------  ",
+    ],
+    frames: {
+        rain1: ["  b   b   b    ", "               ", "    b   b   b  ", "               "],
+        rain2: ["               ", "  b   b   b    ", "               ", "    b   b   b  "],
+        bolt: ["       yy      ", "      yy       ", "     yyyy      ", "       y       "],
+    },
+    colors: { "+": "#8a93a6", "#": "#646c7e", "-": "#474d5c", b: "#8fc8ff", y: "#ffe066" },
+    rain: 0.25, // secondes par image de pluie
+    flashEvery: [2.5, 5], // secondes entre deux éclairs
+    flash: 0.12, // durée d'un éclair (deux fois de suite)
+    gap: 2, // pixels de la carte entre la tête et le nuage
+};
 const STRIKE_RANGE = 26; // distance (pixels de la carte) d'où il frappe
 const FLEE = { speed: 2, distance: [96, 160] }; // le Pokémon frappé s'enfuit plus vite, à 6 à 10 cases de l'attaquant
 // Énergie (par seconde) : 3 à 5 minutes d'activité le jour avant une sieste d'environ une minute ; la nuit, ils
@@ -186,7 +218,7 @@ class Ground {
         this.habitats = new Uint8Array(this.columns * this.lines);
         (data?.habitats ?? []).forEach((row, y) => {
             for (let x = 0; x < this.columns && x < row.length && y < this.lines; x++) {
-                const h = row.charCodeAt(x) - 48;
+                const h = row.codePointAt(x) - 48;
                 if (h >= 0 && h <= 7) this.habitats[y * this.columns + x] = h;
             }
         });
@@ -236,44 +268,69 @@ class Ground {
      * ce type la plus proche du centre de la vue de départ. Rend ces cases.
      */
     openLiquid(collisions, decors, front, habitat, bit) {
-        const { columns } = this, { x: sx, y: sy, w: sw, h: sh } = this.area;
-        const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(columns, sx + sw), y1 = Math.min(this.lines, sy + sh);
-        const inArea = (x, y) => x >= x0 && y >= y0 && x < x1 && y < y1;
+        const bounds = this.areaBounds();
         const bare = i => collisions[i] && !decors[i] && !front[i]; // bloquée, sans objet
-        const open = new Uint8Array(columns * this.lines);
-        for (let y = y0; y < y1; y++)
-            for (let x = x0; x < x1; x++)
-                if (bare(y * columns + x) && this.habitats[y * columns + x] === habitat) open[y * columns + x] = 1;
-        const touchesWater = (x, y) => {
-            for (let dy = -1; dy <= 1; dy++)
-                for (let dx = -1; dx <= 1; dx++)
-                    if (inArea(x + dx, y + dy) && open[(y + dy) * columns + x + dx] === 1) return true;
-            return false;
-        };
-        for (let y = y0; y < y1; y++)
-            for (let x = x0; x < x1; x++)
-                if (!open[y * columns + x] && bare(y * columns + x) && !this.walkable[y * columns + x] && touchesWater(x, y))
-                    open[y * columns + x] = 2; // le bord (pas déjà pris par l'autre liquide)
+        const open = this.liquidTiles(bounds, bare, habitat);
         // Reliée à la terre : de proche en proche (par les côtés) depuis les cases où l'on marche
-        const cells = [], queue = [...this.free], seen = new Uint8Array(columns * this.lines);
+        const cells = [], queue = [...this.free];
         if (!queue.length) {
-            const cx = this.start.x + this.start.w / 2, cy = this.start.y + this.start.h / 2;
-            let first = -1, best = Infinity;
-            for (let i = 0; i < open.length; i++) {
-                const d = (i % columns + 0.5 - cx) ** 2 + (Math.floor(i / columns) + 0.5 - cy) ** 2;
-                if (open[i] === 1 && !this.walkable[i] && d < best) { first = i; best = d; }
-            }
+            const first = this.liquidNearStart(open);
             if (first < 0) return cells;
             this.walkable[first] = bit;
             cells.push(first);
             queue.push(first);
         }
+        return cells.concat(this.spreadLiquid(queue, open, bounds, bit));
+    }
+
+    /** Zone « Parc » ramenée à la carte (x0 ≤ x < x1, y0 ≤ y < y1), et le test « dans la zone ». */
+    areaBounds() {
+        const { x: sx, y: sy, w: sw, h: sh } = this.area;
+        const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(this.columns, sx + sw), y1 = Math.min(this.lines, sy + sh);
+        return { x0, y0, x1, y1, inside: (x, y) => x >= x0 && y >= y0 && x < x1 && y < y1 };
+    }
+
+    /** Cases du liquide dans la zone : 1 le liquide (bloqué, sans objet), 2 son bord bloqué sans objet, 0 le reste. */
+    liquidTiles({ x0, y0, x1, y1, inside }, bare, habitat) {
+        const { columns } = this;
+        const open = new Uint8Array(columns * this.lines);
+        for (let y = y0; y < y1; y++)
+            for (let x = x0; x < x1; x++)
+                if (bare(y * columns + x) && this.habitats[y * columns + x] === habitat) open[y * columns + x] = 1;
+        const touchesLiquid = (x, y) => {
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    if (inside(x + dx, y + dy) && open[(y + dy) * columns + x + dx] === 1) return true;
+            return false;
+        };
+        for (let y = y0; y < y1; y++)
+            for (let x = x0; x < x1; x++)
+                if (!open[y * columns + x] && bare(y * columns + x) && !this.walkable[y * columns + x] && touchesLiquid(x, y))
+                    open[y * columns + x] = 2; // le bord (pas déjà pris par l'autre liquide)
+        return open;
+    }
+
+    /** Sans terre (l'océan) : la case de liquide la plus proche du centre de la vue de départ (-1 s'il n'y en a pas). */
+    liquidNearStart(open) {
+        const { columns } = this;
+        const cx = this.start.x + this.start.w / 2, cy = this.start.y + this.start.h / 2;
+        let first = -1, best = Infinity;
+        for (let i = 0; i < open.length; i++) {
+            const d = (i % columns + 0.5 - cx) ** 2 + (Math.floor(i / columns) + 0.5 - cy) ** 2;
+            if (open[i] === 1 && !this.walkable[i] && d < best) { first = i; best = d; }
+        }
+        return first;
+    }
+
+    /** Ouvre (<bit>) les cases de liquide reliées par les côtés à celles de <queue>, de proche en proche. Rend ces cases. */
+    spreadLiquid(queue, open, { inside }, bit) {
+        const { columns } = this, cells = [], seen = new Uint8Array(columns * this.lines);
         for (const i of queue) seen[i] = 1;
         while (queue.length) {
             const i = queue.pop(), x = i % columns, y = Math.floor(i / columns);
             for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
                 const j = ny * columns + nx;
-                if (!inArea(nx, ny) || seen[j] || !open[j] || this.walkable[j]) continue;
+                if (!inside(nx, ny) || seen[j] || !open[j] || this.walkable[j]) continue;
                 seen[j] = 1;
                 this.walkable[j] = bit;
                 cells.push(j);
@@ -310,9 +367,9 @@ class Ground {
      * (LAVA), l'une ou l'autre (LIQUID), ou sur un sommet (SUMMIT) s'il y en a.
      */
     randomSpot(where = LAND) {
-        const liquid = where === WATER ? this.water : where === LAVA ? this.lava : where === LIQUID ? this.liquid
-            : where === SUMMIT ? this.summits : this.free;
-        const cells = liquid.length ? liquid : this.free.length ? this.free : this.liquid; // sans terre (océan) : l'eau
+        const wanted = { [WATER]: this.water, [LAVA]: this.lava, [LIQUID]: this.liquid, [SUMMIT]: this.summits }[where] ?? this.free;
+        const fallback = this.free.length ? this.free : this.liquid; // sans terre (océan) : l'eau
+        const cells = wanted.length ? wanted : fallback;
         if (!cells.length) return { x: this.width / 2, y: this.height / 2 };
         const c = this.center(cells[Math.floor(Math.random() * cells.length)]);
         return { x: c.x + random(-4, 4), y: c.y + random(-4, 4) };
@@ -459,12 +516,14 @@ class Pokemon {
         this.zzz = 0;
         this.vx = 0; // vitesse actuelle : accélère, tourne et freine progressivement
         this.vy = 0;
-        this.mood = info.mood ?? "normal"; // « sad » : attaque les autres et boude de temps en temps
+        this.mood = info.mood ?? "normal"; // selon l'habitat ; « sad » : attaque les autres et boude (moodOf : malus compris)
+        this.malus = null; // malus « attaqué » : { levels, end } (setMalus)
+        this.nextFlash = random(...STORM.flashEvery); // nuage d'orage : prochain éclair (secondes de clock)
         this.nextAttack = random(...SAD.attackEvery);
         this.nextSulk = random(...SAD.sulkEvery);
         this.prey = null; // Pokémon qu'il va attaquer
         this.hit = null; // frappé : { by, delay } (il a mal un instant après le début de l'attaque)
-        this.then = null; // après une animation jouée une fois
+        this.afterPlay = null; // après une animation jouée une fois
         this.moves = info.moves ?? null; // « swim » (Eau), « lava » (Feu), « swim-lava », « fly » (Vol) ou null (ParkPokemon.Moves)
         this.wet = 0; // nageur (ou dans la lave) : 0 sur terre, 1 dans l'eau (progressif en y entrant)
         this.liquid = WATER; // où il est (ou était) plongé : WATER ou LAVA (couleur des remous)
@@ -544,9 +603,9 @@ class Pokemon {
 
     face(other) { this.dir = directionOf(other.x - this.x, other.y - this.y); }
 
-    /** Joue une fois une animation (« attack », « hurt »), sur place, puis <then> (sinon il se repose). */
-    play(state, then) {
-        Object.assign(this, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, then: then ?? null });
+    /** Joue une fois une animation (« attack », « hurt »), sur place, puis <afterPlay> (sinon il se repose). */
+    play(state, afterPlay) {
+        Object.assign(this, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, afterPlay: afterPlay ?? null });
         this.setState(state);
         this.frame = 0;
         this.frameTime = 0;
@@ -590,10 +649,36 @@ export async function create(container, component, options) {
     let k = 1; // pixels d'écran par pixel de la carte (zoom de la caméra)
     let spriteK = 2; // pixels d'écran par pixel de sprite
     let spriteScale = SPRITE_SIZE; // pixels de la carte par pixel de sprite
-    let scene = null, camera = null, night = null, label = null, labelText = null, marker = null;
+    let scene = null, camera = null, night = null, label = null, labelText = null, marker = null, ring = null;
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
     let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
     let clock = 0; // secondes écoulées (remous)
+    let skew = 0; // secondes ajoutées à l'horloge par simulate (essais) : la fin d'un malus arrive aussi en accéléré
+    const wallNow = () => Date.now() + skew * 1000;
+
+    /** Malus « attaqué » reçu de la page (ParkMalusInfo : niveaux, secondes restantes), ou null. */
+    const setMalus = (p, malus) => {
+        p.malus = malus?.levels > 0 && malus.seconds > 0 ? { levels: malus.levels, end: wallNow() + malus.seconds * 1000 } : null;
+    };
+
+    /** Humeur du moment : celle de l'habitat, abaissée par le malus « attaqué » tant qu'il dure. */
+    const moodOf = p => {
+        if (!p.malus) return p.mood;
+        if (wallNow() >= p.malus.end) { p.malus = null; return p.mood; } // fini : l'habitat décide de nouveau
+        const rank = MOODS.indexOf(p.mood);
+        return MOODS[Math.max(0, (rank < 0 ? 1 : rank) - p.malus.levels)];
+    };
+
+    /**
+     * Attaqué (frappé) : la page du propriétaire enregistre le malus et rend le nouveau (niveaux, temps restant) ; chez un
+     * visiteur, rien (il voit les malus enregistrés, pas ceux de ses propres animations).
+     */
+    const reportAttack = p => {
+        if (!canMove) return;
+        Promise.resolve(component.invokeMethodAsync("OnPokemonAttacked", p.id))
+            .then(malus => { if (malus && pokemon.includes(p)) setMalus(p, malus); })
+            .catch(() => { /* page fermée ou circuit coupé : l'humeur ne change pas */ });
+    };
     const animated = []; // tuiles animées de la carte : { image, animation, offset, index } (animatedTiles)
     let animationClock = 0; // millisecondes écoulées (tuiles animées)
 
@@ -602,6 +687,13 @@ export async function create(container, component, options) {
     // qui tient dans la hauteur visible sous le parc (sur un téléphone : pas plus que la zone entière en largeur). En plein
     // écran : tout l'écran, et le plus grand zoom où la zone « Départ » tient en hauteur ----------
     const isFullscreen = () => document.fullscreenElement === fullscreenTarget;
+    /** Hauteur (pixels CSS, marges comprises) des messages passagers placés avant le parc dans la page. */
+    const transientAbove = () => [...document.querySelectorAll("[data-hors-mesure]")]
+        .filter(e => e.compareDocumentPosition(container) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .reduce((sum, e) => {
+            const style = getComputedStyle(e);
+            return sum + e.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+        }, 0);
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
         if (isFullscreen()) {
@@ -609,7 +701,9 @@ export async function create(container, component, options) {
             return { ratio, zoom: Math.max(1, Math.floor(height / viewH)), width: Math.round(container.clientWidth * ratio), height };
         }
         const width = container.clientWidth || viewW;
-        const top = container.getBoundingClientRect().top + window.scrollY;
+        // Les messages passagers au-dessus du parc ([data-hors-mesure] : « Parc agrandi »...) ne comptent pas : la carte
+        // garde la même taille, qu'ils soient affichés ou non.
+        const top = container.getBoundingClientRect().top + window.scrollY - transientAbove();
         const visible = Math.max(240, window.innerHeight - top - 24) * ratio;
         const fitWidth = Math.round(width * ratio / viewW); // zone à peu près entière en largeur
         const zoom = Math.max(1, Math.round(240 * ratio / viewH), Math.min(Math.floor(visible / viewH), fitWidth));
@@ -733,7 +827,7 @@ export async function create(container, component, options) {
         game.canvas.classList.add("park-canvas");
         game.canvas.addEventListener("wheel", onWheel, { passive: false });
         // Sous la carte : sa couleur de fond (la roche d'une grotte, là où le sol est transparent), ou de l'herbe (planches absentes)
-        const background = data?.backgroundcolor ? parseInt(data.backgroundcolor.slice(-6), 16) : GRASS;
+        const background = data?.backgroundcolor ? Number.parseInt(data.backgroundcolor.slice(-6), 16) : GRASS;
         s.add.rectangle(0, 0, ground.width, ground.height, background).setOrigin(0).setDepth(-1);
         // La carte ne bouge pas : ses calques sont dessinés une seule fois, dans une image sous les Pokémon (sol, décors), des
         // morceaux de feuillages triés avec eux (foliage) et une image devant tout (brouillard). Des calques de tuiles
@@ -775,6 +869,7 @@ export async function create(container, component, options) {
         labelText = s.add.text(0, 0, "", { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "8px", color: "#ffffff", resolution: k })
             .setDepth(6.1).setVisible(false);
         marker = s.add.graphics().setDepth(HELD_DEPTH - 0.1).setVisible(false); // case visée par un Pokémon soulevé
+        ring = s.add.graphics().setDepth(6.2).setVisible(false); // appui en cours sur un Pokémon (PRESS_RING)
 
         camera.roundPixels = true;
         applyZoom(k); // zoom et limites de la vue
@@ -811,7 +906,7 @@ export async function create(container, component, options) {
         const stamp = s.make.image({ key: "lumiere", add: false });
         for (const light of lights) {
             const property = name => light.properties?.find(p => p.name === name)?.value;
-            const radius = property("rayon") ?? 64, color = parseInt(String(property("couleur") ?? "#ffffff").slice(-6), 16);
+            const radius = property("rayon") ?? 64, color = Number.parseInt(String(property("couleur") ?? "#ffffff").slice(-6), 16);
             stamp.setPosition(light.x, light.y).setDisplaySize(2 * radius, 2 * radius).setAlpha(SHADE.clear);
             veil.erase(stamp);
             s.add.image(light.x, light.y, "lumiere").setDisplaySize(2 * radius, 2 * radius).setTint(color)
@@ -965,10 +1060,12 @@ export async function create(container, component, options) {
     // ---------- Pokémon soulevé (propriétaire) : suit le pointeur, posé seulement sur une case où il peut marcher ----------
     const spot = new Phaser.Math.Vector2(); // gardé : la position suit le pointeur à chaque image, sans déchets
 
-    function pickUp(p, pointer) {
+    /** Soulevé à l'endroit du pointeur où on l'a pris (<offset> : écart au moment de l'appui ; il a pu marcher depuis). */
+    function pickUp(p, pointer, offset) {
         camera.getWorldPoint(pointer.x, pointer.y, spot);
-        held = { p, from: { x: p.x, y: p.y }, dx: p.x - spot.x, dy: p.y - spot.y, pointer };
-        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, then: null });
+        const dx = offset?.dx ?? p.x - spot.x, dy = offset?.dy ?? p.y - spot.y;
+        held = { p, from: { x: p.x, y: p.y }, dx, dy, pointer };
+        Object.assign(p, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, dir: FRONT, prey: null, hit: null, afterPlay: null });
         p.setState("held"); // un dormeur se réveille (une attaque prévue n'a pas lieu)
         drag = null;
         hovered = null;
@@ -1038,11 +1135,12 @@ export async function create(container, component, options) {
                 return;
             }
             if (held) return;
-            // Sur un Pokémon (propriétaire) : à la souris, il est soulevé dès qu'on bouge ; au doigt, après un appui long
-            // (tick), un glissement avant fait défiler la vue
-            const target = canMove ? at(worldOf(pointer)) ?? null : null;
+            // Sur un Pokémon (propriétaire) : soulevé après un appui long sans bouger (tick, cercle de PRESS_RING) ; un
+            // glissement avant fait défiler la vue
+            const point = worldOf(pointer);
+            const target = canMove ? at(point) ?? null : null;
             drag = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY, moved: false,
-                target, touch: pointer.wasTouch, time: performance.now(), pointer };
+                target, offset: target && { dx: target.x - point.x, dy: target.y - point.y }, time: performance.now(), pointer };
         });
         const pinchMove = () => {
             if (!pinching()) return;
@@ -1052,14 +1150,11 @@ export async function create(container, component, options) {
                 pinch.spread = now;
             }
         };
-        // Bouton appuyé : au-delà du seuil, le Pokémon visé est soulevé ou la vue défile
+        // Bouton appuyé : au-delà du seuil, la vue défile (même sur un Pokémon, avant la fin de l'appui long)
         const dragMove = pointer => {
             const dx = pointer.x - drag.x, dy = pointer.y - drag.y;
-            if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) {
-                if (drag.target && !drag.touch) pickUp(drag.target, pointer);
-                else drag.moved = true;
-            }
-            if (drag?.moved) camera.setScroll(drag.scrollX - dx / k, drag.scrollY - dy / k);
+            if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) drag.moved = true;
+            if (drag.moved) camera.setScroll(drag.scrollX - dx / k, drag.scrollY - dy / k);
         };
         s.input.on("pointermove", pointer => {
             if (pinch) {
@@ -1119,7 +1214,7 @@ export async function create(container, component, options) {
 
     /** Part attaquer <prey> (il marche jusqu'à lui). */
     function charge(p, prey) {
-        Object.assign(p, { prey, tries: 0, then: null, hit: null });
+        Object.assign(p, { prey, tries: 0, afterPlay: null, hit: null });
         approach(p);
     }
 
@@ -1175,7 +1270,6 @@ export async function create(container, component, options) {
 
     /** Nouvelle intention quand le Pokémon a fini ce qu'il faisait. */
     function decide(p, night) {
-        const { activity, sleepy, sociable, curious } = p.personality;
         const friends = friendsOf(p);
         if (!ground.isFree(p.x, p.y, p.reach)) {
             // Volant arrêté au-dessus de l'eau ou de la lave (clic, chemin barré) : il va d'abord se poser sur la terre ferme.
@@ -1183,62 +1277,84 @@ export async function create(container, component, options) {
             p.walkTo(land.x, land.y, "explore");
             return;
         }
-        if (p.energy < 0.22 + night * 0.4 + sleepy) {
-            // Fatigué : il va dormir près d'un congénère qui dort, sinon sur place ; dans la lave, il en sort d'abord.
-            const sleeper = friends.filter(f => f.state === "sleep").sort((a, b) => distance(p, a) - distance(p, b))[0];
-            if (sleeper && Math.random() < sociable && distance(p, sleeper) > 20) {
-                const side = p.x < sleeper.x ? -1 : 1;
-                p.walkTo(sleeper.x + side * random(16, 23), sleeper.y + random(-5, 5), "sleep", p.bed);
-            } else if (!ground.isFree(p.x, p.y, p.bed)) {
-                const bed = ground.nearestFree(p.x, p.y, p.bed);
-                p.walkTo(bed.x, bed.y, "sleep", p.bed);
-            } else {
-                p.sleep();
-            }
+        if (p.energy < 0.22 + night * 0.4 + p.personality.sleepy) {
+            goToSleep(p, friends);
             return;
         }
-        if (p.mood === "sad" && p.nextAttack <= 0) {
-            // Malheureux : de temps en temps, il s'en prend à un Pokémon proche (pas de sa famille), même endormi.
-            const prey = preyOf(p, false);
-            if (prey) {
-                p.nextAttack = random(...SAD.attackEvery);
-                charge(p, prey);
-                return;
-            }
+        if (attackIfSad(p) || visitPointer(p) || keepCompany(p, friends)) return;
+        wander(p);
+    }
+
+    /** Fatigué : il va dormir près d'un congénère qui dort, sinon sur place ; dans la lave, il en sort d'abord. */
+    function goToSleep(p, friends) {
+        const sleeper = friends.filter(f => f.state === "sleep").sort((a, b) => distance(p, a) - distance(p, b))[0];
+        if (sleeper && Math.random() < p.personality.sociable && distance(p, sleeper) > 20) {
+            const side = p.x < sleeper.x ? -1 : 1;
+            p.walkTo(sleeper.x + side * random(16, 23), sleeper.y + random(-5, 5), "sleep", p.bed);
+        } else if (ground.isFree(p.x, p.y, p.bed)) {
+            p.sleep();
+        } else {
+            const bed = ground.nearestFree(p.x, p.y, p.bed);
+            p.walkTo(bed.x, bed.y, "sleep", p.bed);
+        }
+    }
+
+    /** Malheureux : de temps en temps, il s'en prend à un Pokémon proche (pas de sa famille), même endormi. Vrai s'il part. */
+    function attackIfSad(p) {
+        if (moodOf(p) !== "sad" || p.nextAttack > 0) return false;
+        const prey = preyOf(p, false);
+        if (!prey) {
             p.nextAttack = random(...SAD.retry);
+            return false;
         }
-        if (mouse && distance(p, mouse) < 133 && Math.random() < 0.6 * curious) {
-            // Curieux : il vient voir le pointeur de près, puis le regarde.
-            if (distance(p, mouse) > 30) {
-                const angle = Math.atan2(p.y - mouse.y, p.x - mouse.x);
-                p.walkTo(mouse.x + Math.cos(angle) * 21, mouse.y + Math.sin(angle) * 16, "curious");
-            } else {
-                p.face(mouse);
-                p.rest(random(2, 5));
-            }
-            return;
+        p.nextAttack = random(...SAD.attackEvery);
+        charge(p, prey);
+        return true;
+    }
+
+    /** Curieux : il vient voir le pointeur de près, puis le regarde. Vrai s'il s'y intéresse. */
+    function visitPointer(p) {
+        if (!mouse || distance(p, mouse) >= 133 || Math.random() >= 0.6 * p.personality.curious) return false;
+        if (distance(p, mouse) > 30) {
+            const angle = Math.atan2(p.y - mouse.y, p.x - mouse.x);
+            p.walkTo(mouse.x + Math.cos(angle) * 21, mouse.y + Math.sin(angle) * 16, "curious");
+        } else {
+            p.face(mouse);
+            p.rest(random(2, 5));
         }
+        return true;
+    }
+
+    /**
+     * Avec un congénère tout près : il reste un moment avec lui (se repose face à lui, ou flâne autour) ; sinon, il rend
+     * parfois visite à un Pokémon de sa famille, de préférence proche. Vrai s'il le fait.
+     */
+    function keepCompany(p, friends) {
+        const { activity, sociable } = p.personality;
         const roll = Math.random();
-        const nearest = friends.sort((a, b) => distance(p, a) - distance(p, b))[0];
+        friends.sort((a, b) => distance(p, a) - distance(p, b)); // du plus proche au plus loin (visite plus bas)
+        const nearest = friends[0];
         if (nearest && distance(p, nearest) < 47) {
-            // Avec un congénère : il reste un moment avec lui (se repose face à lui, ou flâne autour).
-            if (roll < 0.45 + 0.35 * sociable) {
-                if (Math.random() < 0.55) {
-                    p.face(nearest);
-                    p.rest(random(3, 8) / activity);
-                } else {
-                    const angle = random(0, Math.PI * 2);
-                    p.walkTo(nearest.x + Math.cos(angle) * random(17, 33), nearest.y + Math.sin(angle) * random(11, 23), "stroll");
-                }
-                return;
+            if (roll >= 0.45 + 0.35 * sociable) return false;
+            if (Math.random() < 0.55) {
+                p.face(nearest);
+                p.rest(random(3, 8) / activity);
+            } else {
+                const angle = random(0, Math.PI * 2);
+                p.walkTo(nearest.x + Math.cos(angle) * random(17, 33), nearest.y + Math.sin(angle) * random(11, 23), "stroll");
             }
-        } else if (friends.length && roll < 0.1 + 0.45 * sociable) {
-            // Rendre visite à un Pokémon de sa famille, de préférence proche.
-            const friend = friends[Math.floor(Math.random() ** 2 * friends.length)];
-            const angle = random(0, Math.PI * 2);
-            p.walkTo(friend.x + Math.cos(angle) * 20, friend.y + Math.sin(angle) * 13, "visit");
-            return;
+            return true;
         }
+        if (!friends.length || roll >= 0.1 + 0.45 * sociable) return false;
+        const friend = friends[Math.floor(Math.random() ** 2 * friends.length)];
+        const angle = random(0, Math.PI * 2);
+        p.walkTo(friend.x + Math.cos(angle) * 20, friend.y + Math.sin(angle) * 13, "visit");
+        return true;
+    }
+
+    /** Rien de mieux à faire : un tour au-dessus du liquide (volant), explorer, ou regarder autour de soi. */
+    function wander(p) {
+        const { activity } = p.personality;
         if (p.moves === "fly" && ground.liquid.length && Math.random() < 0.55 * FLY_OVER) {
             // Volant : un tour au-dessus de l'eau ou de la lave (il n'y reste pas : arrivé, il repart vers la terre, update).
             const spot = spotNear(p, LIQUID);
@@ -1255,86 +1371,132 @@ export async function create(container, component, options) {
     }
 
     function update(p, dt, night) {
-        const { activity, curious } = p.personality;
         if (p.state === "held") return; // porté : suit le pointeur
         if (p.hit && (p.hit.delay -= dt) <= 0) { // frappé (même endormi) : il a mal, puis s'enfuit
             const by = p.hit.by;
             p.hit = null;
             hurt(p, by);
+            reportAttack(p); // malus « attaqué » (page du propriétaire)
             return;
         }
         if (ONCE.has(p.state)) { // animation jouée une fois (attaque, douleur), puis la suite
-            p.timer -= dt;
-            if (p.timer <= 0) {
-                const then = p.then;
-                p.then = null;
-                if (then) then();
-                else p.rest(random(1, 3));
-            }
+            playedOnce(p, dt);
             return;
         }
-        if (p.mood === "sad" && p.state !== "sleep") { p.nextAttack -= dt; p.nextSulk -= dt; }
+        if (moodOf(p) === "sad" && p.state !== "sleep") { p.nextAttack -= dt; p.nextSulk -= dt; }
         if (p.state === "sleep") {
-            p.energy = Math.min(1, p.energy + dt * (night > 0.5 ? ENERGY.sleepNight : ENERGY.sleepDay));
-            p.zzz += dt;
-            if (p.energy >= p.wakeAt && (night < 0.5 || chance(0.002, dt))) { // la nuit, rares réveils
-                p.dir = FRONT;
-                p.rest(random(1.5, 3)); // se réveille, regarde devant lui un moment
-            }
+            sleepOn(p, dt, night);
             return;
         }
+        const nearMouse = watchPointer(p, dt);
+        if (p.state === "idle") idle(p, dt, night, nearMouse);
+        else walk(p, dt);
+    }
 
-        // Curiosité : un Pokémon éveillé près du pointeur se tourne vers lui, et parfois s'en approche.
+    /** Fin d'une animation jouée une fois : la suite prévue, sinon il se repose. */
+    function playedOnce(p, dt) {
+        p.timer -= dt;
+        if (p.timer > 0) return;
+        const afterPlay = p.afterPlay;
+        p.afterPlay = null;
+        if (afterPlay) afterPlay();
+        else p.rest(random(1, 3));
+    }
+
+    /** Endormi : il reprend de l'énergie, et se réveille une fois reposé (la nuit, rarement). */
+    function sleepOn(p, dt, night) {
+        p.energy = Math.min(1, p.energy + dt * (night > 0.5 ? ENERGY.sleepNight : ENERGY.sleepDay));
+        p.zzz += dt;
+        if (p.energy >= p.wakeAt && (night < 0.5 || chance(0.002, dt))) { // la nuit, rares réveils
+            p.dir = FRONT;
+            p.rest(random(1.5, 3)); // se réveille, regarde devant lui un moment
+        }
+    }
+
+    /** Curiosité : un Pokémon éveillé près du pointeur se tourne vers lui, et parfois s'en approche. Vrai s'il en est près. */
+    function watchPointer(p, dt) {
         const nearMouse = mouse && distance(p, mouse) < 93;
         if (nearMouse && p.state === "idle") {
             p.face(mouse);
-            if (chance(0.12 * curious, dt) && distance(p, mouse) > 27)
+            if (chance(0.12 * p.personality.curious, dt) && distance(p, mouse) > 27)
                 p.walkTo(mouse.x + random(-13, 13), mouse.y + random(10, 20), "curious");
         }
+        return nearMouse;
+    }
 
-        if (p.state === "idle") {
-            p.energy = Math.max(0, p.energy - dt * ENERGY.idle);
-            p.timer -= dt;
-            p.lookTimer -= dt;
-            if (p.lookTimer <= 0 && !nearMouse) {
-                // Il regarde autour de lui : un quart de tour, ou de nouveau devant lui.
-                p.dir = Math.random() < 0.25 ? FRONT : (p.dir + (Math.random() < 0.5 ? 1 : 7)) % 8;
-                p.lookTimer = random(1.2, 3.5);
-            }
-            if (p.mood === "sad" && p.nextSulk <= 0) { // malheureux : il boude un instant
-                p.nextSulk = random(...SAD.sulkEvery);
-                p.play("hurt");
-                return;
-            }
-            if (p.timer <= 0) decide(p, night);
+    /** Au repos : il regarde autour de lui, boude s'il est malheureux, puis décide de la suite. */
+    function idle(p, dt, night, nearMouse) {
+        p.energy = Math.max(0, p.energy - dt * ENERGY.idle);
+        p.timer -= dt;
+        p.lookTimer -= dt;
+        if (p.lookTimer <= 0 && !nearMouse) lookAround(p);
+        if (moodOf(p) === "sad" && p.nextSulk <= 0) { // malheureux : il boude un instant
+            p.nextSulk = random(...SAD.sulkEvery);
+            p.play("hurt");
             return;
         }
+        if (p.timer <= 0) decide(p, night);
+    }
 
-        // Marche vers le prochain point de passage, en s'écartant des autres.
+    /** Il regarde autour de lui : un quart de tour, ou de nouveau devant lui. */
+    function lookAround(p) {
+        if (Math.random() < 0.25) p.dir = FRONT;
+        else p.dir = (p.dir + (Math.random() < 0.5 ? 1 : 7)) % 8;
+        p.lookTimer = random(1.2, 3.5);
+    }
+
+    /** Allure selon ce qu'il va faire : plus lent vers son lit, plus vite pour fuir ou attaquer. */
+    function paceOf(intent) {
+        switch (intent) {
+            case "sleep": return 0.7;
+            case "flee": return FLEE.speed;
+            case "attack": return 1.3;
+            default: return 1;
+        }
+    }
+
+    /** Marche vers le prochain point de passage, en s'écartant des autres ; arrivé, il fait ce qu'il était venu faire. */
+    function walk(p, dt) {
+        const { activity } = p.personality;
         p.energy = Math.max(0, p.energy - dt * ENERGY.walk * activity);
         while (p.path.length > 1 && distance(p, p.path[0]) < 4) p.path.shift();
         const remaining = p.remaining();
-        // Ralentit en approchant de sa cible (pas d'arrêt net).
-        const pace = p.intent === "sleep" ? 0.7 : p.intent === "flee" ? FLEE.speed : p.intent === "attack" ? 1.3 : 1;
-        const speed = WALK_SPEED * activity * pace * clamp(remaining / 12, 0.35, 1);
         if (remaining < 1.7) {
-            if (p.intent === "attack") strike(p);
-            else if (p.intent === "sleep") p.sleep();
-            else if (p.intent === "soar") { // au bout de son tour au-dessus de l'eau : il va se poser (à terre ou sur un sommet), sans s'arrêter
-                const spot = spotNear(p, p.destination());
-                p.walkTo(spot.x, spot.y, "explore");
-            }
-            else {
-                if (p.intent === "curious" && mouse) p.face(mouse);
-                if (p.intent === "visit" || p.intent === "stroll") {
-                    // Arrivé chez un congénère : ils se regardent.
-                    const friend = friendsOf(p).sort((a, b) => distance(p, a) - distance(p, b))[0];
-                    if (friend) { p.face(friend); if (friend.state === "idle") friend.face(p); }
-                }
-                p.rest(random(1.5, 5) / activity);
-            }
+            arrive(p);
             return;
         }
+        // Ralentit en approchant de sa cible (pas d'arrêt net).
+        const speed = WALK_SPEED * activity * paceOf(p.intent) * clamp(remaining / 12, 0.35, 1);
+        steer(p, dt, speed);
+        slide(p, dt);
+        faceMotion(p);
+        pauseOnTheWay(p, dt, remaining);
+    }
+
+    /** Arrivé au bout de son chemin. */
+    function arrive(p) {
+        if (p.intent === "attack") strike(p);
+        else if (p.intent === "sleep") p.sleep();
+        else if (p.intent === "soar") { // au bout de son tour au-dessus de l'eau : il va se poser (à terre ou sur un sommet), sans s'arrêter
+            const spot = spotNear(p, p.destination());
+            p.walkTo(spot.x, spot.y, "explore");
+        }
+        else settle(p);
+    }
+
+    /** Arrivé quelque part : il regarde ce qu'il était venu voir (le pointeur, un congénère), puis se repose. */
+    function settle(p) {
+        if (p.intent === "curious" && mouse) p.face(mouse);
+        if (p.intent === "visit" || p.intent === "stroll") {
+            // Arrivé chez un congénère : ils se regardent.
+            const friend = friendsOf(p).sort((a, b) => distance(p, a) - distance(p, b))[0];
+            if (friend) { p.face(friend); if (friend.state === "idle") friend.face(p); }
+        }
+        p.rest(random(1.5, 5) / p.personality.activity);
+    }
+
+    /** Vers le prochain point de passage, en s'écartant des autres ; la vitesse rejoint progressivement <speed>. */
+    function steer(p, dt, speed) {
         const next = p.path[0];
         let dx = next.x - p.x, dy = next.y - p.y;
         const toNext = Math.hypot(dx, dy) || 1;
@@ -1344,24 +1506,32 @@ export async function create(container, component, options) {
             if (o !== p && d < 15 && d > 0) { dx += (p.x - o.x) / d * 0.6; dy += (p.y - o.y) / d * 0.6; }
         }
         const norm = Math.hypot(dx, dy) || 1;
-        // La vitesse rejoint progressivement celle voulue : virages arrondis, démarrages en douceur.
+        // Virages arrondis, démarrages en douceur.
         const ease = Math.min(1, dt * 6);
         p.vx += (dx / norm * speed - p.vx) * ease;
         p.vy += (dy / norm * speed - p.vy) * ease;
-        // Jamais sur une case bloquée : contre un obstacle, il glisse le long (ou s'arrête).
+    }
+
+    /** Jamais sur une case bloquée : contre un obstacle, il glisse le long (ou s'arrête). */
+    function slide(p, dt) {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
         const pass = p.pass;
         if (ground.isFree(nx, ny, pass)) { p.x = nx; p.y = ny; }
         else if (ground.isFree(nx, p.y, pass)) { p.x = nx; p.vy = 0; }
         else if (ground.isFree(p.x, ny, pass)) { p.y = ny; p.vx = 0; }
         else { p.vx = p.vy = 0; }
-        // Regarde où il va, et ne change de direction que franchement (pas de tremblement entre deux directions voisines).
+    }
+
+    /** Regarde où il va, et ne change de direction que franchement (pas de tremblement entre deux directions voisines). */
+    function faceMotion(p) {
         const moving = Math.hypot(p.vx, p.vy);
-        if (moving > 3) {
-            const [fx, fy] = vectorOf(p.dir);
-            if ((fx * p.vx + fy * p.vy) / moving < 0.85) p.dir = directionOf(p.vx, p.vy);
-        }
-        // Petites pauses en chemin, et abandon si quelqu'un lui barre la route.
+        if (moving <= 3) return;
+        const [fx, fy] = vectorOf(p.dir);
+        if ((fx * p.vx + fy * p.vy) / moving < 0.85) p.dir = directionOf(p.vx, p.vy);
+    }
+
+    /** Abandon si quelqu'un lui barre la route, et petites pauses en chemin. */
+    function pauseOnTheWay(p, dt, remaining) {
         p.progress.time += dt;
         if (p.progress.time > 2) {
             if (p.progress.distance - remaining < 7) { p.rest(random(1, 2)); return; }
@@ -1441,37 +1611,101 @@ export async function create(container, component, options) {
     function draw(level) {
         night.setVisible(level > 0);
         if (level > 0) night.setFillStyle(NIGHT.color, NIGHT.alpha * level);
-        for (const p of pokemon) {
-            const anim = p.anim, s = spriteScale;
-            // Ombre au sol (remous dans l'eau), puis l'image : SpriteCollab centre le Pokémon dans chaque image, les pieds un
-            // peu sous le centre.
-            if (p.wet > 0.5) {
-                const wave = Math.sin(clock * 2.6 + p.id);
-                p.shadow.setTexture(rippleOf(anim, p.liquid === LAVA)).setScale((1 + 0.06 * wave) / k).setAlpha(0.75 + 0.25 * wave);
-            } else {
-                p.shadow.setTexture(shadowOf(anim)).setScale((1 - p.altitude / (FLY_HEIGHT * 3)) / k).setAlpha(1);
-            }
-            p.shadow.setPosition(snap(p.x), snap(p.y));
-            const row = Math.min(p.state === "sleep" ? 0 : p.dir, anim.rows - 1);
-            const lift = (p.state === "held" ? LIFT : 0) + p.altitude;
-            p.sprite.setTexture(anim.key, row * anim.columns + p.frame % anim.columns)
-                .setScale(s)
-                .setPosition(snap(p.x), snap(p.y - 6 * s - lift + p.wet * SWIM.sink * s));
-            // Dans l'eau ou la lave : rien sous la surface (la ligne de ses pieds, une fois descendu de SWIM.sink)
-            if (p.wet > 0.02) {
-                p.sprite.setCrop(0, 0, anim.fw, Math.round(anim.fh - p.wet * (anim.fh / 2 - 6 + SWIM.sink)));
-                p.cropped = true;
-            } else if (p.cropped) {
-                p.sprite.setCrop();
-                p.cropped = false;
-            }
-            // Les plus bas passent devant (tri seulement s'ils changent de ligne) ; soulevé : devant tout
-            const depth = lift ? HELD_DEPTH : depthOf(Math.round(p.y));
-            if (p.sprite.depth !== depth) p.sprite.setDepth(depth);
-            drawZzz(p, anim.fh * s);
-        }
+        for (const p of pokemon) drawPokemon(p);
         drawMarker();
         drawName(hovered);
+        drawPressRing();
+    }
+
+    /** Appui en cours sur un Pokémon, sans avoir bougé : il sera soulevé à la fin de LONG_PRESS. */
+    const pressing = () => !!(drag?.target && !drag.moved && drag.pointer.isDown && !held);
+
+    /**
+     * Cercle à côté du Pokémon pendant l'appui, rempli selon le temps écoulé (taille en pixels CSS, la même à tous les
+     * zooms) ; redessiné à chaque image tant qu'il est montré.
+     */
+    function drawPressRing() {
+        const elapsed = pressing() ? performance.now() - drag.time : 0;
+        const show = elapsed >= PRESS_RING.delay;
+        ring.setVisible(show);
+        if (!show) return;
+        const p = drag.target, unit = (window.devicePixelRatio || 1) / k; // un pixel CSS en pixels de la carte
+        const r = PRESS_RING.radius * unit, w = PRESS_RING.width * unit, h = p.anim.fh * spriteScale;
+        const x = clamp(p.x + p.anim.fw * spriteScale * 0.3 + PRESS_RING.gap * unit + r, r + w, ground.width - r - w);
+        const y = clamp(p.y - p.altitude - h * 0.4, r + w, ground.height - r - w);
+        const start = -Math.PI / 2, t = Math.min(1, elapsed / LONG_PRESS);
+        ring.clear()
+            .fillStyle(0x000000, 0.35).fillCircle(x, y, r + w / 2)
+            .lineStyle(w, 0xffffff, 0.3).strokeCircle(x, y, r)
+            .lineStyle(w, 0xffffff, 0.95).beginPath().arc(x, y, r, start, start + t * Math.PI * 2).strokePath();
+    }
+
+    /** Un Pokémon : son ombre (ou ses remous), son image (coupée sous la surface), sa profondeur, ses « z ». */
+    function drawPokemon(p) {
+        const anim = p.anim, s = spriteScale;
+        // Ombre au sol (remous dans l'eau), puis l'image : SpriteCollab centre le Pokémon dans chaque image, les pieds un
+        // peu sous le centre.
+        if (p.wet > 0.5) {
+            const wave = Math.sin(clock * 2.6 + p.id);
+            p.shadow.setTexture(rippleOf(anim, p.liquid === LAVA)).setScale((1 + 0.06 * wave) / k).setAlpha(0.75 + 0.25 * wave);
+        } else {
+            p.shadow.setTexture(shadowOf(anim)).setScale((1 - p.altitude / (FLY_HEIGHT * 3)) / k).setAlpha(1);
+        }
+        p.shadow.setPosition(snap(p.x), snap(p.y));
+        const row = Math.min(p.state === "sleep" ? 0 : p.dir, anim.rows - 1);
+        const lift = (p.state === "held" ? LIFT : 0) + p.altitude;
+        p.sprite.setTexture(anim.key, row * anim.columns + p.frame % anim.columns)
+            .setScale(s)
+            .setPosition(snap(p.x), snap(p.y - 6 * s - lift + p.wet * SWIM.sink * s));
+        // Dans l'eau ou la lave : rien sous la surface (la ligne de ses pieds, une fois descendu de SWIM.sink)
+        if (p.wet > 0.02) {
+            p.sprite.setCrop(0, 0, anim.fw, Math.round(anim.fh - p.wet * (anim.fh / 2 - 6 + SWIM.sink)));
+            p.cropped = true;
+        } else if (p.cropped) {
+            p.sprite.setCrop();
+            p.cropped = false;
+        }
+        // Les plus bas passent devant (tri seulement s'ils changent de ligne) ; soulevé : devant tout
+        const depth = lift ? HELD_DEPTH : depthOf(Math.round(p.y));
+        if (p.sprite.depth !== depth) p.sprite.setDepth(depth);
+        drawZzz(p, anim.fh * s);
+        drawStorm(p, anim.fh * s, lift);
+    }
+
+    /**
+     * Nuage d'orage au-dessus d'un malheureux (habitat ou malus « attaqué ») : pluie qui alterne, éclair double de temps
+     * en temps, léger balancement ; caché sinon.
+     */
+    function drawStorm(p, h, lift) {
+        const sad = moodOf(p) === "sad";
+        p.storm.setVisible(sad);
+        if (!sad) return;
+        if (clock >= p.nextFlash + STORM.flash * 3) p.nextFlash = clock + random(...STORM.flashEvery);
+        const t = clock - p.nextFlash, flashing = (t >= 0 && t < STORM.flash) || (t >= STORM.flash * 2 && t < STORM.flash * 3);
+        const frame = flashing ? "bolt" : Math.floor(clock / STORM.rain + p.id) % 2 ? "rain2" : "rain1";
+        const sway = Math.round(Math.sin(clock * 1.3 + p.id) * 0.8 * spriteK) / spriteK * spriteScale;
+        // Bas du nuage (ligne STORM.cloud.length de l'image) posé au-dessus de la tête, comme le nom au survol
+        const bottom = p.y - p.altitude - lift - h * 0.6 - STORM.gap;
+        p.storm.setTexture(stormOf(frame)).setScale(1 / k)
+            .setOrigin(0.5, STORM.cloud.length / (STORM.cloud.length + STORM.frames.rain1.length))
+            .setPosition(snap(p.x + sway), snap(Math.max(STORM.cloud.length * spriteScale, bottom)));
+    }
+
+    /** Image du nuage d'orage (avec la pluie ou l'éclair), un carré de spriteK pixels par pixel de sprite (refaite comme les ombres). */
+    function stormOf(frame) {
+        const key = `orage:${frame}:${spriteK}`;
+        if (!scene.textures.exists(key)) {
+            const rows = [...STORM.cloud, ...STORM.frames[frame]];
+            const texture = scene.textures.createCanvas(key, rows[0].length * spriteK, rows.length * spriteK);
+            const context = texture.getContext();
+            rows.forEach((row, y) => [...row].forEach((c, x) => {
+                if (!STORM.colors[c]) return;
+                context.fillStyle = STORM.colors[c];
+                context.fillRect(x * spriteK, y * spriteK, spriteK, spriteK);
+            }));
+            texture.refresh();
+        }
+        return key;
     }
 
     function drawZzz(p, h) {
@@ -1513,17 +1747,24 @@ export async function create(container, component, options) {
             }
             update(p, dt, level);
             p.advanceFrame(dt * 1000, spriteScale);
-            // Dans l'eau ou la lave (ou au-dessus), pas porté : le nageur s'y enfonce, le volant monte, en douceur (de même
-            // au-dessus d'un rebord ou d'un flanc de la montagne ; posé sur un sommet, il redescend)
-            if (p.moves) {
-                if (p.flies) p.altitude += ((p.state !== "held" && ground.flightAt(p.x, p.y) ? FLY_HEIGHT : 0) - p.altitude) * ease;
-                else {
-                    const under = p.state !== "held" ? ground.liquidAt(p.x, p.y) : 0;
-                    if (under) p.liquid = under;
-                    p.wet += ((under ? 1 : 0) - p.wet) * ease;
-                }
-            }
+            if (p.moves) sinkOrRise(p, ease);
         }
+    }
+
+    /**
+     * Dans l'eau ou la lave (ou au-dessus), pas porté : le nageur s'y enfonce, le volant monte, en douceur (de même au-dessus
+     * d'un rebord ou d'un flanc de la montagne ; posé sur un sommet, il redescend).
+     */
+    function sinkOrRise(p, ease) {
+        const carried = p.state === "held";
+        if (p.flies) {
+            const high = !carried && ground.flightAt(p.x, p.y);
+            p.altitude += ((high ? FLY_HEIGHT : 0) - p.altitude) * ease;
+            return;
+        }
+        const under = carried ? 0 : ground.liquidAt(p.x, p.y);
+        if (under) p.liquid = under;
+        p.wet += ((under ? 1 : 0) - p.wet) * ease;
     }
 
     let level = nightLevel(), levelAge = 0;
@@ -1531,8 +1772,8 @@ export async function create(container, component, options) {
         const dt = Math.min(0.1, delta / 1000); // onglet en arrière-plan : pas de bond au retour
         levelAge += dt;
         if (levelAge > 1) { level = nightLevel(); levelAge = 0; } // l'heure, une fois par seconde
-        if (drag?.target && drag.touch && !drag.moved && drag.pointer.isDown && performance.now() - drag.time >= LONG_PRESS)
-            pickUp(drag.target, drag.pointer); // appui long sur un Pokémon
+        if (pressing() && performance.now() - drag.time >= LONG_PRESS)
+            pickUp(drag.target, drag.pointer, drag.offset); // appui long sur un Pokémon
         if (held) { edgeScroll(dt); carry(); }
         step(dt, level);
         animate(dt);
@@ -1549,9 +1790,32 @@ export async function create(container, component, options) {
         if (held?.p === p) held = null;
         if (drag?.target === p) drag.target = null;
         if (hovered === p) hovered = null;
-        p.sprite.destroy(); p.shadow.destroy(); for (const text of p.texts) text.destroy();
+        p.sprite.destroy(); p.shadow.destroy(); p.storm.destroy(); for (const text of p.texts) text.destroy();
     };
     let lists = 0; // numéro de la dernière liste reçue (setPokemon)
+
+    /** Où arrive un nouveau : nageur surtout dans l'eau ; volant souvent sur un sommet (montagne) ; Feu à terre. */
+    const arrivalPlace = info => {
+        const swims = info.moves === "swim" || info.moves === "swim-lava";
+        if (swims && Math.random() < SWIM.waterShare) return WATER;
+        return info.moves === "fly" && ground.summits.length && Math.random() < SUMMIT_SHARE ? SUMMIT : LAND;
+    };
+
+    /** Nouveau Pokémon (planches chargées) : posé à un endroit libre, loin des autres (<placed>), avec ses images. */
+    const placeNew = (item, placed) => {
+        const where = arrivalPlace(item.info);
+        let spot = ground.randomSpot(where);
+        for (let tries = 0; tries < 30 && !placed.every(o => distance(o, spot) > 27); tries++) spot = ground.randomSpot(where);
+        const p = new Pokemon(item.info, item.anims, ground, spot.x, spot.y);
+        addTextures(p.anims);
+        p.sprite = scene.add.image(0, 0, p.anim.key, 0);
+        p.shadow = scene.add.image(0, 0, shadowOf(p.anim)).setDepth(1.9);
+        p.texts = ["z", "Z"].map(z => scene.add.text(0, 0, z, { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "7px",
+            color: "#ffffff", resolution: k }).setDepth(6).setVisible(false));
+        p.storm = scene.add.image(0, 0, stormOf("rain1")).setDepth(6).setVisible(false); // malheureux : nuage d'orage
+        setMalus(p, item.info.malus);
+        return p;
+    };
 
     return {
         /** Pokémon du parc : ceux qui restent gardent leur place, les nouveaux arrivent à un endroit libre. */
@@ -1561,6 +1825,7 @@ export async function create(container, component, options) {
             for (const p of kept) {
                 const info = list.find(i => i.id === p.id);
                 p.mood = info.mood ?? "normal";
+                setMalus(p, info.malus);
                 p.moves = info.moves ?? null;
             }
             for (const p of pokemon) if (!kept.includes(p)) removeFromScene(p);
@@ -1574,21 +1839,7 @@ export async function create(container, component, options) {
             }));
             if (call !== lists) return; // une liste plus récente est arrivée pendant le chargement : c'est elle qui compte
             const placed = [...pokemon];
-            for (const item of loaded.filter(l => l)) {
-                const swims = item.info.moves === "swim" || item.info.moves === "swim-lava";
-                // Nageur : surtout dans l'eau ; volant : souvent sur un sommet (montagne) ; Feu : à terre
-                const where = swims && Math.random() < SWIM.waterShare ? WATER
-                    : item.info.moves === "fly" && ground.summits.length && Math.random() < SUMMIT_SHARE ? SUMMIT : LAND;
-                let spot = ground.randomSpot(where);
-                for (let tries = 0; tries < 30 && !placed.every(o => distance(o, spot) > 27); tries++) spot = ground.randomSpot(where);
-                const p = new Pokemon(item.info, item.anims, ground, spot.x, spot.y);
-                addTextures(p.anims);
-                p.sprite = scene.add.image(0, 0, p.anim.key, 0);
-                p.shadow = scene.add.image(0, 0, shadowOf(p.anim)).setDepth(1.9);
-                p.texts = ["z", "Z"].map(z => scene.add.text(0, 0, z, { fontFamily: "sans-serif", fontStyle: "bold", fontSize: "7px",
-                    color: "#ffffff", resolution: k }).setDepth(6).setVisible(false));
-                placed.push(p);
-            }
+            for (const item of loaded.filter(Boolean)) placed.push(placeNew(item, placed));
             pokemon = placed;
             if (hovered && !pokemon.includes(hovered)) hovered = null;
         },
@@ -1620,9 +1871,9 @@ export async function create(container, component, options) {
          */
         simulate(seconds, hour) {
             const level = hour === undefined ? nightLevel() : nightLevel(new Date(2000, 0, 1, Math.floor(hour), (hour % 1) * 60));
-            for (let t = 0; t < seconds; t += 1 / 30) step(1 / 30, level);
+            for (let t = 0; t < seconds; t += 1 / 30) { skew += 1 / 30; step(1 / 30, level); }
             draw(level);
-            return pokemon.map(p => ({ id: p.id, species: p.species, mood: p.mood, moves: p.moves, state: p.state, intent: p.intent,
+            return pokemon.map(p => ({ id: p.id, species: p.species, mood: moodOf(p), habitatMood: p.mood, malus: p.malus?.levels ?? 0, moves: p.moves, state: p.state, intent: p.intent,
                 x: Math.round(p.x), y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100,
                 free: ground.isFree(p.x, p.y, p.pass), // jamais sur une case qui lui est interdite
                 water: ground.liquidAt(p.x, p.y) === WATER, // dans l'eau (nageur) ou au-dessus (volant)
@@ -1662,6 +1913,9 @@ export async function create(container, component, options) {
             document.removeEventListener("fullscreenchange", onFullscreen);
             if (isFullscreen()) document.exitFullscreen().catch(() => { });
             controls.remove();
+            // Phaser ne détruit le jeu (et son canvas) qu'à l'image suivante : retiré tout de suite, l'ancien canvas
+            // n'allonge pas la page pendant que le nouveau parc se mesure (barre de défilement : parc plus étroit).
+            game.canvas?.remove();
             game.destroy(true);
         },
     };

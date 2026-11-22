@@ -1,0 +1,227 @@
+using MonsutaPotaru.Services;
+
+namespace MonsutaPotaru.Tests;
+
+/// <summary>
+/// Préférences du compte (« Mon compte » → « Préférences ») : tris par défaut et disposition des écrans d'un combat. JSON
+/// en base, lecture de l'adresse, service.
+/// </summary>
+public sealed class SortPreferencesTests : IDisposable
+{
+    private readonly TestDatabase _db = new("sacha");
+
+    public void Dispose() => _db.Dispose();
+
+    private static SortPreferences Sample() => new()
+    {
+        Inventory = new Dictionary<ItemCategory, ItemSort>
+        {
+            [ItemCategory.Machines] = new(ItemSortBy.Name),
+            [ItemCategory.Berries] = new(ItemSortBy.Quantity, Descending: true),
+            [ItemCategory.Items] = default, // le tri d'origine n'est pas écrit
+        },
+        Collection = new(CollectionSortBy.Dex, Reversed: true),
+        LivingDex = new(LivingDexSort.Completion, Descending: true),
+        Completion = new(CompletionSort.Completion),
+        Ribbons = new(RibbonSort.Completion),
+    };
+
+    [Fact]
+    public void Json_KeepsEverySort_AndOnlyWhatDiffersFromTheSite()
+    {
+        var json = Sample().ToJson();
+        Assert.Equal("""{"inventaire":{"ct":{"tri":"nom"},"baies":{"tri":"quantite","ordre":"desc"}},"collection":{"tri":"pokedex","ordre":"desc"},"livingdex":{"tri":"completion","ordre":"desc"},"completion":{"tri":"completion"},"rubans":{"tri":"completion"}}""", json);
+        var read = SortPreferences.FromJson(json);
+        Assert.Equal(new ItemSort(ItemSortBy.Name), read.InventoryFor(ItemCategory.Machines));
+        Assert.Equal(new ItemSort(ItemSortBy.Quantity, true), read.InventoryFor(ItemCategory.Berries));
+        Assert.Equal(default, read.InventoryFor(ItemCategory.Items));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Completion, true), read.LivingDex);
+        Assert.Equal(new CompletionOrder(CompletionSort.Completion), read.Completion);
+        Assert.Equal(new RibbonOrder(RibbonSort.Completion), read.Ribbons);
+        Assert.Null(SortPreferences.Default.ToJson()); // tout d'origine : colonne vide
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("pas du json")]
+    [InlineData("null")]
+    [InlineData("""{"inventaire":{"inconnu":{"tri":"nom"},"ct":null},"collection":{"tri":"pirate"}}""")]
+    public void Json_UnreadableOrUnknown_GivesTheSiteSorts(string? json)
+    {
+        var read = SortPreferences.FromJson(json);
+        Assert.Empty(read.Inventory);
+        Assert.Equal(default, read.Collection);
+        Assert.Equal(default, read.LivingDex);
+        Assert.Equal(default, read.Completion);
+        Assert.Equal(BattleLayout.Hybrid, read.Battle);
+        Assert.False(read.BattleEnlarged);
+    }
+
+    [Fact]
+    public void Json_KeepsTheBattleLayout_WhenItIsNotTheSiteOne()
+    {
+        var sideBySide = new SortPreferences { Battle = BattleLayout.SideBySide };
+        Assert.Equal("""{"combat":"cote"}""", sideBySide.ToJson());
+        Assert.Equal(BattleLayout.SideBySide, SortPreferences.FromJson(sideBySide.ToJson()).Battle);
+        Assert.Null(new SortPreferences { Battle = BattleLayout.Hybrid }.ToJson()); // d'origine (hybride) : colonne vide
+        Assert.Equal(BattleLayout.Hybrid, SortPreferences.Default.Battle);
+        Assert.Equal(BattleLayout.Hybrid, SortPreferences.FromJson("""{"combat":"pirate"}""").Battle); // trafiquée
+        Assert.Equal(BattleLayout.Hybrid, SiteSorts.BattleLayoutFrom(null));
+        Assert.Equal(BattleLayout.SideBySide, SiteSorts.BattleLayoutFrom("cote"));
+        Assert.Equal("empile", SiteSorts.Slug(BattleLayout.Stacked));
+        var stacked = new SortPreferences { Battle = BattleLayout.Stacked };
+        Assert.Equal("""{"combat":"empile"}""", stacked.ToJson()); // comptes d'avant le 2026-11-14 (migration HybridBattleDefault)
+        Assert.Equal(BattleLayout.Stacked, SortPreferences.FromJson(stacked.ToJson()).Battle);
+        Assert.Equal(new[] { "Empilés", "Côte à côte", "Hybride" }, SiteSorts.BattleLayoutChoices.Select(c => c.Label));
+    }
+
+    [Fact]
+    public void Json_KeepsTheEnlargedScreens_OnlyWhenChosen()
+    {
+        var enlarged = new SortPreferences { BattleEnlarged = true };
+        Assert.Equal("""{"combatAgrandi":true}""", enlarged.ToJson());
+        Assert.True(SortPreferences.FromJson(enlarged.ToJson()).BattleEnlarged);
+        Assert.Equal("""{"combat":"cote","combatAgrandi":true}""", (enlarged with { Battle = BattleLayout.SideBySide }).ToJson());
+        Assert.Null(new SortPreferences { BattleEnlarged = false }.ToJson());
+        Assert.False(SortPreferences.FromJson("""{"combatAgrandi":false}""").BattleEnlarged);
+        Assert.False(SortPreferences.FromJson("""{"combatAgrandi":"oui"}""").BattleEnlarged); // trafiquée : illisible, réglages d'origine
+    }
+
+    [Fact]
+    public void Json_KeepsTheCompletionView_OnlyWhenGrid()
+    {
+        var grid = new SortPreferences { CompletionView = CompletionStepsView.Grid };
+        Assert.Equal("""{"completionVue":"grille"}""", grid.ToJson());
+        Assert.Equal(CompletionStepsView.Grid, SortPreferences.FromJson(grid.ToJson()).CompletionView);
+        Assert.Null(new SortPreferences { CompletionView = CompletionStepsView.List }.ToJson()); // la liste : réglage d'origine
+        Assert.Equal(CompletionStepsView.List, SortPreferences.FromJson("""{"completionVue":"pirate"}""").CompletionView);
+        Assert.Equal(["Liste", "Grille"], SiteSorts.CompletionViewChoices.Select(c => c.Label));
+    }
+
+    [Fact]
+    public async Task Service_SavesTheCompletionView_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { Battle = BattleLayout.SideBySide })).Ok);
+        var saved = await service.SetCompletionViewAsync("sacha", CompletionStepsView.Grid);
+        Assert.Equal((true, "Affichage des étapes de complétion enregistré."), (saved.Ok, saved.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal((CompletionStepsView.Grid, BattleLayout.SideBySide), (read.CompletionView, read.Battle));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetCompletionViewAsync("disparu", CompletionStepsView.Grid)).Message);
+    }
+
+    [Fact]
+    public async Task Service_SavesTheEnlargedScreens_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { Battle = BattleLayout.SideBySide })).Ok);
+        var saved = await service.SetBattleEnlargedAsync("sacha", true);
+        Assert.Equal((true, "Écrans de combat agrandis."), (saved.Ok, saved.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.True(read.BattleEnlarged);
+        Assert.Equal(BattleLayout.SideBySide, read.Battle);
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Écrans de combat à leur taille normale.", (await service.SetBattleEnlargedAsync("sacha", false)).Message);
+        Assert.False((await service.SortsAsync("sacha")).BattleEnlarged);
+
+        var both = await service.SetBattleScreensAsync("sacha", BattleLayout.Stacked, true);
+        Assert.Equal((true, "Écrans de combat enregistrés."), (both.Ok, both.Message));
+        read = await service.SortsAsync("sacha");
+        Assert.Equal((BattleLayout.Stacked, true), (read.Battle, read.BattleEnlarged));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+
+        Assert.False((await service.SetBattleEnlargedAsync("disparu", true)).Ok);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetBattleScreensAsync("disparu", BattleLayout.Stacked, true)).Message);
+    }
+
+    [Fact]
+    public async Task Service_SavesTheBattleLayout_WithoutTouchingTheSorts()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample())).Ok);
+        var saved = await service.SetBattleLayoutAsync("sacha", BattleLayout.SideBySide);
+        Assert.True(saved.Ok);
+        Assert.Equal("Disposition des écrans de combat enregistrée.", saved.Message);
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal(BattleLayout.SideBySide, read.Battle);
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal(new ItemSort(ItemSortBy.Name), read.InventoryFor(ItemCategory.Machines));
+
+        var gone = await service.SetBattleLayoutAsync("disparu", BattleLayout.SideBySide);
+        Assert.False(gone.Ok);
+        Assert.Equal("Ce compte n'existe plus.", gone.Message);
+    }
+
+    [Fact]
+    public void Address_ReadsEachPage_WithItsOwnDirection()
+    {
+        Assert.Null(SiteSorts.ItemFromQuery(new(null, null)));
+        Assert.Equal(new ItemSort(ItemSortBy.Default, true), SiteSorts.ItemFromQuery(new(null, "desc")));
+        Assert.Equal(new ItemSort(ItemSortBy.Default), SiteSorts.ItemFromQuery(new("pirate", "asc")));
+
+        // Collection : « ordre » donne le sens réel ; l'arrivée est décroissante d'elle-même
+        Assert.Null(SiteSorts.CollectionFromQuery(new(null, null)));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Arrival), SiteSorts.CollectionFromQuery(new("arrivee", null)));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Arrival), SiteSorts.CollectionFromQuery(new("arrivee", "desc")));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Arrival, true), SiteSorts.CollectionFromQuery(new(null, "asc")));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Name, true), SiteSorts.CollectionFromQuery(new("nom", "desc")));
+        Assert.Equal(new SortQuery("arrivee", "asc"), SiteSorts.CollectionQuery(new(CollectionSortBy.Arrival, true)));
+        Assert.Equal(new SortQuery("nom", "desc"), SiteSorts.CollectionQuery(new(CollectionSortBy.Name, true)));
+        Assert.Equal(new SortQuery("pokedex", null), SiteSorts.CollectionQuery(new(CollectionSortBy.Dex)));
+        Assert.True(SiteSorts.IsDescending(default));
+
+        // Quantité : reconnue en mode compact seulement (ailleurs, et dans les préférences, comme une valeur inconnue)
+        Assert.Equal(new CollectionSort(CollectionSortBy.Quantity), SiteSorts.CollectionFromQuery(new("quantite", null), compact: true));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Quantity, true), SiteSorts.CollectionFromQuery(new("quantite", "asc"), compact: true));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Arrival), SiteSorts.CollectionFromQuery(new("quantite", null)));
+        Assert.True(SiteSorts.IsDescending(new(CollectionSortBy.Quantity)));
+        Assert.Equal(new SortQuery("quantite", "asc"), SiteSorts.CollectionQuery(new(CollectionSortBy.Quantity, true)));
+        Assert.Equal(new CollectionSort(), SortPreferences.FromJson("""{"collection":{"tri":"quantite"}}""").Collection);
+        Assert.DoesNotContain(SiteSorts.CollectionChoices, c => c.By == CollectionSortBy.Quantity);
+
+        Assert.Null(SiteSorts.LivingDexFromQuery(new(null, null)));
+        Assert.Equal(new LivingDexOrder(LivingDexSort.Generation, true), SiteSorts.LivingDexFromQuery(new("generation", "desc")));
+        Assert.Equal(new SortQuery("completion", null), SiteSorts.LivingDexQuery(new(LivingDexSort.Completion)));
+        Assert.Null(SiteSorts.CompletionFromQuery(new(null, null)));
+        Assert.Equal(new CompletionOrder(CompletionSort.Generation, true), SiteSorts.CompletionFromQuery(new("generation", "desc")));
+        Assert.Equal(new CompletionOrder(), SiteSorts.CompletionFromQuery(new("pirate", null))); // trafiqué : le tri d'origine
+        Assert.Equal(new SortQuery("completion", "desc"), SiteSorts.CompletionQuery(new(CompletionSort.Completion, true)));
+        Assert.Null(SiteSorts.RibbonFromQuery(new(null, null)));
+        Assert.Equal(new RibbonOrder(RibbonSort.Name, true), SiteSorts.RibbonFromQuery(new("nom", "desc")));
+        Assert.Equal(new RibbonOrder(), SiteSorts.RibbonFromQuery(new("pirate", null))); // trafiqué : le tri d'origine
+        Assert.Equal(new SortQuery("ajout", "desc"), SiteSorts.RibbonQuery(new(RibbonSort.Arrival, true)));
+    }
+
+    [Fact]
+    public void Address_WritesNothingForTheAccountSort()
+    {
+        var accountDefault = new SortQuery("nom", null);
+        Assert.Equal(new Dictionary<string, object?> { ["tri"] = null, ["ordre"] = null }, SiteSorts.AddressFor(new("nom", null), accountDefault));
+        Assert.Equal(new Dictionary<string, object?> { ["tri"] = "arrivee", ["ordre"] = null }, SiteSorts.AddressFor(new("arrivee", null), accountDefault));
+    }
+
+    [Fact]
+    public async Task Service_SavesAndReadsTheSorts_OfAnExistingAccount()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.Same(SortPreferences.Default, await service.SortsAsync(null));
+        Assert.Empty((await service.SortsAsync("sacha")).Inventory);
+
+        var saved = await service.SetSortsAsync("sacha", Sample());
+        Assert.True(saved.Ok);
+        Assert.Equal("Tris par défaut enregistrés.", saved.Message);
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), (await service.SortsAsync("sacha")).Collection);
+
+        Assert.True((await service.SetSortsAsync("sacha", SortPreferences.Default)).Ok);
+        using (var db = _db.NewContext())
+            Assert.Null(db.Users.Single(u => u.Id == "sacha").SortPreferences); // tris d'origine : colonne vide
+
+        var gone = await service.SetSortsAsync("disparu", Sample());
+        Assert.False(gone.Ok);
+        Assert.Equal("Ce compte n'existe plus.", gone.Message);
+        Assert.Same(SortPreferences.Default, await service.SortsAsync("disparu"));
+    }
+}

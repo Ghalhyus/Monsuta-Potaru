@@ -39,7 +39,7 @@ public static class BattleTeam
     /// <summary>Plus grande équipe (combat simple, comme en jeu).</summary>
     public const int MaxSize = 6;
 
-    private static readonly IReadOnlyList<string> EnglishNatures = GameInfo.GetStrings("en").natures;
+    private static readonly string[] EnglishNatures = GameInfo.GetStrings("en").natures;
 
     /// <summary>Format du simulateur pour les sauvegardes de cette génération (null : pas encore de combats).</summary>
     public static string? Format(int generation) => generation switch
@@ -50,7 +50,8 @@ public static class BattleTeam
 
     /// <summary>
     /// Forme de Deoxys en 3e génération : celle du jeu (le Pokémon ne l'enregistre pas). Rouge Feu et Vert Feuille ont la même
-    /// sauvegarde : PKHeX répond « Rouge Feu », donc la forme Attaque.
+    /// sauvegarde : PKHeX répond « Rouge Feu » (forme Attaque), <see cref="SaveVersion"/> reconnaît Vert Feuille d'après ses
+    /// Pokémon (forme Défense).
     /// </summary>
     public static string DeoxysForme(GameVersion version) => version switch
     {
@@ -78,7 +79,7 @@ public static class BattleTeam
                 (ushort)Species.Unown => BattleNames.UnownForme(pk.Form), // forme d'aspect : seulement pour l'image
                 _ => "",
             },
-            HeldItem(pk, sav),
+            SaveBag.HeldItem(pk), // numérotation nationale (la 3e génération a la sienne)
             pk.Ability,
             kept.Select(i => (int)moves[i]).ToList(),
             kept.Select(i => ppUps[i]).ToList(),
@@ -90,10 +91,6 @@ public static class BattleTeam
             new BattleStats(pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPA, pk.IV_SPD, pk.IV_SPE),
             new BattleStats(pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPA, pk.EV_SPD, pk.EV_SPE));
     }
-
-    /// <summary>Objet tenu en numérotation nationale (la 3e génération a la sienne).</summary>
-    private static int HeldItem(PKM pk, SaveFile sav) =>
-        pk.HeldItem == 0 ? 0 : sav.Generation == 3 ? ItemConverter.GetItemFuture3((ushort)pk.HeldItem) : pk.HeldItem;
 
     /// <summary>Pokémon de la sauvegarde qui peuvent combattre : équipe puis boîtes, sans les œufs ni les cases vides.</summary>
     public static IEnumerable<(PKM Pokemon, int Box, int Slot)> Candidates(SaveFile sav)

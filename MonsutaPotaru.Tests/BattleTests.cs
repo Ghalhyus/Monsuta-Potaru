@@ -28,6 +28,16 @@ public sealed class BattleTests
         Assert.Equal(French.types[12], BattleNames.MoveType("Thunderbolt")); // Électrik
         Assert.Equal(French.types[0], BattleNames.MoveType("Tackle")); // Normal : numéro 0
         Assert.Equal(French.types[16], BattleNames.MoveType("Hidden Power Dark 70")); // Ténèbres
+        // Puissance écrite au bout du nom (Retour, Frustration), identifiants de la requête (« moves » d'un Pokémon de l'équipe)
+        Assert.Equal(French.movelist[216], BattleNames.Move("Return 102"));
+        Assert.Equal((216, (string?)null, 102), BattleNames.ParseMove("return102"));
+        Assert.Equal((237, "dark", 70), BattleNames.ParseMove("hiddenpowerdark70"));
+        Assert.Equal("dark", BattleNames.MoveTypeKey("hiddenpowerdark70"));
+        Assert.Equal((0, (string?)null, 0), BattleNames.ParseMove("recharge"));
+        // Pas d'objet : pas le premier numéro sans nom (« ??? ») de la liste de PKHeX
+        Assert.Equal(0, BattleNames.ItemNumber(""));
+        Assert.Equal(234, BattleNames.ItemNumber("leftovers"));
+        Assert.Equal(39, BattleNames.AbilityNumber("innerfocus"));
 
         Assert.Equal((29, "", French.specieslist[29]), BattleNames.SpeciesOf("Nidoran-F, L50, F"));
         Assert.Equal((250, "", French.specieslist[250]), BattleNames.SpeciesOf("Ho-Oh, L70")); // tiret dans le nom
@@ -52,14 +62,14 @@ public sealed class BattleTests
     public void Team_FromALeafGreenSave()
     {
         var sav = Save("vert-feuille.sav");
-        var spearow = BattleTeam.ToSet(sav.GetPartySlotAtIndex(0), sav);
-        Assert.Equal(("Piafou", 21, 12), (spearow.Name, spearow.Species, spearow.Level)); // surnom, Piafabec
-        Assert.Equal([64, 45, 43], spearow.Moves); // Picpic, Rugissement, Groz'Yeux
-        Assert.Equal([0, 0, 0], spearow.PpUps);
-        Assert.Equal(51, spearow.Ability); // Regard Vif
-        Assert.Equal("Roucool", BattleTeam.ToSet(sav.GetPartySlotAtIndex(2), sav).Name); // pas surnommé : pas « ROUCOOL »
+        var ivysaur = BattleTeam.ToSet(sav.GetPartySlotAtIndex(0), sav);
+        Assert.Equal(("Bulbidou", 2, 30), (ivysaur.Name, ivysaur.Species, ivysaur.Level)); // surnom, Herbizarre
+        Assert.Equal([33, 79, 73, 75], ivysaur.Moves); // Charge, Poudre Dodo, Vampigraine, Tranch'Herbe
+        Assert.Equal([0, 0, 0, 0], ivysaur.PpUps);
+        Assert.Equal(65, ivysaur.Ability); // Engrais
+        Assert.Equal("Coconfort", BattleTeam.ToSet(sav.GetPartySlotAtIndex(3), sav).Name); // pas surnommé : pas « COCONFORT »
 
-        Assert.Equal(9, BattleTeam.Candidates(sav).Count()); // équipe et boîtes, sans œufs
+        Assert.Equal(27, BattleTeam.Candidates(sav).Count()); // équipe et boîtes, sans œufs
         Assert.Equal("gen3customgame", BattleTeam.Format(3));
         Assert.Null(BattleTeam.Format(4));
         Assert.Equal(["Speed", "Attack", "Defense", ""],
@@ -86,15 +96,16 @@ public sealed class BattleTests
     [Fact]
     public void View_SpeaksFrench_FromEachSide()
     {
-        var lines = new[]
-        {
+        string[] protocol =
+        [
             "|player|p1|Sacha||", "|player|p2|Ondine||", "|teamsize|p1|2", "|teamsize|p2|1",
             "|switch|p1a: Pika|Pikachu, L50, M, shiny|110/110", "|switch|p2a: Abo|Ekans, L48, F|100/100",
             "|move|p1a: Pika|Thunderbolt|p2a: Abo", "|-supereffective|p2a: Abo", "|-damage|p2a: Abo|20/100",
             "|-unboost|p2a: Abo|atk|1", "|-boost|p1a: Pika|spa|2", "|-status|p2a: Abo|par|[from] ability: Static|[of] p1a: Pika",
             "|-weather|RainDance|[from] ability: Drizzle|[of] p2a: Abo", "|-sidestart|p1: Sacha|Reflect",
             "|-damage|p2a: Abo|0 fnt", "|faint|p2a: Abo", "|win|Sacha",
-        }.Select(BattleLine.Parse).ToList();
+        ];
+        var lines = protocol.Select(BattleLine.Parse).ToList();
 
         var sacha = new BattleView("p1");
         var steps = sacha.Apply(lines);
@@ -217,17 +228,17 @@ public sealed class BattleTests
         await using var run = new Run(new BattleSetup("gen3customgame", [1, 2, 3, 4], p1, p2));
         run.Pump();
         var lead = p2.Team[0].Name;
-        Assert.Equal(["Go ! Piafou !", $"Ondine envoie {lead} !"], run.Steps1.Select(s => s.Text).OfType<string>().Take(2));
-        Assert.Contains("Sacha envoie Piafou !", run.Steps2.Select(s => s.Text));
+        Assert.Equal(["Go ! Bulbidou !", $"Ondine envoie {lead} !"], run.Steps1.Select(s => s.Text).OfType<string>().Take(2));
+        Assert.Contains("Sacha envoie Bulbidou !", run.Steps2.Select(s => s.Text));
 
-        // Picpic (capacité 1) : les PP réels (35, sans PP Plus), et le message des deux côtés.
-        var peck = run.P1.Request!.Active![0].Moves[0];
-        Assert.Equal(("Peck", 35), (peck.Move, peck.MaxPp));
+        // Charge (capacité 1) : les PP réels (35, sans PP Plus), et le message des deux côtés.
+        var tackle = run.P1.Request!.Active![0].Moves[0];
+        Assert.Equal(("Tackle", 35), (tackle.Move, tackle.MaxPp));
         run.Send("p1 move 1");
         run.Send("p2 move 1");
         run.Pump();
-        Assert.Contains("Piafou utilise Picpic !", run.Steps1.Select(s => s.Text));
-        Assert.Contains("Piafou ennemi utilise Picpic !", run.Steps2.Select(s => s.Text));
+        Assert.Contains("Bulbidou utilise Charge !", run.Steps1.Select(s => s.Text));
+        Assert.Contains("Bulbidou ennemi utilise Charge !", run.Steps2.Select(s => s.Text));
         Assert.Equal(34, run.P1.Request!.Active![0].Moves[0].Pp);
 
         // Abandon (ou temps écoulé) : forcé par le site.
@@ -235,6 +246,90 @@ public sealed class BattleTests
         run.Pump();
         Assert.Equal((BattleOutcome.Won, BattleOutcome.Lost), (run.P1.Outcome, run.P2.Outcome));
         Assert.Empty(run.P1.Unhandled.Concat(run.P2.Unhandled));
+    }
+
+    // ---------- Fiche d'un Pokémon de l'équipe ----------
+
+    /// <summary>
+    /// Fiche lue dans une requête : K.O. (ses PV maximum viennent du pont), puissance écrite dans l'identifiant, catégorie de
+    /// Puissance Cachée d'après son type, capacité qui met K.O. en un coup, objet, descriptions de la table générée.
+    /// </summary>
+    [Fact]
+    public void Sheet_FromARequestMember()
+    {
+        var member = new BattleTeamMember("p1: Carmilla", "Crobat, L80, F", "0 fnt", false, "leftovers", "innerfocus",
+            ["return102", "hiddenpowerdark70", "sheercold", "toxic"], new BattleMemberStats(223, 137, 125, 142, 254),
+            [[20, 20], [3, 24], [5, 5]], 233, ["Poison", "Flying"]);
+        var sheet = BattleSheet.Of(member);
+        Assert.Equal(("Carmilla", French.specieslist[169], "F", 80), (sheet.Name, sheet.SpeciesName, sheet.Gender, sheet.Level));
+        Assert.EndsWith(".png", sheet.IconUrl);
+        Assert.Equal((0, 233, 0, true, false), (sheet.Hp, sheet.MaxHp, sheet.Percent, sheet.Fainted, sheet.Active));
+        Assert.Equal(new BattleSheetType[] { new(French.types[3], "poison"), new(French.types[2], "flying") }, sheet.Types);
+        Assert.Equal((French.abilitylist[39], "Empêche la peur."), (sheet.Ability, sheet.AbilityText));
+        Assert.Equal((French.itemlist[234], "images/objets/234.png"), (sheet.Item, sheet.ItemUrl));
+        Assert.Equal(254, sheet.Stats!.Spe);
+
+        var (back, hidden, cold, toxic) = (sheet.Moves[0], sheet.Moves[1], sheet.Moves[2], sheet.Moves[3]);
+        Assert.Equal((French.movelist[216], "normal", 20, 20, BattleMoveCategory.Physical, "102", "100"),
+            (back.Name, back.Type.Key, back.Pp, back.MaxPp, back.Category, back.PowerText, back.AccuracyText));
+        Assert.Equal((French.movelist[237], French.types[16], "dark", 3, BattleMoveCategory.Special, 70, "Spéciale"),
+            (hidden.Name, hidden.Type.Name, hidden.Type.Key, hidden.Pp, hidden.Category, hidden.Power, hidden.CategoryName));
+        Assert.Equal(("—", "30", "Spéciale"), (cold.PowerText, cold.AccuracyText, cold.CategoryName)); // Glaciation
+        Assert.Equal(((int?)null, (int?)null, "Statut", "—", "85"), (toxic.Pp, toxic.MaxPp, toxic.CategoryName, toxic.PowerText, toxic.AccuracyText)); // PP inconnus
+        Assert.Contains("poison", toxic.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Physique", back.CategoryName);
+
+        // Sans objet, PV lus dans « condition », Puissance Cachée d'un type physique, capacité et talent inconnus
+        var bare = BattleSheet.Of(member with { Condition = "51/110 par", Item = "", Ability = "", MaxHp = 0, Types = null, Stats = null,
+            Moves = ["hiddenpowerrock40", "inconnue"], Pp = null, Ident = "p1", Active = true });
+        Assert.Equal((51, 110, 47, "par", false, true), (bare.Hp, bare.MaxHp, bare.Percent, bare.Status, bare.Fainted, bare.Active));
+        Assert.Equal(((string?)null, (string?)null, "", French.specieslist[169]), (bare.Item, bare.ItemUrl, bare.AbilityText, bare.Name));
+        Assert.Empty(bare.Types);
+        Assert.Equal(BattleMoveCategory.Physical, bare.Moves[0].Category);
+        Assert.Equal(("inconnue", "", "—", "Statut"), (bare.Moves[1].Name, bare.Moves[1].Text, bare.Moves[1].PowerText, bare.Moves[1].CategoryName));
+    }
+
+    /// <summary>Table générée (outils/combats_textes.py) : chaque talent et chaque capacité de la 3e génération a sa description.</summary>
+    [Fact]
+    public void DexData_DescribesEveryGen3AbilityAndMove()
+    {
+        Assert.Equal(77, BattleDexData.Abilities.Length);
+        Assert.Equal(355, BattleDexData.Moves.Length);
+        Assert.All(BattleDexData.Abilities.Skip(1), text => Assert.False(string.IsNullOrWhiteSpace(text)));
+        Assert.All(BattleDexData.Moves.Skip(1), move => Assert.False(string.IsNullOrWhiteSpace(move.Text)));
+        Assert.Equal((BattleMoveCategory.Physical, 35, 95), (BattleDexData.Moves[33].Category, BattleDexData.Moves[33].Power, BattleDexData.Moves[33].Accuracy)); // Charge en 3e génération
+        Assert.Equal((BattleMoveCategory.Special, 0), (BattleDexData.Moves[94].Category, BattleDexData.Moves[129].Accuracy)); // Psyko ; Météores n'échoue jamais
+    }
+
+    /// <summary>
+    /// Le pont ajoute à la requête ce qu'il faut à la fiche : PP de tous les Pokémon de l'équipe (Showdown ne donne que
+    /// ceux du Pokémon au combat), PV maximum, types de la 3e génération, statistiques.
+    /// </summary>
+    [Fact]
+    public async Task Sheet_ReadsPpTypesAndStats_OfTheWholeTeam()
+    {
+        await using var run = new Run(new BattleSetup("gen3customgame", [1, 2, 3, 4], Player("Sacha", "vert-feuille.sav"), Player("Ondine", "rouge-feu.sav")));
+        run.Pump();
+        run.Send("p1 move 1");
+        run.Send("p2 move 2"); // Mimi-Queue : sans dégâts
+        run.Pump();
+        var team = run.P1.Request!.Side.Pokemon.Select(BattleSheet.Of).ToList();
+        var ivysaur = team[0];
+        Assert.Equal(("Bulbidou", 30, true, false), (ivysaur.Name, ivysaur.Level, ivysaur.Active, ivysaur.Fainted));
+        Assert.Equal(["grass", "poison"], ivysaur.Types.Select(t => t.Key));
+        Assert.Equal((ivysaur.MaxHp, 100), (ivysaur.Hp, ivysaur.Percent));
+        Assert.True(ivysaur.Stats is { Atk: > 0, Def: > 0, SpA: > 0, SpD: > 0, Spe: > 0 });
+        Assert.Equal((French.abilitylist[65], "Augmente attaques PLANTE.", (string?)null), (ivysaur.Ability, ivysaur.AbilityText, ivysaur.Item));
+        Assert.Equal((French.movelist[33], 34, 35), (ivysaur.Moves[0].Name, ivysaur.Moves[0].Pp, ivysaur.Moves[0].MaxPp)); // Charge, utilisée une fois
+        Assert.Equal((French.movelist[79], 15, 15, "Statut"), (ivysaur.Moves[1].Name, ivysaur.Moves[1].Pp, ivysaur.Moves[1].MaxPp, ivysaur.Moves[1].CategoryName));
+        // Un Pokémon resté dans sa Ball : ses PP, ses PV et ses types sont là aussi
+        var fearow = team[1];
+        Assert.Equal((false, "Piafou"), (fearow.Active, fearow.Name));
+        Assert.Equal(["normal", "flying"], fearow.Types.Select(t => t.Key));
+        Assert.True(fearow.MaxHp > 0 && fearow.Hp == fearow.MaxHp);
+        Assert.All(fearow.Moves, move => Assert.True(move.Pp == move.MaxPp && move.MaxPp > 0));
+        run.Send("forcetie");
+        run.Pump();
     }
 
     /// <summary>

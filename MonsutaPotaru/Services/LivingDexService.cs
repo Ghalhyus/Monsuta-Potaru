@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.EntityFrameworkCore;
 using PKHeX.Core;
 using MonsutaPotaru.Data;
@@ -21,6 +22,14 @@ public enum LivingDexMode
     Complete,
     /// <summary>Living dex global seulement : toutes les formes de chaque espèce (<see cref="GlobalLivingDex"/>).</summary>
     Ultimate,
+}
+
+/// <summary>Filtre des cartes de la vue générale : toutes, les normales ou les chromatiques (global chromatique compris).</summary>
+public enum LivingDexKind
+{
+    All,
+    Normal,
+    Shiny,
 }
 
 /// <summary>Tri des cartes de la vue générale.</summary>
@@ -60,10 +69,15 @@ public enum LivingDexSort
 /// Sous-Pokédex qui forment le régional, dans l'ordre (Kalos : Centre, Côtes, Montagnes), avec leur nombre de Pokémon :
 /// chacun a sa numérotation et son titre dans la grille. Null : un seul Pokédex, celui de <paramref name="Region"/>.
 /// </param>
+/// <param name="Shiny">
+/// Living dex chromatique : seuls les chromatiques comptent, images chromatiques, sans les espèces jamais chromatiques
+/// (<see cref="GlobalLivingDex.ShinyLockedSpecies"/>). D'un jeu : <see cref="LivingDexGames.Get(LivingDexGame, bool)"/> ;
+/// le global chromatique : <see cref="GlobalLivingDex.ShinyGame"/>.
+/// </param>
 public sealed record LivingDexGameInfo(LivingDexGame Game, string Name, string Cover, string? SpriteFolder, byte Generation,
     string Region, IReadOnlyList<ushort> Regional, ushort NationalMax, byte DeoxysForm = 0, int RegionalStart = 1,
     IReadOnlyList<(string Name, int Count)>? Sections = null, IReadOnlyList<ushort>? National = null,
-    IReadOnlyList<int>? RegionalNumbers = null);
+    IReadOnlyList<int>? RegionalNumbers = null, bool Shiny = false);
 
 /// <summary>Une case du living dex : un Pokémon (et sa forme) demandé par le mode.</summary>
 /// <param name="AnyForm">Remplie par n'importe quelle forme de l'espèce, même en Complet (Deoxys de 3e génération, Arceus).</param>
@@ -114,7 +128,10 @@ public sealed record LivingDexEntry(int Number, ushort Species, byte Form, strin
 }
 
 /// <summary>Carte de la vue générale : progression dans un mode.</summary>
-/// <param name="Mode">Mode compté : celui demandé, ou le National si le jeu ne le propose pas (1re génération).</param>
+/// <param name="Mode">
+/// Mode compté : celui demandé, ou le National si le jeu ne le propose pas (1re génération) ; le seul mode d'un living dex
+/// chromatique d'un jeu (Régional, National pour Let's Go) s'il n'a ni l'un ni l'autre.
+/// </param>
 public sealed record LivingDexSummary(int Id, LivingDexGameInfo Game, string SaveLabel, int Owned, int Total,
     LivingDexMode Mode = LivingDexMode.National)
 {
@@ -131,6 +148,15 @@ public sealed record LivingDexView(int Id, LivingDexGameInfo Game, string SaveLa
     public int Owned => Entries.Count(e => e.Owned);
 }
 
+/// <summary>Progression d'un living dex dans chacun de ses modes (statistiques, <see cref="LivingDexService.ProgressAsync"/>).</summary>
+public sealed record LivingDexCompletion(LivingDexGameInfo Game, IReadOnlyList<LivingDexModeProgress> Modes);
+
+/// <summary>Pokémon possédés sur le nombre de cases d'un mode ; complet quand tout y est.</summary>
+public sealed record LivingDexModeProgress(LivingDexMode Mode, int Owned, int Total)
+{
+    public bool Complete => Total > 0 && Owned == Total;
+}
+
 /// <summary>Sauvegarde stockée qui peut recevoir un living dex, et les jeux possibles (Rouge ou Bleu, Or ou Argent : au choix).</summary>
 public sealed record LivingDexCandidate(int SaveId, string Label, IReadOnlyList<LivingDexGame> Games);
 
@@ -139,6 +165,16 @@ public sealed record LivingDexResult(bool Ok, string Message, int? Id = null);
 /// <summary>Jeux qui ont un living dex : 1re à 9e génération (Écarlate / Violet ; pas encore Légendes Z-A).</summary>
 public static class LivingDexGames
 {
+    // Noms des régions et dossiers employés plusieurs fois dans les tables ci-dessous.
+    private const string KantoRegion = "Kanto";
+    private const string JohtoRegion = "Johto";
+    private const string HoennRegion = "Hoenn";
+    private const string SinnohRegion = "Sinnoh";
+    private const string AlolaRegion = "Alola";
+    private const string GalarRegion = "Galar";
+    private const string PaldeaRegion = "Paldea";
+    private const string BlackWhiteSprites = "images/livingdex/noire-blanche/";
+
     private static readonly ushort[] Kanto = Enumerable.Range(1, 151).Select(n => (ushort)n).ToArray();
 
     /// <summary>
@@ -422,7 +458,7 @@ public static class LivingDexGames
         144, 145, 146, 638, 639, 640, 896, 897, 898,
     ];
 
-    /// <summary>Numéro de chaque Pokémon de <see cref="Galar"/> dans le Pokédex du jeu où il apparaît en premier.</summary>
+    /// <summary>Numéro de chaque Pokémon de <see cref=GalarRegion/> dans le Pokédex du jeu où il apparaît en premier.</summary>
     private static readonly int[] GalarNumbers =
     [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -451,7 +487,7 @@ public static class LivingDexGames
         202, 203, 204, 205, 206, 207, 208, 209, 210,
     ];
 
-    private static readonly (string Name, int Count)[] GalarSections = [("Galar", 400), ("Isolarmure", 110), ("Couronneige", 74)];
+    private static readonly (string Name, int Count)[] GalarSections = [(GalarRegion, 400), ("Isolarmure", 110), ("Couronneige", 74)];
 
     /// <summary>Espèces qu'Épée et Bouclier peuvent contenir (664 : PKHeX, sous n'importe quelle forme).</summary>
     private static readonly ushort[] SwordShieldNational = Enumerable.Range(1, 898).Select(n => (ushort)n)
@@ -494,7 +530,7 @@ public static class LivingDexGames
         813, 814, 815, 816, 817, 818, 1020, 1021, 1023, 1022, 1024, 1009, 1010, 1025,
     ];
 
-    /// <summary>Numéro de chaque Pokémon de <see cref="Paldea"/> dans le Pokédex du jeu où il apparaît en premier.</summary>
+    /// <summary>Numéro de chaque Pokémon de <see cref=PaldeaRegion/> dans le Pokédex du jeu où il apparaît en premier.</summary>
     private static readonly int[] PaldeaNumbers =
     [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -526,7 +562,7 @@ public static class LivingDexGames
         230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243,
     ];
 
-    private static readonly (string Name, int Count)[] PaldeaSections = [("Paldea", 400), ("Septentria", 99), ("Myrtille", 165)];
+    private static readonly (string Name, int Count)[] PaldeaSections = [(PaldeaRegion, 400), ("Septentria", 99), ("Myrtille", 165)];
 
     /// <summary>Espèces qu'Écarlate et Violet peuvent contenir (733 : PKHeX, sous n'importe quelle forme).</summary>
     private static readonly ushort[] ScarletVioletNational = Enumerable.Range(1, 1025).Select(n => (ushort)n)
@@ -554,67 +590,67 @@ public static class LivingDexGames
     // Dossiers et fichiers : à garder en accord avec outils/images.py (LIVINGDEX_SPRITES, LIVINGDEX_COVERS).
     public static readonly IReadOnlyList<LivingDexGameInfo> All =
     [
-        new(LivingDexGame.Red, "Pokémon Rouge", "images/livingdex/jaquettes/rouge.png", "images/livingdex/rouge-bleu/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Blue, "Pokémon Bleu", "images/livingdex/jaquettes/bleu.png", "images/livingdex/rouge-bleu/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Yellow, "Pokémon Jaune", "images/livingdex/jaquettes/jaune.png", "images/livingdex/jaune/", 1, "Kanto", Kanto, 151),
-        new(LivingDexGame.Gold, "Pokémon Or", "images/livingdex/jaquettes/or.png", "images/livingdex/or/", 2, "Johto", Johto, 251),
-        new(LivingDexGame.Silver, "Pokémon Argent", "images/livingdex/jaquettes/argent.png", "images/livingdex/argent/", 2, "Johto", Johto, 251),
-        new(LivingDexGame.Crystal, "Pokémon Cristal", "images/livingdex/jaquettes/cristal.png", "images/livingdex/cristal/", 2, "Johto", Johto, 251),
+        new(LivingDexGame.Red, "Pokémon Rouge", "images/livingdex/jaquettes/rouge.png", "images/livingdex/rouge-bleu/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Blue, "Pokémon Bleu", "images/livingdex/jaquettes/bleu.png", "images/livingdex/rouge-bleu/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Yellow, "Pokémon Jaune", "images/livingdex/jaquettes/jaune.png", "images/livingdex/jaune/", 1, KantoRegion, Kanto, 151),
+        new(LivingDexGame.Gold, "Pokémon Or", "images/livingdex/jaquettes/or.png", "images/livingdex/or/", 2, JohtoRegion, Johto, 251),
+        new(LivingDexGame.Silver, "Pokémon Argent", "images/livingdex/jaquettes/argent.png", "images/livingdex/argent/", 2, JohtoRegion, Johto, 251),
+        new(LivingDexGame.Crystal, "Pokémon Cristal", "images/livingdex/jaquettes/cristal.png", "images/livingdex/cristal/", 2, JohtoRegion, Johto, 251),
         // 3e génération : Rubis et Saphir ont les mêmes sprites, Rouge Feu et Vert Feuille aussi (Deoxys à part).
-        new(LivingDexGame.Ruby, "Pokémon Rubis", "images/livingdex/jaquettes/rubis.png", "images/livingdex/rubis-saphir/", 3, "Hoenn", Hoenn, 386),
-        new(LivingDexGame.Sapphire, "Pokémon Saphir", "images/livingdex/jaquettes/saphir.png", "images/livingdex/rubis-saphir/", 3, "Hoenn", Hoenn, 386),
-        new(LivingDexGame.Emerald, "Pokémon Émeraude", "images/livingdex/jaquettes/emeraude.png", "images/livingdex/emeraude/", 3, "Hoenn", Hoenn, 386,
+        new(LivingDexGame.Ruby, "Pokémon Rubis", "images/livingdex/jaquettes/rubis.png", "images/livingdex/rubis-saphir/", 3, HoennRegion, Hoenn, 386),
+        new(LivingDexGame.Sapphire, "Pokémon Saphir", "images/livingdex/jaquettes/saphir.png", "images/livingdex/rubis-saphir/", 3, HoennRegion, Hoenn, 386),
+        new(LivingDexGame.Emerald, "Pokémon Émeraude", "images/livingdex/jaquettes/emeraude.png", "images/livingdex/emeraude/", 3, HoennRegion, Hoenn, 386,
             DeoxysForm: 3),
         new(LivingDexGame.FireRed, "Pokémon Rouge Feu", "images/livingdex/jaquettes/rouge-feu.png", "images/livingdex/rouge-feu-vert-feuille/", 3,
-            "Kanto", Kanto, 386, DeoxysForm: 1),
+            KantoRegion, Kanto, 386, DeoxysForm: 1),
         new(LivingDexGame.LeafGreen, "Pokémon Vert Feuille", "images/livingdex/jaquettes/vert-feuille.png", "images/livingdex/rouge-feu-vert-feuille/", 3,
-            "Kanto", Kanto, 386, DeoxysForm: 2),
+            KantoRegion, Kanto, 386, DeoxysForm: 2),
         // 4e génération : Diamant et Perle ont les mêmes sprites, HeartGold et SoulSilver aussi.
-        new(LivingDexGame.Diamond, "Pokémon Diamant", "images/livingdex/jaquettes/diamant.png", "images/livingdex/diamant-perle/", 4, "Sinnoh", Sinnoh, 493),
-        new(LivingDexGame.Pearl, "Pokémon Perle", "images/livingdex/jaquettes/perle.png", "images/livingdex/diamant-perle/", 4, "Sinnoh", Sinnoh, 493),
-        new(LivingDexGame.Platinum, "Pokémon Platine", "images/livingdex/jaquettes/platine.png", "images/livingdex/platine/", 4, "Sinnoh", SinnohPlatinum, 493),
+        new(LivingDexGame.Diamond, "Pokémon Diamant", "images/livingdex/jaquettes/diamant.png", "images/livingdex/diamant-perle/", 4, SinnohRegion, Sinnoh, 493),
+        new(LivingDexGame.Pearl, "Pokémon Perle", "images/livingdex/jaquettes/perle.png", "images/livingdex/diamant-perle/", 4, SinnohRegion, Sinnoh, 493),
+        new(LivingDexGame.Platinum, "Pokémon Platine", "images/livingdex/jaquettes/platine.png", "images/livingdex/platine/", 4, SinnohRegion, SinnohPlatinum, 493),
         new(LivingDexGame.HeartGold, "Pokémon Or HeartGold", "images/livingdex/jaquettes/heartgold.png", "images/livingdex/heartgold-soulsilver/", 4,
-            "Johto", JohtoHgss, 493),
+            JohtoRegion, JohtoHgss, 493),
         new(LivingDexGame.SoulSilver, "Pokémon Argent SoulSilver", "images/livingdex/jaquettes/soulsilver.png", "images/livingdex/heartgold-soulsilver/", 4,
-            "Johto", JohtoHgss, 493),
+            JohtoRegion, JohtoHgss, 493),
         // 5e génération : PokéAPI n'a que les sprites de Noire / Blanche, repris par Noire 2 / Blanche 2.
-        new(LivingDexGame.Black, "Pokémon Noire", "images/livingdex/jaquettes/noire.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova, 649,
+        new(LivingDexGame.Black, "Pokémon Noire", "images/livingdex/jaquettes/noire.png", BlackWhiteSprites, 5, "Unys", Unova, 649,
             RegionalStart: 0),
-        new(LivingDexGame.White, "Pokémon Blanche", "images/livingdex/jaquettes/blanche.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova, 649,
+        new(LivingDexGame.White, "Pokémon Blanche", "images/livingdex/jaquettes/blanche.png", BlackWhiteSprites, 5, "Unys", Unova, 649,
             RegionalStart: 0),
-        new(LivingDexGame.Black2, "Pokémon Noire 2", "images/livingdex/jaquettes/noire-2.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova2, 649,
+        new(LivingDexGame.Black2, "Pokémon Noire 2", "images/livingdex/jaquettes/noire-2.png", BlackWhiteSprites, 5, "Unys", Unova2, 649,
             RegionalStart: 0),
-        new(LivingDexGame.White2, "Pokémon Blanche 2", "images/livingdex/jaquettes/blanche-2.png", "images/livingdex/noire-blanche/", 5, "Unys", Unova2, 649,
+        new(LivingDexGame.White2, "Pokémon Blanche 2", "images/livingdex/jaquettes/blanche-2.png", BlackWhiteSprites, 5, "Unys", Unova2, 649,
             RegionalStart: 0),
         // 6e génération : les images de la collection (pas de sprites du jeu, SpriteFolder null).
         new(LivingDexGame.X, "Pokémon X", "images/livingdex/jaquettes/x.png", null, 6, "Kalos", Kalos, 721, Sections: KalosSections),
         new(LivingDexGame.Y, "Pokémon Y", "images/livingdex/jaquettes/y.png", null, 6, "Kalos", Kalos, 721, Sections: KalosSections),
-        new(LivingDexGame.OmegaRuby, "Pokémon Rubis Oméga", "images/livingdex/jaquettes/rubis-omega.png", null, 6, "Hoenn", HoennOras, 721),
-        new(LivingDexGame.AlphaSapphire, "Pokémon Saphir Alpha", "images/livingdex/jaquettes/saphir-alpha.png", null, 6, "Hoenn", HoennOras, 721),
+        new(LivingDexGame.OmegaRuby, "Pokémon Rubis Oméga", "images/livingdex/jaquettes/rubis-omega.png", null, 6, HoennRegion, HoennOras, 721),
+        new(LivingDexGame.AlphaSapphire, "Pokémon Saphir Alpha", "images/livingdex/jaquettes/saphir-alpha.png", null, 6, HoennRegion, HoennOras, 721),
         // 7e génération : les images de la collection aussi.
-        new(LivingDexGame.Sun, "Pokémon Soleil", "images/livingdex/jaquettes/soleil.png", null, 7, "Alola", Alola, 802),
-        new(LivingDexGame.Moon, "Pokémon Lune", "images/livingdex/jaquettes/lune.png", null, 7, "Alola", Alola, 802),
-        new(LivingDexGame.UltraSun, "Pokémon Ultra-Soleil", "images/livingdex/jaquettes/ultra-soleil.png", null, 7, "Alola", AlolaUltra, 807),
-        new(LivingDexGame.UltraMoon, "Pokémon Ultra-Lune", "images/livingdex/jaquettes/ultra-lune.png", null, 7, "Alola", AlolaUltra, 807),
-        new(LivingDexGame.LetsGoPikachu, "Pokémon Let's Go, Pikachu", "images/livingdex/jaquettes/lets-go-pikachu.png", null, 7, "Kanto",
+        new(LivingDexGame.Sun, "Pokémon Soleil", "images/livingdex/jaquettes/soleil.png", null, 7, AlolaRegion, Alola, 802),
+        new(LivingDexGame.Moon, "Pokémon Lune", "images/livingdex/jaquettes/lune.png", null, 7, AlolaRegion, Alola, 802),
+        new(LivingDexGame.UltraSun, "Pokémon Ultra-Soleil", "images/livingdex/jaquettes/ultra-soleil.png", null, 7, AlolaRegion, AlolaUltra, 807),
+        new(LivingDexGame.UltraMoon, "Pokémon Ultra-Lune", "images/livingdex/jaquettes/ultra-lune.png", null, 7, AlolaRegion, AlolaUltra, 807),
+        new(LivingDexGame.LetsGoPikachu, "Pokémon Let's Go, Pikachu", "images/livingdex/jaquettes/lets-go-pikachu.png", null, 7, KantoRegion,
             LetsGoKanto, 809, National: LetsGoKanto),
-        new(LivingDexGame.LetsGoEevee, "Pokémon Let's Go, Évoli", "images/livingdex/jaquettes/lets-go-evoli.png", null, 7, "Kanto",
+        new(LivingDexGame.LetsGoEevee, "Pokémon Let's Go, Évoli", "images/livingdex/jaquettes/lets-go-evoli.png", null, 7, KantoRegion,
             LetsGoKanto, 809, National: LetsGoKanto),
         // 8e génération : les images de la collection aussi.
-        new(LivingDexGame.Sword, "Pokémon Épée", "images/livingdex/jaquettes/epee.png", null, 8, "Galar", Galar, 898,
+        new(LivingDexGame.Sword, "Pokémon Épée", "images/livingdex/jaquettes/epee.png", null, 8, GalarRegion, Galar, 898,
             Sections: GalarSections, National: SwordShieldNational, RegionalNumbers: GalarNumbers),
-        new(LivingDexGame.Shield, "Pokémon Bouclier", "images/livingdex/jaquettes/bouclier.png", null, 8, "Galar", Galar, 898,
+        new(LivingDexGame.Shield, "Pokémon Bouclier", "images/livingdex/jaquettes/bouclier.png", null, 8, GalarRegion, Galar, 898,
             Sections: GalarSections, National: SwordShieldNational, RegionalNumbers: GalarNumbers),
         new(LivingDexGame.BrilliantDiamond, "Pokémon Diamant Étincelant", "images/livingdex/jaquettes/diamant-etincelant.png", null, 8,
-            "Sinnoh", Sinnoh, 493),
+            SinnohRegion, Sinnoh, 493),
         new(LivingDexGame.ShiningPearl, "Pokémon Perle Scintillante", "images/livingdex/jaquettes/perle-scintillante.png", null, 8,
-            "Sinnoh", Sinnoh, 493),
+            SinnohRegion, Sinnoh, 493),
         new(LivingDexGame.LegendsArceus, "Légendes Pokémon : Arceus", "images/livingdex/jaquettes/legendes-arceus.png", null, 8,
             "Hisui", Hisui, 905, National: [.. Hisui.Order()]),
         // 9e génération : les images de la collection aussi.
-        new(LivingDexGame.Scarlet, "Pokémon Écarlate", "images/livingdex/jaquettes/ecarlate.png", null, 9, "Paldea", Paldea, 1025,
+        new(LivingDexGame.Scarlet, "Pokémon Écarlate", "images/livingdex/jaquettes/ecarlate.png", null, 9, PaldeaRegion, Paldea, 1025,
             Sections: PaldeaSections, National: ScarletVioletNational, RegionalNumbers: PaldeaNumbers),
-        new(LivingDexGame.Violet, "Pokémon Violet", "images/livingdex/jaquettes/violet.png", null, 9, "Paldea", Paldea, 1025,
+        new(LivingDexGame.Violet, "Pokémon Violet", "images/livingdex/jaquettes/violet.png", null, 9, PaldeaRegion, Paldea, 1025,
             Sections: PaldeaSections, National: ScarletVioletNational, RegionalNumbers: PaldeaNumbers),
     ];
 
@@ -625,102 +661,142 @@ public static class LivingDexGames
     {
         LivingDexGame.Global => GlobalLivingDex.Game,
         LivingDexGame.GlobalShiny => GlobalLivingDex.ShinyGame,
+        LivingDexGame.AllTheMons => AllTheMonsLivingDex.Game,
         _ => All.Single(g => g.Game == game),
     };
+
+    /// <summary>Jeu d'un living dex, normal ou chromatique (« Pokémon Platine chromatique »).</summary>
+    public static LivingDexGameInfo Get(LivingDexGame game, bool shiny) => shiny ? ShinyGames[game] : Get(game);
+
+    /// <summary>
+    /// Le jeu a-t-il un living dex chromatique ? Tous les jeux, sauf la 1re génération (pas de chromatiques) et les globaux
+    /// (le global chromatique est un jeu à part, <see cref="LivingDexGame.GlobalShiny"/>).
+    /// </summary>
+    public static bool HasShiny(LivingDexGameInfo game) => game.Generation >= 2 && !GlobalLivingDex.IsGlobal(game.Game);
+
+    /// <summary>Living dex chromatique de chaque jeu qui en a un.</summary>
+    private static readonly Dictionary<LivingDexGame, LivingDexGameInfo> ShinyGames =
+        All.Where(HasShiny).ToDictionary(g => g.Game, g => g with { Name = $"{g.Name} chromatique", Shiny = true });
+
+    /// <summary>
+    /// Case retirée d'un living dex chromatique d'un jeu : espèce jamais chromatique dans un jeu pris en charge
+    /// (<see cref="GlobalLivingDex.ShinyLockedSpecies"/> : Victini, Marshadow...). Seulement le Régional pour l'instant, où
+    /// n'importe quelle forme compte : les formes jamais chromatiques (casquettes de Pikachu...) n'y ont pas de case.
+    /// </summary>
+    public static bool ShinyLocked(LivingDexGameInfo game, LivingDexSlot slot) =>
+        game.Shiny && !GlobalLivingDex.IsGlobal(game.Game) && GlobalLivingDex.ShinyLockedSpecies.Contains(slot.Species);
 
     /// <summary>
     /// Jeux possibles pour une sauvegarde : PKHeX reconnaît Jaune, Cristal, Émeraude et Platine, mais pas Rouge de Bleu, Or
     /// d'Argent, Rubis de Saphir, Rouge Feu de Vert Feuille, Diamant de Perle ni HeartGold de SoulSilver (même format) : au
-    /// joueur de choisir. Pour Rouge Feu / Vert Feuille,
-    /// PKHeX répond « Rouge Feu » faute de mieux : les deux sont toujours proposés. À partir de la 5e génération, chaque
+    /// joueur de choisir. Pour Rouge Feu / Vert Feuille, PKHeX répond « Rouge Feu » faute de mieux (<see cref="SaveVersion"/>
+    /// devine d'après les Pokémon du dresseur) : les deux sont toujours proposés. À partir de la 5e génération, chaque
     /// sauvegarde dit son jeu. Aucun pour une sauvegarde d'une autre génération, ni pour Colosseum / XD.
     /// </summary>
     public static IReadOnlyList<LivingDexGame> For(SaveFile sav) => sav.Generation switch
     {
-        1 => sav.Version switch
-        {
-            GameVersion.YW => [LivingDexGame.Yellow],
-            GameVersion.RD => [LivingDexGame.Red],
-            GameVersion.BU or GameVersion.GN => [LivingDexGame.Blue], // Bleu japonais ou Vert : les sprites de Rouge / Bleu
-            _ => [LivingDexGame.Red, LivingDexGame.Blue], // RB (ou version inconnue)
-        },
-        2 => sav.Version switch
-        {
-            GameVersion.C => [LivingDexGame.Crystal],
-            GameVersion.GD => [LivingDexGame.Gold],
-            GameVersion.SI => [LivingDexGame.Silver],
-            GameVersion.GS => [LivingDexGame.Gold, LivingDexGame.Silver],
-            _ => [LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal], // version inconnue
-        },
-        3 => sav.Version switch
-        {
-            GameVersion.E => [LivingDexGame.Emerald],
-            GameVersion.R => [LivingDexGame.Ruby],
-            GameVersion.S => [LivingDexGame.Sapphire],
-            GameVersion.RS => [LivingDexGame.Ruby, LivingDexGame.Sapphire],
-            GameVersion.FR or GameVersion.LG or GameVersion.FRLG => [LivingDexGame.FireRed, LivingDexGame.LeafGreen],
-            _ => [], // Colosseum, XD
-        },
-        4 => sav.Version switch
-        {
-            GameVersion.Pt => [LivingDexGame.Platinum],
-            GameVersion.D => [LivingDexGame.Diamond],
-            GameVersion.P => [LivingDexGame.Pearl],
-            GameVersion.DP => [LivingDexGame.Diamond, LivingDexGame.Pearl],
-            GameVersion.HG => [LivingDexGame.HeartGold],
-            GameVersion.SS => [LivingDexGame.SoulSilver],
-            GameVersion.HGSS => [LivingDexGame.HeartGold, LivingDexGame.SoulSilver],
-            _ => [], // Battle Revolution
-        },
+        1 => GamesOfGeneration1(sav),
+        2 => GamesOfGeneration2(sav),
+        3 => GamesOfGeneration3(sav),
+        4 => GamesOfGeneration4(sav),
         // Les vraies sauvegardes disent leur jeu ; une sauvegarde vide de PKHeX répond « Any » : les deux jeux de son format.
-        5 => sav.Version switch
-        {
-            GameVersion.B => [LivingDexGame.Black],
-            GameVersion.W => [LivingDexGame.White],
-            GameVersion.B2 => [LivingDexGame.Black2],
-            GameVersion.W2 => [LivingDexGame.White2],
-            _ when sav is SAV5B2W2 => [LivingDexGame.Black2, LivingDexGame.White2],
-            _ => [LivingDexGame.Black, LivingDexGame.White],
-        },
-        6 => sav.Version switch
-        {
-            GameVersion.X => [LivingDexGame.X],
-            GameVersion.Y => [LivingDexGame.Y],
-            GameVersion.OR => [LivingDexGame.OmegaRuby],
-            GameVersion.AS => [LivingDexGame.AlphaSapphire],
-            _ when sav is SAV6AO => [LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire],
-            _ => [LivingDexGame.X, LivingDexGame.Y],
-        },
-        7 => sav.Version switch
-        {
-            GameVersion.SN => [LivingDexGame.Sun],
-            GameVersion.MN => [LivingDexGame.Moon],
-            GameVersion.US => [LivingDexGame.UltraSun],
-            GameVersion.UM => [LivingDexGame.UltraMoon],
-            GameVersion.GP => [LivingDexGame.LetsGoPikachu],
-            GameVersion.GE => [LivingDexGame.LetsGoEevee],
-            _ when sav is SAV7b => [LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee],
-            _ when sav is SAV7USUM => [LivingDexGame.UltraSun, LivingDexGame.UltraMoon],
-            _ => [LivingDexGame.Sun, LivingDexGame.Moon],
-        },
-        8 => sav.Version switch
-        {
-            GameVersion.SW => [LivingDexGame.Sword],
-            GameVersion.SH => [LivingDexGame.Shield],
-            GameVersion.BD => [LivingDexGame.BrilliantDiamond],
-            GameVersion.SP => [LivingDexGame.ShiningPearl],
-            _ when sav is SAV8LA => [LivingDexGame.LegendsArceus],
-            _ when sav is SAV8BS => [LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl],
-            _ => [LivingDexGame.Sword, LivingDexGame.Shield],
-        },
+        5 => GamesOfGeneration5(sav),
+        6 => GamesOfGeneration6(sav),
+        7 => GamesOfGeneration7(sav),
+        8 => GamesOfGeneration8(sav),
         // Légendes Z-A (9e génération aussi chez PKHeX) n'a pas encore de living dex.
-        9 when sav is SAV9SV => sav.Version switch
-        {
-            GameVersion.SL => [LivingDexGame.Scarlet],
-            GameVersion.VL => [LivingDexGame.Violet],
-            _ => [LivingDexGame.Scarlet, LivingDexGame.Violet],
-        },
+        9 when sav is SAV9SV => GamesOfGeneration9(sav),
         _ => [],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration1(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.YW => [LivingDexGame.Yellow],
+        GameVersion.RD => [LivingDexGame.Red],
+        GameVersion.BU or GameVersion.GN => [LivingDexGame.Blue], // Bleu japonais ou Vert : les sprites de Rouge / Bleu
+        _ => [LivingDexGame.Red, LivingDexGame.Blue], // RB (ou version inconnue)
+    };
+
+    private static LivingDexGame[] GamesOfGeneration2(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.C => [LivingDexGame.Crystal],
+        GameVersion.GD => [LivingDexGame.Gold],
+        GameVersion.SI => [LivingDexGame.Silver],
+        GameVersion.GS => [LivingDexGame.Gold, LivingDexGame.Silver],
+        _ => [LivingDexGame.Gold, LivingDexGame.Silver, LivingDexGame.Crystal], // version inconnue
+    };
+
+    private static LivingDexGame[] GamesOfGeneration3(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.E => [LivingDexGame.Emerald],
+        GameVersion.R => [LivingDexGame.Ruby],
+        GameVersion.S => [LivingDexGame.Sapphire],
+        GameVersion.RS => [LivingDexGame.Ruby, LivingDexGame.Sapphire],
+        GameVersion.FR or GameVersion.LG or GameVersion.FRLG => [LivingDexGame.FireRed, LivingDexGame.LeafGreen],
+        _ => [], // Colosseum, XD
+    };
+
+    private static LivingDexGame[] GamesOfGeneration4(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.Pt => [LivingDexGame.Platinum],
+        GameVersion.D => [LivingDexGame.Diamond],
+        GameVersion.P => [LivingDexGame.Pearl],
+        GameVersion.DP => [LivingDexGame.Diamond, LivingDexGame.Pearl],
+        GameVersion.HG => [LivingDexGame.HeartGold],
+        GameVersion.SS => [LivingDexGame.SoulSilver],
+        GameVersion.HGSS => [LivingDexGame.HeartGold, LivingDexGame.SoulSilver],
+        _ => [], // Battle Revolution
+    };
+
+    private static LivingDexGame[] GamesOfGeneration5(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.B => [LivingDexGame.Black],
+        GameVersion.W => [LivingDexGame.White],
+        GameVersion.B2 => [LivingDexGame.Black2],
+        GameVersion.W2 => [LivingDexGame.White2],
+        _ when sav is SAV5B2W2 => [LivingDexGame.Black2, LivingDexGame.White2],
+        _ => [LivingDexGame.Black, LivingDexGame.White],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration6(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.X => [LivingDexGame.X],
+        GameVersion.Y => [LivingDexGame.Y],
+        GameVersion.OR => [LivingDexGame.OmegaRuby],
+        GameVersion.AS => [LivingDexGame.AlphaSapphire],
+        _ when sav is SAV6AO => [LivingDexGame.OmegaRuby, LivingDexGame.AlphaSapphire],
+        _ => [LivingDexGame.X, LivingDexGame.Y],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration7(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SN => [LivingDexGame.Sun],
+        GameVersion.MN => [LivingDexGame.Moon],
+        GameVersion.US => [LivingDexGame.UltraSun],
+        GameVersion.UM => [LivingDexGame.UltraMoon],
+        GameVersion.GP => [LivingDexGame.LetsGoPikachu],
+        GameVersion.GE => [LivingDexGame.LetsGoEevee],
+        _ when sav is SAV7b => [LivingDexGame.LetsGoPikachu, LivingDexGame.LetsGoEevee],
+        _ when sav is SAV7USUM => [LivingDexGame.UltraSun, LivingDexGame.UltraMoon],
+        _ => [LivingDexGame.Sun, LivingDexGame.Moon],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration8(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SW => [LivingDexGame.Sword],
+        GameVersion.SH => [LivingDexGame.Shield],
+        GameVersion.BD => [LivingDexGame.BrilliantDiamond],
+        GameVersion.SP => [LivingDexGame.ShiningPearl],
+        _ when sav is SAV8LA => [LivingDexGame.LegendsArceus],
+        _ when sav is SAV8BS => [LivingDexGame.BrilliantDiamond, LivingDexGame.ShiningPearl],
+        _ => [LivingDexGame.Sword, LivingDexGame.Shield],
+    };
+
+    private static LivingDexGame[] GamesOfGeneration9(SaveFile sav) => sav.Version switch
+    {
+        GameVersion.SL => [LivingDexGame.Scarlet],
+        GameVersion.VL => [LivingDexGame.Violet],
+        _ => [LivingDexGame.Scarlet, LivingDexGame.Violet],
     };
 
     /// <summary>
@@ -810,7 +886,7 @@ public static class LivingDexGames
     private static IEnumerable<LivingDexSlot> Megas(LivingDexGameInfo game, ushort species) =>
         Enumerable.Range(1, Math.Max(0, FormCount(game, species) - 1)).Select(f => (byte)f)
             .Where(f => (FormInfo.IsMegaForm(species, f) || FormInfo.IsPrimalForm(species, f)) && Present(game, species, f))
-            .Select(f => (Form: f, Item: (ushort)ItemStorage9ZA.GetExpectedMegaStoneOrPrimalOrb(species, f)))
+            .Select(f => (Form: f, Item: ItemStorage9ZA.GetExpectedMegaStoneOrPrimalOrb(species, f)))
             .Where(m => m.Item == 0 || CanHold(game, m.Item))
             .Select(m => m.Item > 0
                 ? new LivingDexSlot(species, m.Form, AnyForm: true, MegaItem: m.Item, MegaInBag: IsLetsGo(game))
@@ -844,8 +920,8 @@ public static class LivingDexGames
     }
 
     /// <summary>Espèces qui ont une case Gigamax : leurs octets disent si un exemplaire a le facteur Gigamax.</summary>
-    public static readonly ushort[] GigamaxSpecies = SwordShieldNational
-        .Where(s => Enumerable.Range(0, PersonalTable.SWSH[s].FormCount).Any(f => Gigantamax.CanToggle(s, (byte)f))).ToArray();
+    public static readonly ImmutableArray<ushort> GigamaxSpecies = [.. SwordShieldNational
+        .Where(s => Enumerable.Range(0, PersonalTable.SWSH[s].FormCount).Any(f => Gigantamax.CanToggle(s, (byte)f)))];
 
     /// <summary>
     /// Formes régionales de l'espèce présentes dans le jeu (à partir de la 8e génération : Alola, Galar, Hisui, Paldea et
@@ -859,7 +935,7 @@ public static class LivingDexGames
             return [];
         var names = FormConverter.GetFormList(species, EnglishStrings.types, EnglishStrings.forms, GameInfo.GenderSymbolASCII, Context(game));
         return Enumerable.Range(1, Math.Max(0, FormCount(game, species) - 1)).Select(f => (byte)f)
-            .Where(f => f < names.Length && (names[f] is "Alola" or "Galar" or "Hisui" || names[f].StartsWith("Paldea"))
+            .Where(f => f < names.Length && (names[f] is AlolaRegion or GalarRegion or "Hisui" || names[f].StartsWith(PaldeaRegion))
                         && Present(game, species, f) && !FormInfo.IsBattleOnlyForm(species, f, game.Generation))
             .ToList();
     }
@@ -969,7 +1045,7 @@ public static class LivingDexGames
     /// </summary>
     public static string Sprite(LivingDexGameInfo game, LivingDexSlot slot) => game.SpriteFolder is null
         ? Fallback(game, slot)
-        : $"{game.SpriteFolder}{slot.Species}{FormSuffix(slot)}.png";
+        : $"{game.SpriteFolder}{(game.Shiny ? "chromatique/" : "")}{slot.Species}{FormSuffix(slot)}.png";
 
     private static string FormSuffix(LivingDexSlot slot) => (slot.Species, slot.Form) switch
     {
@@ -1016,8 +1092,7 @@ public static class LivingDexGames
         var forms = FormConverter.GetFormList(slot.Species, FrenchStrings.types, FrenchStrings.forms, GameInfo.GenderSymbolUnicode, Context(game));
         var form = slot.Form < forms.Length ? forms[slot.Form] : $"{slot.Form}";
         if (slot.MegaItem != 0 || slot.MegaMove != 0)
-            return FormInfo.IsPrimalForm(slot.Species, slot.Form) ? $"Primo-{species}"
-                : form.EndsWith(" X") || form.EndsWith(" Y") ? $"Méga-{species} {form[^1]}" : $"Méga-{species}";
+            return MegaName(slot, species, form);
         if (slot.Gigamax)
             return slot.Species == Urshifu ? $"{species} Gigamax ({FormLabel(slot.Species, form)})" : $"{species} Gigamax";
         return slot.Species switch
@@ -1030,13 +1105,25 @@ public static class LivingDexGames
             Alcremie when mode == LivingDexMode.Complete => $"{species} ({AlcremieCreams[Math.Min(slot.Form, (byte)(AlcremieCreams.Length - 1))]})",
             Zygarde when mode == LivingDexMode.Complete && game.Generation >= 7 => $"{species} ({FormLabel(slot.Species, form)})",
             Kyurem or Hoopa or Necrozma or Calyrex when slot.Form != 0 => $"{species} {form}",
-            _ when slot.Form != 0 && form is "Alola" or "Galar" or "Hisui" or "Paldea" => $"{species} {(form == "Alola" ? "d'" : "de ")}{form}",
+            _ when slot.Form != 0 && form is AlolaRegion or GalarRegion or "Hisui" or PaldeaRegion => RegionalName(species, form),
             _ when slot.Form != 0 && form.StartsWith("Paldea ") => $"{species} de Paldea (race {form[7..]})", // Tauros
             Pikachu when slot.FormsFrom != 0 => "Pikachu Cosplayeur",
             _ when slot.Form != 0 => $"{species} ({FormLabel(slot.Species, form)})",
             _ => species,
         };
     }
+
+    /// <summary>« Primo-Kyogre », « Méga-Dracaufeu X », « Méga-Rayquaza ».</summary>
+    private static string MegaName(LivingDexSlot slot, string species, string form)
+    {
+        if (FormInfo.IsPrimalForm(slot.Species, slot.Form))
+            return $"Primo-{species}";
+        return form.EndsWith(" X") || form.EndsWith(" Y") ? $"Méga-{species} {form[^1]}" : $"Méga-{species}";
+    }
+
+    /// <summary>« Rattata d'Alola », « Caninos de Hisui ».</summary>
+    private static string RegionalName(string species, string region) =>
+        region == AlolaRegion ? $"{species} d'{region}" : $"{species} de {region}";
 
     /// <summary>Crèmes de Charmilly (formes 0 à 8 ; PKHeX abrège : deux « Ruby »).</summary>
     private static readonly string[] AlcremieCreams =
@@ -1056,23 +1143,31 @@ public static class LivingDexGames
         Zygarde or Toxtricity or Dialga or Palkia or Enamorus => $"forme {form}",
         Urshifu => $"style {form}",
         Tatsugiri or Dudunsparce or Gimmighoul => $"forme {form}",
-        Squawkabilly => $"plumage {form switch { "Bleue" => "Bleu", "Blanche" => "Blanc", _ => form }}", // PKHeX : « Bleue », « Blanche »
-        Ogerpon => $"masque {form switch { "Puits" => "du Puits", "Fourneau" => "du Fourneau", "Pierre" => "de la Pierre", _ => form }}",
+        Squawkabilly => $"plumage {SquawkabillyColor(form)}",
+        Ogerpon => $"masque {OgerponMask(form)}",
         Minior => $"noyau {form.Replace("N-", "")}", // PKHeX : « N-Rouge »
         Pichu => "Troizépi", // PKHeX n'a que l'anglais (« Spiky »)
         Keldeo => "forme Décidée", // PKHeX : « Décidé »
         _ => form,
     };
 
+    /// <summary>Couleur de Tapatoès au masculin (PKHeX : « Bleue », « Blanche »).</summary>
+    private static string SquawkabillyColor(string form) => form switch { "Bleue" => "Bleu", "Blanche" => "Blanc", _ => form };
+
+    /// <summary>Masque d'Ogerpon : « du Puits », « du Fourneau », « de la Pierre ».</summary>
+    private static string OgerponMask(string form) =>
+        form switch { "Puits" => "du Puits", "Fourneau" => "du Fourneau", "Pierre" => "de la Pierre", _ => form };
+
     /// <summary>
     /// Image de la même forme dans la collection : celle des cases à partir de la 6e génération, et le remplacement d'un
-    /// sprite du jeu absent avant (images pas encore récupérées). Méga par la gemme, comme un Pokémon qui la tient.
+    /// sprite du jeu absent avant (images pas encore récupérées). Méga par la gemme, comme un Pokémon qui la tient ;
+    /// chromatique pour un living dex chromatique.
     /// </summary>
     public static string Fallback(LivingDexGameInfo game, LivingDexSlot slot) => slot switch
     {
-        { MegaItem: not 0 } => PokemonSprites.Url(slot.Species, 0, Context(game), female: false, heldItem: slot.MegaItem, shiny: false), // Méga par la gemme
+        { MegaItem: not 0 } => PokemonSprites.Url(slot.Species, 0, Context(game), female: false, heldItem: slot.MegaItem, shiny: game.Shiny), // Méga par la gemme
         { Gigamax: true } => PokemonSprites.GigamaxUrl(slot.Species, slot.Form, Context(game)),
-        _ => PokemonSprites.Url(slot.Species, slot.Form, Context(game), female: false, heldItem: 0, shiny: false),
+        _ => PokemonSprites.Url(slot.Species, slot.Form, Context(game), female: false, heldItem: 0, shiny: game.Shiny),
     };
 
     /// <summary>Jeu des Pokémon du living dex chez PKHeX (noms des formes : casquettes de Pikachu en 7e, costumes en 6e).</summary>
@@ -1100,16 +1195,21 @@ public static class LivingDexGames
 
     /// <summary>
     /// Modes proposés, dans l'ordre Régional, National, Complet : un mode qui demande exactement les mêmes Pokémon
-    /// qu'un autre, dans le même ordre, est caché. En 1re génération, il ne reste que le National ; en 2e, le Pokédex de
+    /// qu'un autre, dans le même ordre, est caché. En 1re génération, les trois sont identiques : il ne reste que le
+    /// Régional (Kanto), qui seul compte dans les statistiques, et la carte n'est montrée qu'en Régional
+    /// (<see cref="RegionalOnly"/>, demandé le 2026-11-15) ; en 2e, le Pokédex de
     /// Johto a les mêmes 251 Pokémon que le national mais dans un autre ordre, et Zarbi ses 26 lettres : les trois modes ;
     /// à partir de la 3e, le Pokédex régional, le national et les formes : les trois. Let's Go : son Pokédex est tout ce
     /// qu'il peut contenir, le National et le Complet (formes d'Alola, Méga). Légendes Arceus : comme Johto, le Pokédex de
-    /// Hisui a les mêmes Pokémon que son national, dans un autre ordre : les trois.
+    /// Hisui a les mêmes Pokémon que son national, dans un autre ordre : les trois. Un living dex chromatique d'un jeu n'a
+    /// pour l'instant que le premier : le Régional, ou le National de Let's Go (son seul Pokédex).
     /// </summary>
     public static IReadOnlyList<LivingDexMode> Modes(LivingDexGameInfo game)
     {
-        if (GlobalLivingDex.IsGlobal(game.Game))
+        if (GlobalLivingDex.IsGlobal(game.Game) || AllTheMonsLivingDex.Is(game.Game))
             return GlobalLivingDex.Modes;
+        if (game.Shiny)
+            return [Modes(Get(game.Game))[0]];
         var national = Slots(game, LivingDexMode.National);
         var modes = new List<LivingDexMode>();
         if (!Slots(game, LivingDexMode.Regional).SequenceEqual(national))
@@ -1117,8 +1217,18 @@ public static class LivingDexGames
         modes.Add(LivingDexMode.National);
         if (!Slots(game, LivingDexMode.Complete).SequenceEqual(national))
             modes.Add(LivingDexMode.Complete);
+        if (modes is [LivingDexMode.National] && game.Regional.Count > 0)
+            return [LivingDexMode.Regional]; // 1re génération : son Pokédex régional est tout le national
         return modes;
     }
+
+    /// <summary>
+    /// Living dex d'un jeu qui n'a que le Régional (1re génération) : dans la vue générale, il n'apparaît qu'en Régional,
+    /// sans carte « Régional seul » dans les autres modes. Pas les chromatiques des jeux, qui n'ont aussi que le Régional
+    /// mais restent montrés partout (« Régional seul »).
+    /// </summary>
+    public static bool RegionalOnly(LivingDexGameInfo game) =>
+        !game.Shiny && !GlobalLivingDex.IsGlobal(game.Game) && Modes(game) is [LivingDexMode.Regional];
 
     public static string ModeName(LivingDexMode mode) => mode switch
     {
@@ -1149,18 +1259,18 @@ public static class LivingDexGames
     /// <summary>
     /// Cartes triées. Par génération : l'ordre des jeux, ou son exact inverse (Violet, Écarlate... Rouge). Par
     /// complétion : le pourcentage dans le mode de chaque carte (celui affiché, le National pour « National seul »), du
-    /// plus petit au plus grand ou l'inverse, et à égalité toujours dans l'ordre des jeux. Le living dex global reste en
-    /// tête, suivi du global chromatique.
+    /// plus petit au plus grand ou l'inverse, et à égalité toujours dans l'ordre des jeux. Par génération, le chromatique
+    /// d'un jeu suit son normal, dans les deux sens. Le living dex global reste en tête, suivi du global chromatique.
     /// </summary>
     public static List<LivingDexSummary> Sort(IEnumerable<LivingDexSummary> dexes, LivingDexSort sort, bool descending)
     {
         var all = dexes.ToList();
         var global = all.Where(d => GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game);
-        var byGame = all.Where(d => !GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game).ToList();
+        var byGame = all.Where(d => !GlobalLivingDex.IsGlobal(d.Game.Game)).OrderBy(d => d.Game.Game).ThenBy(d => d.Game.Shiny).ToList();
         if (sort == LivingDexSort.Generation)
         {
             if (descending)
-                byGame.Reverse();
+                byGame = [.. byGame.OrderByDescending(d => d.Game.Game).ThenBy(d => d.Game.Shiny)];
             return [.. global, .. byGame];
         }
         // Comparaison exacte des fractions (owned / total), sans arrondi : 1 / 3 avant 34 / 100.
@@ -1169,11 +1279,29 @@ public static class LivingDexGames
         return [.. global, .. byGame.Order(Comparer<LivingDexSummary>.Create((a, b) => descending ? completion(b, a) : completion(a, b)))];
     }
 
-    /// <summary>Tri dans l'adresse (?tri=completion) ; celui par génération n'y figure pas (null), c'est le tri par défaut.</summary>
-    public static string? SortSlug(LivingDexSort sort) => sort == LivingDexSort.Completion ? "completion" : null;
+    /// <summary>La carte passe-t-elle le filtre de la vue générale ? Chromatiques : ceux des jeux et le global chromatique.</summary>
+    public static bool Matches(LivingDexGameInfo game, LivingDexKind kind) => kind switch
+    {
+        LivingDexKind.Normal => !game.Shiny,
+        LivingDexKind.Shiny => game.Shiny,
+        _ => true,
+    };
 
-    /// <summary>Tri lu dans l'adresse ; absent ou inconnu : par génération.</summary>
-    public static LivingDexSort SortFromSlug(string? slug) => slug == "completion" ? LivingDexSort.Completion : LivingDexSort.Generation;
+    /// <summary>Filtre dans l'adresse (?filtre=chromatiques, ?filtre=normaux) ; « Tous » n'y figure pas (null).</summary>
+    public static string? KindSlug(LivingDexKind kind) => kind switch
+    {
+        LivingDexKind.Normal => "normaux",
+        LivingDexKind.Shiny => "chromatiques",
+        _ => null,
+    };
+
+    /// <summary>Filtre lu dans l'adresse ; absent ou inconnu : tous.</summary>
+    public static LivingDexKind KindFromSlug(string? slug) => slug switch
+    {
+        "normaux" => LivingDexKind.Normal,
+        "chromatiques" => LivingDexKind.Shiny,
+        _ => LivingDexKind.All,
+    };
 
     /// <summary>
     /// Progression affichée dans les barres, avec une décimale arrondie vers le bas : « 57,3 % » ; 100 % seulement quand
@@ -1196,25 +1324,26 @@ public sealed class LivingDexService(
 {
     /// <summary>
     /// Living dex du compte, progression comptée dans un mode (vue générale) : le National pour un jeu qui ne propose pas
-    /// ce mode (<see cref="LivingDexSummary.Mode"/>), comme sur sa page. En Ultime, seulement ceux qui ont ce mode (le
-    /// living dex global).
+    /// ce mode, le seul mode d'un living dex chromatique d'un jeu (<see cref="LivingDexSummary.Mode"/>), comme sur sa page.
+    /// En Ultime, seulement ceux qui ont ce mode (les living dex globaux) ; ceux de 1re génération, seulement en Régional
+    /// (<see cref="LivingDexGames.RegionalOnly"/>).
     /// </summary>
     public async Task<List<LivingDexSummary>> ListAsync(string ownerId, LivingDexMode mode = LivingDexMode.National)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var dexes = await db.LivingDexes.AsNoTracking().Where(d => d.OwnerId == ownerId)
-            .Select(d => new { d.Id, d.Game, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
+            .Select(d => new { d.Id, d.Game, d.Shiny, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
             .ToListAsync();
         var summaries = new List<LivingDexSummary>();
-        foreach (var d in dexes.OrderBy(d => d.Game))
+        foreach (var d in dexes.OrderBy(d => d.Game).ThenBy(d => d.Shiny))
         {
-            var game = LivingDexGames.Get(d.Game);
+            var game = LivingDexGames.Get(d.Game, d.Shiny);
             var modes = LivingDexGames.Modes(game);
-            if (mode == LivingDexMode.Ultimate && !modes.Contains(mode))
+            if (!modes.Contains(mode) && (mode == LivingDexMode.Ultimate || LivingDexGames.RegionalOnly(game)))
                 continue;
-            var shown = modes.Contains(mode) ? mode : LivingDexMode.National;
+            var shown = ShownMode(modes, mode);
             var entries = d.StoredSaveId is { } saveId ? await EntriesAsync(db, game, saveId, shown)
-                : await GlobalEntriesAsync(db, ownerId, shown, d.Game == LivingDexGame.GlobalShiny);
+                : await GlobalEntriesAsync(db, ownerId, shown, game.Shiny);
             summaries.Add(new(d.Id, game, d.StoredSaveId is null ? GlobalLabelOf(d.Game) : SaveLabel(d.TrainerName, d.FileName),
                 entries.Count(e => e.Owned), entries.Count, shown)
             { PublicSaveLabel = d.StoredSaveId is null ? GlobalLabelOf(d.Game) : d.TrainerName });
@@ -1222,11 +1351,52 @@ public sealed class LivingDexService(
         return summaries;
     }
 
-    /// <summary>Jeux qui ont déjà un living dex sur ce compte (global compris) : grisés à la création.</summary>
-    public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId)
+    /// <summary>
+    /// Progression de chaque living dex du compte dans chacun de ses modes (statistiques), chaque sauvegarde lue une fois.
+    /// Même comptage que la vue générale et la page d'un living dex.
+    /// </summary>
+    public async Task<List<LivingDexCompletion>> ProgressAsync(string ownerId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return [.. await db.LivingDexes.Where(d => d.OwnerId == ownerId).Select(d => d.Game).ToListAsync()];
+        var dexes = await db.LivingDexes.AsNoTracking().Where(d => d.OwnerId == ownerId)
+            .Select(d => new { d.Game, d.Shiny, d.StoredSaveId }).ToListAsync();
+        var result = new List<LivingDexCompletion>();
+        foreach (var d in dexes.OrderBy(d => d.Game).ThenBy(d => d.Shiny))
+        {
+            var game = LivingDexGames.Get(d.Game, d.Shiny);
+            var modes = LivingDexGames.Modes(game);
+            Dictionary<LivingDexMode, List<LivingDexEntry>> entries;
+            if (d.StoredSaveId is { } saveId)
+                entries = await EntriesAsync(db, game, saveId, modes);
+            else
+            {
+                var copies = await GlobalCopiesAsync(db, ownerId, game.Shiny);
+                entries = modes.ToDictionary(m => m, m => GlobalEntries(copies, m, game.Shiny));
+            }
+            result.Add(new(game, [.. modes.Select(m => new LivingDexModeProgress(m, entries[m].Count(e => e.Owned), entries[m].Count))]));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Mode affiché : celui demandé s'il est proposé, sinon le National, sinon le seul mode du living dex (chromatique d'un
+    /// jeu, 1re génération).
+    /// </summary>
+    private static LivingDexMode ShownMode(IReadOnlyList<LivingDexMode> modes, LivingDexMode mode)
+    {
+        if (modes.Contains(mode))
+            return mode;
+        return modes.Contains(LivingDexMode.National) ? LivingDexMode.National : modes[0];
+    }
+
+    /// <summary>
+    /// Jeux qui ont déjà un living dex sur ce compte : les normaux (globaux compris, le global chromatique étant un jeu à
+    /// part), ou les chromatiques des jeux. Grisés à la création.
+    /// </summary>
+    public async Task<HashSet<LivingDexGame>> TakenGamesAsync(string ownerId, bool shiny = false)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return [.. await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.Shiny == shiny).Select(d => d.Game).ToListAsync()];
     }
 
     /// <summary>Living dex global, ou global chromatique : un de chaque par compte, sur le stockage interne.</summary>
@@ -1247,49 +1417,68 @@ public sealed class LivingDexService(
         {
             return new(false, $"Tu as déjà un {name}.");
         }
-        logger.LogInformation("Utilisateur {User} : {Game} créé.", ownerId, name);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : {Game} créé.", ownerId, name);
         return new(true, $"{LivingDexGames.Get(game).Name} créé.", dex.Id);
     }
 
-    /// <summary>Sauvegardes stockées qui peuvent recevoir un living dex : d'un jeu qui en a, pas encore liées, avec un jeu libre.</summary>
-    public async Task<List<LivingDexCandidate>> ListCandidatesAsync(string ownerId)
+    /// <summary>
+    /// Sauvegardes stockées qui peuvent recevoir un living dex, normal ou chromatique (pas en 1re génération) : d'un jeu
+    /// qui en a, pas encore liées (une sauvegarde par living dex, même entre normal et chromatique), avec un jeu libre
+    /// pour ce type.
+    /// </summary>
+    public async Task<List<LivingDexCandidate>> ListCandidatesAsync(string ownerId, bool shiny = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var taken = await db.LivingDexes.Where(d => d.OwnerId == ownerId).Select(d => d.Game).ToListAsync();
+        var taken = await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.Shiny == shiny).Select(d => d.Game).ToListAsync();
         var linked = db.LivingDexes.Where(d => d.StoredSaveId != null).Select(d => d.StoredSaveId!.Value);
         var saves = await db.StoredSaves.AsNoTracking()
             .Where(s => s.OwnerId == ownerId && s.Generation <= 9 && !linked.Contains(s.Id))
             .OrderBy(s => s.UploadedAt)
-            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data })
+            .Select(s => new { s.Id, s.GameName, s.TrainerName, s.FileName, s.Data, s.Generation })
             .ToListAsync();
         var candidates = new List<LivingDexCandidate>();
         foreach (var s in saves)
         {
+            if (s.Generation == 0) // monde Minecraft : living dex All the Mons, pas de chromatique pour l'instant
+            {
+                if (!shiny && !taken.Contains(LivingDexGame.AllTheMons))
+                    candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", [LivingDexGame.AllTheMons]));
+                continue;
+            }
             if (!StoredSaveService.TryRead(s.Data, s.FileName, out var sav))
                 continue;
-            var games = LivingDexGames.For(sav).Except(taken).ToList();
+            var games = LivingDexGames.For(sav).Where(g => !shiny || LivingDexGames.HasShiny(LivingDexGames.Get(g))).Except(taken).ToList();
             if (games.Count > 0)
                 candidates.Add(new(s.Id, $"{s.GameName} — {SaveLabel(s.TrainerName, s.FileName)}", games));
         }
         return candidates;
     }
 
-    public async Task<LivingDexResult> CreateAsync(string ownerId, int saveId, LivingDexGame game)
+    /// <summary>Living dex d'un jeu sur une sauvegarde stockée ; chromatique : il ne compte que ses chromatiques.</summary>
+    public async Task<LivingDexResult> CreateAsync(string ownerId, int saveId, LivingDexGame game, bool shiny = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var save = await db.StoredSaves.AsNoTracking().Where(s => s.Id == saveId && s.OwnerId == ownerId)
-            .Select(s => new { s.FileName, s.Data }).FirstOrDefaultAsync();
+            .Select(s => new { s.FileName, s.Data, s.IdentityKey }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        var name = LivingDexGames.Get(game).Name;
-        if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
-            return new(false, $"Cette sauvegarde n'est pas une partie de {name}.");
-        if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game))
+        if (GlobalLivingDex.IsGlobal(game))
+            return new(false, "Le living dex global n'a pas de sauvegarde.");
+        var gameName = LivingDexGames.Get(game).Name;
+        if (shiny && !LivingDexGames.HasShiny(LivingDexGames.Get(game)))
+            return new(false, AllTheMonsLivingDex.Is(game) ? $"Pas encore de living dex chromatique {gameName}."
+                : $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.");
+        var world = save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+        if (AllTheMonsLivingDex.Is(game) ? !world : world || !StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
+            return new(false, AllTheMonsLivingDex.Is(game) ? $"Cette sauvegarde n'est pas un monde {gameName}." : $"Cette sauvegarde n'est pas une partie de {gameName}.");
+        var name = LivingDexGames.Get(game, shiny).Name;
+        if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game && d.Shiny == shiny))
             return new(false, $"Tu as déjà un living dex {name} : supprime-le pour en créer un autre.");
         if (await db.LivingDexes.AnyAsync(d => d.StoredSaveId == saveId))
             return new(false, "Cette sauvegarde a déjà un living dex.");
 
-        var dex = new LivingDex { OwnerId = ownerId, Game = game, StoredSaveId = saveId, CreatedAt = DateTime.UtcNow };
+        var dex = new LivingDex { OwnerId = ownerId, Game = game, Shiny = shiny, StoredSaveId = saveId, CreatedAt = DateTime.UtcNow };
         db.LivingDexes.Add(dex);
         try
         {
@@ -1299,25 +1488,28 @@ public sealed class LivingDexService(
         {
             return new(false, $"Tu as déjà un living dex {name}, ou cette sauvegarde en a déjà un.");
         }
-        logger.LogInformation("Utilisateur {User} : living dex {Game} créé sur la sauvegarde {Save}.", ownerId, game, saveId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Utilisateur {User} : living dex {Game} (chromatique : {Shiny}) créé sur la sauvegarde {Save}.", ownerId, game, shiny, saveId);
         return new(true, $"Living dex {name} créé.", dex.Id);
     }
 
-    /// <summary>Living dex dans un mode (le National si celui demandé n'est pas proposé pour ce jeu), null s'il n'existe pas.</summary>
+    /// <summary>
+    /// Living dex dans un mode (le National si celui demandé n'est pas proposé pour ce jeu, le seul mode d'un chromatique
+    /// d'un jeu), null s'il n'existe pas.
+    /// </summary>
     public async Task<LivingDexView?> GetAsync(string ownerId, int id, LivingDexMode mode = LivingDexMode.National)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var dex = await db.LivingDexes.AsNoTracking().Where(d => d.Id == id && d.OwnerId == ownerId)
-            .Select(d => new { d.Id, d.Game, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
+            .Select(d => new { d.Id, d.Game, d.Shiny, d.StoredSaveId, d.StoredSave!.TrainerName, d.StoredSave.FileName })
             .FirstOrDefaultAsync();
         if (dex is null)
             return null;
-        var game = LivingDexGames.Get(dex.Game);
+        var game = LivingDexGames.Get(dex.Game, dex.Shiny);
         var modes = LivingDexGames.Modes(game);
-        if (!modes.Contains(mode))
-            mode = LivingDexMode.National;
+        mode = ShownMode(modes, mode);
         var entries = dex.StoredSaveId is { } saveId ? await EntriesAsync(db, game, saveId, mode)
-            : await GlobalEntriesAsync(db, ownerId, mode, dex.Game == LivingDexGame.GlobalShiny);
+            : await GlobalEntriesAsync(db, ownerId, mode, game.Shiny);
         return new(dex.Id, game, dex.StoredSaveId is null ? GlobalLabelOf(dex.Game) : SaveLabel(dex.TrainerName, dex.FileName), modes, mode, entries)
         { PublicSaveLabel = dex.StoredSaveId is null ? GlobalLabelOf(dex.Game) : dex.TrainerName };
     }
@@ -1334,21 +1526,11 @@ public sealed class LivingDexService(
     /// stockées, ni les œufs), dans l'ordre des dépôts (<see cref="GlobalLivingDex.Assign"/>) : les non chromatiques pour le
     /// global, les seuls chromatiques pour le global chromatique (images chromatiques).
     /// </summary>
-    private static async Task<List<LivingDexEntry>> GlobalEntriesAsync(ApplicationDbContext db, string ownerId, LivingDexMode mode, bool shiny)
+    private static async Task<List<LivingDexEntry>> GlobalEntriesAsync(ApplicationDbContext db, string ownerId, LivingDexMode mode, bool shiny) =>
+        GlobalEntries(await GlobalCopiesAsync(db, ownerId, shiny), mode, shiny);
+
+    private static List<LivingDexEntry> GlobalEntries(IReadOnlyList<GlobalLivingDex.Copy> copies, LivingDexMode mode, bool shiny)
     {
-        var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny)
-            .OrderBy(p => p.DepositedAt).ThenBy(p => p.Id)
-            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, Data = GlobalDataSpecies.Contains(p.Species) ? p.Data : null })
-            .ToListAsync();
-        var copies = rows.Select(p =>
-        {
-            var pk = p.Data is null ? null : EntityFormat.GetFromBytes(p.Data, (EntityContext)p.Context);
-            return new GlobalLivingDex.Copy(p.Id, p.Species, p.Form, (EntityContext)p.Context, p.Gender, p.HeldItem ?? 0,
-                p.Species == (ushort)Species.Alcremie && pk is IFormArgument sweet ? (byte)sweet.FormArgument : null,
-                pk is IGigantamax { CanGigantamax: true },
-                p.Species == LivingDexGames.Rayquaza && pk is not null && pk.HasMove(LivingDexGames.DragonAscent));
-        }).ToList();
         var slots = GlobalLivingDex.Slots(mode, shiny);
         var assigned = GlobalLivingDex.Assign(slots, copies, mode);
         return slots.Select((slot, i) =>
@@ -1359,52 +1541,161 @@ public sealed class LivingDexService(
         }).ToList();
     }
 
+    /// <summary>Exemplaires du stockage interne pour le living dex global (ou global chromatique), dans l'ordre des dépôts.</summary>
+    private static async Task<List<GlobalLivingDex.Copy>> GlobalCopiesAsync(ApplicationDbContext db, string ownerId, bool shiny)
+    {
+        var rows = await db.BankPokemon.AsNoTracking()
+            .Where(p => p.OwnerId == ownerId && p.StoredSaveId == null && !p.IsEgg && p.IsShiny == shiny && p.Extension != CobblemonPokemon.Extension)
+            .OrderBy(p => p.DepositedAt).ThenBy(p => p.Id)
+            .Select(p => new { p.Id, p.Species, p.Form, p.Context, p.Gender, p.HeldItem, Data = GlobalDataSpecies.Contains(p.Species) ? p.Data : null })
+            .ToListAsync();
+        return rows.Select(p =>
+        {
+            var pk = p.Data is null ? null : EntityFormat.GetFromBytes(p.Data, (EntityContext)p.Context);
+            return new GlobalLivingDex.Copy(p.Id, p.Species, p.Form, (EntityContext)p.Context, p.Gender, p.HeldItem ?? 0,
+                p.Species == (ushort)Species.Alcremie && pk is IFormArgument sweet ? (byte)sweet.FormArgument : null,
+                pk is IGigantamax { CanGigantamax: true },
+                p.Species == LivingDexGames.Rayquaza && pk is not null && pk.HasMove(LivingDexGames.DragonAscent));
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Pokémon d'un monde Minecraft (équipe, puis PC ; chromatiques compris) pour le living dex All the Mons, et leur place
+    /// (« Équipe 1 », « Boîte 3, case 12 »). Leur NBT est relu : formes propres à Cobblemon, décoration, facteur Gigamax.
+    /// </summary>
+    private static async Task<(List<GlobalLivingDex.Copy> Copies, Dictionary<int, string?> Locations)> WorldCopiesAsync(
+        ApplicationDbContext db, int saveId)
+    {
+        var rows = await db.BankPokemon.AsNoTracking()
+            .Where(p => p.StoredSaveId == saveId && !p.IsEgg && p.Extension == CobblemonPokemon.Extension)
+            .OrderBy(p => p.Position)
+            .Select(p => new { p.Id, p.Data, p.Location })
+            .ToListAsync();
+        var copies = new List<GlobalLivingDex.Copy>(rows.Count);
+        foreach (var p in rows)
+        {
+            CobblemonPokemon mon;
+            try
+            {
+                mon = CobblemonPokemon.FromBytes(p.Data);
+            }
+            catch (InvalidDataException)
+            {
+                continue; // NBT illisible : déjà refusé à l'envoi, ne bloque pas la page
+            }
+            if (mon.DexNumber != 0)
+                copies.Add(AllTheMonsLivingDex.Copy(p.Id, mon));
+        }
+        return (copies, rows.ToDictionary(p => p.Id, p => p.Location));
+    }
+
+    /// <summary>Cases du living dex All the Mons dans un mode, avec leur exemplaire (règles du global : <see cref="GlobalLivingDex.Assign"/>).</summary>
+    private static List<LivingDexEntry> WorldEntries(IReadOnlyList<GlobalLivingDex.Copy> copies, Dictionary<int, string?> locations,
+        LivingDexMode mode)
+    {
+        var slots = AllTheMonsLivingDex.Slots(mode);
+        var assigned = GlobalLivingDex.Assign(slots, copies, mode);
+        return slots.Select((slot, i) =>
+        {
+            var sprite = GlobalLivingDex.Sprite(slot);
+            var fallback = slot.Image is null || slot.Species > GlobalLivingDex.MaxSpecies ? sprite
+                : PokemonSprites.Url(slot.Species, 0, slot.Context, female: false, heldItem: 0, shiny: false);
+            return new LivingDexEntry(slot.Species, slot.Species, slot.Form, slot.Name, sprite, assigned[i]?.Id,
+                assigned[i] is { } copy ? locations.GetValueOrDefault(copy.Id) : null, fallback, GlobalLivingDex.Note(slot, assigned[i] is not null));
+        }).ToList();
+    }
+
     /// <summary>
     /// Cases d'un mode avec le Pokémon de la sauvegarde qui remplit chacune : le même comptage partout (page, vue générale).
     /// Les cases Méga (<see cref="LivingDexSlot.MegaItem"/>, <see cref="LivingDexSlot.MegaMove"/>) prennent d'abord leurs
     /// exemplaires, que les autres cases ne reprennent pas : il faut un exemplaire de plus par Méga-Évolution. En Let's Go
     /// (<see cref="LivingDexSlot.MegaInBag"/>), n'importe quel exemplaire convient : la case de l'espèce garde le premier,
     /// chaque Méga dont la gemme est dans le sac prend le suivant. Les cases Gigamax (<see cref="LivingDexSlot.Gigamax"/>)
-    /// prennent aussi d'abord le leur, qui a le facteur Gigamax.
+    /// prennent aussi d'abord le leur, qui a le facteur Gigamax. Living dex chromatique : les seuls chromatiques, sans les
+    /// cases des espèces jamais chromatiques (retirées à la fin : les autres gardent leur numéro du Pokédex régional).
     /// </summary>
-    private static async Task<List<LivingDexEntry>> EntriesAsync(ApplicationDbContext db, LivingDexGameInfo game, int saveId, LivingDexMode mode)
-    {
-        var owned = await OwnedAsync(db, saveId);
-        var slots = LivingDexGames.Slots(game, mode);
-        var bag = slots.Any(s => s.KeyItem != 0 || s.MegaInBag) ? await BagItemsAsync(db, saveId) : new HashSet<int>();
+    private static async Task<List<LivingDexEntry>> EntriesAsync(ApplicationDbContext db, LivingDexGameInfo game, int saveId, LivingDexMode mode) =>
+        (await EntriesAsync(db, game, saveId, [mode]))[mode];
 
-        var megaCopies = new Dictionary<int, OwnedCopy>(); // index de la case Méga ou Gigamax → son exemplaire
+    /// <summary>Cases de plusieurs modes, la sauvegarde lue une seule fois (statistiques : <see cref="ProgressAsync"/>).</summary>
+    private static async Task<Dictionary<LivingDexMode, List<LivingDexEntry>>> EntriesAsync(ApplicationDbContext db,
+        LivingDexGameInfo game, int saveId, IReadOnlyList<LivingDexMode> modes)
+    {
+        if (AllTheMonsLivingDex.Is(game.Game))
+        {
+            var (copies, locations) = await WorldCopiesAsync(db, saveId);
+            return modes.ToDictionary(m => m, m => WorldEntries(copies, locations, m));
+        }
+        var owned = await OwnedAsync(db, saveId, game.Shiny);
+        IReadOnlySet<int>? bag = null; // le sac n'est lu que si un mode en a besoin
+        var result = new Dictionary<LivingDexMode, List<LivingDexEntry>>();
+        foreach (var mode in modes)
+        {
+            var slots = LivingDexGames.Slots(game, mode);
+            if (bag is null && slots.Any(s => s.KeyItem != 0 || s.MegaInBag))
+                bag = await BagItemsAsync(db, saveId);
+            result[mode] = Entries(game, mode, slots, owned, bag ?? new HashSet<int>());
+        }
+        return result;
+    }
+
+    /// <summary>Cases d'un mode avec leur exemplaire, parmi les Pokémon de la sauvegarde (voir <see cref="EntriesAsync"/>).</summary>
+    private static List<LivingDexEntry> Entries(LivingDexGameInfo game, LivingDexMode mode, IReadOnlyList<LivingDexSlot> slots,
+        List<OwnedCopy> owned, IReadOnlySet<int> bag)
+    {
+        var megaCopies = MegaCopies(slots, owned);
+        var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
+        var copies = new SlotCopies(available, megaCopies, BagMegas(slots, available, bag), bag);
+        return slots.Select((slot, index) => (slot, index)).Where(s => !LivingDexGames.ShinyLocked(game, s.slot))
+            .Select(s => Entry(game, mode, s.slot, s.index, copies)).ToList();
+    }
+
+    /// <summary>Exemplaires trouvés pour les cases (voir <see cref="EntriesAsync"/>).</summary>
+    private sealed record SlotCopies(List<OwnedCopy> Available, Dictionary<int, OwnedCopy> MegaCopies,
+        Dictionary<int, (OwnedCopy? Copy, string Note)> BagMegas, IReadOnlySet<int> Bag);
+
+    /// <summary>Case Méga ou Gigamax (index) → son exemplaire, pris en premier : il faut un exemplaire de plus pour chacune.</summary>
+    private static Dictionary<int, OwnedCopy> MegaCopies(IReadOnlyList<LivingDexSlot> slots, List<OwnedCopy> owned)
+    {
+        var megaCopies = new Dictionary<int, OwnedCopy>();
         for (var i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
             if (slot.MegaItem == 0 && slot.MegaMove == 0 && !slot.Gigamax || slot.MegaInBag)
                 continue;
-            var copy = owned.FirstOrDefault(p => p.Species == slot.Species && !megaCopies.ContainsValue(p)
-                && (slot.Gigamax ? p.CanGigantamax && LivingDexGames.Fills(slot, p.Species, p.Form, LivingDexMode.Complete)
-                    : slot.MegaItem != 0 ? p.HeldItem == slot.MegaItem : p.KnowsMegaMove));
+            var copy = owned.FirstOrDefault(p => p.Species == slot.Species && !megaCopies.ContainsValue(p) && FillsSpecial(slot, p));
             if (copy is not null)
                 megaCopies[i] = copy;
         }
-        var available = megaCopies.Count == 0 ? owned : owned.Except(megaCopies.Values).ToList();
-        var bagMegas = BagMegas(slots, available, bag);
+        return megaCopies;
+    }
 
-        return slots.Select((slot, index) =>
+    /// <summary>L'exemplaire convient-il à cette case Méga ou Gigamax (gemme tenue, capacité connue, facteur Gigamax) ?</summary>
+    private static bool FillsSpecial(LivingDexSlot slot, OwnedCopy p)
+    {
+        if (slot.Gigamax)
+            return p.CanGigantamax && LivingDexGames.Fills(slot, p.Species, p.Form, LivingDexMode.Complete);
+        return slot.MegaItem != 0 ? p.HeldItem == slot.MegaItem : p.KnowsMegaMove;
+    }
+
+    /// <summary>Case du living dex : son exemplaire (ou sa note s'il manque), son nom, son image.</summary>
+    private static LivingDexEntry Entry(LivingDexGameInfo game, LivingDexMode mode, LivingDexSlot slot, int index, SlotCopies copies)
+    {
+        var (copy, note) = slot switch
         {
-            var (copy, note) = slot switch
-            {
-                { MegaInBag: true } => bagMegas[index],
-                { MegaItem: not 0 } or { MegaMove: not 0 } or { Gigamax: true } =>
-                    (megaCopies.GetValueOrDefault(index), MegaNote(slot, megaCopies.ContainsKey(index))),
-                { KeyItem: not 0 } => FindWithItem(available, slot, mode, bag),
-                _ => (Find(available, slot, mode), null),
-            };
-            if (copy is null && slot.Hint is not null)
-                note = slot.Hint;
-            var (section, number) = LivingDexGames.RegionalNumber(game, index);
-            return new LivingDexEntry(mode == LivingDexMode.Regional ? number : slot.Species, slot.Species, slot.Form,
-                LivingDexGames.Name(game, slot, mode), LivingDexGames.Sprite(game, slot), copy?.Id, copy?.Location,
-                LivingDexGames.Fallback(game, slot), note, mode == LivingDexMode.Regional ? section : null);
-        }).ToList();
+            { MegaInBag: true } => copies.BagMegas[index],
+            { MegaItem: not 0 } or { MegaMove: not 0 } or { Gigamax: true } =>
+                (copies.MegaCopies.GetValueOrDefault(index), MegaNote(slot, copies.MegaCopies.ContainsKey(index))),
+            { KeyItem: not 0 } => FindWithItem(copies.Available, slot, mode, copies.Bag),
+            _ => (Find(copies.Available, slot, mode), null),
+        };
+        if (copy is null && slot.Hint is not null)
+            note = slot.Hint;
+        var (section, number) = LivingDexGames.RegionalNumber(game, index);
+        var regional = mode == LivingDexMode.Regional;
+        return new LivingDexEntry(regional ? number : slot.Species, slot.Species, slot.Form,
+            LivingDexGames.Name(game, slot, mode), LivingDexGames.Sprite(game, slot), copy?.Id, copy?.Location,
+            LivingDexGames.Fallback(game, slot), note, regional ? section : null);
     }
 
     /// <summary>
@@ -1413,9 +1704,16 @@ public sealed class LivingDexService(
     /// </summary>
     private static string MegaNote(LivingDexSlot slot, bool filled)
     {
-        var condition = slot.Gigamax ? "avec le facteur Gigamax"
-            : slot.MegaItem != 0 ? $"avec {FrenchStrings.itemlist[slot.MegaItem]}" : $"qui connaît {FrenchStrings.movelist[slot.MegaMove]}";
+        var condition = MegaCondition(slot);
         return filled ? condition : $"il faut un {FrenchStrings.specieslist[slot.Species]} de plus {condition}";
+    }
+
+    /// <summary>« avec le facteur Gigamax », « avec Dracaufite X », « qui connaît Draco-Ascension ».</summary>
+    private static string MegaCondition(LivingDexSlot slot)
+    {
+        if (slot.Gigamax)
+            return "avec le facteur Gigamax";
+        return slot.MegaItem != 0 ? $"avec {FrenchStrings.itemlist[slot.MegaItem]}" : $"qui connaît {FrenchStrings.movelist[slot.MegaMove]}";
     }
 
     /// <summary>
@@ -1456,17 +1754,17 @@ public sealed class LivingDexService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var deleted = await db.LivingDexes.Where(d => d.Id == id && d.OwnerId == ownerId).ExecuteDeleteAsync();
-        if (deleted > 0)
+        if (deleted > 0 && logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Utilisateur {User} : living dex {Id} supprimé.", ownerId, id);
         return deleted > 0;
     }
 
-    /// <summary>Living dex de chaque sauvegarde (nom du jeu), pour prévenir qu'il partira avec elle (« Supprimer »).</summary>
+    /// <summary>Living dex de chaque sauvegarde (nom du jeu, « chromatique »), pour prévenir qu'il partira avec elle (« Supprimer »).</summary>
     public async Task<Dictionary<int, string>> NamesBySaveAsync(string ownerId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return (await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.StoredSaveId != null).Select(d => new { d.StoredSaveId, d.Game }).ToListAsync())
-            .ToDictionary(d => d.StoredSaveId!.Value, d => LivingDexGames.Get(d.Game).Name);
+        return (await db.LivingDexes.Where(d => d.OwnerId == ownerId && d.StoredSaveId != null).Select(d => new { d.StoredSaveId, d.Game, d.Shiny }).ToListAsync())
+            .ToDictionary(d => d.StoredSaveId!.Value, d => LivingDexGames.Get(d.Game, d.Shiny).Name);
     }
 
     /// <summary>Pokémon de la sauvegarde qui remplit une case.</summary>
@@ -1476,11 +1774,14 @@ public sealed class LivingDexService(
     private sealed record OwnedCopy(int Id, ushort Species, byte Form, string? Location, int HeldItem, bool KnowsMegaMove,
         bool CanGigantamax);
 
-    /// <summary>Pokémon de la sauvegarde (les œufs ne comptent pas), dans son ordre : équipe, puis boîtes.</summary>
-    private static async Task<List<OwnedCopy>> OwnedAsync(ApplicationDbContext db, int saveId)
+    /// <summary>
+    /// Pokémon de la sauvegarde (les œufs ne comptent pas), dans son ordre : équipe, puis boîtes ; les seuls chromatiques
+    /// pour un living dex chromatique (le normal compte tout le monde, chromatiques compris).
+    /// </summary>
+    private static async Task<List<OwnedCopy>> OwnedAsync(ApplicationDbContext db, int saveId, bool shiny)
     {
         var rows = await db.BankPokemon.AsNoTracking()
-            .Where(p => p.StoredSaveId == saveId && !p.IsEgg)
+            .Where(p => p.StoredSaveId == saveId && !p.IsEgg && (!shiny || p.IsShiny))
             .OrderBy(p => p.Position)
             // Octets seulement pour les Rayquaza (leurs capacités disent s'ils peuvent méga-évoluer) et les espèces qui ont
             // une case Gigamax (le facteur est dans les octets).

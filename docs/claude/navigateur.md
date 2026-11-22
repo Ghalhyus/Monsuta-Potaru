@@ -12,6 +12,12 @@
 - **Envoi d'un `.sav`** : servir le dossier avec un petit serveur HTTP local qui autorise CORS, appelé par
   `http://localhost:<port>` (la CSP de développement refuse `127.0.0.1`), puis dans la page `fetch` du fichier →
   `DataTransfer` → `input.files`, et déclencher `change`.
+- **Dossier d'un monde Minecraft** (`input[webkitdirectory]`, la fenêtre de choix du système n'est pas pilotable) :
+  `fetch` de chaque fichier du monde servi en local (avec des leurres, `region/…`), `new File(...)` avec
+  `Object.defineProperty(f, 'webkitRelativePath', { value: 'Kantalia/level.dat' })`, puis
+  `Object.defineProperty(input, 'files', { value: liste, configurable: true })` et `change`. Pour vérifier que les leurres
+  ne sont jamais lus : envelopper `File.prototype.arrayBuffer` et noter les `webkitRelativePath` ouverts. Un mauvais
+  dossier : préfixer les chemins (« saves/Kantalia/… »).
 - Vérifier par `javascript_tool` (textes, états des boutons) ; une capture d'écran seulement quand la mise en page compte
   (elles coûtent cher). Exception : panneau masqué, les listes virtualisées (« Ma collection ») ne se remplissent qu'avec
   une capture.

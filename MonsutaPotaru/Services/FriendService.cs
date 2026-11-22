@@ -128,7 +128,8 @@ public sealed class FriendService(IDbContextFactory<ApplicationDbContext> dbFact
         {
             return new(false, $"Tu as déjà envoyé une demande à {name}.");
         }
-        logger.LogInformation("Compte {User} : demande d'ami au compte {Target}.", userId, targetId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : demande d'ami au compte {Target}.", userId, targetId);
         return new(true, $"Demande d'ami envoyée à {name}.");
     }
 
@@ -157,7 +158,8 @@ public sealed class FriendService(IDbContextFactory<ApplicationDbContext> dbFact
             await db.SaveChangesAsync();
         }
         await tx.CommitAsync();
-        logger.LogInformation("Comptes {From} et {To} : amis.", request.FromId, request.ToId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Comptes {From} et {To} : amis.", request.FromId, request.ToId);
     }
 
     /// <summary>Refuse une demande reçue (l'autre n'est pas prévenu : elle disparaît de ses demandes envoyées).</summary>
@@ -185,7 +187,8 @@ public sealed class FriendService(IDbContextFactory<ApplicationDbContext> dbFact
             || (f.UserId == friendId && f.FriendId == userId)).ExecuteDeleteAsync();
         if (removed == 0)
             return new(false, "Ce joueur n'est pas (ou plus) ton ami.");
-        logger.LogInformation("Compte {User} : ami {Friend} retiré.", userId, friendId);
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Compte {User} : ami {Friend} retiré.", userId, friendId);
         return new(true, $"{Name(name)} n'est plus ton ami.");
     }
 

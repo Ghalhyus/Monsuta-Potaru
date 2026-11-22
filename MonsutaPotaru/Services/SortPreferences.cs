@@ -1,0 +1,372 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using MonsutaPotaru.Data;
+
+namespace MonsutaPotaru.Services;
+
+/// <summary>
+/// Critère de tri d'un onglet de l'inventaire : « par défaut » (numéro d'objet commun à tous les jeux, qui garde ensemble
+/// les Balls, les pierres, les potions... ; nom de la capacité pour les CT), nom ou quantité. À égalité de quantité, par nom.
+/// </summary>
+public enum ItemSortBy { Default, Name, Quantity }
+
+/// <summary>Tri d'un onglet de l'inventaire : croissant par défaut, <paramref name="Descending"/> l'inverse.</summary>
+public readonly record struct ItemSort(ItemSortBy By = ItemSortBy.Default, bool Descending = false);
+
+/// <summary>Tri de la vue générale des living dex : par génération croissante par défaut.</summary>
+public readonly record struct LivingDexOrder(LivingDexSort By = LivingDexSort.Generation, bool Descending = false);
+
+/// <summary>Tri de la vue générale des complétions : par génération croissante par défaut.</summary>
+public readonly record struct CompletionOrder(CompletionSort By = CompletionSort.Generation, bool Descending = false);
+
+/// <summary>Tri de la vue générale des rubans : par ordre d'ajout (le premier suivi d'abord) par défaut.</summary>
+public readonly record struct RibbonOrder(RibbonSort By = RibbonSort.Arrival, bool Descending = false);
+
+/// <summary>
+/// Disposition des deux écrans d'un combat (« Multijoueurs » → « Combat ») : l'un au-dessus de l'autre comme sur la console,
+/// côte à côte, ou « hybride » (le terrain en grand, le menu dans un panneau à sa droite ; par défaut depuis le 2026-11-14,
+/// les comptes plus anciens ont gardé « Empilés », migration HybridBattleDefault). Sur un écran trop étroit, la page les
+/// empile toujours.
+/// </summary>
+public enum BattleLayout { Stacked, SideBySide, Hybrid }
+
+/// <summary>
+/// Affichage des étapes d'une complétion : une par ligne (par défaut), ou en grille de cases. Pour l'instant sur la
+/// complétion All the Mons seulement (essai avant de l'étendre aux autres complétions).
+/// </summary>
+public enum CompletionStepsView { List, Grid }
+
+/// <summary>Valeurs « tri » et « ordre » d'une adresse (« ?tri=nom&amp;ordre=desc ») ; null : absente.</summary>
+public readonly record struct SortQuery(string? Tri, string? Ordre)
+{
+    /// <summary>Ni « tri » ni « ordre » : c'est le tri par défaut du compte qui s'applique.</summary>
+    public bool IsEmpty => Tri is null && Ordre is null;
+}
+
+/// <summary>
+/// Les tris de l'inventaire, de « Ma collection » et des vues générales des living dex, des complétions et des rubans : leurs noms dans l'adresse
+/// (« ?tri= », « ?ordre= »), leurs libellés, et la lecture d'une adresse. Une valeur inconnue (adresse ou formulaire
+/// trafiqués) donne le premier critère et le sens par défaut, jamais une erreur.
+/// </summary>
+public static class SiteSorts
+{
+    /// <summary>Nom de chaque onglet de l'inventaire dans l'adresse (« ?onglet=baies ») et dans les préférences.</summary>
+    public static readonly IReadOnlyDictionary<ItemCategory, string> InventoryTabs = new Dictionary<ItemCategory, string>
+    {
+        [ItemCategory.Items] = "objets",
+        [ItemCategory.Balls] = "pokeballs",
+        [ItemCategory.Medicine] = "medicaments",
+        [ItemCategory.Berries] = "baies",
+        [ItemCategory.Machines] = "ct",
+    };
+
+    public static readonly IReadOnlyList<(ItemSortBy By, string Slug, string Label)> ItemChoices =
+    [
+        (ItemSortBy.Default, "defaut", "Par défaut"),
+        (ItemSortBy.Name, "nom", "Nom"),
+        (ItemSortBy.Quantity, "quantite", "Quantité"),
+    ];
+
+    public static readonly IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> CollectionChoices =
+    [
+        (CollectionSortBy.Arrival, "arrivee", "Arrivée"),
+        (CollectionSortBy.Name, "nom", "Nom"),
+        (CollectionSortBy.Dex, "pokedex", "N° Pokédex"),
+    ];
+
+    /// <summary>
+    /// Les choix du mode compact : ceux de <see cref="CollectionChoices"/> et la quantité (nombre de Pokémon du dossier), qui
+    /// ne veut rien dire hors mode compact (pas proposée dans les préférences).
+    /// </summary>
+    public static readonly IReadOnlyList<(CollectionSortBy By, string Slug, string Label)> CollectionCompactChoices =
+        [.. CollectionChoices, (CollectionSortBy.Quantity, "quantite", "Quantité")];
+
+    public static readonly IReadOnlyList<(LivingDexSort By, string Slug, string Label)> LivingDexChoices =
+    [
+        (LivingDexSort.Generation, "generation", "Génération"),
+        (LivingDexSort.Completion, "completion", "Complétion"),
+    ];
+
+    public static readonly IReadOnlyList<(CompletionSort By, string Slug, string Label)> CompletionChoices =
+    [
+        (CompletionSort.Generation, "generation", "Génération"),
+        (CompletionSort.Completion, "completion", "Complétion"),
+    ];
+
+    public static readonly IReadOnlyList<(RibbonSort By, string Slug, string Label)> RibbonChoices =
+    [
+        (RibbonSort.Arrival, "ajout", "Ajout"),
+        (RibbonSort.Name, "nom", "Nom"),
+        (RibbonSort.Completion, "completion", "Complétion"),
+    ];
+
+    /// <summary>Dispositions des écrans d'un combat : nom dans les préférences et le formulaire, libellé.</summary>
+    public static readonly IReadOnlyList<(BattleLayout Layout, string Slug, string Label)> BattleLayoutChoices =
+    [
+        (BattleLayout.Stacked, "empile", "Empilés"),
+        (BattleLayout.SideBySide, "cote", "Côte à côte"),
+        (BattleLayout.Hybrid, "hybride", "Hybride"),
+    ];
+
+    public static string Slug(ItemSortBy by) => ItemChoices.First(c => c.By == by).Slug;
+    public static string Slug(CollectionSortBy by) => CollectionCompactChoices.First(c => c.By == by).Slug;
+    public static string Slug(LivingDexSort by) => LivingDexChoices.First(c => c.By == by).Slug;
+    public static string Slug(CompletionSort by) => CompletionChoices.First(c => c.By == by).Slug;
+    public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
+
+    public static string Slug(BattleLayout layout) => BattleLayoutChoices.First(c => c.Layout == layout).Slug;
+
+    /// <summary>Affichages des étapes d'une complétion : nom dans les préférences et le formulaire, libellé.</summary>
+    public static readonly IReadOnlyList<(CompletionStepsView View, string Slug, string Label)> CompletionViewChoices =
+    [
+        (CompletionStepsView.List, "liste", "Liste"),
+        (CompletionStepsView.Grid, "grille", "Grille"),
+    ];
+
+    public static string Slug(CompletionStepsView view) => CompletionViewChoices.First(c => c.View == view).Slug;
+
+    /// <summary>Affichage lu dans les préférences ou le formulaire ; absent ou inconnu (trafiqué) : la liste.</summary>
+    public static CompletionStepsView CompletionViewFrom(string? slug) =>
+        CompletionViewChoices.FirstOrDefault(c => c.Slug == slug, (View: CompletionStepsView.List, Slug: "", Label: "")).View;
+
+    /// <summary>Disposition des écrans d'un combat quand le compte n'en a pas choisi : hybride.</summary>
+    public const BattleLayout DefaultBattleLayout = BattleLayout.Hybrid;
+
+    /// <summary>Disposition lue dans les préférences ou le formulaire ; absente ou inconnue (trafiquée) : hybride.</summary>
+    public static BattleLayout BattleLayoutFrom(string? slug) =>
+        BattleLayoutChoices.FirstOrDefault(c => c.Slug == slug, (Layout: DefaultBattleLayout, Slug: "", Label: "")).Layout;
+
+    // ---------- Inventaire : « ordre=desc » pour décroissant ----------
+
+    /// <summary>Tri d'un onglet lu dans l'adresse ; null si elle n'en dit rien.</summary>
+    public static ItemSort? ItemFromQuery(SortQuery query) => query.IsEmpty
+        ? null
+        : new ItemSort(ItemChoices.FirstOrDefault(c => c.Slug == query.Tri, ItemChoices[0]).By, query.Ordre == "desc");
+
+    public static SortQuery ItemQuery(ItemSort sort) => new(Slug(sort.By), sort.Descending ? "desc" : null);
+
+    // ---------- Collection : « ordre=asc|desc », le sens réel ----------
+
+    /// <summary>L'arrivée montre les plus récents d'abord, la quantité les plus nombreux ; le nom et le numéro sont croissants.</summary>
+    public static bool DescendingByDefault(CollectionSortBy by) => by is CollectionSortBy.Arrival or CollectionSortBy.Quantity;
+
+    /// <summary>Le tri montre-t-il le plus grand (ou le plus récent) d'abord ?</summary>
+    public static bool IsDescending(CollectionSort sort) => DescendingByDefault(sort.By) != sort.Reversed;
+
+    /// <summary>
+    /// Tri de la collection lu dans l'adresse (sens par défaut du critère, sauf « ordre » contraire) ; null si elle n'en dit
+    /// rien. La quantité n'est reconnue qu'avec <paramref name="compact"/> (sinon, comme une valeur inconnue : l'arrivée).
+    /// </summary>
+    public static CollectionSort? CollectionFromQuery(SortQuery query, bool compact = false)
+    {
+        if (query.IsEmpty)
+            return null;
+        var choices = compact ? CollectionCompactChoices : CollectionChoices;
+        var by = choices.FirstOrDefault(c => c.Slug == query.Tri, choices[0]).By;
+        var descending = query.Ordre is "asc" or "desc" ? query.Ordre == "desc" : DescendingByDefault(by);
+        return new CollectionSort(by, descending != DescendingByDefault(by));
+    }
+
+    public static SortQuery CollectionQuery(CollectionSort sort) =>
+        new(Slug(sort.By), sort.Reversed ? (IsDescending(sort) ? "desc" : "asc") : null);
+
+    // ---------- Living dex : « ordre=desc » pour décroissant ----------
+
+    /// <summary>Tri de la vue générale lu dans l'adresse ; null si elle n'en dit rien.</summary>
+    public static LivingDexOrder? LivingDexFromQuery(SortQuery query) => query.IsEmpty
+        ? null
+        : new LivingDexOrder(LivingDexChoices.FirstOrDefault(c => c.Slug == query.Tri, LivingDexChoices[0]).By, query.Ordre == "desc");
+
+    public static SortQuery LivingDexQuery(LivingDexOrder order) => new(Slug(order.By), order.Descending ? "desc" : null);
+
+    // ---------- Complétion : « ordre=desc » pour décroissant ----------
+
+    /// <summary>Tri de la vue générale des complétions lu dans l'adresse ; null si elle n'en dit rien.</summary>
+    public static CompletionOrder? CompletionFromQuery(SortQuery query) => query.IsEmpty
+        ? null
+        : new CompletionOrder(CompletionChoices.FirstOrDefault(c => c.Slug == query.Tri, CompletionChoices[0]).By, query.Ordre == "desc");
+
+    public static SortQuery CompletionQuery(CompletionOrder order) => new(Slug(order.By), order.Descending ? "desc" : null);
+
+    // ---------- Rubans : « ordre=desc » pour décroissant ----------
+
+    /// <summary>Tri de la vue générale des rubans lu dans l'adresse ; null si elle n'en dit rien.</summary>
+    public static RibbonOrder? RibbonFromQuery(SortQuery query) => query.IsEmpty
+        ? null
+        : new RibbonOrder(RibbonChoices.FirstOrDefault(c => c.Slug == query.Tri, RibbonChoices[0]).By, query.Ordre == "desc");
+
+    public static SortQuery RibbonQuery(RibbonOrder order) => new(Slug(order.By), order.Descending ? "desc" : null);
+
+    /// <summary>
+    /// Ce qu'il faut écrire dans l'adresse pour un tri choisi sur la page : rien quand c'est le tri par défaut du compte
+    /// (l'adresse reste courte, et suit un changement de préférence), sinon le critère et le sens, toujours écrits en entier
+    /// (« ?tri=arrivee » quand le défaut du compte est le nom).
+    /// </summary>
+    public static Dictionary<string, object?> AddressFor(SortQuery chosen, SortQuery accountDefault) => chosen == accountDefault
+        ? new() { ["tri"] = null, ["ordre"] = null }
+        : new() { ["tri"] = chosen.Tri, ["ordre"] = chosen.Ordre };
+}
+
+/// <summary>
+/// Tris par défaut d'un compte (« Mon compte » → « Préférences ») : un par onglet de l'inventaire, celui de « Ma
+/// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
+/// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
+/// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>), et l'affichage des étapes d'une complétion
+/// (<see cref="CompletionView"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille"}</c>.
+/// </summary>
+public sealed record SortPreferences
+{
+    /// <summary>Les réglages d'origine du site : tris par défaut dans l'inventaire, par arrivée, par génération, par ajout ; écrans de combat en mode hybride, taille normale.</summary>
+    public static readonly SortPreferences Default = new();
+
+    public IReadOnlyDictionary<ItemCategory, ItemSort> Inventory { get; init; } = new Dictionary<ItemCategory, ItemSort>();
+    public CollectionSort Collection { get; init; }
+    public LivingDexOrder LivingDex { get; init; }
+    public CompletionOrder Completion { get; init; }
+    public RibbonOrder Ribbons { get; init; }
+    public BattleLayout Battle { get; init; } = SiteSorts.DefaultBattleLayout;
+
+    /// <summary>Écrans de combat agrandis (bouton « Agrandir » de la page du combat) : toute la place du contenu de la page.</summary>
+    public bool BattleEnlarged { get; init; }
+
+    /// <summary>Étapes d'une complétion en liste ou en grille (bouton de la page, ou « Préférences »).</summary>
+    public CompletionStepsView CompletionView { get; init; }
+
+    public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
+
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private sealed class Stored
+    {
+        public Dictionary<string, StoredSort>? Inventaire { get; set; }
+        public StoredSort? Collection { get; set; }
+        public StoredSort? Livingdex { get; set; }
+        public StoredSort? Completion { get; set; }
+        public StoredSort? Rubans { get; set; }
+        public string? Combat { get; set; }
+        public bool? CombatAgrandi { get; set; }
+        public string? CompletionVue { get; set; }
+    }
+
+    private sealed class StoredSort
+    {
+        public string? Tri { get; set; }
+        public string? Ordre { get; set; }
+        public SortQuery ToQuery() => new(Tri, Ordre);
+        public static StoredSort From(SortQuery query) => new() { Tri = query.Tri, Ordre = query.Ordre };
+    }
+
+    /// <summary>JSON à enregistrer ; null quand tout est au réglage d'origine (la colonne reste vide).</summary>
+    public string? ToJson()
+    {
+        var inventory = Inventory.Where(s => s.Value != default)
+            .ToDictionary(s => SiteSorts.InventoryTabs[s.Key], s => StoredSort.From(SiteSorts.ItemQuery(s.Value)));
+        var stored = new Stored
+        {
+            Inventaire = inventory.Count == 0 ? null : inventory,
+            Collection = Collection == default ? null : StoredSort.From(SiteSorts.CollectionQuery(Collection)),
+            Livingdex = LivingDex == default ? null : StoredSort.From(SiteSorts.LivingDexQuery(LivingDex)),
+            Completion = Completion == default ? null : StoredSort.From(SiteSorts.CompletionQuery(Completion)),
+            Rubans = Ribbons == default ? null : StoredSort.From(SiteSorts.RibbonQuery(Ribbons)),
+            Combat = Battle == SiteSorts.DefaultBattleLayout ? null : SiteSorts.Slug(Battle),
+            CombatAgrandi = BattleEnlarged ? true : null,
+            CompletionVue = CompletionView == CompletionStepsView.List ? null : SiteSorts.Slug(CompletionView),
+        };
+        return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
+            && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null && stored.CompletionVue is null
+            ? null
+            : JsonSerializer.Serialize(stored, Json);
+    }
+
+    /// <summary>Préférences lues en base ; absentes ou illisibles : les tris d'origine (une partie illisible seulement : elle seule).</summary>
+    public static SortPreferences FromJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Default;
+        Stored? stored;
+        try
+        {
+            stored = JsonSerializer.Deserialize<Stored>(json, Json);
+        }
+        catch (JsonException)
+        {
+            return Default;
+        }
+        if (stored is null)
+            return Default;
+        var inventory = new Dictionary<ItemCategory, ItemSort>();
+        foreach (var (tab, sort) in stored.Inventaire ?? [])
+            if (sort is not null && SiteSorts.InventoryTabs.FirstOrDefault(t => t.Value == tab) is { Value: not null } category
+                && SiteSorts.ItemFromQuery(sort.ToQuery()) is { } itemSort)
+                inventory[category.Key] = itemSort;
+        return new SortPreferences
+        {
+            Inventory = inventory,
+            Collection = stored.Collection is { } c ? SiteSorts.CollectionFromQuery(c.ToQuery()) ?? default : default,
+            LivingDex = stored.Livingdex is { } l ? SiteSorts.LivingDexFromQuery(l.ToQuery()) ?? default : default,
+            Completion = stored.Completion is { } p ? SiteSorts.CompletionFromQuery(p.ToQuery()) ?? default : default,
+            Ribbons = stored.Rubans is { } r ? SiteSorts.RibbonFromQuery(r.ToQuery()) ?? default : default,
+            Battle = SiteSorts.BattleLayoutFrom(stored.Combat),
+            BattleEnlarged = stored.CombatAgrandi == true,
+            CompletionView = SiteSorts.CompletionViewFrom(stored.CompletionVue),
+        };
+    }
+}
+
+/// <summary>
+/// Lecture et enregistrement des préférences d'un compte : les tris par défaut, la disposition des écrans d'un combat et
+/// l'affichage des étapes d'une complétion.
+/// </summary>
+public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> dbFactory)
+{
+    /// <summary>Tris par défaut du compte ; les tris d'origine sans compte (ou compte supprimé).</summary>
+    public async Task<SortPreferences> SortsAsync(string? userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return SortPreferences.Default;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return SortPreferences.FromJson(await db.Users.Where(u => u.Id == userId).Select(u => u.SortPreferences).FirstOrDefaultAsync());
+    }
+
+    public async Task<AccountResult> SetSortsAsync(string userId, SortPreferences sorts)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var json = sorts.ToJson();
+        if (await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(u => u.SetProperty(x => x.SortPreferences, json)) == 0)
+            return new(false, "Ce compte n'existe plus.");
+        return new(true, "Tris par défaut enregistrés.");
+    }
+
+    /// <summary>Disposition des écrans d'un combat, choisie dans les préférences ou sur la page du combat ; les tris ne changent pas.</summary>
+    public async Task<AccountResult> SetBattleLayoutAsync(string userId, BattleLayout layout)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout });
+        return result.Ok ? new(true, "Disposition des écrans de combat enregistrée.") : result;
+    }
+
+    /// <summary>Disposition et mode agrandi des écrans d'un combat, choisis dans les préférences ; les tris ne changent pas.</summary>
+    public async Task<AccountResult> SetBattleScreensAsync(string userId, BattleLayout layout, bool enlarged)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { Battle = layout, BattleEnlarged = enlarged });
+        return result.Ok ? new(true, "Écrans de combat enregistrés.") : result;
+    }
+
+    /// <summary>Étapes d'une complétion en liste ou en grille, choisi sur la page ou dans les préférences ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetCompletionViewAsync(string userId, CompletionStepsView view)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { CompletionView = view });
+        return result.Ok ? new(true, "Affichage des étapes de complétion enregistré.") : result;
+    }
+
+    /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetBattleEnlargedAsync(string userId, bool enlarged)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { BattleEnlarged = enlarged });
+        return result.Ok ? new(true, enlarged ? "Écrans de combat agrandis." : "Écrans de combat à leur taille normale.") : result;
+    }
+}

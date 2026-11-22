@@ -5,23 +5,32 @@ Identity, PKHeX.Core, xUnit). « Monsuta Potaru » affiché, `MonsutaPotaru` dan
 (dossiers, service, volumes Docker). Restent « PokeBank » exprès : le homebrew 3DS **PokeBank Sync** (autre dépôt, à
 renommer plus tard) et `SetApplicationName("PokeBank")` (le changer déconnecte tout le monde).
 
-Le `README.md` (100 Ko) décrit le fonctionnement, les règles métier et l'organisation du code : n'en lire que la section
-utile à la tâche. Ce fichier ne garde que ce que le README ne dit pas.
+Le `README.md` (75 Ko, pour les développeurs) donne les règles métier en bref, l'organisation du code et la mise en
+ligne : n'en lire que la section utile à la tâche. Ce fichier ne garde que ce que le README ne dit pas.
+
+Le mode d'emploi pour les joueurs est le **guide du joueur**, un Google Doc
+(`1cCz7BaDp5PWYgcoyKmB7m63tj9R6L9jGBg1o5HDLijM`, un chapitre par menu du site, tutoiement, aucun détail technique).
+Il s'écrit avec le connecteur Google Docs (`update_doc`) : lire d'abord la skill `google-workspace`. Sans le connecteur
+dans la session, demander à l'utilisateur de le brancher.
 
 ## Fiches par sujet : lire celle du sujet avant d'y toucher
 
 | Sujet | Fiche |
 |---|---|
-| Comptes, connexion, rôles, thèmes, pages du compte | `docs/claude/comptes.md` |
-| Multijoueurs : pages des joueurs, visibilité, amis, échanges, valeurs trafiquées | `docs/claude/multijoueurs.md` |
+| Comptes, connexion, rôles, thèmes, pages du compte, tris par défaut (« Préférences ») | `docs/claude/comptes.md` |
+| Multijoueurs : pages des joueurs, visibilité, amis, échanges (entre amis et « Échange interne », Time Capsule), GTS, valeurs trafiquées | `docs/claude/multijoueurs.md` |
 | Combats (Showdown) | `docs/claude/combats.md` |
 | Images des Pokémon et des objets, `outils/images.py`, `PokemonSprites` | `docs/claude/images.md` |
 | Parc | `docs/claude/parc.md` |
-| Living dex (par jeu, global, chromatique) | `docs/claude/living-dex.md` |
+| Living dex (par jeu, global, chromatique, All the Mons) | `docs/claude/living-dex.md` |
+| Rubans : liste des rubans comptés, suivi d'un Pokémon par empreinte, souvenirs | `docs/claude/rubans.md` |
+| Complétion (100 %) : tables de la 1re à la 9e génération générées d'après pret (pokered, pokecrystal, pokeemerald, binaires de pokediamond…), pokebw2, la ROM de Noire et FlagsEditorEX, conditions, ratés ; All the Mons (quêtes FTB et succès du modpack) | `docs/claude/completion.md` ; écarts avec les check-lists : `docs/claude/completion-ecarts.md` ; dresseurs de la 7e génération (ROM 3DS, code du jeu, reprise) : `docs/claude/completion-gen7-dresseurs.md` |
+| Statistiques : argent, moyennes des living dex, rubans et complétions, échanges et combats, sur le profil | `docs/claude/statistiques.md` |
 | Inventaire : sacs, numéros d'objets, CT, nouvelle catégorie | `docs/claude/inventaire.md` |
 | Pièges de PKHeX (octets, sauvegardes vides) | `docs/claude/pkhex.md` |
-| Ma collection : colonnes remplies au démarrage, doublons, PID des Pokémon de test | `docs/claude/collection.md` |
+| Ma collection : colonnes remplies au démarrage, doublons, PID des Pokémon de test ; « Dépôt / Retrait » : Pokémon incompatibles grisés | `docs/claude/collection.md` |
 | Tester dans le navigateur : instance de test, compte, envoi d'un `.sav`, deux comptes, anti-copie | `docs/claude/navigateur.md` |
+| Minecraft (All the Mons, Cobblemon) : format NBT, zip ou dossier du monde (envoi filtré), mondes stockés, mondes séparés | `docs/claude/minecraft.md` |
 | CI/CD : workflows, SonarCloud, déploiement | `docs/claude/ci-cd.md` |
 
 Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau sujet : nouvelle fiche, et une ligne ici.
@@ -39,7 +48,9 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
   (`innerWidth * devicePixelRatio`), pas en pixels CSS.
 - Vérifier dans un vrai navigateur (instance de test : `docs/claude/navigateur.md`) avant d'annoncer qu'une
   fonctionnalité marche.
-- Tenir le README à jour (règles métier, sauvegardes d'exemple, tableau « Organisation du code ») à chaque fonctionnalité.
+- À chaque fonctionnalité, tenir à jour **le guide du joueur** (ce que le joueur voit et peut faire, dans le chapitre de
+  son menu) et **le README** (règles que le code doit respecter, en bref ; sauvegardes d'exemple ; tableau « Organisation
+  du code »). Le détail technique va dans la fiche du sujet, pas dans le README.
 - **Toute ressource venant d'un autre projet** (bibliothèque, paquet, images, données, table reprise d'un site) : citée
   dans la section « Crédits » du README, avec son usage et sa licence, dès qu'elle entre dans le projet.
 
@@ -59,11 +70,15 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
 - Une valeur venue du navigateur (`<select>`, champ, `[JSInvokable]`) peut être trafiquée : le service revérifie
   (compte, amitié, visibilité). Détails et méthode de test : `docs/claude/multijoueurs.md`.
 - Tests : xUnit, base SQLite temporaire via `TestDatabase` ; sauvegardes fabriquées en mémoire
-  (`SaveSessionTests.CreateBw2Save`, `CreatePlatinumSave`, `GiveItems`).
+  (`SaveSessionTests.CreateBw2Save`, `CreatePlatinumSave`, `GiveItems`). Pages et composants : bUnit avec
+  `PageTestContext` (vrais services, JavaScript simulé, `RenderAs` pour un deuxième joueur) ; site entier (formulaires du
+  compte, API 3DS, `Program.cs`) : `SiteFactory`. Une page ajoutée ou modifiée a ses tests : couverture SonarCloud ≥ 70 %
+  (`docs/claude/ci-cd.md`).
 - Vraies sauvegardes de l'utilisateur dans `MonsutaPotaru.Tests/Sauvegardes/` (versionnées, exception à `*.sav` dans
   `.gitignore`) : `RealSavesTests` les passe toutes. Quand il en ajoute (fichiers bruts d'un émulateur, souvent sans
   extension) : les ranger sous un nom clair en `.sav` (`rubis-omega.sav`), les inspecter, lancer les tests, s'en servir
-  pour les essais dans le navigateur, mettre à jour la liste du README (ligne « Jeux testés » comprise).
+  pour les essais dans le navigateur, mettre à jour la liste du README (ligne « Jeux testés » comprise) et le chapitre « Jeux pris en
+  charge » du guide du joueur.
   **`git status` ne montre pas les `.sav`** (ignorés) : chercher les fichiers déposés avec `ls`.
 
 ## Compiler et tester
@@ -89,6 +104,6 @@ dotnet test MonsutaPotaru.Tests/MonsutaPotaru.Tests.csproj --artifacts-path <dos
 - **Migration EF** : la générer dans une **copie** du projet (`MonsutaPotaru` copié dans un dossier temporaire,
   `dotnet ef migrations add <Nom>` dessus), puis recopier `Data/Migrations` (migration, designer, snapshot) et remettre
   l'espace de noms `MonsutaPotaru.Migrations` (la copie génère `MonsutaPotaru.Data.Migrations`). Le code doit compiler
-  avant. La base se met à jour au démarrage (`Database.Migrate()`). Une migration qui modifie des données (SQL seul :
+  avant. La base se met à jour au démarrage (`Database.MigrateAsync()`). Une migration qui modifie des données (SQL seul :
   `GameNames`, `JournalFileNames`, `GameGroupNames`) se teste dans `MigrationsTests` (base migrée jusqu'à la précédente,
   lignes ajoutées, migration complète et retour) ; les autres tests créent la base avec `EnsureCreated`.

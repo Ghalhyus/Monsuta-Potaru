@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 
 namespace MonsutaPotaru.Data;
 
@@ -14,6 +14,13 @@ public class ApplicationUser : IdentityUser
     /// <summary>Thème choisi dans « Mon compte » → « Thèmes » (clé de <see cref="Services.SiteThemes"/>) ; null : le thème par défaut.</summary>
     [System.ComponentModel.DataAnnotations.MaxLength(32)]
     public string? Theme { get; set; }
+
+    /// <summary>
+    /// Tris par défaut choisis dans « Mon compte » → « Préférences » (inventaire, collection, living dex) et disposition des
+    /// écrans d'un combat, en JSON (voir <see cref="Services.SortPreferences"/>) ; null : les réglages d'origine du site.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(1024)]
+    public string? SortPreferences { get; set; }
 
     /// <summary>
     /// Qui peut voir les pages cochées (<see cref="PublicPages"/>), « Mon compte » → « Visibilité » : tout le monde, les amis
@@ -42,7 +49,11 @@ public enum PublicPages
     Park = 2,
     Inventory = 4,
     LivingDex = 8,
-    All = Collection | Park | Inventory | LivingDex,
+    /// <summary>Page « Statistiques » (argent, living dex, rubans, complétions, échanges, combats) ; cochée pour tous à son arrivée.</summary>
+    Statistics = 16,
+    /// <summary>Pages « Complétion (100 %) » (la liste et chaque complétion) ; cochée pour tous à son arrivée.</summary>
+    Completion = 32,
+    All = Collection | Park | Inventory | LivingDex | Statistics | Completion,
 }
 
 /// <summary>Qui peut voir les pages d'un joueur (« Mon compte » → « Visibilité »).</summary>

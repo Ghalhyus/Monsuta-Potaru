@@ -6,8 +6,8 @@
 //   « forcetie ») ; tout le reste est refusé (le simulateur accepte aussi « eval » : jamais transmis) ;
 // - lignes envoyées : chaque morceau du protocole de Showdown (« update », « sideupdate », « end »), encodé en JSON.
 'use strict';
-const {Battle, BattleStreams, Dex} = require('@pkmn/sim');
-const readline = require('readline');
+const {Battle, BattleStreams, Dex, Pokemon} = require('@pkmn/sim');
+const readline = require('node:readline');
 
 // PP Plus de chaque capacité (« ppUps » du Pokémon) : Showdown en suppose toujours 3. Appliqués juste avant le début du
 // combat, quand les Pokémon existent et qu'aucune requête n'est encore partie.
@@ -26,6 +26,21 @@ Battle.prototype.start = function (...args) {
     }
   }
   return start.apply(this, args);
+};
+
+// Fiche d'un Pokémon de l'équipe (résumé, capacités) : la requête de Showdown ne donne les PP que du Pokémon au combat, et
+// plus les PV maximum d'un Pokémon K.O. On ajoute à chaque Pokémon de la requête ses PP (« pp » : [restants, maximum]
+// par capacité, dans l'ordre de « moves »), ses PV maximum (« maxhp »), ses types (« types », ceux de l'espèce) et, avant
+// la 6e génération, la puissance de Puissance Cachée au bout de son identifiant (« hiddenpowerdark70 », comme Showdown le
+// fait lui-même ensuite).
+const requestData = Pokemon.prototype.getSwitchRequestData;
+Pokemon.prototype.getSwitchRequestData = function (...args) {
+  const entry = requestData.apply(this, args);
+  if (this.battle.gen < 6) entry.moves = entry.moves.map(id => id.startsWith('hiddenpower') ? id + this.hpPower : id);
+  entry.pp = this.moveSlots.map(slot => [slot.pp, slot.maxpp]);
+  entry.maxhp = this.maxhp;
+  entry.types = this.species.types;
+  return entry;
 };
 
 /**
@@ -75,9 +90,15 @@ const end = /^(forcelose (p1|p2)|forcetie)$/;
 const stream = new BattleStreams.BattleStream();
 let started = false;
 
+// Une erreur du simulateur part sur stderr, que le site lit : jamais de promesse rejetée sans suite.
+const report = e => process.stderr.write(`erreur : ${e.message}\n`);
+const send = text => {
+  Promise.resolve(stream.write(text)).catch(report);
+};
+
 (async () => {
   for await (const chunk of stream) process.stdout.write(JSON.stringify(chunk) + '\n');
-})();
+})().catch(report);
 
 readline.createInterface({input: process.stdin}).on('line', line => {
   try {
@@ -85,13 +106,13 @@ readline.createInterface({input: process.stdin}).on('line', line => {
       const setup = JSON.parse(line);
       const dex = Dex.forFormat(setup.format);
       started = true;
-      stream.write(`>start ${JSON.stringify({formatid: setup.format, seed: setup.seed})}`);
+      send(`>start ${JSON.stringify({formatid: setup.format, seed: setup.seed})}`);
       for (const side of ['p1', 'p2']) {
         const team = setup[side].team.map(p => toSet(dex, p));
-        stream.write(`>player ${side} ${JSON.stringify({name: setup[side].name, team})}`);
+        send(`>player ${side} ${JSON.stringify({name: setup[side].name, team})}`);
       }
     } else if (choice.test(line) || end.test(line)) {
-      stream.write(`>${line}`);
+      send(`>${line}`);
     } else {
       process.stderr.write(`commande refusée : ${line}\n`);
     }

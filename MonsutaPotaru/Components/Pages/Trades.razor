@@ -11,15 +11,15 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>Échanges</PageTitle>
+<PageTitle>Échange</PageTitle>
 
-@* Multijoueurs → Échanges : avec un ami, entre deux sauvegardes stockées de même génération. Demande (valable
+@* Multijoueurs → Échanges : avec un ami, entre deux sauvegardes stockées compatibles (TradeFamily : comme sur console). Demande (valable
    TradeHub.RequestLifetime), puis chacun choisit le Pokémon de l'autre qu'il veut, les deux valident, et le site échange
    les deux Pokémon dans les deux sauvegardes (TradeService). En direct : les deux pages suivent la même TradeSession.
    Quitter la page pendant un échange demande confirmation, puis l'annule pour les deux. *@
 <NavigationLock ConfirmExternalNavigation="InTrade" OnBeforeInternalNavigation="BeforeLeaving" />
 
-<PageHeader Title="Échanges" Icon="bi-list-nested-nav-menu" />
+<PageHeader Title="Échange" Icon="bi-list-nested-nav-menu" />
 
 @if (message is not null)
 {
@@ -122,8 +122,14 @@
                     }
                     else
                     {
+                        <PokemonPickerSearch @bind-Search="search" @bind-Criteria="criteria" Abilities="PokemonSearch.Abilities(theirs, c => c.Traits)" />
+                        var shown = PokemonSearch.Filter(theirs, search, criteria, c => c.Traits);
+                        @if (shown.Count == 0)
+                        {
+                            <p class="text-muted small">Aucun Pokémon ne correspond.</p>
+                        }
                         <div class="trade-candidates">
-                            @foreach (var candidate in theirs)
+                            @foreach (var candidate in shown)
                             {
                                 var c = candidate;
                                 <button type="button" class="trade-candidate @(wants?.Slot == c.Slot ? "selected" : "")" title="@c.Location"
@@ -159,6 +165,12 @@
             }
         </ChildContent>
     </Block>
+    @* Échange fait : chacun voit le Pokémon qu'il envoie, celui qu'il reçoit et son évolution, une fois. *@
+    @if (s.Stage == TradeStage.Done && closedShow != s.Id && s.Outcome is { Ok: true } outcome
+         && (s.IsFirst(userId) ? outcome.FirstShow : outcome.SecondShow) is { } show)
+    {
+        <TradeAnimation Show="show" OnClosed="() => closedShow = s.Id" />
+    }
 }
 else
 {
@@ -186,60 +198,68 @@ else
 
     @* ---------- Nouvel échange : l'ami, puis la paire de sauvegardes ---------- *@
     <Block Title="Nouvel échange">
-        <p class="small text-muted">
-            L'échange se fait en direct, avec un ami connecté, entre deux sauvegardes stockées de même génération. Il porte sur la
-            version stockée de ta sauvegarde : si tu as joué depuis, mets-la d'abord à jour dans <a href="sauvegardes">Mes sauvegardes</a>.
-            Après l'échange, chacun télécharge sa sauvegarde et la remet dans son jeu.
-        </p>
-        @if (friends is null)
-        {
-            <p class="text-muted">Chargement…</p>
-        }
-        else if (friends.Count == 0)
-        {
-            <p class="text-muted">Il te faut un ami pour échanger : ajoute-en dans <a href="amis">Amis</a>.</p>
-        }
-        else
-        {
-            <select class="form-select mb-3 trade-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
-                <option value="">Choisis un ami…</option>
-                @foreach (var f in friends)
-                {
-                    <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
-                }
-            </select>
-            @if (pairs is not null)
+        <Help>
+            <p>
+                L'échange se fait en direct, avec un ami connecté, entre deux sauvegardes stockées qui peuvent échanger sur console
+                (deux jeux qui échangent entre eux, ou Rouge / Bleu / Jaune avec Or / Argent / Cristal par le Time Capsule).
+            </p>
+            <p>
+                Il porte sur la version stockée de ta sauvegarde : si tu as joué depuis, mets-la d'abord à jour dans
+                <a href="sauvegardes">Mes sauvegardes</a>.
+            </p>
+            <p>Après l'échange, chacun télécharge sa sauvegarde et la remet dans son jeu.</p>
+        </Help>
+        <ChildContent>
+            @if (friends is null)
             {
-                @if (pairs.Count == 0)
+                <p class="text-muted">Chargement…</p>
+            }
+            else if (friends.Count == 0)
+            {
+                <p class="text-muted">Il te faut un ami pour échanger : ajoute-en dans <a href="amis">Amis</a>.</p>
+            }
+            else
+            {
+                <select class="form-select mb-3 trade-friend" aria-label="Ami" value="@friendId" @onchange="FriendChosen">
+                    <option value="">Choisis un ami…</option>
+                    @foreach (var f in friends)
+                    {
+                        <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                    }
+                </select>
+                @if (pairs is not null)
                 {
-                    <p class="text-muted">Vous n'avez aucune sauvegarde stockée de la même génération.</p>
-                }
-                else
-                {
-                    <div class="list-group">
-                        @foreach (var pair in pairs)
-                        {
-                            var p = pair;
-                            <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
-                                <span>
-                                    Ta sauvegarde : <strong>@p.Mine.Label</strong>
-                                    <span class="d-block small text-muted">
-                                        Version stockée du @p.Mine.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-                                        @if (p.Mine.MustDownloadBeforeUpdate)
-                                        {
-                                            <span class="text-warning-emphasis"> · modifiée par le site (@p.Mine.ServerChanges), pas encore téléchargée</span>
-                                        }
+                    @if (pairs.Count == 0)
+                    {
+                        <p class="text-muted">Vous n'avez aucune paire de sauvegardes stockées qui puissent échanger.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var pair in pairs)
+                            {
+                                var p = pair;
+                                <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+                                    <span>
+                                        Ta sauvegarde : <strong>@p.Mine.Label</strong>
+                                        <span class="d-block small text-muted">
+                                            Version stockée du @p.Mine.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                            @if (p.Mine.MustDownloadBeforeUpdate)
+                                            {
+                                                <span class="text-warning-emphasis"> · modifiée par le site (@p.Mine.ServerChanges), pas encore téléchargée</span>
+                                            }
+                                        </span>
                                     </span>
-                                </span>
-                                <span class="mx-2">↔</span>
-                                <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
-                                <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer l'échange</button>
-                            </div>
-                        }
-                    </div>
+                                    <span class="mx-2">↔</span>
+                                    <span>Sa sauvegarde : <strong>@p.Theirs.Label</strong></span>
+                                    <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="() => Propose(p)" disabled="@busy">Proposer l'échange</button>
+                                </div>
+                            }
+                        </div>
+                    }
                 }
             }
-        }
+        </ChildContent>
     </Block>
 }
 
@@ -250,7 +270,10 @@ else
     private string pseudo = "";
     private TradeSession? session;
     private TradeStage? shownStage; // pour recharger les Pokémon de l'autre à chaque retour au choix
+    private Guid? closedShow; // échange dont l'animation est déjà fermée
     private List<TradeCandidate>? theirs;
+    private string search = ""; // recherche et pastilles de « Ma collection » sur ses Pokémon, gardées le temps de la page
+    private PokemonCriteria criteria = PokemonCriteria.None;
     private List<FriendEntry>? friends;
     private string friendId = "";
     private List<TradeSavePair>? pairs;

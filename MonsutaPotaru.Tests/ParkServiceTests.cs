@@ -79,6 +79,107 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal("normal", moods[snorunt]);
     }
 
+    [Fact]
+    public async Task Attack_LowersTheMoodOneLevel_ForFifteenMinutes_AndAgainAddsALevelAndFifteenMinutes()
+    {
+        var eevee = Add(133); // heureux dans la forêt
+        var forest = await Forest();
+        Assert.True((await _park.SetAsync("sacha", forest, [eevee])).Ok);
+        Assert.Null((await _park.ListAsync("sacha", forest)).Single().Malus);
+
+        var start = DateTime.UtcNow;
+        var first = await _park.RecordAttackAsync("sacha", forest, eevee, start);
+        Assert.Equal(1, first?.Levels);
+        AssertClose(start.AddMinutes(15), first!.Until);
+        var listed = (await _park.ListAsync("sacha", forest)).Single();
+        Assert.Equal("happy", listed.Mood); // l'humeur de l'habitat ; parc.js l'abaisse du malus
+        Assert.Equal(1, listed.Malus?.Levels);
+        Assert.InRange(listed.Malus!.Seconds, 895, 900);
+        Assert.Equal("Attaqué : neutre au lieu d'heureux encore 15 min.", (await _park.GetMalusAsync("sacha", forest, eevee))?.Message(ParkMood.Happy, start));
+
+        // Pendant le malus : un niveau de plus, 15 minutes de plus sur le compteur
+        var second = await _park.RecordAttackAsync("sacha", forest, eevee, start.AddMinutes(5));
+        Assert.Equal(2, second?.Levels);
+        AssertClose(start.AddMinutes(30), second!.Until);
+        Assert.Equal("Attaqué : malheureux au lieu d'heureux encore 25 min.", second.Message(ParkMood.Happy, start.AddMinutes(5)));
+        // Déjà au plus bas : le compteur augmente encore, pas les niveaux
+        var third = await _park.RecordAttackAsync("sacha", forest, eevee, start.AddMinutes(6));
+        Assert.Equal(ParkService.MaxMalusLevels, third?.Levels);
+        AssertClose(start.AddMinutes(45), third!.Until);
+        Assert.Equal("Attaqué : malheureux au lieu d'heureux encore 39 min.", third.Message(ParkMood.Happy, start.AddMinutes(6)));
+        Assert.Equal(ParkMood.Sad, ParkHabitats.WithMalus(ParkMood.Happy, third.Levels));
+    }
+
+    [Fact]
+    public async Task EndedMalus_IsForgotten_AndTheNextAttackStartsAgainAtOneLevel()
+    {
+        var eevee = Add(133);
+        var forest = await Forest();
+        Assert.True((await _park.SetAsync("sacha", forest, [eevee])).Ok);
+        var past = DateTime.UtcNow.AddMinutes(-40);
+        await _park.RecordAttackAsync("sacha", forest, eevee, past);
+        await _park.RecordAttackAsync("sacha", forest, eevee, past.AddMinutes(1)); // 2 niveaux jusqu'à il y a 10 minutes
+
+        Assert.Null((await _park.ListAsync("sacha", forest)).Single().Malus);
+        Assert.Null(await _park.GetMalusAsync("sacha", forest, eevee));
+        var now = DateTime.UtcNow;
+        var again = await _park.RecordAttackAsync("sacha", forest, eevee, now);
+        Assert.Equal(1, again?.Levels);
+        AssertClose(now.AddMinutes(15), again!.Until);
+    }
+
+    [Fact]
+    public async Task Attack_OnlyCountsForAPokemonOfThatParkOfThePlayer_AndEndsWhenItLeaves()
+    {
+        GiveMoney("sacha", ParkService.ParkPrice);
+        var pikachu = Add(25);
+        var mew = Add(151); // dans la collection, pas au parc
+        var misty = Add(120, owner: "ondine");
+        var (forest, ondine) = (await Forest(), await Forest("ondine"));
+        Assert.True((await _park.SetAsync("sacha", forest, [pikachu])).Ok);
+        Assert.True((await _park.SetAsync("ondine", ondine, [misty])).Ok);
+
+        // Numéros venus du navigateur : rien n'est enregistré ailleurs que dans ce parc du joueur
+        Assert.Null(await _park.RecordAttackAsync("sacha", forest, mew));
+        Assert.Null(await _park.RecordAttackAsync("sacha", forest, misty));
+        Assert.Null(await _park.RecordAttackAsync("sacha", ondine, misty));
+        Assert.Null(await _park.RecordAttackAsync("ondine", ondine, pikachu));
+        Assert.Null(await _park.GetMalusAsync("ondine", ondine, misty));
+
+        // Parti dans un autre parc : son malus reste derrière lui
+        Assert.NotNull(await _park.RecordAttackAsync("sacha", forest, pikachu));
+        var beach = await _park.BuyAsync("sacha", ParkLandscape.Beach);
+        Assert.True((await _park.SetAsync("sacha", beach.ParkId, [pikachu])).Ok);
+        Assert.Null((await _park.ListAsync("sacha", beach.ParkId)).Single().Malus);
+        Assert.Null(await _park.GetMalusAsync("sacha", beach.ParkId, pikachu));
+    }
+
+    [Theory]
+    [InlineData(ParkMood.Happy, 1, ParkMood.Normal)]
+    [InlineData(ParkMood.Happy, 2, ParkMood.Sad)]
+    [InlineData(ParkMood.Normal, 1, ParkMood.Sad)]
+    [InlineData(ParkMood.Normal, 2, ParkMood.Sad)]
+    [InlineData(ParkMood.Sad, 1, ParkMood.Sad)]
+    [InlineData(ParkMood.Happy, 0, ParkMood.Happy)]
+    public void Malus_LowersTheMood_NeverBelowSad(ParkMood mood, int levels, ParkMood expected) =>
+        Assert.Equal(expected, ParkHabitats.WithMalus(mood, levels));
+
+    [Fact]
+    public void MalusMessage_SaysWhatChanges_AndHowLongItLasts()
+    {
+        var now = new DateTime(2026, 11, 14, 18, 0, 0, DateTimeKind.Utc);
+        Assert.Equal("Attaqué : malheureux au lieu de neutre encore 1 h 05.", new ParkMalus(1, now.AddMinutes(65)).Message(ParkMood.Normal, now));
+        Assert.Equal("Attaqué : déjà malheureux, son malus dure encore 1 min.", new ParkMalus(2, now.AddSeconds(10)).Message(ParkMood.Sad, now));
+        Assert.Null(ParkMalus.Active(1, now, now)); // fini à l'instant
+        Assert.Null(ParkMalus.Active(0, now.AddMinutes(1), now));
+        Assert.Equal(new ParkMalusInfo(1, 61), new ParkMalus(1, now.AddSeconds(60.5)).Info(now));
+    }
+
+    private static void AssertClose(DateTime expected, DateTime actual) =>
+        Assert.InRange((actual - expected).Duration().TotalSeconds, 0, 1);
+
+    private void GiveMoney(string owner, long money) => SetWallet(owner, money).GetAwaiter().GetResult();
+
     private async Task SetWallet(string owner, long money)
     {
         using var db = _db.NewContext();

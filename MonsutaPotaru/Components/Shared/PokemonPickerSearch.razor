@@ -1,0 +1,21 @@
+@using MonsutaPotaru.Services
+@* Recherche de « Ma collection » au-dessus des Pokémon à choisir (échange entre amis, échange interne, équipe de combat) :
+   espèce ou surnom, puis les mêmes pastilles. La page filtre sa liste avec PokemonSearch.Filter ; rien dans l'adresse. *@
+<div class="pokemon-picker-search">
+    <input type="search" class="form-control form-control-sm pokemon-picker-text" placeholder="Rechercher (espèce ou surnom)…"
+           aria-label="Rechercher un Pokémon" value="@Search" @oninput="e => SearchChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+    <CollectionFilterChips Value="Criteria" ValueChanged="CriteriaChanged" Abilities="Abilities" NoEggs="NoEggs" />
+</div>
+
+@code {
+    [Parameter] public string Search { get; set; } = "";
+    [Parameter] public EventCallback<string> SearchChanged { get; set; }
+    [Parameter] public PokemonCriteria Criteria { get; set; } = PokemonCriteria.None;
+    [Parameter] public EventCallback<PokemonCriteria> CriteriaChanged { get; set; }
+
+    /// <summary>Talents des Pokémon à choisir (<see cref="PokemonSearch.Abilities"/>) : les seuls proposés par « Talent ».</summary>
+    [Parameter] public IReadOnlyCollection<int> Abilities { get; set; } = [];
+
+    /// <summary>Liste sans œufs (équipe de combat) : pas de filtre « Œuf ».</summary>
+    [Parameter] public bool NoEggs { get; set; }
+}

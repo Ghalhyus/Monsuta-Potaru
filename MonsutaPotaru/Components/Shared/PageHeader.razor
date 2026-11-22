@@ -1,6 +1,6 @@
-@* En-tête d'une page : titre (h1, cible du focus après une navigation), nombre en pastille, description et boutons
-   d'action dessous (jamais collés à droite, sauf Aside : le journal de l'inventaire). Thèmes Classique et Pokédex : le
-   titre et sa description comme avant. Thème Ardoise : un bandeau blanc, l'icône de la page dans un carré orange
+@* En-tête d'une page : titre (h1, cible du focus après une navigation), nombre en pastille, aide en infobulle (« ? »),
+   description et boutons d'action dessous (jamais collés à droite, sauf Aside : le journal de l'inventaire). Thèmes
+   Classique et Pokédex : le titre et sa description comme avant. Thème Ardoise : un bandeau blanc, l'icône de la page dans un carré orange
    (wwwroot/themes/ardoise.css). *@
 
 <header class="page-header @(Small ? "page-header-small" : "")">
@@ -13,13 +13,19 @@
         {
             <a class="page-header-back small" href="@BackHref">← @BackLabel</a>
         }
-        <h1 class="page-header-title @(Small ? "h3" : "")">
-            @Title
-            @if (Count is not null)
+        <div class="page-header-heading help-tip-anchor">
+            <h1 class="page-header-title @(Small ? "h3" : "")">
+                @Title
+                @if (Count is not null)
+                {
+                    <span class="badge bg-primary fs-6 align-middle ms-1 page-header-count">@Count</span>
+                }
+            </h1>
+            @if (Help is not null)
             {
-                <span class="badge bg-primary fs-6 align-middle ms-1 page-header-count">@Count</span>
+                <HelpTip Label="@($"Aide : {Title}")">@Help</HelpTip>
             }
-        </h1>
+        </div>
         @if (Description is not null)
         {
             <div class="page-header-description small text-muted">@Description</div>
@@ -52,7 +58,10 @@
     [Parameter] public string? BackHref { get; set; }
     [Parameter] public string? BackLabel { get; set; }
 
-    /// <summary>Texte d'explication sous le titre (petit, grisé).</summary>
+    /// <summary>Aide de la page : dans une infobulle, derrière l'icône « ? » à côté du titre (<c>HelpTip</c>).</summary>
+    [Parameter] public RenderFragment? Help { get; set; }
+
+    /// <summary>Texte toujours affiché sous le titre (petit, grisé) ; une explication va plutôt dans <c>Help</c>.</summary>
     [Parameter] public RenderFragment? Description { get; set; }
 
     /// <summary>Boutons d'action, sous le titre et la description.</summary>

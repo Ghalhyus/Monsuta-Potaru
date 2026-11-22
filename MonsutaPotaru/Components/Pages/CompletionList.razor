@@ -1,0 +1,276 @@
+@page "/completion"
+@page "/joueurs/{Pseudo}/completion"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Components.Shared
+@using MonsutaPotaru.Data
+@using MonsutaPotaru.Services
+@inject CompletionService Completions
+@inject NavigationManager Navigation
+@inject PlayerService Players
+@inject PreferencesService Preferences
+
+<PageTitle>@PageName</PageTitle>
+
+@* Complétions du compte : une carte par partie suivie (jaquette, sauvegarde, progression globale et par section), et la
+   création d'une nouvelle sur une sauvegarde stockée (1re à 9e génération pour l'instant ; pas encore Légendes Z-A) ou
+   sur un monde Minecraft stocké (All the Mons : quêtes et succès du modpack). *@
+
+@* Complétions d'un autre joueur (Multijoueurs, /joueurs/{pseudo}/completion) : consultation seule, sans création ni noms
+   de fichiers. *@
+@if (Visitor && player is null)
+{
+    @if (playerChecked)
+    {
+        <PlayerHidden />
+    }
+}
+else
+{
+@if (player is not null)
+{
+    <PlayerHeader Player="player" Current="PublicPages.Completion" />
+}
+@if (Visitor)
+{
+    <PageHeader Title="Complétion" Small="true" />
+}
+else
+{
+    <PageHeader Title="Complétion (100 %)" Icon="bi-check2-circle-nav-menu">
+        <Help>
+            <p>Suis une de tes parties jusqu'au 100 % : elle se met à jour avec sa sauvegarde stockée.</p>
+            <ul>
+                <li>Sections : <strong>histoire, Pokédex, dresseurs, objets, rencontres uniques</strong> (et quêtes annexes à partir de la 2e génération).</li>
+                <li>Chaque section compte <strong>autant</strong> dans le total, même si elle est plus longue.</li>
+                <li>Pour l'instant : de Rouge / Bleu à Écarlate / Violet (1re à 9e génération, sans Légendes Z-A).</li>
+                <li><strong>All the Mons</strong> (Minecraft) : toutes les <strong>quêtes</strong> du livre de quêtes et tous les <strong>succès</strong> ; là, chaque quête et chaque succès compte autant dans le total.</li>
+                <li>À partir de la <strong>7e génération</strong>, le suivi est <strong>incomplet</strong> : certaines étapes du jeu ne sont pas encore comptées (en 7e génération, quelques combats de l'histoire manquent, et ceux dont le lieu n'est pas connu sont rangés dans « Lieu inconnu » ; pas de dresseurs dans Let's Go ni en 8e génération).</li>
+            </ul>
+        </Help>
+    </PageHeader>
+}
+
+@if (message is not null)
+{
+    <div class="alert alert-danger alert-dismissible" role="alert">
+        @message
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+    </div>
+}
+
+@if (creating && !Visitor)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h2 class="h5">Nouvelle complétion</h2>
+            @* D'abord le jeu (une complétion par jeu), puis les sauvegardes stockées qui peuvent être une partie de ce jeu
+               (Rouge / Bleu, Or / Argent : PKHeX ne distingue pas les deux, une telle sauvegarde va avec l'un comme l'autre). *@
+            @* Générations repliées au départ, dépliées une à une par leur titre ; repliée, celle du jeu choisi le montre encore. *@
+            <div class="form-label">Jeu</div>
+            <GamePicker Games="CompletionGames.All.Select(LivingDexGames.Get)" Selected="game" OnChosen="GameChosen"
+                        IsTaken="taken.Contains" Name="completionGame"
+                        TakenTitle="Tu as déjà cette complétion" TakenSuffix="(déjà créée)" />
+            @if (game is { } chosenGame)
+            {
+                @if (Saves().Count == 0 && AllTheMonsLivingDex.Is(chosenGame))
+                {
+                    <p class="text-muted mb-3">
+                        Aucun monde All the Mons disponible : stocke le dossier de ton monde dans
+                        <a href="sauvegardes">« Mes sauvegardes »</a> (un monde qui a déjà sa complétion ne compte pas).
+                    </p>
+                }
+                else if (Saves().Count == 0)
+                {
+                    <p class="text-muted mb-3">
+                        Aucune sauvegarde de @LivingDexGames.Get(chosenGame).Name disponible : stockes-en une dans
+                        <a href="sauvegardes">« Mes sauvegardes »</a> (une sauvegarde qui a déjà sa complétion ne compte pas ;
+                        les sauvegardes japonaises et coréennes ne sont pas encore prises en charge).
+                    </p>
+                }
+                else
+                {
+                    <label class="form-label" for="completionSave">Sauvegarde</label>
+                    <select id="completionSave" class="form-select mb-3" value="@saveId" @onchange="SaveChosen">
+                        @foreach (var c in Saves())
+                        {
+                            <option value="@c.SaveId">@c.Label</option>
+                        }
+                    </select>
+                }
+            }
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-primary" @onclick="Create"
+                        disabled="@(busy || game is null || Saves().All(c => c.SaveId != saveId))">Créer</button>
+                <button type="button" class="btn btn-outline-secondary" @onclick="() => creating = false">Annuler</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Juste au-dessus de la liste, à gauche : plus visible. *@
+@if (!creating && !Visitor)
+{
+    <div class="mb-3">
+        <button type="button" class="btn btn-primary" @onclick="OpenCreation">+ Ajouter une sauvegarde</button>
+    </div>
+}
+
+@if (completions is null)
+{
+    <p class="text-muted">Chargement…</p>
+}
+else if (completions.Count == 0)
+{
+    <p class="text-muted">@(Visitor ? $"{player!.Pseudo} n'a aucune sauvegarde de suivie." : "Tu n'as aucune sauvegarde de suivie.")</p>
+}
+else
+{
+    @* Tri gardé dans l'adresse (?tri=completion&ordre=desc) ; sans tri dans l'adresse, celui du compte (« Mon compte » →
+       « Préférences »). Par complétion : la moyenne exacte des sections. *@
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div class="d-flex align-items-center gap-2 livingdex-choice">
+            <label class="small text-nowrap" for="completionSort">Trier par</label>
+            <select id="completionSort" class="form-select form-select-sm w-auto" value="@SiteSorts.Slug(sort)" @onchange="SortChosen">
+                @foreach (var (_, slug, label) in SiteSorts.CompletionChoices)
+                {
+                    <option value="@slug">@label</option>
+                }
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ToggleOrder"
+                    title="@(descending ? "Décroissant : clique pour trier en croissant" : "Croissant : clique pour trier en décroissant")"
+                    aria-label="@(descending ? "Ordre décroissant" : "Ordre croissant")">@(descending ? "↓" : "↑")</button>
+        </div>
+    </div>
+    <div class="livingdex-cards">
+        @foreach (var c in CompletionGames.Sort(completions, sort, descending))
+        {
+            <a class="livingdex-card" href="@CardLink(c)">
+                <LivingDexCover Game="c.Game" Alt="@($"Jaquette de {c.Game.Name}")" />
+                <div class="livingdex-card-body">
+                    <strong>@c.Game.Name</strong>
+                    <div class="small text-muted">@(Visitor ? c.PublicSaveLabel : c.SaveLabel)</div>
+                    <LivingDexProgress Owned="c.Progress.Tenths" Total="1000" Class="mt-2"
+                                       ValueText="@($"{c.Progress.Percent}, {c.Progress.Basis}")" />
+                    <div class="small mt-1 completion-card-sections">
+                        @foreach (var s in c.Progress.Sections)
+                        {
+                            <span title="@s.Done / @s.Total">@s.Name @LivingDexGames.Percent(s.Done, s.Total)</span>
+                        }
+                    </div>
+                </div>
+            </a>
+        }
+    </div>
+}
+}
+
+@code {
+    /// <summary>Titre de l'onglet : la page du compte, ou celle d'un autre joueur.</summary>
+    private string PageName
+    {
+        get
+        {
+            if (!Visitor)
+                return "Complétion";
+            return player is null ? "Joueur introuvable" : $"Complétion de {player.Pseudo}";
+        }
+    }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    /// <summary>Pseudo d'un autre joueur (adresse /joueurs/{pseudo}/completion) : ses complétions, en lecture seule.</summary>
+    [Parameter] public string? Pseudo { get; set; }
+
+    private bool Visitor => Pseudo is not null;
+    private PlayerProfile? player; // joueur consulté, si ses complétions sont publiques
+    private bool playerChecked;
+    [SupplyParameterFromQuery(Name = "tri")] private string? SortFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "ordre")] private string? OrderFromQuery { get; set; }
+
+    private string userId = "";
+    private CompletionSort sort;
+    private bool descending;
+    private CompletionOrder? defaultOrder; // tri par défaut du compte qui regarde (visiteur compris) ; null : pas encore lu
+    private List<CompletionSummary>? completions;
+    private HashSet<LivingDexGame> taken = [];
+    private List<CompletionCandidate> candidates = [];
+    private bool creating;
+    private int saveId;
+    private LivingDexGame? game;
+    private bool busy;
+    private string? message;
+
+    /// <summary>Sauvegardes qui peuvent recevoir la complétion du jeu choisi.</summary>
+    private List<CompletionCandidate> Saves() => game is { } g ? candidates.Where(c => c.Games.Contains(g)).ToList() : [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Le tri par défaut est celui du joueur connecté, même chez un autre joueur : sa façon de lire une liste.
+        defaultOrder ??= (await Preferences.SortsAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier))).Completion;
+        (sort, descending) = SiteSorts.CompletionFromQuery(new(SortFromQuery, OrderFromQuery)) ?? defaultOrder.Value;
+        if (Visitor)
+        {
+            player = await Players.FindAsync((await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier), Pseudo, PublicPages.Completion);
+            playerChecked = true;
+            if (player is null)
+                return;
+            userId = player.Id;
+        }
+        else
+            userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        completions = await Completions.ListAsync(userId);
+        taken = await Completions.TakenGamesAsync(userId);
+    }
+
+    /// <summary>Critère de tri choisi, gardé dans l'adresse (le sens ne change pas).</summary>
+    private void SortChosen(ChangeEventArgs e) =>
+        ApplyOrder(new(SiteSorts.CompletionChoices.FirstOrDefault(c => c.Slug == e.Value?.ToString(), SiteSorts.CompletionChoices[0]).By, descending));
+
+    /// <summary>Inverse le sens du tri.</summary>
+    private void ToggleOrder() => ApplyOrder(new(sort, !descending));
+
+    /// <summary>Tri gardé dans l'adresse : rien pour celui du compte, sinon critère et sens en entier (« ?tri=generation »).</summary>
+    private void ApplyOrder(CompletionOrder order) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+            SiteSorts.AddressFor(SiteSorts.CompletionQuery(order), SiteSorts.CompletionQuery(defaultOrder ?? default))), replace: true);
+
+    private string CardLink(CompletionSummary c) =>
+        player is null ? $"completion/{c.Id}" : PlayerService.Link(player.Pseudo, $"completion/{c.Id}");
+
+    private async Task OpenCreation()
+    {
+        if (Visitor)
+            return;
+        message = null;
+        candidates = await Completions.ListCandidatesAsync(userId);
+        game = null;
+        saveId = 0;
+        creating = true;
+    }
+
+    /// <summary>Jeu choisi : la première de ses sauvegardes est proposée d'office.</summary>
+    private void GameChosen(LivingDexGame value)
+    {
+        game = value;
+        saveId = Saves().FirstOrDefault()?.SaveId ?? 0;
+    }
+
+    private void SaveChosen(ChangeEventArgs e) => saveId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+
+    private async Task Create()
+    {
+        if (Visitor || game is not { } chosenGame)
+            return;
+        busy = true;
+        var result = await Completions.CreateAsync(userId, saveId, chosenGame);
+        busy = false;
+        if (result.Ok)
+        {
+            Navigation.NavigateTo($"completion/{result.Id}");
+            return;
+        }
+        message = result.Message;
+    }
+}

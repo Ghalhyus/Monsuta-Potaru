@@ -52,6 +52,9 @@ public sealed class TestDatabase : IDisposable
 
     public TradeService Trades() => new(Factory, StoredSaves(), new PokemonInfo(), NullLogger<TradeService>.Instance);
 
+    public GtsService Gts(GtsEvents? events = null) =>
+        new(Factory, StoredSaves(), new PokemonInfo(), events ?? new GtsEvents(), NullLogger<GtsService>.Instance);
+
     public void Dispose()
     {
         _connection.Dispose();
@@ -65,7 +68,7 @@ public sealed class TestDatabase : IDisposable
     }
 
     /// <summary>Seul ContentRootPath sert (chemin des copies de sécurité, absolu ici de toute façon).</summary>
-    private sealed class FakeEnvironment : IWebHostEnvironment
+    internal sealed class FakeEnvironment : IWebHostEnvironment
     {
         public string ApplicationName { get; set; } = "MonsutaPotaru.Tests";
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();

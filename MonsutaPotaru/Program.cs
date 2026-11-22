@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components.Authorization;
+﻿using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +48,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(AccountService.ConfigureIdenti
     .AddSignInManager()
     .AddErrorDescriber<FrenchIdentityErrorDescriber>();
 builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<PreferencesService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddSingleton<DebugMode>(); // comptes en mode debug, en mémoire (jusqu'à la déconnexion)
 builder.Services.AddScoped<DebugService>();
@@ -68,6 +69,9 @@ builder.Services.AddScoped<StoredSaveService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<ParkService>();
 builder.Services.AddScoped<LivingDexService>();
+builder.Services.AddScoped<CompletionService>();
+builder.Services.AddScoped<RibbonService>(); // « Défis » → « Rubans »
+builder.Services.AddScoped<StatisticsService>(); // page « Statistiques »
 builder.Services.AddScoped<WalletState>();
 builder.Services.AddScoped<SaveSession>();
 builder.Services.AddScoped<SyncService>();
@@ -75,6 +79,9 @@ builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FriendService>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddSingleton<TradeHub>(); // échanges en cours, partagés entre les deux joueurs
+builder.Services.AddScoped<GtsService>(); // Multijoueurs → GTS
+builder.Services.AddSingleton<GtsEvents>(); // boîte de réception de la GTS changée (pastille du menu)
+builder.Services.AddHostedService<GtsExpiry>(); // offres de la GTS arrivées à leur terme, toutes les heures
 // Combats : simulateur de Pokémon Showdown (dossier showdown, Node.js), un processus par combat en cours.
 builder.Services.AddSingleton(sp => ShowdownOptions.From(builder.Configuration, builder.Environment));
 builder.Services.AddScoped<BattleService>();
@@ -89,15 +96,17 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
     await AdminService.InitializeAsync(db, app.Configuration, app.Logger); // code d'invitation en base, premier administrateur
     await BankService.FillSortNamesAsync(db); // nom de tri des Pokémon enregistrés avant son ajout
     await BankService.FillSpriteDetailsAsync(db); // sexe et objet tenu (image) des Pokémon enregistrés avant leur ajout
     await BankService.FillFilterDetailsAsync(db); // types, nature, IV... (filtres de « Ma collection ») des Pokémon plus anciens
     await PokemonFingerprint.FillAsync(db); // empreinte (doublons) des Pokémon plus anciens
+    await StoredSaveService.FillGameNamesAsync(db, scope.ServiceProvider.GetRequiredService<PokemonInfo>()); // Vert Feuille notées Rouge Feu
 }
 PokemonSprites.Load(app.Environment.WebRootPath); // images des Pokémon et de leurs formes
 ParkHabitats.Load(app.Environment.WebRootPath); // types de cases des cartes du parc
+TradeSounds.Load(app.Environment.WebRootPath); // musiques de l'animation d'échange (images/sons, hors Git)
 
 // En-têtes de sécurité (nosniff, Referrer-Policy, CSP stricte : aucun script écrit dans la page) : SecurityHeaders.cs.
 app.UseSecurityHeaders(app.Environment.IsDevelopment());
@@ -158,4 +167,4 @@ app.MapAdditionalIdentityEndpoints();
 // API du homebrew 3DS PokeBank Sync (envoi des sauvegardes depuis la console, jeton au lieu du cookie de connexion).
 app.MapSyncEndpoints();
 
-app.Run();
+await app.RunAsync();
