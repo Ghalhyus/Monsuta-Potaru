@@ -20,6 +20,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Comptes, connexion, rôles, thèmes, pages du compte, tris par défaut (« Préférences ») | `docs/claude/comptes.md` |
 | Multijoueurs : pages des joueurs, visibilité, amis, échanges (entre amis et « Échange interne », Time Capsule), GTS, valeurs trafiquées | `docs/claude/multijoueurs.md` |
 | Combats (Showdown) | `docs/claude/combats.md` |
+| Échecs Pokémon (Mini-jeux) : règles des types, tour bonus, pion au bout, partie en direct, plateau Phaser en pixel art | `docs/claude/echecs.md` |
 | Images des Pokémon et des objets, `outils/images.py`, `PokemonSprites` | `docs/claude/images.md` |
 | Parc | `docs/claude/parc.md` |
 | Living dex (par jeu, global, chromatique, All the Mons) | `docs/claude/living-dex.md` |

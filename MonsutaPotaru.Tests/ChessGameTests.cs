@@ -1,0 +1,236 @@
+using MonsutaPotaru.Services;
+
+namespace MonsutaPotaru.Tests;
+
+/// <summary>
+/// Règles des échecs Pokémon (<see cref="ChessGame"/>) : prises selon les types, tour bonus en chaîne, roi mangé, échec
+/// et mat d'après les types, roque, prise en passant, pion au bout du plateau, pat et rois seuls.
+/// </summary>
+public sealed class ChessGameTests
+{
+    private static readonly ChessTeam Fire = ChessTeams.Find("feu")!;
+    private static readonly ChessTeam Psy = ChessTeams.Find("psy")!;
+    private static readonly ChessTeam Electric = ChessTeams.Find("electrique")!;
+
+    private const ChessColor W = ChessColor.White;
+    private const ChessColor B = ChessColor.Black;
+
+    /// <summary>Case d'après son nom (« e4 »).</summary>
+    private static int Sq(string name) => ChessGame.Square(name[1] - '1', name[0] - 'a');
+
+    private static ChessGame Position(ChessTeam white, ChessTeam black, ChessColor turn, string pieces,
+        IEnumerable<(ChessColor, ChessPiece)>? ko = null) =>
+        ChessGame.FromPosition(white, black, turn, pieces.Split(' ').Select(p =>
+            (p[0] == 'w' ? W : B, p[1] switch
+            {
+                'P' => ChessPiece.Pawn, 'R' => ChessPiece.Rook, 'N' => ChessPiece.Knight, 'B' => ChessPiece.Bishop,
+                'Q' => ChessPiece.Queen, _ => ChessPiece.King,
+            }, Sq(p[2..]))), ko);
+
+    private static ChessStep Play(ChessGame game, string from, string to, int? revive = null)
+    {
+        var step = game.Play(new ChessMove(Sq(from), Sq(to), revive));
+        Assert.True(step is not null, $"{from}-{to} refusé");
+        return step;
+    }
+
+    [Fact]
+    public void Teams_HaveOnePokemonPerPiece()
+    {
+        Assert.Equal(3, ChessTeams.All.Count);
+        foreach (var team in ChessTeams.All)
+            Assert.Equal(Enum.GetValues<ChessPiece>().Order(), team.Members.Select(m => m.Piece).Order());
+        Assert.Null(ChessTeams.Find("pirate"));
+        Assert.Equal("Raichu d'Alola", Electric.Of(ChessPiece.Queen).Name);
+    }
+
+    [Theory]
+    [InlineData(PokeType.Fire, PokeType.Grass, 2)]
+    [InlineData(PokeType.Fire, PokeType.Water, 0.5)]
+    [InlineData(PokeType.Ground, PokeType.Flying, 0)]
+    [InlineData(PokeType.Dragon, PokeType.Fairy, 0)]
+    [InlineData(PokeType.Psychic, PokeType.Dark, 0)]
+    [InlineData(PokeType.Dark, PokeType.Psychic, 2)]
+    [InlineData(PokeType.Fire, PokeType.Psychic, 1)]
+    [InlineData(PokeType.Steel, PokeType.Fairy, 2)]
+    public void Effectiveness_FollowsTheTypeChart(PokeType attacker, PokeType defender, double expected) =>
+        Assert.Equal(expected, PokeTypes.Effectiveness(attacker, defender));
+
+    [Fact]
+    public void Start_TwentyMovesForWhite()
+    {
+        var game = new ChessGame(Fire, Psy);
+        Assert.Equal(20, game.LegalMoves().Count);
+        Assert.Equal("Salamèche", game.At(Sq("e2"))!.Mon.Name);
+        Assert.Equal("Gallame", game.At(Sq("e8"))!.Mon.Name);
+        Assert.Empty(game.MovesFrom(Sq("e7"))); // pas aux noirs
+    }
+
+    [Fact]
+    public void NeutralCapture_NoBonus()
+    {
+        var game = Position(Fire, Psy, W, "wKa1 wPe4 bPd5 bKh8");
+        var step = Play(game, "e4", "d5"); // Feu contre Psy : neutre
+        Assert.Equal(1, step.Effect);
+        Assert.False(step.Bonus);
+        Assert.Equal(B, game.Turn);
+        Assert.Equal("Tarsal", Assert.Single(game.Ko(B)).Mon.Name);
+        Assert.Contains("Salamèche mange Tarsal en d5.", step.Text);
+    }
+
+    [Fact]
+    public void WeakCapture_IsRefusedAndExplained()
+    {
+        var game = Position(Fire, Psy, W, "wKa1 wPe4 bBd5 bKh8");
+        Assert.DoesNotContain(game.MovesFrom(Sq("e4")), m => m.To == Sq("d5")); // Feu contre Eau : pas très efficace
+        var blocked = Assert.Single(game.Blocked(Sq("e4")));
+        Assert.Equal((Sq("d5"), 0.5), (blocked.Square, blocked.Effect));
+        Assert.Null(game.Play(new ChessMove(Sq("e4"), Sq("d5"))));
+    }
+
+    [Fact]
+    public void SuperEffective_ChainsBonusTurns_ThenPass()
+    {
+        // Démolosse (Ténèbres) contre Tarsal (Psy) : super efficace, deux fois de suite
+        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPf6 bPd7 bKh1");
+        var first = Play(game, "e4", "f6");
+        Assert.True(first.Bonus);
+        Assert.Equal(W, game.Turn);
+        Assert.Equal(Sq("f6"), game.BonusSquare);
+        Assert.Empty(game.MovesFrom(Sq("a1"))); // seul Démolosse rejoue
+        Assert.Contains(ChessMove.Pass, game.LegalMoves());
+        Assert.Contains("super efficace", first.Text);
+
+        var second = Play(game, "f6", "d7");
+        Assert.True(second.Bonus);
+        var pass = game.Play(ChessMove.Pass)!;
+        Assert.False(pass.Bonus);
+        Assert.Equal(B, game.Turn);
+        Assert.Null(game.BonusSquare);
+        Assert.Null(game.Play(ChessMove.Pass)); // plus de tour bonus
+    }
+
+    [Fact]
+    public void BonusTurn_CanEatTheKing()
+    {
+        // Malvalame (Spectre) mange Tarsal (super efficace), puis le roi Gallame (Combat : neutre) derrière lui
+        var game = Position(Fire, Psy, W, "wKh1 wBc1 bPe3 bKg5");
+        Assert.False(game.InCheck(B));
+        Assert.True(Play(game, "c1", "e3").Bonus);
+        var win = Play(game, "e3", "g5");
+        Assert.Equal((W, ChessEnd.KingEaten), (win.Winner, win.End));
+        Assert.True(game.IsOver);
+        Assert.Empty(game.LegalMoves());
+        Assert.DoesNotContain(game.Ko(B), u => u.Piece == ChessPiece.King); // le roi ne va pas chez les K.O.
+    }
+
+    [Fact]
+    public void Checkmate_EndsTheGame()
+    {
+        // Goupelin (Psy) contre Gallame (Combat) : super efficace, échec ; les deux Tarsal bloquent le roi
+        var game = Position(Fire, Psy, W, "wKa1 wQd1 bPg7 bPh7 bKh8");
+        var step = Play(game, "d1", "d8");
+        Assert.True(step.Check);
+        Assert.Equal((W, ChessEnd.Checkmate), (step.Winner, step.End));
+        Assert.Contains("Échec et mat !", step.Text);
+    }
+
+    [Fact]
+    public void NoCheck_WhenThePieceCannotEatTheKing()
+    {
+        // Boumata (Dragon) ne peut rien contre Tokorico (Fée) : pas d'échec, et le roi peut marcher sur sa colonne
+        var game = Position(Fire, Electric, B, "wKa1 wRe1 bKe8");
+        Assert.False(game.InCheck(B));
+        Assert.Contains(game.MovesFrom(Sq("e8")), m => m.To == Sq("e7"));
+    }
+
+    [Fact]
+    public void PinnedPiece_CannotLeaveItsKingExposed()
+    {
+        // Magnézone (Acier) peut manger Dracaufeu (Vol) : Boumata, entre eux, ne quitte pas la colonne
+        var game = Position(Fire, Electric, W, "wKe1 wRe4 bRe8 bKa8");
+        var moves = game.MovesFrom(Sq("e4"));
+        Assert.DoesNotContain(moves, m => m.To == Sq("a4"));
+        Assert.Contains(moves, m => m.To == Sq("e5"));
+        Assert.DoesNotContain(moves, m => m.To == Sq("e8")); // Dragon contre Acier : pas très efficace
+    }
+
+    [Fact]
+    public void Castling_DependsOnWhatCanEatTheKing()
+    {
+        // Kaorine (Sol) ne peut rien contre Dracaufeu (Vol) : f1 n'est pas menacée, le petit roque est permis
+        var free = Position(Fire, Psy, W, "wKe1 wRh1 bRf8 bKa8");
+        var step = Play(free, "e1", "g1");
+        Assert.Equal((Sq("h1"), Sq("f1")), (step.RookFrom, step.RookTo));
+        Assert.Equal(ChessPiece.Rook, free.At(Sq("f1"))!.Piece);
+
+        // Magnézone (Acier) le pourrait : pas de roque à travers f1
+        var guarded = Position(Fire, Electric, W, "wKe1 wRh1 bRf8 bKa8");
+        Assert.DoesNotContain(guarded.MovesFrom(Sq("e1")), m => m.To == Sq("g1"));
+    }
+
+    [Fact]
+    public void EnPassant_FollowsTheTypes()
+    {
+        var game = Position(Fire, Psy, B, "wKa1 wPe5 bPd7 bKh8");
+        Play(game, "d7", "d5");
+        var step = Play(game, "e5", "d6");
+        Assert.Equal(Sq("d5"), step.CapturedSquare);
+        Assert.Null(game.At(Sq("d5")));
+        Assert.Equal("Salamèche", game.At(Sq("d6"))!.Mon.Name);
+    }
+
+    [Fact]
+    public void PawnAtTheEnd_SwapsWithAKnockedOutPokemon()
+    {
+        var game = Position(Fire, Psy, W, "wKa1 wPb7 bKh1", ko: [(W, ChessPiece.Queen), (W, ChessPiece.Pawn)]);
+        var target = Assert.Single(game.Targets(Sq("b7")), t => t.To == Sq("b8"));
+        var queen = Assert.Single(target.Revives); // le pion K.O. ne revient pas
+        Assert.Null(game.Play(new ChessMove(Sq("b7"), Sq("b8")))); // il faut choisir le Pokémon qui revient
+        var step = Play(game, "b7", "b8", queen);
+        Assert.Equal(queen, step.RevivedId);
+        Assert.Equal("Goupelin", game.At(Sq("b8"))!.Mon.Name);
+        Assert.Contains(game.Ko(W), u => u.Id == step.UnitId);
+        Assert.DoesNotContain(game.Ko(W), u => u.Id == queen);
+    }
+
+    [Fact]
+    public void PawnAtTheEnd_WaitsForAKnockedOutPokemon()
+    {
+        var game = Position(Fire, Psy, W, "wKa1 wPb7 wRd4 bRd8 bKh1");
+        Play(game, "b7", "b8"); // aucun K.O. : le pion attend
+        Assert.Equal(ChessPiece.Pawn, game.At(Sq("b8"))!.Piece);
+        Play(game, "d8", "d4"); // Kaorine (Sol) mange Boumata (Dragon) : neutre
+        var swaps = game.SwapsFrom(Sq("b8"));
+        var rook = Assert.Single(swaps);
+        var step = Play(game, "b8", "b8", rook);
+        Assert.True(step.Move.IsSwap);
+        Assert.Equal("Boumata", game.At(Sq("b8"))!.Mon.Name);
+    }
+
+    [Fact]
+    public void Stalemate_IsADraw()
+    {
+        var game = Position(Fire, Psy, W, "wKa1 wQg1 bKh8");
+        var step = Play(game, "g1", "g6");
+        Assert.Equal((null, ChessEnd.Stalemate), (step.Winner, step.End));
+    }
+
+    [Fact]
+    public void OnlyKings_IsADraw()
+    {
+        var game = Position(Fire, Psy, W, "wKe1 bPd2 bKe8");
+        var step = Play(game, "e1", "d2");
+        Assert.Equal(ChessEnd.OnlyKings, step.End);
+        Assert.Null(step.Winner);
+    }
+
+    [Fact]
+    public void Resign_GivesTheWinToTheOther()
+    {
+        var game = new ChessGame(Fire, Psy);
+        game.Resign(W, ChessEnd.Timeout);
+        Assert.Equal((B, ChessEnd.Timeout), (game.Winner, game.End));
+        Assert.Empty(game.LegalMoves());
+    }
+}

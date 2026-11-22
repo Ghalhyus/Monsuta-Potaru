@@ -15,6 +15,7 @@ public static class Breadcrumbs
     private const string Challenges = "Défis";
     private const string Multiplayer = "Multijoueurs";
     private const string Saves = "Sauvegardes";
+    private const string Games = "Mini-jeux";
 
     /// <summary>Étapes pour une adresse relative à la racine du site (« joueurs/Sacha/parc?x=1 ») ; vide pour une page inconnue.</summary>
     public static IReadOnlyList<Crumb> For(string? relativeUrl)
@@ -40,6 +41,7 @@ public static class Breadcrumbs
             "echanges" => [new(Multiplayer, null), new("Échange", null)],
             "gts" => [new(Multiplayer, null), new("GTS", null)],
             "combats" => [new(Multiplayer, null), new("Combat", null)],
+            "mini-jeux" when parts.Length > 1 && Lower(parts[1]) == "echecs" => [new(Games, null), new("Échecs", null)],
             "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new(Saves, null), new("Synchronisation 3DS", null)],
             "sauvegardes" => [new(Saves, null), new("Mes sauvegardes", null)],
             "administration" => [new("Administration", null)],

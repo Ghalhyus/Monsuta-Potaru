@@ -123,11 +123,12 @@ public sealed class StatisticsPageTests : PageTestContext
     }
 
     [Fact]
-    public void Multiplayer_TradesAndBattles()
+    public void Multiplayer_TradesBattlesAndChess()
     {
         var empty = Open("?onglet=multijoueurs");
         empty.WaitForText("Aucun échange pour l'instant");
         Assert.Contains("Aucun combat pour l'instant", empty.Text());
+        Assert.Contains("Aucune partie pour l'instant", empty.Text());
 
         using (var db = Db.NewContext())
         {
@@ -139,14 +140,17 @@ public sealed class StatisticsPageTests : PageTestContext
                 new BattleRecord { At = at, FirstId = "sacha", SecondId = "ondine", Format = "f", WinnerId = "sacha" },
                 new BattleRecord { At = at, FirstId = "pierre", SecondId = "sacha", Format = "f", WinnerId = "pierre" },
                 new BattleRecord { At = at, FirstId = "pierre", SecondId = "sacha", Format = "f" });
+            db.ChessRecords.AddRange(
+                new ChessRecord { At = at, WhiteId = "sacha", BlackId = "ondine", WhiteTeam = "psy", BlackTeam = "feu", End = "Checkmate", WinnerId = "sacha" },
+                new ChessRecord { At = at, WhiteId = "ondine", BlackId = "sacha", WhiteTeam = "psy", BlackTeam = "feu", End = "Stalemate" });
             db.SaveChanges();
         }
 
         var cut = Open("?onglet=multijoueurs");
 
-        cut.WaitForAssertion(() => Assert.Equal(6, cut.FindAll(".stat-value").Count));
-        // Échanges réussis, partenaires ; victoires, défaites, nuls, adversaires.
-        Assert.Equal(["2", "1", "1", "1", "1", "2"], cut.FindAll(".stat-value").Select(v => v.TextContent));
+        cut.WaitForAssertion(() => Assert.Equal(10, cut.FindAll(".stat-value").Count));
+        // Échanges réussis, partenaires ; combats puis échecs : victoires, défaites, nuls, adversaires.
+        Assert.Equal(["2", "1", "1", "1", "1", "2", "1", "0", "1", "1"], cut.FindAll(".stat-value").Select(v => v.TextContent));
         Assert.DoesNotContain("pour l'instant", cut.Text());
     }
 

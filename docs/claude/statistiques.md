@@ -48,3 +48,5 @@ README : « Statistiques ». Page `Components/Pages/Statistics.razor` (deux adre
 - Le champ injecté ne peut pas s'appeler `Statistics` (nom du composant) : `Stats`.
 - `MigrationsTests` : un compte ajouté en SQL après la migration `Friends` échoue (`Audience` sans valeur par défaut) ;
   l'ajouter à `ProfileVisibility`, puis migrer.
+- Onglet Multijoueurs : **Échange**, **Combat** et **Échecs** (ajouté avec les échecs le 2026-11-22, mêmes tuiles que
+  les combats : `ChessService.StatsAsync`, table `ChessRecords`). Test `Multiplayer_TradesBattlesAndChess` : dix tuiles.

@@ -1,0 +1,826 @@
+@page "/mini-jeux/echecs"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using MonsutaPotaru.Services
+@inject ChessHub Hub
+@inject FriendService FriendStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Échecs</PageTitle>
+
+@* Mini-jeux → Échecs : échecs Pokémon en direct avec un ami (règles : ChessGame). L'hôte invite un ami et choisit le
+   temps par coup ; l'ami accepte ; chacun prend une équipe (pas la même) ; l'hôte joue les blancs. Le plateau est dessiné
+   et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
+   relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Quitter la page
+   pendant la partie demande confirmation, puis fait perdre. *@
+<NavigationLock ConfirmExternalNavigation="InGame" OnBeforeInternalNavigation="BeforeLeaving" />
+
+@if (BoardShown)
+{
+    @* Pendant la partie, pas de bandeau : le plateau et la colonne d'à côté tiennent dans la fenêtre sans défiler *@
+    <h1 class="visually-hidden">Échecs</h1>
+}
+else
+{
+    <PageHeader Title="Échecs" Icon="bi-chess-nav-menu" />
+}
+
+@if (message is not null)
+{
+    <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible" role="alert">
+        @message
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+    </div>
+}
+
+@if (session is { } s)
+{
+    var other = s.Other(userId);
+    var preparing = s.Stage is ChessStage.Requested or ChessStage.TeamChoice;
+    @* Avant la partie : titre et bouton dans l'en-tête du bloc ; pendant la partie : dans la colonne à côté du plateau *@
+    <Block Title="@(preparing ? $"Partie contre {other.Pseudo}" : null)" Class="chess-block" Actions="@(preparing ? CancelActions : null)">
+        <ChildContent>
+            @if (preparing)
+            {
+                <p class="small text-muted">@SideLine(s)</p>
+            }
+            @switch (s.Stage)
+            {
+                case ChessStage.Requested:
+                    <p>En attente de la réponse de @other.Pseudo… L'invitation vaut jusqu'à @s.ExpiresAt.ToLocalTime().ToString("HH:mm"), tant que tu restes sur cette page.</p>
+                    break;
+
+                case ChessStage.TeamChoice:
+                    var mine = s.TeamOf(userId);
+                    var taken = s.TakenBy(userId);
+                    @if (mine is not null)
+                    {
+                        <p class="mb-1">Tu as choisi l'@mine.InSentence. En attente de l'équipe de @other.Pseudo…</p>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mb-3 chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
+                    }
+                    else
+                    {
+                        <p class="small text-muted">Choisis ton équipe : un Pokémon par pièce, chacun avec un seul type. Tu pourras en changer tant que @other.Pseudo n'a pas choisi la sienne.</p>
+                    }
+                    <div class="chess-teams">
+                        @foreach (var team in ChessTeams.All)
+                        {
+                            var t = team;
+                            var isTaken = taken?.Id == t.Id;
+                            <div class="chess-team card @(mine?.Id == t.Id ? "chosen" : "") @(isTaken ? "taken" : "")">
+                                <div class="card-body">
+                                    <h3 class="h6">@t.Name</h3>
+                                    @TeamList(t, null)
+                                    @if (mine is null)
+                                    {
+                                        <button type="button" class="btn btn-primary btn-sm mt-2" disabled="@(isTaken || busy)" @onclick="() => ChooseTeam(t)">
+                                            @(isTaken ? $"Prise par {other.Pseudo}" : "Choisir cette équipe")
+                                        </button>
+                                    }
+                                    else if (mine.Id == t.Id)
+                                    {
+                                        <span class="badge text-bg-success mt-2">Ton équipe</span>
+                                    }
+                                    else if (isTaken)
+                                    {
+                                        <span class="badge text-bg-secondary mt-2">Équipe de @other.Pseudo</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    break;
+
+                default:
+                    @if (s.Stage == ChessStage.Cancelled)
+                    {
+                        <div class="alert alert-secondary">@s.Notice</div>
+                    }
+                    @* Le plateau à gauche, à la hauteur qui reste dans la fenêtre (echecs.js la mesure) ; à droite (au-dessus
+                       sur un écran étroit), tout ce qu'il faut voir pendant la partie *@
+                    <div class="chess-play">
+                        <div class="chess-board" @ref="boardHost"></div>
+                        <div class="chess-side">
+                            <h2 class="block-title h5 mb-1">Partie contre @other.Pseudo</h2>
+                            <p class="small text-muted mb-2">@SideLine(s)</p>
+                            <div class="chess-side-buttons">
+                                <button type="button" class="btn btn-sm btn-outline-secondary chess-pieces-button" @onclick="() => showPieces = true">Pièces</button>
+                                @if (s.Stage == ChessStage.Playing)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
+                                }
+                            </div>
+                            <div class="chess-status @(StatusClass())" aria-live="polite">
+                                <span class="chess-status-text">@StatusText()</span>
+                                @if (SecondsLeft is { } left && s.Stage == ChessStage.Playing && !animating)
+                                {
+                                    <span class="chess-timer @(left <= 10 ? "urgent" : "")">@Clock(left)</span>
+                                }
+                                @if (CanPass)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary chess-pass" @onclick="Pass">Passer</button>
+                                }
+                            </div>
+                            @if (lastText is not null)
+                            {
+                                <p class="chess-last small">@lastText</p>
+                            }
+                            @if (info is not null)
+                            {
+                                <p class="chess-info small">@info</p>
+                            }
+                            @if (CanAct && swapChoices is { Count: > 0 } choices && selected is { } from)
+                            {
+                                @* Pion au bout du plateau : le Pokémon K.O. qui prend sa place (à son arrivée, ou plus tard) *@
+                                <div class="chess-swap">
+                                    <span class="small">@(pendingTo is null ? "Échanger avec un Pokémon K.O. :" : "Au bout du plateau, il laisse sa place à :")</span>
+                                    @foreach (var id in choices)
+                                    {
+                                        var revive = id;
+                                        var unit = UnitOf(revive);
+                                        <button type="button" class="btn btn-sm btn-outline-primary chess-swap-choice" @onclick="() => Swap(from, revive)">
+                                            <img src="@unit?.Mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                            @unit?.Mon.Name (@(unit is null ? "" : ChessTeams.PieceName(unit.Piece)))
+                                        </button>
+                                    }
+                                    @if (pendingTo is not null)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearSelection">Annuler</button>
+                                    }
+                                </div>
+                            }
+                            @if (s.IsOver)
+                            {
+                                <div class="chess-after mt-3">
+                                    <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
+                                    <button type="button" class="btn btn-primary" @onclick="NewGame">Nouvelle partie</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    break;
+            }
+        </ChildContent>
+    </Block>
+
+    @if (showPieces && s.Stage is not (ChessStage.Requested or ChessStage.TeamChoice))
+    {
+        @* Fenêtre « Pièces » : les deux équipes côte à côte, chaque Pokémon avec son type et sa pièce *@
+        <div class="dialog-backdrop" @onclick="() => showPieces = false"></div>
+        <div class="dialog-panel card chess-pieces" role="dialog" aria-modal="true" aria-label="Pièces">
+            <div class="card-body">
+                <h5>Pièces</h5>
+                <div class="chess-pieces-teams">
+                    @foreach (var color in new[] { s.ColorOf(userId), s.ColorOf(other.UserId) })
+                    {
+                        var team = s.TeamOf(s.Player(color).UserId);
+                        <div>
+                            <h6>@(s.Player(color).UserId == userId ? "Toi" : s.Player(color).Pseudo) · @(color == ChessColor.White ? "blancs" : "noirs")</h6>
+                            @if (team is not null)
+                            {
+                                <div class="small text-muted mb-1">@team.Name</div>
+                                @TeamList(team, color)
+                            }
+                        </div>
+                    }
+                </div>
+                <button type="button" class="btn btn-secondary mt-3" @onclick="() => showPieces = false">Fermer</button>
+            </div>
+        </div>
+    }
+}
+else
+{
+    @* ---------- Invitations reçues ---------- *@
+    var incoming = Hub.Incoming(userId);
+    @if (incoming.Count > 0)
+    {
+        <Block Title="Invitations reçues" Flush="true">
+            <div class="list-group">
+                @foreach (var request in incoming)
+                {
+                    var r = request;
+                    <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+                        <span>
+                            <strong>@r.Host.Pseudo</strong> t'invite à une partie d'échecs Pokémon (@ChessTiming.Label(r.MoveSeconds) par coup). Tu jouerais les noirs.
+                            <span class="d-block small text-muted">Jusqu'à @r.ExpiresAt.ToLocalTime().ToString("HH:mm").</span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-primary" @onclick="() => Accept(r)">Accepter</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Hub.Leave(r, userId)">Refuser</button>
+                    </div>
+                }
+            </div>
+        </Block>
+    }
+
+    @* ---------- Nouvelle partie : l'ami et le temps par coup ---------- *@
+    <Block Title="Nouvelle partie">
+        <Help>
+            <p>Des échecs où chaque pièce est un Pokémon avec un seul type :</p>
+            <ul>
+                <li>Une pièce ne mange une autre que si son type est au moins neutre contre elle (pas très efficace ou sans effet : impossible).</li>
+                <li>Super efficace : le Pokémon qui a mangé rejoue aussitôt (il peut passer), et encore à chaque nouvelle prise super efficace. S'il mange le roi, la partie est gagnée.</li>
+                <li>Sinon, échec et mat comme aux échecs : un roi n'est en échec que si une pièce adverse peut vraiment le manger.</li>
+                <li>Un pion au bout du plateau prend la place d'un Pokémon K.O. de son équipe (pas d'un pion). Sans K.O., il attend.</li>
+                <li>Celui qui invite joue les blancs. Passé le temps par coup, ou en quittant la page, on perd.</li>
+            </ul>
+        </Help>
+        <ChildContent>
+            @if (friends is null)
+            {
+                <p class="text-muted">Chargement…</p>
+            }
+            else if (friends.Count == 0)
+            {
+                <p class="text-muted">Il te faut un ami pour jouer : ajoute-en dans <a href="amis">Amis</a>.</p>
+            }
+            else
+            {
+                <div class="chess-new">
+                    <select class="form-select chess-friend" aria-label="Ami" value="@friendId" @onchange="e => friendId = e.Value?.ToString() ?? string.Empty">
+                        <option value="">Choisis un ami…</option>
+                        @foreach (var f in friends)
+                        {
+                            <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                        }
+                    </select>
+                    <select class="form-select chess-time" aria-label="Temps par coup" value="@moveSeconds" @onchange="TimeChosen">
+                        @foreach (var seconds in ChessTiming.MoveSeconds)
+                        {
+                            <option value="@seconds">@ChessTiming.Label(seconds) par coup</option>
+                        }
+                    </select>
+                    <button type="button" class="btn btn-primary chess-invite" disabled="@(friendId.Length == 0)" @onclick="Invite">Inviter</button>
+                </div>
+            }
+        </ChildContent>
+    </Block>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string userId = "";
+    private string pseudo = "";
+    private ChessSession? session;
+    private ChessSnapshot? snapshot;
+    private IReadOnlyList<ChessUnit> units = [];
+    private List<FriendEntry>? friends;
+    private string friendId = "";
+    private int moveSeconds = ChessTiming.DefaultMoveSeconds;
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+    private bool showPieces;
+
+    // Plateau (echecs.js)
+    private ElementReference boardHost;
+
+    /// <summary>Plateau affiché (partie en cours ou finie) : la page n'a plus son bandeau de titre.</summary>
+    private bool BoardShown => session?.Stage is ChessStage.Playing or ChessStage.Done;
+
+    /// <summary>Bouton du bloc pendant l'invitation et le choix des équipes.</summary>
+    private RenderFragment CancelActions => @<button type="button" class="btn btn-outline-danger" @onclick="CancelGame">Annuler la partie</button>;
+
+    private string SideLine(ChessSession s) =>
+        $"Tu joues les {(s.IsHost(userId) ? "blancs" : "noirs")} · {ChessTiming.Label(s.MoveSeconds)} par coup";
+    private IJSObjectReference? module;
+    private IJSObjectReference? board;
+    private bool boardStarting;
+    private DotNetObjectReference<Chess>? selfRef;
+    private int played; // coups déjà montrés sur le plateau
+    private bool animating;
+    private string? lastText; // récit du dernier coup montré
+    private ChessStep? lastStep;
+
+    // Pièce choisie
+    private int? selected;
+    private ChessOptions options = ChessOptions.None;
+    private int? pendingTo; // arrivée d'un pion au bout du plateau : en attente du Pokémon K.O. qui le remplace
+    private IReadOnlyList<int>? swapChoices;
+    private string? info; // explication (prise impossible, pièce adverse) sous le plateau
+    private Timer? clock;
+
+    /// <summary>Une partie est en cours (ou en préparation) : quitter la page l'annulerait, ou ferait perdre.</summary>
+    private bool InGame => session is { IsOver: false };
+
+    /// <summary>À ce joueur de jouer, animations finies.</summary>
+    private bool CanAct => !animating && snapshot is { Stage: ChessStage.Playing, MyTurn: true } && played >= snapshot.StepCount;
+
+    private bool CanPass => CanAct && snapshot?.BonusSquare is not null;
+
+    private int? SecondsLeft => snapshot?.Deadline is { } deadline && session is not null
+        ? Math.Clamp((int)Math.Ceiling((deadline - DateTime.UtcNow).TotalSeconds), 0, session.MoveSeconds)
+        : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        pseudo = user.Identity?.Name ?? "";
+        Hub.RequestsChanged += OnRequestsChanged;
+        if (Hub.Active(userId) is { } active) // page rechargée pendant une partie : on la reprend où elle en est
+            Join(active);
+        friends = (await FriendStore.ListAsync(userId)).Friends.ToList();
+    }
+
+    private void Join(ChessSession joined)
+    {
+        if (session is not null)
+            session.Changed -= OnSessionChanged;
+        session = joined;
+        session.Changed += OnSessionChanged;
+        snapshot = session.Snapshot(userId);
+        clock ??= new Timer(_ => InvokeAsync(() => { if (session?.Stage == ChessStage.Playing) StateHasChanged(); }), null, 500, 500);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Le plateau naît quand la partie commence (la case qui le contient vient d'être affichée)
+        if (board is not null || boardStarting || session is null || snapshot is null
+            || snapshot.Stage is ChessStage.Requested or ChessStage.TeamChoice || (snapshot.Stage == ChessStage.Cancelled && snapshot.Position is null))
+            return;
+        boardStarting = true; // d'autres rendus arrivent pendant le chargement des sprites : un seul plateau
+        try
+        {
+            await StartBoard();
+        }
+        finally
+        {
+            boardStarting = false;
+        }
+    }
+
+    private async Task StartBoard()
+    {
+        if (session is null)
+            return;
+        selfRef ??= DotNetObjectReference.Create(this);
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/echecs.js");
+        units = session.Units();
+        var start = session.Snapshot(userId); // position et nombre de coups lus ensemble : les coups d'après seront animés
+        if (start.Position is null)
+            return;
+        played = start.StepCount;
+        lastStep = session.Steps(Math.Max(0, played - 1)).LastOrDefault();
+        lastText = lastStep?.Text;
+        var mine = session.ColorOf(userId);
+        board = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
+        {
+            flip = mine == ChessColor.Black,
+            units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.Mon.DonjonFolder, name = u.Mon.Name }),
+            position = start.Position,
+            timing = new
+            {
+                walk = ChessTiming.WalkPerSquare.TotalMilliseconds,
+                strike = ChessTiming.Strike.TotalMilliseconds,
+            },
+        });
+        snapshot = start;
+        await Highlight();
+        _ = PlayAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>Anime les nouveaux coups un à un sur le plateau, puis rend la main.</summary>
+    private async Task PlayAsync()
+    {
+        if (animating || board is null || session is null || session.Steps(played).Count == 0)
+            return;
+        animating = true;
+        ClearSelection();
+        try
+        {
+            while (session.Steps(played) is { Count: > 0 } steps)
+            {
+                foreach (var step in steps)
+                {
+                    played++;
+                    lastStep = step;
+                    lastText = step.Text;
+                    StateHasChanged();
+                    await Highlight();
+                    await board.InvokeVoidAsync("play", step);
+                }
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        finally
+        {
+            animating = false;
+        }
+        snapshot = session.Snapshot(userId);
+        if (CanAct && snapshot.BonusSquare is { } bonus)
+            await Select(bonus); // tour bonus : la pièce qui rejoue est déjà choisie
+        await Highlight();
+        StateHasChanged();
+    }
+
+    private void OnSessionChanged() => InvokeAsync(async () =>
+    {
+        if (session is null)
+            return;
+        snapshot = session.Snapshot(userId);
+        if (snapshot.Stage != ChessStage.Requested && message?.StartsWith("Invitation envoyée", StringComparison.Ordinal) == true)
+            message = null; // l'ami a répondu
+        if (snapshot.Stage == ChessStage.Done && snapshot.Notice is { } notice && lastText != notice && session.Steps(played).Count == 0)
+            lastText = notice; // abandon, temps écoulé, page quittée
+        StateHasChanged();
+        if (board is null && snapshot.Stage is ChessStage.Playing or ChessStage.Done)
+            return; // OnAfterRenderAsync crée le plateau
+        await PlayAsync();
+    });
+
+    private void OnRequestsChanged(string user)
+    {
+        if (user == userId)
+            InvokeAsync(StateHasChanged);
+    }
+
+    // ---------- Avant la partie ----------
+
+    private void TimeChosen(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var seconds))
+            moveSeconds = seconds; // revérifié par ChessHub.Request
+    }
+
+    private void Invite()
+    {
+        // L'ami est cherché dans la liste lue sur le serveur : une valeur trafiquée de la liste déroulante ne trouve personne
+        if (friends?.FirstOrDefault(f => f.UserId == friendId) is not { } friend)
+            return;
+        var (created, text) = Hub.Request(new ChessParty(userId, pseudo), new ChessParty(friend.UserId, friend.Pseudo ?? FriendService.NoPseudo), moveSeconds);
+        message = text;
+        messageIsError = created is null;
+        if (created is not null)
+            Join(created);
+    }
+
+    private void Accept(ChessSession request)
+    {
+        if (Hub.Accept(request, userId) is { } error)
+        {
+            message = error;
+            messageIsError = true;
+            return;
+        }
+        message = null;
+        Join(request);
+    }
+
+    private void ChooseTeam(ChessTeam team)
+    {
+        if (session is null)
+            return;
+        busy = true;
+        if (Hub.ChooseTeam(session, userId, team.Id) is { } error)
+        {
+            message = error;
+            messageIsError = true;
+        }
+        else if (message?.StartsWith("Invitation envoyée", StringComparison.Ordinal) == true)
+        {
+            message = null;
+        }
+        snapshot = session.Snapshot(userId);
+        busy = false;
+    }
+
+    /// <summary>Revient sur son choix d'équipe (refusé si l'autre a choisi la sienne entre-temps : la partie a commencé).</summary>
+    private void ClearTeam()
+    {
+        if (session is null)
+            return;
+        busy = true;
+        if (Hub.ClearTeam(session, userId) is { } error)
+        {
+            message = error;
+            messageIsError = true;
+        }
+        snapshot = session.Snapshot(userId);
+        busy = false;
+    }
+
+    // ---------- Pendant la partie ----------
+
+    /// <summary>Clic sur une case du plateau (numéro venu du navigateur : tout est revérifié par ChessHub).</summary>
+    [JSInvokable]
+    public async Task OnSquareClicked(int square)
+    {
+        if (session is null || square is < 0 or > 63)
+            return;
+        var unit = session.At(square);
+        if (!CanAct)
+        {
+            info = unit is null ? null : Describe(unit);
+            StateHasChanged();
+            return;
+        }
+        if (snapshot?.BonusSquare is { } bonus && selected != bonus)
+        {
+            // Tour bonus : la pièce qui rejoue est choisie, même si le clic arrive avant que la page l'ait fait
+            selected = bonus;
+            options = session.Options(userId, bonus);
+        }
+        if (selected is { } from && from != square)
+        {
+            if (options.Targets.FirstOrDefault(t => t.To == square) is { } target)
+            {
+                if (target.Revives.Count > 0)
+                {
+                    pendingTo = square;
+                    swapChoices = target.Revives;
+                    info = null;
+                    StateHasChanged();
+                    return;
+                }
+                await PlayMove(new ChessMove(from, square));
+                return;
+            }
+            if (options.Blocked.FirstOrDefault(b => b.Square == square) is { } blocked)
+            {
+                info = Refusal(session.At(from)!, UnitOf(blocked.VictimId)!, blocked.Effect);
+                StateHasChanged();
+                return;
+            }
+        }
+        if (unit is not null && unit.Color == session.ColorOf(userId) && snapshot?.BonusSquare is null)
+        {
+            await Select(square);
+        }
+        else if (unit is not null && unit.Color != session.ColorOf(userId))
+        {
+            info = Describe(unit);
+            if (snapshot?.BonusSquare is null)
+                ClearSelection(keepInfo: true);
+            await Highlight();
+        }
+        else if (snapshot?.BonusSquare is null)
+        {
+            ClearSelection();
+            await Highlight();
+        }
+        StateHasChanged();
+    }
+
+    private async Task Select(int square)
+    {
+        if (session is null)
+            return;
+        selected = square;
+        pendingTo = null;
+        options = session.Options(userId, square);
+        swapChoices = options.Swaps.Count > 0 ? options.Swaps : null;
+        var unit = session.At(square);
+        info = unit is null ? null
+            : options.Any ? $"{Describe(unit)}{(options.Blocked.Count > 0 ? " Les pièces barrées résistent à son type." : "")}"
+            : unit.Piece == ChessPiece.Pawn && ChessGame.RankOf(square) is 0 or 7
+                ? $"{unit.Mon.Name} attend au bout du plateau qu'un Pokémon de ton équipe soit K.O. pour lui laisser sa place."
+                : $"{unit.Mon.Name} ne peut pas bouger.";
+        await Highlight();
+    }
+
+    private void ClearSelection() => ClearSelection(false);
+
+    private void ClearSelection(bool keepInfo)
+    {
+        selected = null;
+        pendingTo = null;
+        options = ChessOptions.None;
+        swapChoices = null;
+        if (!keepInfo)
+            info = null;
+    }
+
+    private async Task Swap(int from, int revive) => await PlayMove(new ChessMove(from, pendingTo ?? from, revive));
+
+    private async Task Pass() => await PlayMove(ChessMove.Pass);
+
+    private async Task PlayMove(ChessMove move)
+    {
+        if (session is null)
+            return;
+        if (Hub.Play(session, userId, move) is { } error)
+        {
+            info = error;
+            ClearSelection(keepInfo: true);
+            await Highlight();
+            return;
+        }
+        ClearSelection();
+        // la session prévient les deux pages (OnSessionChanged) : le coup s'anime
+    }
+
+    private async Task Forfeit()
+    {
+        if (session is null || !await JS.InvokeAsync<bool>("confirm", "Abandonner la partie ? Tu perdras."))
+            return;
+        Hub.Forfeit(session, userId);
+    }
+
+    /// <summary>Marques du plateau : pièce choisie, cases permises (super efficace à part), pièces qui résistent, dernier coup, roi en échec.</summary>
+    private async Task Highlight()
+    {
+        if (board is null || session is null)
+            return;
+        int? check = null;
+        if (lastStep is { Check: true, End: ChessEnd.None or ChessEnd.Checkmate } step)
+        {
+            var enemy = step.Color == ChessColor.White ? ChessColor.Black : ChessColor.White;
+            check = step.After.Board.FirstOrDefault(p => UnitOf(p.Id) is { Piece: ChessPiece.King } k && k.Color == enemy)?.Square;
+        }
+        try
+        {
+            await board.InvokeVoidAsync("highlight", new
+            {
+                selected,
+                moves = options.Targets.Select(t => new { to = t.To, capture = t.VictimId is not null, super = t.Effect > 1 }),
+                blocked = options.Blocked.Select(b => b.Square),
+                last = lastStep is { Move.IsPass: false } l ? new[] { l.Move.From, l.Move.To } : [],
+                check,
+            });
+        }
+        catch (JSDisconnectedException)
+        {
+            // onglet fermé
+        }
+    }
+
+    // ---------- Fin ----------
+
+    private void CancelGame()
+    {
+        if (session is not null)
+            Hub.Leave(session, userId);
+        Navigation.NavigateTo("");
+    }
+
+    private async Task BeforeLeaving(LocationChangingContext context)
+    {
+        if (!InGame)
+            return;
+        var question = session!.Stage == ChessStage.Playing
+            ? "Quitter cette page abandonne la partie : tu perdras. Continuer ?"
+            : "Quitter cette page annule la partie, pour toi et pour ton ami. Continuer ?";
+        if (!await JS.InvokeAsync<bool>("confirm", question))
+        {
+            context.PreventNavigation();
+            return;
+        }
+        Hub.Leave(session, userId, $"{pseudo} a quitté la partie.");
+    }
+
+    private async Task NewGame()
+    {
+        if (session is not null)
+            session.Changed -= OnSessionChanged;
+        session = null;
+        snapshot = null;
+        units = [];
+        played = 0;
+        lastText = null;
+        lastStep = null;
+        message = null;
+        showPieces = false;
+        ClearSelection();
+        await DisposeBoard();
+    }
+
+    private async Task DisposeBoard()
+    {
+        if (board is null)
+            return;
+        try
+        {
+            await board.InvokeVoidAsync("dispose");
+            await board.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // onglet fermé
+        }
+        board = null;
+    }
+
+    // ---------- Affichage ----------
+
+    private ChessUnit? UnitOf(int id) => units.FirstOrDefault(u => u.Id == id);
+
+    private static string TypeName(ChessUnit unit) => PokeTypes.Name(unit.Type);
+
+    /// <summary>« Gardevoir (Fée) · Reine adverse ».</summary>
+    private string Describe(ChessUnit unit) =>
+        $"{unit.Mon.Name} ({TypeName(unit)}) · {ChessTeams.PieceName(unit.Piece)}{(session?.ColorOf(userId) == unit.Color ? "" : " adverse")}.";
+
+    /// <summary>Pourquoi la prise est impossible (« Pas très efficace : Salamèche (Feu) ne peut pas manger Roigada (Eau). »).</summary>
+    private static string Refusal(ChessUnit attacker, ChessUnit victim, double effect) =>
+        $"{(effect == 0 ? "Aucun effet" : "Pas très efficace")} : {attacker.Mon.Name} ({TypeName(attacker)}) ne peut pas manger {victim.Mon.Name} ({TypeName(victim)}).";
+
+    private string StatusText()
+    {
+        if (session is null || snapshot is null)
+            return "";
+        if (snapshot.Stage == ChessStage.Cancelled)
+            return "Partie annulée.";
+        if (snapshot.Stage == ChessStage.Done && !animating && played >= snapshot.StepCount)
+        {
+            var mine = session.ColorOf(userId);
+            var result = snapshot.Winner is null ? "Match nul" : snapshot.Winner == mine ? "Victoire !" : "Défaite…";
+            var why = snapshot.End switch
+            {
+                ChessEnd.Checkmate => "échec et mat",
+                ChessEnd.KingEaten => "roi mangé",
+                ChessEnd.Stalemate => "pat",
+                ChessEnd.OnlyKings => "il ne reste que les rois",
+                ChessEnd.Forfeit => "abandon",
+                ChessEnd.Timeout => "temps écoulé",
+                ChessEnd.Left => "partie quittée",
+                _ => "",
+            };
+            return why.Length > 0 ? $"{result} ({why})" : result;
+        }
+        if (animating || played < snapshot.StepCount)
+            return "…";
+        if (!snapshot.MyTurn)
+            return $"Au tour de {session.Other(userId).Pseudo}…";
+        if (snapshot.BonusSquare is { } bonus && session.At(bonus) is { } unit)
+            return $"Super efficace ! {unit.Mon.Name} rejoue : choisis sa case, ou passe.";
+        return lastStep is { Check: true } && lastStep.Color != session.ColorOf(userId) ? "À toi de jouer : ton roi est en échec !" : "À toi de jouer.";
+    }
+
+    private string StatusClass() => snapshot switch
+    {
+        { Stage: ChessStage.Done, Winner: null } => "draw",
+        { Stage: ChessStage.Done } when session is not null && snapshot.Winner == session.ColorOf(userId) => "won",
+        { Stage: ChessStage.Done } => "lost",
+        { MyTurn: true } => "my-turn",
+        _ => "",
+    };
+
+    private static string Clock(int seconds) => $"{seconds / 60}:{seconds % 60:00}";
+
+    /// <summary>
+    /// Les Pokémon d'une équipe, une ligne par pièce (sprite, symbole et nom de la pièce, Pokémon, type) ; pendant la partie
+    /// (<paramref name="color"/>), combien sont sur le plateau et combien sont K.O.
+    /// </summary>
+    private RenderFragment TeamList(ChessTeam team, ChessColor? color) => __builder =>
+    {
+        <ul class="chess-team-list">
+            @foreach (var piece in new[] { ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn })
+            {
+                var mon = team.Of(piece);
+                @* Le sprite (96 × 96) à 4rem : un pixel d'image par pixel d'écran à 150 % ; à côté, le nom en entier et le
+                   type, la pièce dessous *@
+                <li>
+                    <img src="@mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                    <div class="chess-mon">
+                        <div class="chess-mon-title">
+                            <span class="chess-mon-name">@mon.Name</span>
+                            <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+                        </div>
+                        <div class="chess-mon-piece">
+                            <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
+                            <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
+                            @if (color is { } c && snapshot?.Position is { } position)
+                            {
+                                var ids = units.Where(u => u.Color == c && u.Piece == piece).Select(u => u.Id).ToHashSet();
+                                var onBoard = position.Board.Count(p => ids.Contains(p.Id));
+                                var ko = (c == ChessColor.White ? position.WhiteKo : position.BlackKo).Count(ids.Contains);
+                                <span class="chess-piece-count small text-muted">· @onBoard sur le plateau@(ko > 0 ? $" · {ko} K.O." : "")</span>
+                            }
+                        </div>
+                    </div>
+                </li>
+            }
+        </ul>
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        clock?.Dispose();
+        Hub.RequestsChanged -= OnRequestsChanged;
+        if (session is not null)
+        {
+            session.Changed -= OnSessionChanged;
+            Hub.Leave(session, userId, $"{pseudo} a quitté la partie."); // onglet fermé, connexion perdue : sans effet si finie
+        }
+        await DisposeBoard();
+        try
+        {
+            if (module is not null)
+                await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // onglet fermé
+        }
+        selfRef?.Dispose();
+    }
+}

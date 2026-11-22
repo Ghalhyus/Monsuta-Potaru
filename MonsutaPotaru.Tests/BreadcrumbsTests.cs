@@ -27,6 +27,7 @@ public class BreadcrumbsTests
     [InlineData("echanges", "Multijoueurs › Échange")]
     [InlineData("gts", "Multijoueurs › GTS")]
     [InlineData("combats", "Multijoueurs › Combat")]
+    [InlineData("mini-jeux/echecs", "Mini-jeux › Échecs")]
     [InlineData("amis", "Multijoueurs › Amis")]
     [InlineData("joueurs", "Multijoueurs › Rechercher un joueur")]
     [InlineData("joueurs/Sacha", "Multijoueurs › Rechercher un joueur › Sacha")]

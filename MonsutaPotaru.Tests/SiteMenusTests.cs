@@ -9,13 +9,13 @@ using MonsutaPotaru.Services;
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
-/// Menu latéral en rubriques (Mes Pokémon, Inventaire, Défis, Multijoueurs, Sauvegardes), le même dans le cadre du thème
+/// Menu latéral en rubriques (Mes Pokémon, Inventaire, Défis, Multijoueurs, Mini-jeux, Sauvegardes), le même dans le cadre du thème
 /// Ardoise (<see cref="ArdoiseLayout"/>) et dans le menu des thèmes Classique et Pokédex (<see cref="NavMenu"/>) :
 /// rubriques fermées, chacune ouverte d'elle-même sur l'une de ses pages ; porte-monnaie dans la barre du haut.
 /// </summary>
 public sealed class SiteMenusTests : PageTestContext
 {
-    private static readonly string[] Sections = ["Mes Pokémon", "Inventaire", "Défis", "Multijoueurs", "Sauvegardes"];
+    private static readonly string[] Sections = ["Mes Pokémon", "Inventaire", "Défis", "Multijoueurs", "Mini-jeux", "Sauvegardes"];
 
     private static readonly string[][] Pages =
     [
@@ -23,6 +23,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["Banque d'objets", "Transfert d'inventaire"],
         ["Living dex", "Rubans", "Complétion (100 %)"],
         ["Rechercher un joueur", "Amis", "Échange", "GTS", "Combat"],
+        ["Échecs"],
         ["Mes sauvegardes", "Synchronisation 3DS"],
     ];
 
@@ -32,6 +33,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["inventaire", "inventaire/transfert"],
         ["livingdex", "rubans", "completion"],
         ["joueurs", "amis", "echanges", "gts", "combats"],
+        ["mini-jeux/echecs"],
         ["sauvegardes", "sauvegardes/3ds"],
     ];
 
@@ -71,7 +73,7 @@ public sealed class SiteMenusTests : PageTestContext
         }
         // Accueil seul avant les rubriques ; chaque rubrique a son icône (seule visible, menu replié)
         Assert.Equal(["Accueil"], cut.FindAll(".ardoise-nav > a .ardoise-label").Select(Text));
-        Assert.Equal(["bi-pokeball-nav-menu", "bi-bag-nav-menu", "bi-trophy-nav-menu", "bi-person-badge-nav-menu", "bi-save-nav-menu"],
+        Assert.Equal(["bi-pokeball-nav-menu", "bi-bag-nav-menu", "bi-trophy-nav-menu", "bi-person-badge-nav-menu", "bi-dice-nav-menu", "bi-save-nav-menu"],
             groups.Select(g => g.QuerySelector(".ardoise-group-title .bi")!.ClassList.Last()));
     }
 
@@ -108,7 +110,8 @@ public sealed class SiteMenusTests : PageTestContext
     [InlineData("joueurs/ondine/inventaire", 3)] // l'inventaire d'un autre joueur relève de Multijoueurs
     [InlineData("echanges", 3)]
     [InlineData("combats", 3)]
-    [InlineData("sauvegardes/3ds", 4)]
+    [InlineData("mini-jeux/echecs", 4)]
+    [InlineData("sauvegardes/3ds", 5)]
     [InlineData("statistiques", -1)]
     public void Sections_ClosedExceptOnTheirPages(string url, int open)
     {
@@ -179,5 +182,27 @@ public sealed class SiteMenusTests : PageTestContext
         GiveMoney("sacha", 800); // retrait d'argent : la page « Banque d'objets » relit le solde
         await cut.InvokeAsync(() => state.RefreshAsync("sacha"));
         Assert.Contains(InventoryService.FormatMoney(800), cut.Find("a.top-wallet").TextContent);
+    }
+
+    [Fact]
+    public void ChessInvitation_ShowsBadges_UntilCancelled()
+    {
+        var classic = Classic("");
+        var ardoise = Ardoise("");
+        Assert.Empty(classic.FindAll(".badge"));
+
+        var hub = Services.GetRequiredService<ChessHub>();
+        var (session, _) = hub.Request(new ChessParty("ondine", "Ondine"), new ChessParty("sacha", "Sacha"), 60);
+
+        // Rubrique fermée : la pastille sur « Mini-jeux » et sur « Échecs » ; Ardoise aussi
+        classic.WaitForAssertion(() => Assert.Equal(["1", "1"], classic.FindAll(".badge").Select(b => b.TextContent.Trim())));
+        Assert.Equal("Invitations aux échecs reçues", classic.Find(".badge").GetAttribute("title"));
+        ardoise.WaitForAssertion(() => Assert.Equal(["1", "1"], ardoise.FindAll(".ardoise-badge").Select(b => b.TextContent.Trim())));
+
+        // Sur la page des échecs, rubrique ouverte : seulement sur « Échecs »
+        Assert.Single(Classic("mini-jeux/echecs").FindAll(".badge"));
+
+        classic.InvokeAsync(() => hub.Leave(session!, "ondine"));
+        classic.WaitForAssertion(() => Assert.Empty(classic.FindAll(".badge")));
     }
 }

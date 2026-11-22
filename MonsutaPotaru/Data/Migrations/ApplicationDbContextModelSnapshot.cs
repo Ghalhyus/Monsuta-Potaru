@@ -409,6 +409,50 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("BattleRecords");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.ChessRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BlackId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BlackTeam")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("End")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Moves")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WhiteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WhiteTeam")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WinnerId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlackId");
+
+                    b.HasIndex("WhiteId");
+
+                    b.ToTable("ChessRecords");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
                 {
                     b.Property<int>("Id")

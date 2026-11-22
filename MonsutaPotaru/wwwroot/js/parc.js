@@ -127,9 +127,9 @@ const chance = (perSecond, dt) => Math.random() < perSecond * dt; // probabilit�
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** Animations d'un dossier de sprites (AnimData.xml + planches), chargées une fois par dossier. */
+/** Animations d'un dossier de sprites (AnimData.xml + planches), chargées une fois par dossier ; reprises par le plateau des échecs (echecs.js). */
 const sheets = new Map();
-function loadSheets(folder) {
+export function loadSheets(folder) {
     if (!sheets.has(folder)) {
         sheets.set(folder, (async () => {
             // La liste des animations dans l'adresse : une copie gardée par le navigateur d'avant l'ajout d'une animation

@@ -24,6 +24,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
     public DbSet<BattleRecord> BattleRecords => Set<BattleRecord>();
+    public DbSet<ChessRecord> ChessRecords => Set<ChessRecord>();
     public DbSet<GtsPokemon> GtsPokemon => Set<GtsPokemon>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -51,6 +52,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(b => b.FirstId);
             e.HasIndex(b => b.SecondId);
+        });
+
+        builder.Entity<ChessRecord>(e =>
+        {
+            e.HasIndex(c => c.WhiteId);
+            e.HasIndex(c => c.BlackId);
         });
 
         builder.Entity<GtsPokemon>(e =>

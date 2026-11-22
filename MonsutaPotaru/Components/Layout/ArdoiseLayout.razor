@@ -112,6 +112,25 @@
                     </NavLink>
                 </div>
             </div>
+            <div class="ardoise-group @(gamesOpen ? "ouvert" : "")">
+                <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(gamesOpen ? "true" : "false")" title="Mini-jeux">
+                    <span class="bi bi-dice-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Mini-jeux</span>
+                    @if (chessRequests > 0)
+                    {
+                        <span class="ardoise-badge ardoise-group-badge" title="Invitations aux échecs reçues">@chessRequests</span>
+                    }
+                </button>
+                <div class="ardoise-subitems">
+                    <span class="ardoise-subitems-title">Mini-jeux</span>
+                    <NavLink class="ardoise-link" href="mini-jeux/echecs">
+                        <span class="ardoise-label">Échecs</span>
+                        @if (chessRequests > 0)
+                        {
+                            <span class="ardoise-badge" title="Invitations aux échecs reçues">@chessRequests</span>
+                        }
+                    </NavLink>
+                </div>
+            </div>
             <div class="ardoise-group @(savesOpen ? "ouvert" : "")">
                 <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(savesOpen ? "true" : "false")" title="Sauvegardes">
                     <span class="bi bi-save-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Sauvegardes</span>

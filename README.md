@@ -220,6 +220,32 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - **Résultats** : table `BattleRecords` (`Services/Battle/BattleRecorder.cs`, événement `BattleHub.Finished`), sans clé
   étrangère.
 
+### Échecs (Mini-jeux)
+
+`/mini-jeux/echecs`, `Pages/Chess.razor`, rubrique « Mini-jeux » à la racine du menu ; détails : `docs/claude/echecs.md`.
+
+- **Règles** (`Services/Chess/ChessGame.cs`, sans réseau ni affichage) : les pièces et les déplacements des échecs,
+  roque et prise en passant compris ; chaque pièce est un Pokémon à **un seul type** (table des types depuis la 6e
+  génération, `ChessTypes.cs`). Une pièce ne mange une autre que si son type est au moins **neutre** contre elle ;
+  **super efficace** : la même pièce rejoue aussitôt (elle peut passer), à nouveau à chaque prise super efficace ; un tour
+  bonus qui **mange le roi** gagne. Sinon échec et mat : un roi n'est en échec que si une pièce adverse peut le manger
+  (types compris), on ne peut pas laisser son roi mangeable ; pat ou deux rois seuls : nulle. Un **pion au bout** du
+  plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
+  l'échange se fera plus tard, à la place d'un coup.
+- **Équipes** par défaut (`ChessTeams.cs`) : Psy, Feu, Électrik, un Pokémon par pièce ; les deux joueurs ne peuvent pas
+  prendre la même. Pas encore d'équipe faite par les joueurs.
+- **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
+  sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;
+  invitation valable 10 minutes ; l'ami accepte ; chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne) ; l'hôte joue les blancs. Une
+  partie à la fois par joueur. Temps dépassé (`ChessHub.Tick`, il ne court qu'après les animations : `ChessTiming.Playback`),
+  abandon, page quittée : défaite. Chaque coup venu du navigateur est revérifié par les règles.
+- **Plateau** (`wwwroot/js/echecs.js`, Phaser) en pixel art dessiné par le code (aucune image), sprites Donjon Mystère à
+  la même échelle ; chaque joueur voit son camp en bas, les K.O. endormis sur les côtés. Un coup s'anime : marche (le
+  cavalier en L), attaque et blessure pour une prise, échange de places pour un pion au bout. Bouton **Pièces** : les deux
+  équipes (pièce, Pokémon, type, combien sur le plateau et K.O.).
+- **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
+  « Statistiques » (onglet Multijoueurs, bloc « Échecs »).
+
 ### Échanges
 
 `/echanges`, `Pages/Trades.razor` ; mécanique `Services/TradeService.cs`, déroulé en direct `Services/TradeHub.cs`
@@ -779,8 +805,8 @@ Détails : `docs/claude/statistiques.md`.
   complétions à 100 %. Même comptage que la vue générale (`CompletionService.ListAsync`).
 - Un visiteur voit les rubans et les complétions dès que la case « Statistiques » est cochée, même si ses pages Rubans
   (jamais publiques) ou Complétion sont cachées : les moyennes seulement, sans lien.
-- **Échange** et **Combat** : tables `TradeRecords` et `BattleRecords`, sans clé étrangère (elles survivent à la
-  suppression du compte du partenaire) ; l'échange interne n'y est pas.
+- **Échange**, **Combat** et **Échecs** : tables `TradeRecords`, `BattleRecords` et `ChessRecords`, sans clé étrangère
+  (elles survivent à la suppression du compte du partenaire) ; l'échange interne n'y est pas.
 
 ### Taille de la collection
 
@@ -828,6 +854,13 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`) : invitations, ami et temps par coup, choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtre « Pièces » |
+| `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
+| `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
+| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, équipes, coups vérifiés, temps par coup, abandon, fin |
+| `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
+| `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
+| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
 | `MonsutaPotaru/Services/Battle/BattleTeam.cs` | Pokémon d'une sauvegarde → Pokémon du simulateur (format par génération, forme de Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
@@ -838,7 +871,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats) |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats, échecs) |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
 | `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |
 | `MonsutaPotaru/Components/Shared/CompletionStatsBlock.razor` | Statistiques des complétions : moyenne générale et par section en barres, complétions à 100 % |
@@ -1121,16 +1154,16 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [PokéAPI sprites](https://github.com/PokeAPI/sprites) | Images des Pokémon (normales et chromatiques, formes, femelles, Méga-Évolutions, Gigamax), de la plupart des objets et des CT (`wwwroot/images`) ; sprites de Rouge / Bleu, Jaune, Or, Argent, Cristal, Rubis / Saphir, Émeraude, Rouge Feu / Vert Feuille, Diamant / Perle, Platine, HeartGold / SoulSilver et Noire / Blanche des living dex, formes comprises (`versions/generation-i` à `generation-v`, `wwwroot/images/livingdex`) ; sprites de dos et chromatiques de Rubis / Saphir, Émeraude et Rouge Feu / Vert Feuille des combats (`back/`, `shiny/`) | CC0 1.0 pour le dépôt ; images © The Pokémon Company |
 | [PokéAPI](https://github.com/PokeAPI/pokeapi) (données) | Liste des formes de chaque espèce et des espèces dont la femelle est différente (tables `pokemon`, `pokemon_forms`, `pokemon_species`, lues par `outils/images.py` ; `has_gender_differences` reprise dans `GlobalLivingDex.GenderDifferences`) ; ordre des Pokédex régionaux des living dex (`pokemon_dex_numbers`, Pokédex « original-johto », « hoenn », « original-sinnoh », « extended-sinnoh », « updated-johto », « original-unova », « updated-unova », « kalos-central », « kalos-coastal », « kalos-mountain », « updated-hoenn », « original-alola », « updated-alola », « letsgo-kanto », « galar », « isle-of-armor », « crown-tundra », « hisui », « paldea », « kitakami » et « blueberry », repris dans `LivingDexGames`) ; descriptions françaises des talents et des capacités de la fiche Pokémon des combats (`ability_flavor_text`, `move_flavor_text`, lues par `outils/combats_textes.py`, reprises dans `BattleDexData.cs`) | BSD-3-Clause ; textes des jeux © Nintendo / Creatures Inc. / GAME FREAK Inc. |
 | [PokéSprite](https://github.com/msikma/pokesprite) (msikma) | Images d'objets absentes de PokéAPI, retrouvées par numéro d'objet (`data/item-map.json`) | MIT ; images © Nintendo / Creatures Inc. / GAME FREAK Inc. |
-| [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
+| [SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (PMD Collab, [sprites.pmdcollab.org](https://sprites.pmdcollab.org)) | Sprites animés façon Donjon Mystère du « Parc » et des pièces des « Échecs », animations Idle, Walk, Sleep, Charge, Attack et Hurt, et portraits Normal, Happy et Sad (humeur dans la fiche d'un Pokémon du parc) (`wwwroot/images/donjon`, `donjon/portraits`, par `outils/images.py donjon`) ; auteurs de chaque sprite et portrait dans `wwwroot/images/donjon/credits.txt` | CC BY-NC 4.0 (usage non commercial, auteurs à citer) |
 | [Cute Fantasy RPG](https://kenmi-art.itch.io/cute-fantasy-rpg) (Kenmi), version premium, et ses extensions | Tuiles des cartes du « Parc » (herbe, chemins, eau, arbres, décors ; plage et palmiers de l'extension Desert, et tout le désert (sable, falaises, eau, cascade, herbe, cactus, rochers, acacias, plantes) ; îlots et rochers animés de l'océan ; sol, parois, eau, cristaux, stalagmites et torches de la grotte ; herbes, hauteurs à flancs de pierre, rivière, pont de bois, sapins et nids de la montagne ; murs, dallage, bassins d'égout, piliers, pics, objets, or, coffres et petit pont de l'extension Dungeons ; roche, lave, cascades, pont, rochers et plantes de l'extension Volcano ; `wwwroot/images/parc/tuiles`, hors Git, copiées par `outils/carte-parc.py`) | Licence du pack (acheté) : usage dans tout projet, même commercial, modifications permises ; redistribution ou revente interdite, même modifié (ni le pack ni ses planches dans le dépôt) |
 | Bande originale de *Pokémon HeartGold / SoulSilver* (GAME FREAK, 2009 ; Shota Kageyama, Junichi Masuda), pistes « Trade », « Evolution » et « Congratulations! Your Pokémon Evolved! », et « Battle! » (Rival, Champion, Frontier Brain, Gym Leader Kanto et Johto), fournies par l'utilisateur | Musiques de l'animation d'échange (`wwwroot/images/sons/` : `echange.mp3`, `evolution.mp3`, `felicitations.mp3`) ; musiques des combats rangées pour plus tard (`combat-*.mp3`) ; hors Git, jamais redistribuées avec le code | © Nintendo / GAME FREAK ; non libre |
-| [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » : carte en tuiles, caméra, dessin (`wwwroot/lib/phaser`) | MIT |
+| [Phaser](https://phaser.io) 3.90.0 (Richard Davey, Phaser Studio) | Moteur de jeu 2D du « Parc » (carte en tuiles, caméra, dessin) et du plateau des « Échecs » (`wwwroot/lib/phaser`) | MIT |
 | [Tiled](https://www.mapeditor.org) (Thorbjørn Lindeijer) | Éditeur de la carte du « Parc » (format lu par Phaser ; outil seulement, rien de Tiled dans le site) | GPL-2.0 (l'éditeur ; les cartes faites avec appartiennent à leur auteur) |
 | [Cobblemon](https://gitlab.com/cable-mc/cobblemon) (Cable MC et contributeurs), dans le modpack [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) | Format des fichiers de l'équipe et du PC (noms des champs NBT, lus dans le mod 1.8.4) pour `Services/Cobblemon/` ; formes, traits et noms des formes de chaque espèce (`data/cobblemon/species`), repris dans `CobblemonPokemon` et `AllTheMonsLivingDex` ; modèles et textures des coupes de Couafarel et des motifs de Prismillon propres à Cobblemon, rendus en images par `outils/rendu-cobblemon.py` (`wwwroot/minecraft/pokemon/`) | MPL-2.0 (le mod) ; modèles : CC BY-NC 3.0 (fichiers `license` des modèles) |
 | [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) (modpack 2.1.0, mod `allthemons` de LobsterJonn), [Complete Cobblemon Collection](https://www.curseforge.com/minecraft/mc-mods/complete-cobblemon-collection) (Xcavalier), [Cobblemon: Mega Showdown](https://www.curseforge.com/minecraft/mc-mods/cobblemon-mega-showdown) et zamega (Yajat Kaul, Navas) | Logo du modpack, jaquette du living dex All the Mons (`wwwroot/minecraft/all-the-mons.png`, fourni par l'utilisateur) ; espèces et formes du modpack (Piglich, Creepyon, Stari Patrickyu ; espèces rendues disponibles ; Méga) relevées dans les mods pour `AllTheMonsLivingDex` ; modèles et textures de Piglich, Creepyon (texture du Creeper de Minecraft) et Patrickyu rendus en images (`wwwroot/minecraft/pokemon/`) | All Rights Reserved (`allthemons`, Complete Cobblemon Collection), Mega Showdown License v2.1 ; Minecraft © Mojang ; usage de fan, non commercial |
 | Livre de quêtes d'All the Mons ([All the Mods Team](https://www.curseforge.com/minecraft/modpacks/all-the-mons), FTB Quests) et succès (advancements) de Minecraft et des mods du modpack | Identifiants et **titres seulement** (jamais les descriptions) des quêtes et des succès, relevés par `outils/completion_allthemons.py` dans `AllTheMonsCompletionData.cs` pour la complétion All the Mons | Quêtes : All Rights Reserved (All the Mods Team) ; succès : licences de chaque mod, Minecraft © Mojang ; usage de fan, non commercial |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
-| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus » ; sauf la Poké Ball de « Mes Pokémon », dessin du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
+| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus », dont dice-5-fill pour « Mini-jeux » ; sauf la Poké Ball de « Mes Pokémon » et le pion des « Échecs », dessins du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |
 | [SQLite](https://sqlite.org) | Base de données | Domaine public |
 | [xUnit](https://xunit.net), [coverlet](https://github.com/coverlet-coverage/coverlet) | Tests, couverture des tests (envoyée à SonarCloud) | Apache-2.0, MIT |

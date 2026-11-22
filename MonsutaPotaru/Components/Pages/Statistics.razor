@@ -9,6 +9,7 @@
 @inject StatisticsService Stats
 @inject TradeService Trades
 @inject BattleService Battles
+@inject ChessService ChessStats
 @inject PlayerService Players
 @inject NavigationManager Navigation
 
@@ -35,7 +36,7 @@ else
     else
     {
         <PageHeader Title="Statistiques" Icon="bi-grid-nav-menu">
-            <Help>Ton argent, tes living dex, tes rubans, tes complétions, tes échanges et tes combats.</Help>
+            <Help>Ton argent, tes living dex, tes rubans, tes complétions, tes échanges, tes combats et tes parties d'échecs.</Help>
         </PageHeader>
     }
 
@@ -186,6 +187,46 @@ else
                             }
                         }
                     </Block>
+
+                    <Block Title="Échecs">
+                        @if (chess is null)
+                        {
+                            <p class="text-muted">Chargement…</p>
+                        }
+                        else
+                        {
+                            <div class="stat-tiles">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Victoires</div>
+                                        <div class="stat-value">@chess.Won</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Défaites</div>
+                                        <div class="stat-value">@chess.Lost</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Parties nulles</div>
+                                        <div class="stat-value">@chess.Draws</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="small text-muted">Adversaires différents</div>
+                                        <div class="stat-value">@chess.Opponents</div>
+                                    </div>
+                                </div>
+                            </div>
+                            @if (chess.Total == 0 && !Visitor)
+                            {
+                                <p class="text-muted small mt-3 mb-0">Aucune partie pour l'instant : invite un ami dans <a href="mini-jeux/echecs">Échecs</a>.</p>
+                            }
+                        }
+                    </Block>
                     break;
             }
         </div>
@@ -236,6 +277,7 @@ else
     private CompletionStats? completions;
     private TradeStats? trades;
     private BattleRecordStats? battles;
+    private BattleRecordStats? chess;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -265,6 +307,7 @@ else
             completions = null;
             trades = null;
             battles = null;
+            chess = null;
         }
         switch (tab)
         {
@@ -279,6 +322,7 @@ else
             default:
                 trades ??= await Trades.StatsAsync(userId);
                 battles ??= await Battles.StatsAsync(userId);
+                chess ??= await ChessStats.StatsAsync(userId);
                 break;
         }
     }

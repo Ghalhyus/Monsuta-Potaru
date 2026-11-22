@@ -120,6 +120,27 @@
                 </div>
             </details>
         </div>
+        @* Mini-jeux : jeux entre amis, en direct. Fermée : les invitations reçues. *@
+        <div class="nav-item nav-group px-3">
+            <details open="@gamesOpen">
+                <summary class="nav-link">
+                    <span class="bi bi-dice-nav-menu" aria-hidden="true"></span> Mini-jeux
+                    @if (chessRequests > 0 && !gamesOpen)
+                    {
+                        <span class="badge bg-danger ms-2" title="Invitations aux échecs reçues">@chessRequests</span>
+                    }
+                </summary>
+                <div class="nav-subitems">
+                    <NavLink class="nav-link" href="mini-jeux/echecs">
+                        <span class="bi bi-chess-nav-menu" aria-hidden="true"></span> Échecs
+                        @if (chessRequests > 0)
+                        {
+                            <span class="badge bg-danger ms-2" title="Invitations aux échecs reçues">@chessRequests</span>
+                        }
+                    </NavLink>
+                </div>
+            </details>
+        </div>
         <div class="nav-item nav-group px-3">
             <details open="@savesOpen">
                 <summary class="nav-link">

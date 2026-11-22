@@ -48,6 +48,8 @@ public abstract class PageTestContext : BunitContext
         Services.AddScoped<GtsService>();
         Services.AddSingleton<GtsEvents>();
         Services.AddScoped<BattleService>();
+        Services.AddScoped<ChessService>();
+        Services.AddSingleton(_ => new ChessHub(TimeProvider.System, ticking: false));
         Services.AddSingleton(_ => new BattleHub(BattleTests.Showdown(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BattleHub>.Instance));
         // Pseudo cherché comme le fait Identity (NormalizedUserName) : pages des autres joueurs.

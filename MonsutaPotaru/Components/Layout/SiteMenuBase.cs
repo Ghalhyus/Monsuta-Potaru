@@ -18,6 +18,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     [Inject] private FriendService Friends { get; set; } = default!;
     [Inject] private TradeHub Trades { get; set; } = default!;
     [Inject] private BattleHub Battles { get; set; } = default!;
+    [Inject] private ChessHub Chess { get; set; } = default!;
     [Inject] private GtsService Gts { get; set; } = default!;
     [Inject] private GtsEvents GtsEvents { get; set; } = default!;
 
@@ -31,6 +32,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     protected int tradeRequests; // demandes d'échange reçues (en direct, TradeHub)
     protected int battleRequests; // demandes de combat reçues (en direct, BattleHub)
     protected int gtsInbox; // Pokémon dans la boîte de réception de la GTS (relus à chaque navigation, et en direct)
+    protected int chessRequests; // invitations aux échecs reçues (en direct, ChessHub) : pastille de « Mini-jeux »
 
     /// <summary>Toutes les demandes reçues, et la boîte de réception de la GTS : la pastille du menu « Multijoueurs ».</summary>
     protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests + gtsInbox;
@@ -48,6 +50,9 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
 
     /// <summary>Rubrique « Sauvegardes » ouverte : sur « Mes sauvegardes » ou « Synchronisation 3DS ».</summary>
     protected bool savesOpen => IsOn("sauvegardes");
+
+    /// <summary>Rubrique « Mini-jeux » ouverte : sur « Échecs ».</summary>
+    protected bool gamesOpen => IsOn("mini-jeux");
 
     /// <summary>Rubrique « Multijoueurs » ouverte : sur la recherche, les pages d'un joueur, « Amis », « Échange », « GTS » ou « Combat ».</summary>
     protected bool playersOpen => IsOn("joueurs", "amis", "echanges", "gts", "combats");
@@ -75,6 +80,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Friends.Changed += OnFriendsChanged;
         Trades.RequestsChanged += OnTradeRequestsChanged;
         Battles.RequestsChanged += OnBattleRequestsChanged;
+        Chess.RequestsChanged += OnChessRequestsChanged;
         GtsEvents.InboxChanged += OnGtsInboxChanged;
 
         // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Banque d'objets » après un retrait).
@@ -85,6 +91,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
             pendingRequests = await Friends.PendingCountAsync(userId);
             tradeRequests = Trades.Incoming(userId).Count;
             battleRequests = Battles.Incoming(userId).Count;
+            chessRequests = Chess.Incoming(userId).Count;
             gtsInbox = await Gts.InboxCountAsync(userId);
         }
     }
@@ -96,6 +103,17 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         InvokeAsync(async () =>
         {
             gtsInbox = await Gts.InboxCountAsync(user);
+            StateHasChanged();
+        });
+    }
+
+    private void OnChessRequestsChanged(string user)
+    {
+        if (user != userId)
+            return;
+        InvokeAsync(() =>
+        {
+            chessRequests = Chess.Incoming(user).Count;
             StateHasChanged();
         });
     }
@@ -158,6 +176,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Friends.Changed -= OnFriendsChanged;
         Trades.RequestsChanged -= OnTradeRequestsChanged;
         Battles.RequestsChanged -= OnBattleRequestsChanged;
+        Chess.RequestsChanged -= OnChessRequestsChanged;
         GtsEvents.InboxChanged -= OnGtsInboxChanged;
     }
 }
