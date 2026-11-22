@@ -26,7 +26,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   Forêt : `foret` de `generer-parc.py`, 6 cases en haut, 5 ailleurs, ± 2,2 ; plage et volcan : `EPAISSEUR` = 4,4 ± 0,9
   dans `generer-plage.py`, `generer-volcan.py`, `generer-desert.py` et `generer-ocean.py` (2,4 donnait une seule rangée trouée) ;
   montagne : la forêt de sapins de la forêt (6 en haut, 5 ailleurs, ± 2,2), les massifs hors d'elle ;
-  grotte : 3,6 ± 1 de roche (plus l'anneau de pierres, et le mur sous le bord du haut). Compter large : une case cachée sans décor reste libre, et
+  grotte : 3,6 ± 1 de roche (plus l'anneau de pierres, et le mur sous le bord du haut) ; forêt profonde : rien ne s'ouvre à
+  moins de 5 cases du bord (7 en haut, `BORDURE`), tout le reste est forêt. Compter large : une case cachée sans décor reste libre, et
   un palmier ou un gros rocher prend deux cases de profondeur.
 
 ## Agrandissements (`ParkService`)
@@ -84,7 +85,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - **Moteur commun** `outils/parc_carte.py` (classe `Carte` : jeux de tuiles, `animer` (tuiles animées de Tiled, écrites
   dans le jeu de tuiles du `.tmx`), calques, `poser`, `essayer`, `boucher_poches(zone, decors, bloque, remplissage)`,
   `ecrire_carte` (`autres` : calques de tuiles en plus, après « Collisions » ; `fond` : couleur de fond ; `lumieres` : calque
-  d'objets « Lumières » ; sans eux, le `.tmx` est le même qu'avant),
+  d'objets « Lumières » ; `voile` : couleur et opacité de la pénombre, propriétés de ce calque ; sans eux, le `.tmx` est le
+  même qu'avant),
   `apercu` ; fonctions de formes). Les générateurs
   gardent leur paysage et l'ordre de leurs tirages. Refonte du moteur : régénérer les deux parcs dans un dossier
   temporaire et comparer avec `cmp` (`.tmx` et aperçus identiques ; seuls les chemins des planches changent si le dossier
@@ -439,6 +441,60 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   interdite, 12 / 46 / 64 secteurs de 8 × 8 cases parcourus, la plupart endormis la nuit. Après le blocage de l'ombre
   (tailles 1, 2, 4) : aucune des 3 600 positions relevées sur une face ou une ombre de mur. Plan d'avant, sol allégé (tailles 1 à
   4) : aucune case interdite, nageurs 49 à 59 % dans l'eau, 8 / 20 / 43 / 74 secteurs de 8 × 8 cases parcourus.
+
+## Forêt profonde (`outils/generer-foret-profonde.py`, `ParkLandscape.DeepForest`, 2026-11-21)
+- `Foret_profonde_1-1.tmx` à `Foret_profonde_1-4.tmx` dans `C:\Sources\Parcs`, puis `carte-parc.py` → `foret-profonde-1-{taille}.json`
+  (le nom vient du fichier). Mêmes arguments que les autres générateurs ; aperçus `foret-profonde-<n>.png`. Zones du volcan.
+- Choix de l'utilisateur : **labyrinthe végétal, aucun point d'eau, l'apparence d'une forêt profonde**, pas que des
+  couloirs (assez de place pour se balader) ; murs d'**arbres serrés** ; **clairières + sentiers** (boucles et
+  culs-de-sac) ; **pénombre et puits de lumière** ; champignons, souches et rochers moussus, touffes d'herbe animées,
+  quelques fleurs. Tous les Pokémon y vont (pas de `Refusal`) ; les nageurs y marchent (pas d'eau, comme la grotte à la
+  taille 1).
+- **Plan** (`PIECES`, comme le donjon) : clairières (ovale au bord irrégulier, `clairiere`) et sentiers (polyligne de 2 ou
+  3 cases, `sentier`), chacun à sa taille, tout entier dans la zone de sa taille avec une case de forêt au moins (le script
+  s'arrête sinon). `OUVERT[n]` = les pièces jusqu'à la taille n, les **murs d'une case** ouverts (ni arbre ni buisson n'y
+  tient), nettoyé, tout relié. Le reste est forêt, bloquée.
+- **Arbres** : quinconce de `generer-parc.py` (sapins et chênes moyens) quand les deux cases du tronc sont dans la forêt ;
+  le feuillage peut déborder sur une **clairière** (on passe derrière), **jamais sur un sentier** (un sentier de 3 rangées
+  sous les feuillages cachait les Pokémon). `GRANDS` : grands chênes et sapins 4 × 5 tout entiers (avec une case autour)
+  dans la forêt de la carte entière, donc les mêmes à toutes les tailles ; la quinconce les évite. Deux feuillages ne se
+  chevauchent jamais (une tuile en remplace une autre : bord coupé) : la forêt ne peut pas être plus dense que la quinconce.
+- **Aspect profond** (premier aperçu jugé trop clair : buissons vert vif partout entre les arbres) : buissons seulement sur
+  les cases de forêt qui touchent l'ouvert (une haie le long des murs) ; ailleurs, entre les troncs, les **herbes hautes**
+  de ShroomLands (`ShroomLands_Tall_Grass_Green_Tiles`, 5 colonnes : coins et côtés 0 1 2 5 7 10 11 12, coins rentrants
+  3 4 8 9, milieux 6 et 21) en « Sol » sur toute la forêt, leur bord transparent sur la couleur de fond `#3e8948`
+  (= `Grass_1_Middle`, l'herbe des clairières). Une case bloquée sans décor est permise ici (pas de liquide).
+- **Objets** (`poser`, par taille, sur les cases nouvelles de cette taille, hors des arbres de cette taille : les arbres
+  ne font que disparaître d'une taille à l'autre) : ce qui bloque seulement dans une clairière, avec ses 8 voisines ouvertes
+  et libres ; peu dans les tailles 1 et 2 (`k`), qui laissent juste 14 cases par Pokémon. Planches de ShroomLands : grands
+  champignons 2 × 3 en (0, 0) ou (4, 0), moyens 2 × 2 en (2, 1) ou (6, 1), petits d'une tuile 32 33 40 41 (8 colonnes) ;
+  rochers moussus 2 × 2 en colonnes impaires (`ROCHERS`). Touffes `Grass_n_Anim` (8 images) : chaque tuile de la planche
+  part d'une image différente (`animer` décalé), les touffes ne bougent pas ensemble. `carte-parc.py` : les `Props` de
+  ShroomLands sont des décors.
+- **Pénombre** : `ecrire_carte(voile=("#0a1f12", 0.5))` → propriétés `voile` et `opacite` du calque « Lumières », lues par
+  `shade` de `parc.js` (sans elles : `SHADE`, la grotte et le donjon inchangés, vérifié). Puits de lumière `#fff1b0` au
+  centre de chaque clairière (rayon = moyenne des rayons × 1,05), grand champignon bleu (44 px), champignons lumineux d'une
+  tuile sur la case la plus loin d'une lumière tant qu'elle dépasse `PORTEE` (8 cases). Aperçu avec la pénombre pour juger
+  sans le navigateur : appliquer le voile et les dégradés de `shade` sur l'aperçu (script jetable, pas dans le dépôt).
+- Cases libres par Pokémon : 14,3 / 14,4 / 15,7 / 16,3 d'abord, puis **« il faut un peu plus de place »** (2026-11-21) :
+  `AGRANDIR` (chaque clairière grandit de 15 % au plus, autant que la zone de sa taille le permet, `piece`) et
+  `LARGEUR_MIN` (sentiers de 3 cases au moins) → 15,4 / 17,1 / 18,9 / 20,1 (`ParkMapTests` : 14). La vue de départ gagne
+  peu (ses clairières touchent déjà presque sa zone) : 64 % libre, 34 % à la carte entière ;
+  `DeepForest_IsAllVegetation_WithoutWater_InTheShade` exige un tiers de forêt au moins (la vue de départ en est proche :
+  plus de place y demanderait d'assouplir ce test).
+- **« Ajouter de l'espace en réduisant les gros morceaux de bordures »** (2026-11-22) : `amincir` (avant les murs d'une
+  case) ouvre de proche en proche, depuis l'ouvert, les cases de la zone (marges de `hors_zone` gardées) proches d'un
+  bloc trop épais = case de la zone dont tout le disque est en forêt (hors zone et hors carte comptés comme forêt). Rayon
+  `MUR_MAX / 2` (8 / 2) ± 1 selon l'endroit (`RAYON`, sinus lents) : sans ce bruit, le bord de ce qui recule est une ligne
+  droite. **Essai refusé d'avance** : `MUR_MAX = 5` (murs de 4 cases au plus) supprimait le labyrinthe (une grande
+  prairie entourée d'une haie droite, 37 cases par Pokémon à la carte entière). Avec 8 : 15,4 / 18,1 / 21,2 / 24,9 cases
+  par Pokémon (la vue de départ ne change pas : ses blocs sont déjà minces). Les grands arbres (`GRANDS`) ne tiennent
+  plus que dans la bordure de la carte. Essai du 2026-11-22 (15 min simulées aux 4 tailles, 20 Pokémon) : aucune case
+  interdite, 12 / 23 / 38 / 56 secteurs de 8 × 8 cases parcourus.
+- Essai du 2026-11-21 (instance de test : achat de la Forêt profonde dans la vraie page, puis 15 min simulées aux tailles 1,
+  2 et 4 avec 20 Pokémon dont 2 nageurs et 3 volants) : aucune case interdite (jour et nuit), 12 / 21 / 48 secteurs de
+  8 × 8 cases parcourus (26 par Pokémon à la taille 4), 13 à 17 endormis la nuit. Grotte vérifiée après le changement de
+  `shade` : pénombre inchangée.
 
 ## Lave et tuiles animées (`parc.js`)
 - `LAVA` (4) dans `Ground.walkable`, `LIQUID` = `WATER | LAVA`. `openLiquid(…, habitat, bit)` (l'ancien `openWater`) :

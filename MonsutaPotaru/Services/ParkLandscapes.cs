@@ -21,6 +21,7 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "Grotte",
         ParkLandscape.Mountain => "Montagne",
         ParkLandscape.Dungeon => "Donjon",
+        ParkLandscape.DeepForest => "Forêt profonde",
         _ => "Forêt",
     };
 
@@ -34,6 +35,7 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "dans la grotte",
         ParkLandscape.Mountain => "à la montagne",
         ParkLandscape.Dungeon => "dans le donjon",
+        ParkLandscape.DeepForest => "dans la forêt profonde",
         _ => "dans la forêt",
     };
 
@@ -47,6 +49,7 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "🦇",
         ParkLandscape.Mountain => "⛰️",
         ParkLandscape.Dungeon => "🏚️",
+        ParkLandscape.DeepForest => "🌲",
         _ => "🌳",
     };
 
@@ -60,6 +63,7 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "grotte-1",
         ParkLandscape.Mountain => "montagne-1",
         ParkLandscape.Dungeon => "donjon-1",
+        ParkLandscape.DeepForest => "foret-profonde-1",
         _ => "parc-1",
     };
 
@@ -82,6 +86,9 @@ public static class ParkLandscapes
         ParkLandscape.Dungeon => "Un souterrain abandonné, ses salles et ses couloirs de pierre, ses tombes, ses bassins d'égout et l'or " +
                                  "oublié, dans la pénombre des torches : le repaire des types Spectre, Ténèbres, Poison, Psy, Acier et " +
                                  "Dragon, bien moins celui des Pokémon qui aiment le grand air.",
+        ParkLandscape.DeepForest => "Un labyrinthe de clairières et de sentiers sinueux entre des murs d'arbres serrés, sans un point " +
+                                     "d'eau, dans la pénombre des sous-bois où percent des rayons de soleil et luisent des champignons : " +
+                                     "le paradis des types Plante, Insecte, Fée, Poison et de bien d'autres, bien moins celui des types Eau et Roche.",
         _ => "Un pré au milieu des bois, avec ses arbres, ses fleurs et ses plans d'eau.",
     };
 
@@ -95,6 +102,7 @@ public static class ParkLandscapes
         ParkLandscape.Cave => "La roche recule et dévoile une nouvelle partie de la grotte",
         ParkLandscape.Mountain => "La forêt de sapins recule et dévoile une nouvelle partie de la montagne",
         ParkLandscape.Dungeon => "Des éboulis sont dégagés et ouvrent de nouvelles salles du donjon",
+        ParkLandscape.DeepForest => "Les arbres s'écartent et ouvrent de nouvelles clairières et de nouveaux sentiers",
         _ => "La forêt recule et dévoile une nouvelle partie du parc",
     };
 

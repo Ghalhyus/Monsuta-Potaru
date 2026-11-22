@@ -784,13 +784,18 @@ export async function create(container, component, options) {
     }
 
     /**
-     * Pénombre d'une grotte : si la carte a un calque d'objets « Lumières » (un point par lumière, propriétés « rayon » en
+     * Pénombre d'une grotte, d'un donjon ou d'une forêt profonde : si la carte a un calque d'objets « Lumières » (un point par lumière, propriétés « rayon » en
      * pixels de la carte et « couleur »), un voile sombre dessiné une fois dans une image, où chaque lumière efface un
      * dégradé rond, et une image de ce dégradé, teinte de sa couleur, ajoutée par-dessus (rien de recalculé ensuite).
      */
     function shade(s) {
-        const lights = data?.layers.find(l => l.name === "Lumières" && l.type === "objectgroup")?.objects;
+        const layer = data?.layers.find(l => l.name === "Lumières" && l.type === "objectgroup"), lights = layer?.objects;
         if (!lights) return;
+        // Couleur et opacité du voile : propriétés « voile » et « opacite » du calque (la forêt profonde : une pénombre
+        // verte), sinon celles de la grotte
+        const own = name => layer.properties?.find(p => p.name === name)?.value;
+        const veilColor = own("voile") ? parseInt(String(own("voile")).slice(-6), 16) : SHADE.color;
+        const veilAlpha = own("opacite") ?? SHADE.alpha;
         if (!s.textures.exists("lumiere")) { // dégradé rond, opaque au centre (une texture par jeu de Phaser)
             const size = 128, texture = s.textures.createCanvas("lumiere", size, size), context = texture.getContext();
             const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
@@ -802,7 +807,7 @@ export async function create(container, component, options) {
             texture.refresh();
         }
         const veil = s.add.renderTexture(0, 0, ground.width, ground.height).setOrigin(0).setDepth(SHADE.depth);
-        veil.fill(SHADE.color, SHADE.alpha);
+        veil.fill(veilColor, veilAlpha);
         const stamp = s.make.image({ key: "lumiere", add: false });
         for (const light of lights) {
             const property = name => light.properties?.find(p => p.name === name)?.value;

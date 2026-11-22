@@ -1,5 +1,5 @@
 # Moteur commun des générateurs de cartes du parc (generer-parc.py, generer-plage.py, generer-volcan.py, generer-desert.py,
-# generer-ocean.py, generer-grotte.py, generer-montagne.py, generer-donjon.py) avec le pack Cute Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes
+# generer-ocean.py, generer-grotte.py, generer-montagne.py, generer-donjon.py, generer-foret-profonde.py) avec le pack Cute Fantasy : jeux de tuiles incorporés (et leurs tuiles animées), calques, formes
 # (bruit, taches, nettoyage), bordures automatiques, objets posés, poches enfermées, écriture des .tmx pour Tiled et aperçus
 # en PNG. Chaque générateur garde ce qui fait son paysage (formes, objets, ce qui cache la partie pas encore achetée) et
 # l'ordre de ses tirages : relancé sans changement, il redonne les mêmes cartes.
@@ -259,11 +259,12 @@ class Carte:
 
     # --- Écriture des .tmx et aperçus ---
     def ecrire_carte(self, sortie, fichier, depart, zone, sol_, decors_, devant_, bloque_, autres=(), fond=None,
-                     lumieres=()):
+                     lumieres=(), voile=None):
         """Écrit le .tmx d'une taille. autres : calques de tuiles en plus, [(nom, grille)], après « Collisions » ; fond :
         couleur sous les tuiles (« #rrggbb », visible là où le sol est transparent) ; lumieres : calque d'objets
-        « Lumières » (pénombre de parc.js), [(x, y, rayon en pixels de la carte, « #rrggbb »)...]. Sans les deux derniers,
-        le .tmx est le même qu'avant."""
+        « Lumières » (pénombre de parc.js), [(x, y, rayon en pixels de la carte, « #rrggbb »)...] ; voile : couleur et
+        opacité de la pénombre, (« #rrggbb », 0 à 1), propriétés du calque « Lumières » (sans elles, celles de la grotte).
+        Sans les trois derniers, le .tmx est le même qu'avant."""
         os.makedirs(sortie, exist_ok=True)
         Image.new("RGBA", (16, 16), (230, 40, 40, 255)).save(os.path.join(sortie, "collisions.png"))
         relatif = os.path.relpath(self.pack, sortie).replace("\\", "/")
@@ -304,6 +305,11 @@ class Carte:
         # « Lumières » : un point par lumière, son rayon et sa couleur en propriétés (lus par parc.js)
         if lumieres:
             morceaux.append(f' <objectgroup id="{6 + len(autres)}" name="Lumières">')
+            if voile:
+                morceaux.extend(['  <properties>',
+                                 f'   <property name="opacite" type="float" value="{voile[1]}"/>',
+                                 f'   <property name="voile" type="color" value="#ff{voile[0][1:]}"/>',
+                                 '  </properties>'])
             for i, (x, y, rayon, teinte) in enumerate(lumieres, 3):
                 morceaux.extend([f'  <object id="{i}" x="{x}" y="{y}">',
                                  '   <properties>',

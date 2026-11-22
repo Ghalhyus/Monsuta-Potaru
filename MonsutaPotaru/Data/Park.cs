@@ -20,6 +20,9 @@ public enum ParkLandscape
     Mountain = 7,
     /// <summary>Des salles et des couloirs de pierre délaissés, des bassins d'égout, dans la pénombre (cartes donjon-1-{taille}).</summary>
     Dungeon = 8,
+    /// <summary>Un labyrinthe végétal de clairières et de sentiers entre des murs d'arbres serrés, sans eau, dans la pénombre
+    /// (cartes foret-profonde-1-{taille}).</summary>
+    DeepForest = 9,
 }
 
 /// <summary>

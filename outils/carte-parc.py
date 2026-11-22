@@ -103,6 +103,7 @@ HABITAT_RULES = [
     (r"Cute_Fantasy_Dungeons/Dungeon_\d/Dungeon_\d_Sewer_Tileset\.png$", ("Donjon", SEWER_TILES)),
     (r"Cute_Fantasy_Dungeons/Objects/", DECOR),
     (r"Cute_Fantasy_Dungeons/", "Donjon"),
+    (r"Cute_Fantasy_ShroomLands/(Props|Houses|Shroomlings|Snails)/", DECOR),
     (r"Cute_Fantasy_ShroomLands/Tiles/.*Waterfall", "Eau"),
     (r"Cute_Fantasy_ShroomLands/Tiles/.*Cliff", "Falaise"),
     (r"Cute_Fantasy_ShroomLands/Tiles/", "Végétation"),

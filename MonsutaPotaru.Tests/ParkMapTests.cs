@@ -6,7 +6,7 @@ namespace MonsutaPotaru.Tests;
 
 /// <summary>
 /// Cartes de chaque parc, une par taille (wwwroot/parc/{parc}-{taille}.json, écrites par outils/generer-parc.py,
-/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py, generer-grotte.py, generer-montagne.py ou generer-donjon.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
+/// generer-plage.py, generer-volcan.py, generer-desert.py, generer-ocean.py, generer-grotte.py, generer-montagne.py, generer-donjon.py ou generer-foret-profonde.py puis carte-parc.py) : ce que parc.js lit, une zone « Parc » où chaque case libre est
 /// accessible depuis les autres (pas de Pokémon enfermé ; à l'océan, d'un îlot à l'autre à la nage ; à la montagne, en volant), et chaque agrandissement qui
 /// garde les cases libres de la taille d'avant.
 /// </summary>
@@ -15,8 +15,8 @@ public sealed class ParkMapTests
     private const int Tile = 16;
     private static readonly string[] Layers = ["Sol", "Décors", "Devant", "Collisions"];
 
-    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan, la grotte, la montagne et le donjon.</summary>
-    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1", "montagne-1", "donjon-1"];
+    /// <summary>Cartes de chaque parc, sans la taille : le parc 1 (prairie), la plage, le volcan, le désert, l'océan, la grotte, la montagne, le donjon et la forêt profonde.</summary>
+    private static readonly string[] Parks = ["parc-1", "plage-1", "volcan-1", "desert-1", "ocean-1", "grotte-1", "montagne-1", "donjon-1", "foret-profonde-1"];
 
     /// <summary>Tailles de chaque parc : une carte pour chacune (sans agrandissement, puis un à trois).</summary>
     public static TheoryData<string, int> Sizes()
@@ -532,5 +532,46 @@ public sealed class ParkMapTests
             .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
             .Select(t => t.GetProperty("image").GetString()).Order().ToList();
         Assert.Equal(["Big_Torch_Anim.png", "Floor_spikes_1.png"], animated);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void DeepForest_IsAllVegetation_WithoutWater_InTheShade(int size)
+    {
+        // Choix de l'utilisateur (2026-11-21) : un labyrinthe végétal, sans aucun point d'eau, l'apparence d'une forêt
+        // profonde. Tout est de la végétation (herbe, herbes hautes, arbres et objets posés dessus) : Plante, Insecte, Fée,
+        // Poison, Normal... heureux, Eau et Roche malheureux, Feu normal (feuille « Habitat »).
+        var json = Json("foret-profonde-1", size);
+        var habitats = ParkHabitats.Read(json)!;
+        Assert.Equal(habitats.Area.W * habitats.Area.H, habitats.Counts[Habitat.Vegetation]);
+        Assert.Empty(OpenWater("foret-profonde-1", size));
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Grass, (byte)MoveType.Grass, habitats).Mood);
+        Assert.Equal(ParkMood.Happy, ParkHabitats.MoodOf((byte)MoveType.Bug, (byte)MoveType.Bug, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Water, (byte)MoveType.Water, habitats).Mood);
+        Assert.Equal(ParkMood.Sad, ParkHabitats.MoodOf((byte)MoveType.Rock, (byte)MoveType.Rock, habitats).Mood);
+        Assert.Equal(ParkMood.Normal, ParkHabitats.MoodOf((byte)MoveType.Fire, (byte)MoveType.Fire, habitats).Mood);
+
+        // Un labyrinthe, pas une prairie : la forêt garde au moins un tiers de la zone (40 % dans la vue de départ, de plus en
+        // plus ensuite), avec la place demandée (14 cases libres par Pokémon : ParkZone_InsideTheMap_AndEveryFreeTileReachable)
+        var map = Map("foret-profonde-1", size);
+        var (_, _, w, h) = Zone(map, "Parc");
+        Assert.True(FreeTiles(map).Count * 3 < w * h * 2, $"{FreeTiles(map).Count} cases libres sur {w * h} : trop peu de forêt");
+
+        // La pénombre verte (couleur et opacité du voile sur le calque « Lumières »), des puits de lumière et des champignons
+        // lumineux, plus à chaque taille ; l'herbe sous le bord transparent des herbes hautes ; les touffes d'herbe animées
+        Assert.Equal("#3e8948", map.GetProperty("backgroundcolor").GetString());
+        var shade = Layer(map, "Lumières");
+        Assert.Equal(["opacite", "voile"], shade.GetProperty("properties").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order());
+        var lights = shade.GetProperty("objects").EnumerateArray().ToList();
+        Assert.All(lights, light => Assert.Equal(["couleur", "rayon"],
+            light.GetProperty("properties").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order()));
+        if (size > 1) Assert.True(lights.Count > Layer(Map("foret-profonde-1", size - 1), "Lumières").GetProperty("objects").GetArrayLength());
+        var animated = map.GetProperty("tilesets").EnumerateArray()
+            .Where(t => t.TryGetProperty("tiles", out var tiles) && tiles.EnumerateArray().Any(tile => tile.TryGetProperty("animation", out _)))
+            .Select(t => t.GetProperty("image").GetString()).Order().ToList();
+        Assert.Equal(["Grass_1_Anim.png", "Grass_2_Anim.png", "Grass_3_Anim.png"], animated);
     }
 }
