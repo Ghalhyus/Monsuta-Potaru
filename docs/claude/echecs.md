@@ -3,7 +3,8 @@
 README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-jeux/echecs`), règles
 `Services/Chess/ChessGame.cs`, types `ChessTypes.cs`, équipes `ChessTeams.cs`, parties en direct `ChessHub.cs`, résultats
 `ChessRecorder.cs` (+ `ChessService`, statistiques), plateau `wwwroot/js/echecs.js` (Phaser). Tests : `ChessGameTests`
-(règles), `ChessHubTests` (hub, enregistrement), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Aide »).
+(règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
+(`docs/claude/statistiques.md`), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Aide »).
 
 ## Choix de l'utilisateur (2026-11-22)
 - Demande d'origine : un seul type par Pokémon ; super efficace = la pièce rejoue ; neutre = elle mange ; pas très

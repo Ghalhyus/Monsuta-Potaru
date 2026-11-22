@@ -251,7 +251,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Bouton **Aide** : qui mange qui, deux tableaux croisés
   (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après `ChessGame.CanEat` et la table des types.
 - **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
-  « Statistiques » (onglet Multijoueurs, bloc « Échecs »).
+  « Statistiques » (onglet Mini-jeux, bloc « Échecs »). Pièces mangées par chaque camp (`WhiteCaptures`,
+  `BlackCaptures`, migration `ChessCaptures` : 0 pour les parties d'avant).
 
 ### Échanges
 
@@ -793,7 +794,8 @@ Détails : `docs/claude/statistiques.md`.
 
 - `/statistiques` (menu du pseudo) et `/joueurs/{pseudo}/statistiques` (case « Statistiques » de « Visibilité », cochée
   pour tous les comptes à son arrivée : migration `StatisticsVisibility`). Onglets à gauche, en ligne au-dessus sur un
-  écran étroit : **Générale**, **Défis**, **Multijoueurs** (`?onglet=defis`, `?onglet=multijoueurs`). Chaque onglet est
+  écran étroit : **Générale**, **Défis**, **Multijoueurs**, **Mini-jeux** (`?onglet=defis`, `?onglet=multijoueurs`,
+  `?onglet=mini-jeux`). Chaque onglet est
   calculé à son ouverture, sans cache (`Services/StatisticsService.cs`).
 - **Argent dépensé** : toutes les sorties du porte-monnaie (montants négatifs du journal : emplacements, agrandissements,
   parcs). **Argent déposé** : le solde plus l'argent dépensé (un aller-retour d'argent ne compte pas deux fois).
@@ -812,8 +814,15 @@ Détails : `docs/claude/statistiques.md`.
   complétions à 100 %. Même comptage que la vue générale (`CompletionService.ListAsync`).
 - Un visiteur voit les rubans et les complétions dès que la case « Statistiques » est cochée, même si ses pages Rubans
   (jamais publiques) ou Complétion sont cachées : les moyennes seulement, sans lien.
-- **Échange**, **Combat** et **Échecs** : tables `TradeRecords`, `BattleRecords` et `ChessRecords`, sans clé étrangère
-  (elles survivent à la suppression du compte du partenaire) ; l'échange interne n'y est pas.
+- **Échange**, **Combat** (onglet Multijoueurs) et **Échecs** (onglet Mini-jeux) : tables `TradeRecords`,
+  `BattleRecords` et `ChessRecords`, sans clé étrangère (elles survivent à la suppression du compte du partenaire) ;
+  l'échange interne n'y est pas.
+- **Mini-jeux** (`Services/MiniGames.cs`, `MiniGameService`) : bloc **Générale** (tous les mini-jeux : parties jouées,
+  victoires, défaites, nulles, joueurs différents, mini-jeu favori), puis un bloc par mini-jeu ; **Échecs**, en groupes
+  Parties, Pièces (prises et perdues : roi et prise en passant compris, pas l'échange d'un pion au bout) et Équipe
+  favorite (avec ses six Pokémon, `Shared/ChessTeamList.razor`).
+  Favori = le plus joué, à égalité le plus récemment joué. Les **invités sans compte** comptent dans les parties, pas dans
+  les joueurs différents (on ne sait pas les reconnaître d'une partie à l'autre).
 
 ### Taille de la collection
 
@@ -878,7 +887,9 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats, échecs) |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs) |
+| `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
+| `MonsutaPotaru/Services/MiniGames.cs` | Statistiques des mini-jeux : une partie vue par un joueur, parties gagnées, perdues, nulles, joueurs différents (sans les invités), le plus joué ; `MiniGameService` pour l'onglet Mini-jeux |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
 | `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |
 | `MonsutaPotaru/Components/Shared/CompletionStatsBlock.razor` | Statistiques des complétions : moyenne générale et par section en barres, complétions à 100 % |

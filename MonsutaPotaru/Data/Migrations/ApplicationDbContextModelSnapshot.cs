@@ -418,6 +418,9 @@ namespace MonsutaPotaru.Migrations
                     b.Property<DateTime>("At")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("BlackCaptures")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("BlackId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -431,6 +434,9 @@ namespace MonsutaPotaru.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Moves")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("WhiteCaptures")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("WhiteId")

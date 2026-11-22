@@ -48,5 +48,32 @@ README : « Statistiques ». Page `Components/Pages/Statistics.razor` (deux adre
 - Le champ injecté ne peut pas s'appeler `Statistics` (nom du composant) : `Stats`.
 - `MigrationsTests` : un compte ajouté en SQL après la migration `Friends` échoue (`Audience` sans valeur par défaut) ;
   l'ajouter à `ProfileVisibility`, puis migrer.
-- Onglet Multijoueurs : **Échange**, **Combat** et **Échecs** (ajouté avec les échecs le 2026-11-22, mêmes tuiles que
-  les combats : `ChessService.StatsAsync`, table `ChessRecords`). Test `Multiplayer_TradesBattlesAndChess` : dix tuiles.
+- Onglet Multijoueurs : **Échange** et **Combat** (test `Multiplayer_TradesAndBattles` : six tuiles). Le bloc Échecs y
+  était du 2026-11-22 (arrivée des échecs) jusqu'à l'onglet Mini-jeux, le même jour.
+
+## Onglet Mini-jeux (demandé le 2026-11-22)
+- Demande : section Mini-jeux, groupes « Générale » (parties jouées, gagnées, perdues, nulles, joueurs différents, mini-jeu
+  favori) et « Échecs » (les mêmes, pièces prises et perdues, équipe la plus jouée). `?onglet=mini-jeux`, après
+  Multijoueurs.
+- Choix de l'utilisateur : bloc Échecs **déplacé** de Multijoueurs (pas de chiffres en double) ; parties d'avant la
+  migration `ChessCaptures` à **0 pièce**, sans mention ; **invités sans compte** hors des joueurs / adversaires
+  différents (mais leurs parties comptent) ; favoris en **nom + nombre de parties** (`.stat-note` sous la valeur ;
+  équipe sans « Équipe », `ChessTeam.ShortName`), à égalité le **plus récemment joué**, « — » sans partie.
+- **Agencement** (demandé ensuite, le même jour) : groupes titrés (`.stat-group-title`) ; Générale : **Parties**
+  (Jouées, Gagnées, Perdues, Nulles, Joueurs différents), **Favori** ; Échecs : **Parties** (les mêmes, Adversaires
+  différents), **Pièces** (Prises, Perdues), **Équipe favorite** : **une seule carte** (`.stat-team`) avec le nom
+  (« Psy »), le nombre de parties et le **détail de ses Pokémon** (`Shared/ChessTeamList.razor`, la liste du choix des
+  équipes, sortie de `Chess.razor`).
+- **Tuiles** (`.stat-tiles`, toute la page) : 12rem chacune, en flex, **à la ligne seulement quand la place manque**
+  (demandé ensuite ; avant : une grille de 40rem au plus, trois par ligne).
+- Code : `Services/MiniGames.cs` (`MiniGamePlay` : jeu, adversaire ou null pour un invité, date, résultat ;
+  `MiniGameStats.From`, `MostPlayed` ; `MiniGameService` : général + échecs en une lecture). `ChessService.PlaysAsync`
+  (ses parties vues de son côté), `ChessStats.From`. Un nouveau mini-jeu : ses parties en `MiniGamePlay` ajoutées dans
+  `MiniGameService.StatsAsync`, et son bloc.
+- Prises : `ChessRecorder.RecordAsync` compte les `ChessStep` avec `CapturedId` par couleur (`WhiteCaptures`,
+  `BlackCaptures`). Migration `ChessCaptures` **écrite à la main** (pas de `dotnet ef` sur le poste) : designer = le
+  snapshot mis à jour ; `MigrationsTests.Migrations_MatchTheModel_AndChessCapturesKeepsOldGames` vérifie
+  `HasPendingModelChanges` (garde pour toute migration écrite à la main) et la partie déjà enregistrée.
+- Tests : `MiniGameStatsTests` (égalités, invités), `ChessHubTests.FinishedGames_AreRecordedAndCounted` (une prise
+  réelle), `StatisticsPageTests.MiniGames_GeneralAndChess` (quatorze tuiles, groupes, six Pokémon de l'équipe, notes, invité,
+  égalité d'équipes).

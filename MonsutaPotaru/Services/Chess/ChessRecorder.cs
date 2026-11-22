@@ -50,6 +50,8 @@ public sealed class ChessRecorder(ChessHub hub, IDbContextFactory<ApplicationDbC
                 WhiteTeam = game.White.Id,
                 BlackTeam = game.Black.Id,
                 Moves = game.Steps.Count,
+                WhiteCaptures = game.Steps.Count(s => s.CapturedId is not null && s.Color == ChessColor.White),
+                BlackCaptures = game.Steps.Count(s => s.CapturedId is not null && s.Color == ChessColor.Black),
                 End = game.End.ToString(),
                 WinnerId = game.Winner is { } winner ? session.Player(winner).UserId : null,
             };
@@ -60,18 +62,44 @@ public sealed class ChessRecorder(ChessHub hub, IDbContextFactory<ApplicationDbC
     }
 }
 
-/// <summary>Résultats des parties d'échecs d'un joueur (page « Statistiques »).</summary>
+/// <summary>Résultats des parties d'échecs d'un joueur (page « Statistiques », onglet Mini-jeux).</summary>
 public sealed class ChessService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
-    /// <summary>Victoires, défaites, nulles et adversaires différents de ce joueur aux échecs.</summary>
-    public async Task<BattleRecordStats> StatsAsync(string userId)
+    /// <summary>Ses parties, vues de son côté (adversaire, résultat, équipe, pièces prises et perdues).</summary>
+    public async Task<List<ChessPlay>> PlaysAsync(string userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var games = await db.ChessRecords.AsNoTracking()
+        var records = await db.ChessRecords.AsNoTracking()
             .Where(c => c.WhiteId == userId || c.BlackId == userId)
-            .Select(c => new { Opponent = c.WhiteId == userId ? c.BlackId : c.WhiteId, c.WinnerId })
             .ToListAsync();
-        return new(games.Count(g => g.WinnerId == userId), games.Count(g => g.WinnerId != null && g.WinnerId != userId),
-            games.Count(g => g.WinnerId == null), games.Select(g => g.Opponent).Distinct().Count());
+        return records.Select(c =>
+        {
+            var white = c.WhiteId == userId;
+            var opponent = white ? c.BlackId : c.WhiteId;
+            return new ChessPlay(
+                new MiniGamePlay(MiniGames.Chess, MiniGamePlay.AccountOrNull(opponent), c.At,
+                    c.WinnerId is null ? MiniGameOutcome.Draw : c.WinnerId == userId ? MiniGameOutcome.Won : MiniGameOutcome.Lost),
+                white ? c.WhiteTeam : c.BlackTeam, white ? c.WhiteCaptures : c.BlackCaptures, white ? c.BlackCaptures : c.WhiteCaptures);
+        }).ToList();
+    }
+
+    /// <summary>Ses statistiques aux échecs.</summary>
+    public async Task<ChessStats> StatsAsync(string userId) => ChessStats.From(await PlaysAsync(userId));
+}
+
+/// <summary>Une partie d'échecs vue par un joueur : la partie (résultat, adversaire), son équipe, ses prises et ses pertes.</summary>
+public sealed record ChessPlay(MiniGamePlay Play, string Team, int Taken, int Lost);
+
+/// <summary>
+/// Échecs, onglet Mini-jeux des statistiques : parties (comme le bloc « Générale »), pièces prises et perdues, équipe la
+/// plus jouée (à égalité : la plus récemment jouée ; null sans partie).
+/// </summary>
+public sealed record ChessStats(MiniGameStats Games, int PiecesTaken, int PiecesLost, ChessTeam? FavoriteTeam, int FavoriteTeamGames)
+{
+    public static ChessStats From(IReadOnlyList<ChessPlay> plays)
+    {
+        var favorite = MiniGameStats.MostPlayed(plays, p => p.Team, p => p.Play.At);
+        return new ChessStats(MiniGameStats.From(plays.Select(p => p.Play).ToList()), plays.Sum(p => p.Taken), plays.Sum(p => p.Lost),
+            favorite is { } f ? ChessTeams.Find(f.Key) : null, favorite?.Count ?? 0);
     }
 }

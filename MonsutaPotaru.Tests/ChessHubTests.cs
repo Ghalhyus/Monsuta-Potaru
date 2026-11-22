@@ -271,9 +271,14 @@ public sealed class ChessHubTests : IDisposable
                 (record.WhiteId, record.BlackId, record.WhiteTeam, record.BlackTeam, record.Moves, record.End, record.WinnerId));
         }
         var stats = new ChessService(_db.Factory);
-        Assert.Equal(new BattleRecordStats(1, 0, 0, 1), await stats.StatsAsync("sacha"));
-        Assert.Equal(new BattleRecordStats(0, 1, 0, 1), await stats.StatsAsync("ondine"));
-        Assert.Equal(new BattleRecordStats(0, 0, 0, 0), await stats.StatsAsync("pierre"));
+        async Task<(int, int, int, int, int, int, string?)> Counts(string userId)
+        {
+            var c = await stats.StatsAsync(userId);
+            return (c.Games.Won, c.Games.Lost, c.Games.Draws, c.Games.Players, c.PiecesTaken, c.PiecesLost, c.FavoriteTeam?.Id);
+        }
+        Assert.Equal((1, 0, 0, 1, 0, 0, "psy"), await Counts("sacha"));
+        Assert.Equal((0, 1, 0, 1, 0, 0, "feu"), await Counts("ondine"));
+        Assert.Equal((0, 0, 0, 0, 0, 0, null), await Counts("pierre"));
 
         // Partie publique contre un invité sans compte : comptée pour l'hôte (l'invité n'a pas de statistiques)
         var guestId = ChessHub.NewGuestId();
@@ -281,10 +286,14 @@ public sealed class ChessHubTests : IDisposable
         Assert.Null(_hub.JoinPublic(open.Code, new ChessParty(guestId, "Léo (invité)")).Error);
         Assert.Null(_hub.ChooseTeam(open, guestId, "feu"));
         Assert.Null(_hub.ChooseTeam(open, "sacha", "psy"));
+        // Tarsal (Psy) mange Salamèche (Feu) : une pièce prise par les blancs
+        Assert.Null(_hub.Play(open, "sacha", Move("e2", "e4")));
+        Assert.Null(_hub.Play(open, guestId, Move("d7", "d5")));
+        Assert.Null(_hub.Play(open, "sacha", Move("e4", "d5")));
         _hub.Forfeit(open, "sacha");
         await ChessRecorder.RecordAsync(_db.Factory, open, DateTime.UtcNow);
         using (var db = _db.NewContext())
-            Assert.Single(db.ChessRecords, r => r.BlackId == guestId && r.WinnerId == guestId);
-        Assert.Equal(new BattleRecordStats(1, 1, 0, 2), await stats.StatsAsync("sacha"));
+            Assert.Single(db.ChessRecords, r => r.BlackId == guestId && r.WinnerId == guestId && r.WhiteCaptures == 1 && r.BlackCaptures == 0);
+        Assert.Equal((1, 1, 0, 1, 1, 0, "psy"), await Counts("sacha")); // l'invité n'est pas un adversaire différent
     }
 }

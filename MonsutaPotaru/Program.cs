@@ -89,6 +89,7 @@ builder.Services.AddSingleton(sp => new BattleHub(sp.GetRequiredService<Showdown
     sp.GetRequiredService<ILogger<BattleHub>>())); // combats en cours, partagés entre les deux joueurs
 builder.Services.AddHostedService<BattleRecorder>(); // résultats des combats terminés (statistiques)
 builder.Services.AddScoped<ChessService>(); // résultats des parties d'échecs (statistiques)
+builder.Services.AddScoped<MiniGameService>(); // onglet Mini-jeux des statistiques (tous les mini-jeux, puis chacun)
 builder.Services.AddSingleton<ChessHub>(); // parties d'échecs en cours (Mini-jeux), partagées entre les deux joueurs
 builder.Services.AddHostedService<ChessRecorder>(); // résultats des parties d'échecs terminées (statistiques)
 builder.Services.AddSyncRateLimits(); // essais de codes de liaison 3DS

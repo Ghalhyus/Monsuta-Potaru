@@ -910,34 +910,19 @@ else
     /// </summary>
     private RenderFragment TeamList(ChessTeam team, ChessColor? color) => __builder =>
     {
-        <ul class="chess-team-list">
-            @foreach (var piece in PieceOrder)
-            {
-                var mon = team.Of(piece);
-                @* Le sprite (96 × 96) à 4rem : un pixel d'image par pixel d'écran à 150 % ; à côté, le nom en entier et le
-                   type, la pièce dessous *@
-                <li>
-                    <img src="@mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
-                    <div class="chess-mon">
-                        <div class="chess-mon-title">
-                            <span class="chess-mon-name">@mon.Name</span>
-                            <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
-                        </div>
-                        <div class="chess-mon-piece">
-                            <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
-                            <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
-                            @if (color is { } c && snapshot?.Position is { } position)
-                            {
-                                var ids = units.Where(u => u.Color == c && u.Piece == piece).Select(u => u.Id).ToHashSet();
-                                var onBoard = position.Board.Count(p => ids.Contains(p.Id));
-                                var ko = (c == ChessColor.White ? position.WhiteKo : position.BlackKo).Count(ids.Contains);
-                                <span class="chess-piece-count small text-muted">· @onBoard sur le plateau@(ko > 0 ? $" · {ko} K.O." : "")</span>
-                            }
-                        </div>
-                    </div>
-                </li>
-            }
-        </ul>
+        <ChessTeamList Team="team" Extra="@(color is { } c ? piece => PieceCount(c, piece) : null)" />
+    };
+
+    /// <summary>Pendant la partie : combien de pièces de ce camp sont sur le plateau, et combien sont K.O.</summary>
+    private RenderFragment PieceCount(ChessColor color, ChessPiece piece) => __builder =>
+    {
+        @if (snapshot?.Position is { } position)
+        {
+            var ids = units.Where(u => u.Color == color && u.Piece == piece).Select(u => u.Id).ToHashSet();
+            var onBoard = position.Board.Count(p => ids.Contains(p.Id));
+            var ko = (color == ChessColor.White ? position.WhiteKo : position.BlackKo).Count(ids.Contains);
+            <span class="chess-piece-count small text-muted">· @onBoard sur le plateau@(ko > 0 ? $" · {ko} K.O." : "")</span>
+        }
     };
 
     /// <summary>Les règles, dans l'aide des blocs « Nouvelle partie » et « Rejoindre une partie ».</summary>
@@ -993,9 +978,8 @@ else
     private string LoginLink => "Account/Login?ReturnUrl=" + Uri.EscapeDataString(
         "/mini-jeux/echecs" + (CodeFromLink is null ? "" : "?code=" + Uri.EscapeDataString(ChessHub.NormalizeCode(CodeFromLink))));
 
-    /// <summary>Ordre des pièces dans les listes et les tableaux : roi d'abord, pion à la fin.</summary>
-    private static readonly ChessPiece[] PieceOrder =
-        [ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn];
+    /// <summary>Ordre des pièces dans les tableaux de l'aide : celui des listes d'équipes.</summary>
+    private static readonly ChessPiece[] PieceOrder = ChessTeamList.Order;
 
     /// <summary>
     /// Fenêtre « Aide » : un tableau croisé, les Pokémon de <paramref name="attackers"/> en lignes, ceux de

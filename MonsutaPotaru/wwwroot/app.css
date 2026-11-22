@@ -785,8 +785,17 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
     .internal-trade-sticky { position: sticky; top: 3.5rem; z-index: 3; padding-top: .75rem; margin-top: -.75rem; background: var(--bs-body-bg); }
     [data-theme="ardoise"] .internal-trade-sticky { background: var(--ard-bg); }
 }
-.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1rem; max-width: 40rem; }
+/* Tuiles de 12rem côte à côte, à la ligne seulement quand la place manque (demande de l'utilisateur, 2026-11-22 ; avant :
+   trois au plus par ligne) */
+.stat-tiles { display: flex; flex-wrap: wrap; gap: 1rem; }
+.stat-tiles > .card { flex: 0 0 12rem; }
 .stat-value { font-size: 2rem; font-weight: 600; line-height: 1.2; }
+.stat-note { margin-top: .1rem; } /* précision sous une valeur (« 12 parties » sous le mini-jeu favori) */
+/* Onglet Mini-jeux : groupes d'un bloc (Parties, Pièces, Équipe favorite) ; l'équipe favorite, sa tuile puis ses Pokémon */
+.stat-group-title { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .6rem; }
+.stat-group-title:first-child { margin-top: 0; }
+.stat-team { max-width: 22rem; } /* une seule carte : le nom de l'équipe, son nombre de parties, puis ses six Pokémon */
+.stat-team .chess-team-list { margin-top: .75rem; }
 /* Statistiques des living dex : le mode, sa barre (moyenne), le nombre de living dex comptés. */
 .stat-bars { display: grid; grid-template-columns: auto minmax(8rem, 1fr) auto; align-items: center; gap: .6rem 1rem; max-width: 40rem; }
 .stat-bar-label { font-weight: 600; }

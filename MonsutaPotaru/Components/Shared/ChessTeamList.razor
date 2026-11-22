@@ -1,0 +1,35 @@
+@using MonsutaPotaru.Services
+@* Les Pokémon d'une équipe d'échecs, une ligne par pièce, du roi au pion : sprite (96 × 96) à 4rem, un pixel d'image par
+   pixel d'écran à 150 % ; à côté, le nom en entier et le type, la pièce dessous, puis ce que la page ajoute (Extra :
+   combien sur le plateau et K.O. pendant une partie). Choix des équipes, fenêtre « Pièces », statistiques. *@
+<ul class="chess-team-list">
+    @foreach (var piece in Order)
+    {
+        var mon = Team.Of(piece);
+        <li>
+            <img src="@mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+            <div class="chess-mon">
+                <div class="chess-mon-title">
+                    <span class="chess-mon-name">@mon.Name</span>
+                    <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+                </div>
+                <div class="chess-mon-piece">
+                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
+                    <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
+                    @Extra?.Invoke(piece)
+                </div>
+            </div>
+        </li>
+    }
+</ul>
+
+@code {
+    /// <summary>Ordre des pièces dans les listes et les tableaux : roi d'abord, pion à la fin.</summary>
+    public static readonly ChessPiece[] Order =
+        [ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn];
+
+    [Parameter, EditorRequired] public ChessTeam Team { get; set; } = default!;
+
+    /// <summary>Ajout après le nom de la pièce (rien par défaut).</summary>
+    [Parameter] public RenderFragment<ChessPiece>? Extra { get; set; }
+}

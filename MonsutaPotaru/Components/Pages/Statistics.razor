@@ -9,7 +9,7 @@
 @inject StatisticsService Stats
 @inject TradeService Trades
 @inject BattleService Battles
-@inject ChessService ChessStats
+@inject MiniGameService MiniGameStore
 @inject PlayerService Players
 @inject NavigationManager Navigation
 
@@ -36,7 +36,7 @@ else
     else
     {
         <PageHeader Title="Statistiques" Icon="bi-grid-nav-menu">
-            <Help>Ton argent, tes living dex, tes rubans, tes complétions, tes échanges, tes combats et tes parties d'échecs.</Help>
+            <Help>Ton argent, tes living dex, tes rubans, tes complétions, tes échanges, tes combats et tes parties de mini-jeux.</Help>
         </PageHeader>
     }
 
@@ -119,6 +119,73 @@ else
                     }
                     break;
 
+                case StatsTab.MiniGames:
+                    @if (miniGames is not { } games)
+                    {
+                        <Block Title="Générale">
+                            <p class="text-muted">Chargement…</p>
+                        </Block>
+                    }
+                    else
+                    {
+                        @* Tous les mini-jeux (les échecs pour l'instant), puis un bloc par mini-jeu, en groupes : parties,
+                           puis ce qui est propre au jeu (pièces, équipe favorite et ses Pokémon) *@
+                        <Block Title="Générale">
+                            <h3 class="stat-group-title">Parties</h3>
+                            <div class="stat-tiles">
+                                @GameTiles(games.General, "Joueurs différents")
+                            </div>
+                            <h3 class="stat-group-title">Favori</h3>
+                            <div class="stat-tiles">
+                                @Tile("Mini-jeu le plus joué", games.General.Favorite ?? "—", games.General.Favorite is null ? null : Games(games.General.FavoriteGames))
+                            </div>
+                            @if (games.General.Total == 0 && !Visitor)
+                            {
+                                <p class="text-muted small mt-3 mb-0">Aucune partie pour l'instant : essaie les <a href="mini-jeux/echecs">Échecs</a>.</p>
+                            }
+                        </Block>
+
+                        <Block Title="Échecs">
+                            @if (games.Chess.Games.Total == 0 && !Visitor)
+                            {
+                                <p class="text-muted small">Aucune partie pour l'instant : invite un ami, ou crée une partie publique, dans <a href="mini-jeux/echecs">Échecs</a>.</p>
+                            }
+                            <h3 class="stat-group-title">Parties</h3>
+                            <div class="stat-tiles">
+                                @GameTiles(games.Chess.Games, "Adversaires différents")
+                            </div>
+                            <p class="text-muted small mt-2 mb-0">Les invités sans compte des parties publiques ne comptent pas dans les adversaires différents.</p>
+
+                            <h3 class="stat-group-title">Pièces</h3>
+                            <div class="stat-tiles">
+                                @Tile("Prises", games.Chess.PiecesTaken.ToString())
+                                @Tile("Perdues", games.Chess.PiecesLost.ToString())
+                            </div>
+                            <p class="text-muted small mt-2 mb-0">
+                                Prises : les Pokémon adverses mangés par @(Visitor ? "ses" : "tes") pièces ; perdues : les @(Visitor ? "siens" : "tiens")
+                                mangés. L'échange d'un pion au bout du plateau n'en est pas une.
+                            </p>
+
+                            <h3 class="stat-group-title">Équipe favorite</h3>
+                            @if (games.Chess.FavoriteTeam is { } team)
+                            {
+                                @* Une seule carte : l'équipe la plus jouée, puis le détail de ses Pokémon (comme au choix des équipes) *@
+                                <div class="card stat-team">
+                                    <div class="card-body">
+                                        <div class="stat-value">@team.ShortName</div>
+                                        <div class="small text-muted stat-note">@Games(games.Chess.FavoriteTeamGames)</div>
+                                        <ChessTeamList Team="team" />
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted mb-0">—</p>
+                            }
+                        </Block>
+                    }
+                    break;
+
                 default:
                     <Block Title="Échange">
                         @if (trades is null)
@@ -187,46 +254,6 @@ else
                             }
                         }
                     </Block>
-
-                    <Block Title="Échecs">
-                        @if (chess is null)
-                        {
-                            <p class="text-muted">Chargement…</p>
-                        }
-                        else
-                        {
-                            <div class="stat-tiles">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="small text-muted">Victoires</div>
-                                        <div class="stat-value">@chess.Won</div>
-                                    </div>
-                                </div>
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="small text-muted">Défaites</div>
-                                        <div class="stat-value">@chess.Lost</div>
-                                    </div>
-                                </div>
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="small text-muted">Parties nulles</div>
-                                        <div class="stat-value">@chess.Draws</div>
-                                    </div>
-                                </div>
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="small text-muted">Adversaires différents</div>
-                                        <div class="stat-value">@chess.Opponents</div>
-                                    </div>
-                                </div>
-                            </div>
-                            @if (chess.Total == 0 && !Visitor)
-                            {
-                                <p class="text-muted small mt-3 mb-0">Aucune partie pour l'instant : invite un ami dans <a href="mini-jeux/echecs">Échecs</a>.</p>
-                            }
-                        }
-                    </Block>
                     break;
             }
         </div>
@@ -235,17 +262,19 @@ else
 
 @code {
     /// <summary>Onglets de la page, dans l'ordre affiché.</summary>
-    public enum StatsTab { General, Challenges, Multiplayer }
+    public enum StatsTab { General, Challenges, Multiplayer, MiniGames }
 
     /// <summary>Onglet et son titre ; le nom dans l'adresse vient de <see cref="TabSlug"/>.</summary>
     private static readonly (StatsTab Tab, string Title)[] Tabs =
-        [(StatsTab.General, "Générale"), (StatsTab.Challenges, "Défis"), (StatsTab.Multiplayer, "Multijoueurs")];
+        [(StatsTab.General, "Générale"), (StatsTab.Challenges, "Défis"), (StatsTab.Multiplayer, "Multijoueurs"),
+            (StatsTab.MiniGames, "Mini-jeux")];
 
     /// <summary>Nom de l'onglet dans l'adresse (« ?onglet=defis ») ; rien pour « Générale », l'onglet par défaut.</summary>
     public static string? TabSlug(StatsTab tab) => tab switch
     {
         StatsTab.Challenges => "defis",
         StatsTab.Multiplayer => "multijoueurs",
+        StatsTab.MiniGames => "mini-jeux",
         _ => null,
     };
 
@@ -254,6 +283,7 @@ else
     {
         "defis" => StatsTab.Challenges,
         "multijoueurs" => StatsTab.Multiplayer,
+        "mini-jeux" => StatsTab.MiniGames,
         _ => StatsTab.General,
     };
 
@@ -277,7 +307,7 @@ else
     private CompletionStats? completions;
     private TradeStats? trades;
     private BattleRecordStats? battles;
-    private BattleRecordStats? chess;
+    private MiniGameOverview? miniGames;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -307,7 +337,7 @@ else
             completions = null;
             trades = null;
             battles = null;
-            chess = null;
+            miniGames = null;
         }
         switch (tab)
         {
@@ -319,13 +349,43 @@ else
                 ribbons ??= await Stats.RibbonsAsync(userId);
                 completions ??= await Stats.CompletionsAsync(userId);
                 break;
+            case StatsTab.MiniGames:
+                miniGames ??= await MiniGameStore.StatsAsync(userId);
+                break;
             default:
                 trades ??= await Trades.StatsAsync(userId);
                 battles ??= await Battles.StatsAsync(userId);
-                chess ??= await ChessStats.StatsAsync(userId);
                 break;
         }
     }
+
+    /// <summary>Une tuile : intitulé, valeur, et une précision dessous (« 12 parties »).</summary>
+    private static RenderFragment Tile(string label, string value, string? note = null) => __builder =>
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="small text-muted">@label</div>
+                <div class="stat-value">@value</div>
+                @if (note is not null)
+                {
+                    <div class="small text-muted stat-note">@note</div>
+                }
+            </div>
+        </div>
+    };
+
+    /// <summary>Groupe « Parties » des blocs de l'onglet Mini-jeux : jouées, gagnées, perdues, nulles, adversaires.</summary>
+    private static RenderFragment GameTiles(MiniGameStats stats, string opponents) => __builder =>
+    {
+        @Tile("Jouées", stats.Total.ToString())
+        @Tile("Gagnées", stats.Won.ToString())
+        @Tile("Perdues", stats.Lost.ToString())
+        @Tile("Nulles", stats.Draws.ToString())
+        @Tile(opponents, stats.Players.ToString())
+    };
+
+    /// <summary>« 1 partie », « 12 parties ».</summary>
+    private static string Games(int count) => count == 1 ? "1 partie" : $"{count} parties";
 
     private string TabHref(StatsTab value) => Navigation.GetUriWithQueryParameter("onglet", TabSlug(value));
 }

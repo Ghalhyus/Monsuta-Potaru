@@ -26,6 +26,9 @@ public sealed record ChessTeam(string Id, string Name, IReadOnlyList<ChessMon> M
 {
     public ChessMon Of(ChessPiece piece) => Members.First(m => m.Piece == piece);
 
+    /// <summary>Nom sans « Équipe » (« Feu ») : tuile « Équipe favorite » des statistiques.</summary>
+    public string ShortName => Name.Replace("Équipe ", "", StringComparison.Ordinal);
+
     /// <summary>Nom dans une phrase (« l'équipe Feu »).</summary>
     public string InSentence => Name.Replace("Équipe", "équipe", StringComparison.Ordinal);
 }

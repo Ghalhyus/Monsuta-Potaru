@@ -36,6 +36,28 @@ public sealed class MigrationsTests : IDisposable
             VALUES ({id}, {userName}, 0, {phone}, {phone is not null}, {twoFactor}, 1, 0)
             """);
 
+    /// <summary>
+    /// Les migrations décrivent tout le modèle (une migration écrite à la main, sans <c>dotnet ef</c>, ne doit rien
+    /// oublier) ; la dernière, <c>ChessCaptures</c>, garde les parties déjà enregistrées, à 0 pièce prise.
+    /// </summary>
+    [Fact]
+    public async Task Migrations_MatchTheModel_AndChessCapturesKeepsOldGames()
+    {
+        await using var db = NewContext();
+        Assert.False(db.Database.HasPendingModelChanges());
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("ChessRecords");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO ChessRecords (At, WhiteId, BlackId, WhiteTeam, BlackTeam, Moves, "End", WinnerId)
+            VALUES ('2026-11-22 12:00:00', 'sacha', 'ondine', 'psy', 'feu', 12, 'Forfeit', 'sacha')
+            """);
+        await migrator.MigrateAsync();
+        var old = await db.ChessRecords.SingleAsync();
+        Assert.Equal((12, 0, 0), (old.Moves, old.WhiteCaptures, old.BlackCaptures));
+        await migrator.MigrateAsync("ChessRecords"); // retour
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM ChessRecords").SingleAsync());
+    }
+
     [Fact]
     public async Task JournalFileNames_AddsTheFileName_OfSavesThatStillExist()
     {

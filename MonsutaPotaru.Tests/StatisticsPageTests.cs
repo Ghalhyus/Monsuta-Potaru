@@ -52,7 +52,8 @@ public sealed class StatisticsPageTests : PageTestContext
         Assert.Contains("ton porte-monnaie", cut.Text());
         // Onglets : Générale actif, les autres par l'adresse.
         var tabs = cut.FindAll(".stats-tabs a");
-        Assert.Equal(["Générale", "Défis", "Multijoueurs"], tabs.Select(t => t.TextContent));
+        Assert.Equal(["Générale", "Défis", "Multijoueurs", "Mini-jeux"], tabs.Select(t => t.TextContent));
+        Assert.EndsWith("statistiques?onglet=mini-jeux", tabs[3].GetAttribute("href"));
         Assert.Equal("page", tabs[0].GetAttribute("aria-current"));
         Assert.EndsWith("statistiques?onglet=defis", tabs[1].GetAttribute("href"));
         Assert.DoesNotContain("onglet", tabs[0].GetAttribute("href"));
@@ -123,12 +124,12 @@ public sealed class StatisticsPageTests : PageTestContext
     }
 
     [Fact]
-    public void Multiplayer_TradesBattlesAndChess()
+    public void Multiplayer_TradesAndBattles()
     {
         var empty = Open("?onglet=multijoueurs");
         empty.WaitForText("Aucun échange pour l'instant");
         Assert.Contains("Aucun combat pour l'instant", empty.Text());
-        Assert.Contains("Aucune partie pour l'instant", empty.Text());
+        Assert.DoesNotContain("Échecs", empty.Text()); // dans l'onglet Mini-jeux
 
         using (var db = Db.NewContext())
         {
@@ -140,18 +141,62 @@ public sealed class StatisticsPageTests : PageTestContext
                 new BattleRecord { At = at, FirstId = "sacha", SecondId = "ondine", Format = "f", WinnerId = "sacha" },
                 new BattleRecord { At = at, FirstId = "pierre", SecondId = "sacha", Format = "f", WinnerId = "pierre" },
                 new BattleRecord { At = at, FirstId = "pierre", SecondId = "sacha", Format = "f" });
-            db.ChessRecords.AddRange(
-                new ChessRecord { At = at, WhiteId = "sacha", BlackId = "ondine", WhiteTeam = "psy", BlackTeam = "feu", End = "Checkmate", WinnerId = "sacha" },
-                new ChessRecord { At = at, WhiteId = "ondine", BlackId = "sacha", WhiteTeam = "psy", BlackTeam = "feu", End = "Stalemate" });
             db.SaveChanges();
         }
 
         var cut = Open("?onglet=multijoueurs");
 
-        cut.WaitForAssertion(() => Assert.Equal(10, cut.FindAll(".stat-value").Count));
-        // Échanges réussis, partenaires ; combats puis échecs : victoires, défaites, nuls, adversaires.
-        Assert.Equal(["2", "1", "1", "1", "1", "2", "1", "0", "1", "1"], cut.FindAll(".stat-value").Select(v => v.TextContent));
+        cut.WaitForAssertion(() => Assert.Equal(6, cut.FindAll(".stat-value").Count));
+        // Échanges réussis, partenaires ; combats : victoires, défaites, nuls, adversaires.
+        Assert.Equal(["2", "1", "1", "1", "1", "2"], cut.FindAll(".stat-value").Select(v => v.TextContent));
         Assert.DoesNotContain("pour l'instant", cut.Text());
+    }
+
+    [Fact]
+    public void MiniGames_GeneralAndChess()
+    {
+        var empty = Open("?onglet=mini-jeux");
+        empty.WaitForText("Aucune partie pour l'instant : essaie les Échecs.");
+        Assert.Contains("invite un ami, ou crée une partie publique", empty.Text());
+        Assert.Equal(["0", "0", "0", "0", "0", "—", "0", "0", "0", "0", "0", "0", "0"],
+            empty.FindAll(".stat-value").Select(v => v.TextContent));
+        Assert.Empty(empty.FindAll(".stat-team")); // pas d'équipe favorite
+
+        using (var db = Db.NewContext())
+        {
+            var at = DateTime.UtcNow;
+            db.ChessRecords.AddRange(
+                // Victoire en Psy (3 pièces prises, 1 perdue), nulle en Feu (chez les noirs : 2 prises, 4 perdues)
+                new ChessRecord { At = at.AddHours(-3), WhiteId = "sacha", BlackId = "ondine", WhiteTeam = "psy", BlackTeam = "feu",
+                    End = "Checkmate", WinnerId = "sacha", WhiteCaptures = 3, BlackCaptures = 1 },
+                new ChessRecord { At = at.AddHours(-2), WhiteId = "ondine", BlackId = "sacha", WhiteTeam = "psy", BlackTeam = "feu",
+                    End = "Stalemate", WhiteCaptures = 4, BlackCaptures = 2 },
+                // Défaite en Feu contre un invité sans compte, la plus récente : à égalité (2 parties), Feu l'emporte
+                new ChessRecord { At = at.AddHours(-1), WhiteId = "sacha", BlackId = ChessHub.GuestIdPrefix + "abc", WhiteTeam = "feu",
+                    BlackTeam = "psy", End = "Forfeit", WinnerId = ChessHub.GuestIdPrefix + "abc" },
+                new ChessRecord { At = at.AddHours(-4), WhiteId = "sacha", BlackId = "pierre", WhiteTeam = "psy", BlackTeam = "feu",
+                    End = "Timeout", WinnerId = "pierre" },
+                new ChessRecord { At = at, WhiteId = "ondine", BlackId = "pierre", WhiteTeam = "psy", BlackTeam = "feu", End = "Checkmate" }); // pas la sienne
+            db.SaveChanges();
+        }
+
+        var cut = Open("?onglet=mini-jeux");
+
+        cut.WaitForAssertion(() => Assert.Equal(14, cut.FindAll(".stat-value").Count));
+        // Générale : jouées, victoires, défaites, nulles, joueurs (comptes), favori ; Échecs : les mêmes, prises, perdues, équipe.
+        Assert.Equal(["4", "1", "2", "1", "2", "Échecs", "4", "1", "2", "1", "2", "5", "5", "Feu"],
+            cut.FindAll(".stat-value").Select(v => v.TextContent));
+        Assert.Equal(["4 parties", "2 parties"], cut.FindAll(".stat-note").Select(n => n.TextContent));
+        // Groupes : Parties, Favori ; Parties, Pièces, Équipe favorite avec ses six Pokémon (roi d'abord)
+        Assert.Equal(["Parties", "Favori", "Parties", "Pièces", "Équipe favorite"], cut.FindAll(".stat-group-title").Select(t => t.TextContent));
+        Assert.Equal(["Jouées", "Gagnées", "Perdues", "Nulles", "Joueurs différents"],
+            cut.FindAll(".stat-tiles")[0].QuerySelectorAll(".card .small.text-muted").Select(l => l.TextContent));
+        var members = cut.FindAll(".stat-team li"); // la carte de l'équipe : nom, parties, puis ses Pokémon
+        Assert.Equal(6, members.Count);
+        Assert.Contains("Dracaufeu", members[0].TextContent);
+        Assert.Contains("Roi", members[0].TextContent);
+        Assert.DoesNotContain("pour l'instant", cut.Text());
+        Assert.Contains("mangés par tes pièces", cut.Text());
     }
 
     [Fact]
@@ -180,6 +225,11 @@ public sealed class StatisticsPageTests : PageTestContext
         var multiplayer = Open("?onglet=multijoueurs", "ondine");
         multiplayer.WaitForText("Échanges réussis");
         Assert.DoesNotContain("pour l'instant", multiplayer.Text());
+
+        var miniGames = Open("?onglet=mini-jeux", "ondine");
+        miniGames.WaitForText("Équipe favorite");
+        Assert.Contains("mangés par ses pièces", miniGames.Text());
+        Assert.DoesNotContain("pour l'instant", miniGames.Text());
 
         // Page décochée dans « Visibilité » : comme un joueur inconnu.
         UpdateUser("ondine", u => u.PublicPages = PublicPages.All & ~PublicPages.Statistics);

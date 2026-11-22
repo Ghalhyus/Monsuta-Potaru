@@ -22,6 +22,13 @@ public class ChessRecord
     /// <summary>Coups joués (tours bonus et passes compris).</summary>
     public int Moves { get; set; }
 
+    /// <summary>
+    /// Pièces mangées par les blancs, par les noirs (roi et prise en passant compris ; l'échange d'un pion au bout du
+    /// plateau n'en est pas une). 0 pour les parties d'avant la migration <c>ChessCaptures</c> (2026-11-22).
+    /// </summary>
+    public int WhiteCaptures { get; set; }
+    public int BlackCaptures { get; set; }
+
     /// <summary>Fin de la partie (<c>ChessEnd</c> : « Checkmate », « KingEaten », « Timeout »...).</summary>
     public string End { get; set; } = "";
 
