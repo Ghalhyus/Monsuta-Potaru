@@ -1388,7 +1388,6 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 /* Choix des équipes : trois cartes côte à côte */
 .chess-teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .75rem; }
 .chess-team.chosen { box-shadow: 0 0 0 2px #198754; }
-.chess-team.taken { opacity: .6; }
 /* Colonne des images à la largeur de la plus large (deux pions Nidoran : 8rem), commune aux lignes (sous-grille). */
 .chess-team-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto 1fr; column-gap: .5rem; }
 .chess-team-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; padding: .15rem 0; }

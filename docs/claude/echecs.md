@@ -4,15 +4,16 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 `Services/Chess/ChessGame.cs`, types `ChessTypes.cs`, équipes `ChessTeams.cs`, parties en direct `ChessHub.cs`, résultats
 `ChessRecorder.cs` (+ `ChessService`, statistiques), plateau `wwwroot/js/echecs.js` (Phaser). Tests : `ChessGameTests`
 (règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
-(`docs/claude/statistiques.md`), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Aide », case des
-Pokémon au repos).
+(`docs/claude/statistiques.md`), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
+pièces », case « Désactiver les animations », cadres de la pièce choisie, même équipe).
 
 ## Choix de l'utilisateur (2026-11-22)
 - Demande d'origine : un seul type par Pokémon ; super efficace = la pièce rejoue ; neutre = elle mange ; pas très
   efficace ou sans effet = elle ne mange pas ; les pièces des échecs ; le Pokémon **marche** jusqu'à sa case, attaque s'il
   mange, l'autre joue sa blessure ; invitation acceptée comme les échanges et les combats ; chaque joueur choisit une
-  équipe, **pas la même** (la partie bloquerait), et peut **revenir sur son choix** tant que l'autre n'a pas choisi
-  la sienne (`ChessHub.ClearTeam`, bouton « Changer d'équipe », demandé le 2026-11-22) ; l'invité joue les noirs ; équipes par défaut seulement (Psy, Feu,
+  équipe (d'abord **pas la même** ; depuis, à l'aveugle et la même permise : voir « Choix à l'aveugle ») et peut
+  **revenir sur son choix** tant que l'autre n'a pas choisi la sienne (`ChessHub.ClearTeam`, bouton « Changer
+  d'équipe », demandé le 2026-11-22) ; l'invité joue les noirs ; équipes par défaut seulement (Psy, Feu,
   Électrik : `ChessTeams.All`, types choisis par lui ; quatre autres ajoutées ensuite, voir plus bas, Motisma Lavage = forme 2, Raichu d'Alola = forme 1). Espèces
   vérifiées d'après les noms français de PKHeX (`GameInfo.GetStrings("fr").specieslist`) : Kaorine = 344, Rhinolove =
   528, Boumata = 776 (la première version avait pris Tiboudet, Chovsourir et Draïeul).
@@ -34,6 +35,46 @@ Pokémon au repos).
   pas ; deux rois seuls = nulle ; pas de nulle par répétition ni par 50 coups ; une partie à la fois par joueur ; résultats
   en base et bloc « Échecs » des statistiques ; mes Pokémon tournés vers l'adversaire (on voit leur dos, comme les siens
   en combat) ; pas de musique.
+
+## Choix à l'aveugle, même équipe, noms des équipes (demandés le 2026-11-22)
+- **Noms** : d'après le roi (`ChessTeam.Name` calculé : « Équipe Nidoking ») ; `ShortName` = le roi (« Équipe favorite »
+  des statistiques). Les identifiants (`psy`, `feu`…) ne changent pas (`ChessRecords.WhiteTeam`) : les parties déjà
+  enregistrées prennent le nouveau nom. Choix de l'utilisateur : le type du thème n'est plus rappelé nulle part.
+- **À l'aveugle** : la page ne lit plus l'équipe de l'autre pendant le choix (`TakenBy` supprimé) mais
+  `ChessSession.TeamChoice` (`ChessTeamChoice` : la sienne, `OtherChose` sans dire laquelle, `Same`, `IKeep`,
+  `OtherKeeps`, `OtherChanging`). Choix de l'utilisateur : « X a choisi son équipe » affiché.
+- **La même** : `ChooseTeam` ne la refuse plus ; deux équipes différentes, la partie commence (`Start`) ; la même, la
+  partie attend. Chacun « Garder l'équipe … » (`KeepTeam` ; les deux : `Start`) ou « Changer d'équipe » (`ClearTeam`).
+  Celui qui change d'une même équipe est noté (`ChangingId`) : l'autre lit « X change d'équipe : tu peux garder la
+  tienne, ou en changer aussi » (le simple « Changer d'équipe » d'avant lui suffit, l'autre n'ayant plus d'équipe) ;
+  si l'autre change aussi, ou que celui qui changeait rechoisit, `ChangingId` s'efface. Choisir ou changer remet les
+  deux « garder » à faux (même équipe reprise : on redemande aux deux).
+- **Partie à même équipe** (choix de l'utilisateur) : les noirs en **chromatique** (`ChessGame.SameTeams`,
+  `ChessUnit.Shiny`, posé par `NewUnit` ; `ChessUnit.SpriteUrl` / `DonjonFolder` ; `ChessMon.SpriteUrlOf` /
+  `DonjonFolderOf`) sur le plateau, chez les K.O., dans « Pièces » (`ChessTeamList Shiny`) et la table de type
+  (`HelpImages`). Seulement dans ces parties : les autres ne changent pas. Tous les Pokémon des équipes ont un dossier
+  Donjon chromatique (`…/0000/0001/` ou `…/<forme>/0001/`) **sauf Roserade** (407) : `DonjonFolder` retombe sur
+  l'ordinaire ; son image fixe chromatique existe. Piège signalé aux joueurs : des Pokémon du même type ne se mangent
+  souvent pas (pions face à face, les deux rois).
+
+## Pièce choisie : cadres, croix, aperçu (demandés le 2026-11-22)
+- `ChessOptions.Matchups` (`ChessGame.Matchups`) : toutes les pièces adverses du plateau, même hors de portée, d'efficacité
+  ≠ 1. Choix de l'utilisateur : **vert** = super efficace (> 1), **rouge** = elle ne peut pas la manger (< 1), neutres sans
+  cadre ; vert même pendant le tour bonus (c'est le type qui compte, pas le tour bonus). Cadre de 2 px (`frame` dans
+  `drawMarks`), sous les coins des prises.
+- **Croix rouge** : sur les pièces de `Blocked` (atteintes mais pas mangeables), à la place de la petite croix grise ; dès
+  la sélection ; dessinée dans un second `Graphics` (`crosses`, profondeur 50) **par-dessus** les sprites (profondeur 10 +
+  y), bord sombre de 4 px et cœur rouge de 2 px en diagonale.
+- **Aperçu pendant le tour adverse** (choix de l'utilisateur) : `CanPreview` (page) ; `ChessSession.Options` rend les
+  options d'une pièce du joueur même hors de son tour : cadres (`Matchups`) et croix (`Blocked`, qui ne dépend pas du
+  tour), mais **ni cases ni échange de pion** (le 2026-11-23, l'utilisateur ne voulait pas de points là où on ne peut
+  pas jouer ; la première version montrait les cases qu'elle atteindrait, `PreviewFrom`, supprimée). Le texte ne dit
+  donc pas « ne peut pas bouger » en aperçu (`Select`). Rien ne s'y joue : `Preview` sélectionne, explique
+  une prise impossible, ou efface ; `Play` revérifie le tour. `PlayAsync` efface la sélection quand l'autre joue ; la fin
+  de la partie aussi (`OnSessionChanged`). Texte : « Aperçu (au tour de X) : … », puis la légende des marques présentes
+  (`MatchupLegend`).
+- Boutons « Pièces » et « Table de type des pièces » (ancien « Aide ») en `btn-primary` : la couleur principale du thème
+  (bleu, orange avec Ardoise), choix de l'utilisateur ; « Abandonner » reste en contour.
 
 ## Équipes Poison, Eau, Plante, Sol (ajoutées le 2026-11-22)
 - Composition et types donnés par l'utilisateur (`ChessTeams.All`) ; noms corrigés d'après PKHeX : **Roserade** (sans
@@ -143,8 +184,8 @@ Pokémon au repos).
   image/s et la marche ne tient pas dans `MAX_PLAY`.
 - Quitter la page (ou la recharger) pendant la partie = défaite (`Dispose` → `Leave`), comme les combats.
 
-## Fenêtre « Aide » (demandée le 2026-11-22)
-- Bouton « Aide » à côté de « Pièces » ; fenêtre du même genre (fond grisé). Choix de l'utilisateur : **deux tableaux
+## Fenêtre « Table de type des pièces » (demandée le 2026-11-22, d'abord « Aide »)
+- Bouton « Table de type des pièces » à côté de « Pièces » ; fenêtre du même genre (fond grisé). Choix de l'utilisateur : **deux tableaux
   croisés** (« Tes Pokémon contre les siens », « Ceux de <pseudo> contre les tiens » : les menaces), marques **×2** (mange
   et rejoue), **✓** (mange), **✗** (ne mange pas, sans distinguer « pas très efficace » de « sans effet ») ; en têtes
   l'image à 4rem, le nom, le type, la pièce. Une ligne (colonne) par pièce : les huit pions une fois.
@@ -155,8 +196,9 @@ Pokémon au repos).
   tableau ne tenait pas en hauteur.
 
 ## Pokémon au repos (demandé le 2026-11-22)
-- Case « Animer les Pokémon au repos » (`#chess-idle`) dans `.chess-side`, sous les boutons. Décochée : les pièces du
-  plateau en état `idle` et les K.O. en état `sleep` restent sur la première image (`tick` remet `frame` à 0), **sauf
+- Case « Désactiver les animations » (`#chess-idle` ; d'abord « Animer les Pokémon au repos », sens inverse : renommée
+  à la demande de l'utilisateur, elle n'arrête toujours que le repos) dans `.chess-side`, sous les boutons. Cochée : les
+  pièces du plateau en état `idle` et les K.O. en état `sleep` restent sur la première image (`tick` remet `frame` à 0), **sauf
   la pièce sélectionnée** (son numéro retrouvé par `marks.selected` dans `position.board` : la sélection repart du début
   de l'animation). Marche, attaque, blessure toujours animées. Les K.O. dormaient d'abord toujours (premier choix de
   l'utilisateur) ; figés aussi depuis, à sa demande, le même jour.

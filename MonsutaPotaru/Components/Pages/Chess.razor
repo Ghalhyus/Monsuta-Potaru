@@ -14,10 +14,10 @@
 @* Mini-jeux → Échecs : échecs Pokémon en direct (règles : ChessGame). L'hôte invite un ami, ou crée une partie publique
    dont il donne le code (8 caractères) ; l'ami accepte, ou l'adversaire saisit le code : avec un compte, ou sans (page
    ouverte à tous, mais un visiteur sans compte n'y voit que « Rejoindre une partie », sous un prénom) ; chacun prend une
-   équipe (pas la même) ; l'hôte joue les blancs. Le plateau est dessiné
+   équipe sans voir celle de l'autre (la même : chacun la garde ou en change) ; l'hôte joue les blancs. Le plateau est dessiné
    et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
    relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Les Pokémon au repos
-   peuvent rester figés (préférence du compte, case de la page) : seule la pièce choisie s'anime. Quitter la page
+   peuvent rester figés (préférence du compte, case « Désactiver les animations ») : seule la pièce choisie s'anime. Quitter la page
    pendant la partie demande confirmation, puis fait perdre. *@
 <NavigationLock ConfirmExternalNavigation="InGame" OnBeforeInternalNavigation="BeforeLeaving" />
 
@@ -72,39 +72,72 @@ else
                     break;
 
                 case ChessStage.TeamChoice:
-                    var mine = s.TeamOf(userId);
-                    var taken = s.TakenBy(userId);
+                    @* À l'aveugle : on ne voit pas l'équipe de l'autre (seulement s'il a choisi) ; la même prise par les
+                       deux : chacun la garde ou en change *@
+                    var choice = s.TeamChoice(userId);
+                    var mine = choice.Mine;
+                    @if (choice.Same is { } same)
+                    {
+                        <div class="alert alert-warning chess-same-team">
+                            <p class="mb-2"><strong>Vous avez pris la même équipe, @other.Pseudo et toi : l'@same.InSentence.</strong></p>
+                            <p class="small mb-2">
+                                Garde-la ou change d'équipe. Si vous la gardez tous les deux, la partie se joue avec les mêmes
+                                Pokémon des deux côtés (ceux des noirs en chromatique) : des Pokémon du même type ne se mangent
+                                souvent pas entre eux.
+                            </p>
+                            @if (choice.IKeep)
+                            {
+                                <p class="small mb-2 chess-kept">Tu la gardes. En attente de la réponse de @other.Pseudo…</p>
+                            }
+                            else if (choice.OtherKeeps)
+                            {
+                                <p class="small mb-2 chess-other-kept">@other.Pseudo la garde.</p>
+                            }
+                            <div class="d-flex flex-wrap gap-2">
+                                @if (!choice.IKeep)
+                                {
+                                    <button type="button" class="btn btn-primary btn-sm chess-keep-team" disabled="@busy" @onclick="KeepTeam">Garder l'@same.InSentence</button>
+                                }
+                                <button type="button" class="btn btn-outline-secondary btn-sm chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
+                            </div>
+                        </div>
+                        break;
+                    }
                     @if (mine is not null)
                     {
                         <p class="mb-1">Tu as choisi l'@mine.InSentence. En attente de l'équipe de @other.Pseudo…</p>
+                        @if (choice.OtherChanging)
+                        {
+                            <p class="small mb-1 chess-other-changing">@other.Pseudo change d'équipe : tu peux garder la tienne, ou en changer aussi.</p>
+                        }
                         <button type="button" class="btn btn-outline-secondary btn-sm mb-3 chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
                     }
                     else
                     {
-                        <p class="small text-muted">Choisis ton équipe : un Pokémon par pièce, chacun avec un seul type. Tu pourras en changer tant que @other.Pseudo n'a pas choisi la sienne.</p>
+                        <p class="small text-muted">
+                            Choisis ton équipe : un Pokémon par pièce, chacun avec un seul type. Tu ne verras celle de @other.Pseudo
+                            qu'une fois vos deux équipes choisies, et tu pourras changer la tienne tant que @other.Pseudo n'a pas choisi.
+                        </p>
+                        @if (choice.OtherChose)
+                        {
+                            <p class="small mb-2 chess-other-chose">@other.Pseudo a choisi son équipe.</p>
+                        }
                     }
                     <div class="chess-teams">
                         @foreach (var team in ChessTeams.All)
                         {
                             var t = team;
-                            var isTaken = taken?.Id == t.Id;
-                            <div class="chess-team card @(mine?.Id == t.Id ? "chosen" : "") @(isTaken ? "taken" : "")">
+                            <div class="chess-team card @(mine?.Id == t.Id ? "chosen" : "")">
                                 <div class="card-body">
                                     <h3 class="h6">@t.Name</h3>
                                     @TeamList(t, null)
                                     @if (mine is null)
                                     {
-                                        <button type="button" class="btn btn-primary btn-sm mt-2" disabled="@(isTaken || busy)" @onclick="() => ChooseTeam(t)">
-                                            @(isTaken ? $"Prise par {other.Pseudo}" : "Choisir cette équipe")
-                                        </button>
+                                        <button type="button" class="btn btn-primary btn-sm mt-2" disabled="@busy" @onclick="() => ChooseTeam(t)">Choisir cette équipe</button>
                                     }
                                     else if (mine.Id == t.Id)
                                     {
                                         <span class="badge text-bg-success mt-2">Ton équipe</span>
-                                    }
-                                    else if (isTaken)
-                                    {
-                                        <span class="badge text-bg-secondary mt-2">Équipe de @other.Pseudo</span>
                                     }
                                 </div>
                             </div>
@@ -125,8 +158,9 @@ else
                             <h2 class="block-title h5 mb-1">Partie contre @other.Pseudo</h2>
                             <p class="small text-muted mb-2">@SideLine(s)</p>
                             <div class="chess-side-buttons">
-                                <button type="button" class="btn btn-sm btn-outline-secondary chess-pieces-button" @onclick="() => showPieces = true">Pièces</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary chess-help-button" @onclick="() => showHelp = true">Aide</button>
+                                @* « Pièces » et la table de type dans la couleur principale du thème (orange avec Ardoise) : bien visibles *@
+                                <button type="button" class="btn btn-sm btn-primary chess-pieces-button" @onclick="() => showPieces = true">Pièces</button>
+                                <button type="button" class="btn btn-sm btn-primary chess-help-button" @onclick="() => showHelp = true">Table de type des pièces</button>
                                 @if (s.Stage == ChessStage.Playing)
                                 {
                                     <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
@@ -134,8 +168,8 @@ else
                             </div>
                             @* Préférence du compte (aussi dans « Préférences ») ; sans compte : pour cette partie seulement *@
                             <div class="form-check small mb-2 chess-idle">
-                                <input class="form-check-input" type="checkbox" id="chess-idle" checked="@idleAnimated" @onchange="IdleChanged" />
-                                <label class="form-check-label" for="chess-idle">Animer les Pokémon au repos</label>
+                                <input class="form-check-input" type="checkbox" id="chess-idle" checked="@(!idleAnimated)" @onchange="IdleChanged" />
+                                <label class="form-check-label" for="chess-idle">Désactiver les animations</label>
                             </div>
                             <div class="chess-status @(StatusClass())" aria-live="polite">
                                 <span class="chess-status-text">@StatusText()</span>
@@ -166,7 +200,7 @@ else
                                         var revive = id;
                                         var unit = UnitOf(revive);
                                         <button type="button" class="btn btn-sm btn-outline-primary chess-swap-choice" @onclick="() => Swap(from, revive)">
-                                            <img src="@unit?.Mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                            <img src="@unit?.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
                                             @unit?.Mon.Name (@(unit is null ? "" : ChessTeams.PieceName(unit.Piece)))
                                         </button>
                                     }
@@ -225,7 +259,7 @@ else
                             @if (team is not null)
                             {
                                 <div class="small text-muted mb-1">@team.Name</div>
-                                @TeamList(team, color)
+                                @TeamList(team, color, s.SameTeams && color == ChessColor.Black)
                             }
                         </div>
                     }
@@ -238,19 +272,24 @@ else
     @if (showHelp && s.Stage is not (ChessStage.Requested or ChessStage.TeamChoice)
         && s.TeamOf(userId) is { } mine && s.TeamOf(other.UserId) is { } theirs)
     {
-        @* Fenêtre « Aide » : qui mange qui, dans les deux sens (deux tableaux croisés, d'après la même table des types que
-           les règles de la partie) *@
+        @* Fenêtre « Table de type des pièces » : qui mange qui, dans les deux sens (deux tableaux croisés, d'après la même
+           table des types que les règles de la partie) *@
         <div class="dialog-backdrop" @onclick="() => showHelp = false"></div>
-        <div class="dialog-panel card chess-help" role="dialog" aria-modal="true" aria-label="Aide">
+        <div class="dialog-panel card chess-help" role="dialog" aria-modal="true" aria-label="Table de type des pièces">
             <div class="card-body">
-                <h5>Aide</h5>
+                <h5>Table de type des pièces</h5>
                 <p class="small text-muted mb-2">
                     Un Pokémon ne mange une pièce que si son type est neutre ou super efficace contre le sien. Super efficace,
                     il mange et rejoue aussitôt, une fois seulement.
                 </p>
+                @* Même équipe des deux côtés : les noirs en chromatique, ici aussi *@
+                @{
+                    var shinyMine = s.SameTeams && s.ColorOf(userId) == ChessColor.Black;
+                    var shinyTheirs = s.SameTeams && !shinyMine;
+                }
                 <div class="chess-help-tables">
-                    @HelpTable("Tes Pokémon contre les siens", mine, theirs)
-                    @HelpTable($"Ceux de {other.Pseudo} contre les tiens", theirs, mine)
+                    @HelpTable("Tes Pokémon contre les siens", (mine, shinyMine), (theirs, shinyTheirs))
+                    @HelpTable($"Ceux de {other.Pseudo} contre les tiens", (theirs, shinyTheirs), (mine, shinyMine))
                 </div>
                 <p class="chess-help-legend small mt-2 mb-0">
                     <span class="chess-help-mark super">×2</span> super efficace : il mange et rejoue
@@ -398,6 +437,9 @@ else
 
     private bool CanPass => CanAct && snapshot is { BonusSquare: not null, CanPass: true };
 
+    /// <summary>Au tour de l'autre, animations finies : on peut choisir une de ses pièces pour regarder, sans jouer.</summary>
+    private bool CanPreview => !animating && snapshot is { Stage: ChessStage.Playing, MyTurn: false } && played >= snapshot.StepCount;
+
     private int? SecondsLeft => snapshot?.Deadline is { } deadline && session is not null
         ? Math.Clamp((int)Math.Ceiling((deadline - DateTime.UtcNow).TotalSeconds), 0, session.MoveSeconds)
         : null;
@@ -480,7 +522,7 @@ else
         var created = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
         {
             flip = mine == ChessColor.Black,
-            units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.Mon.DonjonFolder, name = u.Mon.Name }),
+            units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.DonjonFolder, name = u.Mon.Name }),
             position = start.Position,
             idle = idleAnimated,
             timing = new
@@ -558,6 +600,11 @@ else
             message = null; // l'ami a répondu
         if (snapshot.Stage == ChessStage.Done && snapshot.Notice is { } notice && lastText != notice && session.Steps(played).Count == 0)
             lastText = notice; // abandon, temps écoulé, page quittée
+        if (snapshot.Stage != ChessStage.Playing && selected is not null)
+        {
+            ClearSelection(keepInfo: true); // partie finie pendant un aperçu : plus de marques
+            await Highlight();
+        }
         StateHasChanged();
         if (board is null && snapshot.Stage is ChessStage.Playing or ChessStage.Done)
             return; // OnAfterRenderAsync crée le plateau
@@ -715,7 +762,25 @@ else
         busy = false;
     }
 
-    /// <summary>Revient sur son choix d'équipe (refusé si l'autre a choisi la sienne entre-temps : la partie a commencé).</summary>
+    /// <summary>Les deux ont pris la même équipe : ce joueur la garde (les deux : la partie commence).</summary>
+    private void KeepTeam()
+    {
+        if (session is null)
+            return;
+        busy = true;
+        if (Hub.KeepTeam(session, userId) is { } error)
+        {
+            message = error;
+            messageIsError = true;
+        }
+        snapshot = session.Snapshot(userId);
+        busy = false;
+    }
+
+    /// <summary>
+    /// Revient sur son choix d'équipe (refusé si l'autre a choisi une autre équipe entre-temps : la partie a commencé) ;
+    /// avec la même équipe que l'autre, il en change.
+    /// </summary>
     private void ClearTeam()
     {
         if (session is null)
@@ -741,6 +806,11 @@ else
         var unit = session.At(square);
         if (!CanAct)
         {
+            if (CanPreview)
+            {
+                await Preview(square, unit);
+                return;
+            }
             info = unit is null ? null : Describe(unit);
             StateHasChanged();
             return;
@@ -792,6 +862,27 @@ else
         StateHasChanged();
     }
 
+    /// <summary>
+    /// Tour de l'autre : clic sur une de ses pièces (aperçu : ses cases, ses cadres), sur une pièce qu'elle ne peut pas
+    /// manger (pourquoi), ou ailleurs (la sélection s'efface). Rien ne se joue.
+    /// </summary>
+    private async Task Preview(int square, ChessUnit? unit)
+    {
+        if (session is null)
+            return;
+        if (selected is { } from && from != square && options.Blocked.FirstOrDefault(b => b.Square == square) is { } blocked)
+            info = Refusal(session.At(from)!, UnitOf(blocked.VictimId)!, blocked.Effect);
+        else if (unit is not null && unit.Color == session.ColorOf(userId))
+            await Select(square);
+        else
+        {
+            ClearSelection();
+            info = unit is null ? null : Describe(unit);
+        }
+        await Highlight();
+        StateHasChanged();
+    }
+
     private async Task Select(int square)
     {
         if (session is null)
@@ -801,12 +892,28 @@ else
         options = session.Options(userId, square);
         swapChoices = options.Swaps.Count > 0 ? options.Swaps : null;
         var unit = session.At(square);
+        var legend = MatchupLegend();
         info = unit is null ? null
-            : options.Any ? $"{Describe(unit)}{(options.Blocked.Count > 0 ? " Les pièces barrées résistent à son type." : "")}"
+            : options.Any || !CanAct ? $"{Describe(unit)}{legend}" // aperçu : pas de cases, il ne bouge pas encore
             : unit.Piece == ChessPiece.Pawn && ChessGame.RankOf(square) is 0 or 7
-                ? $"{unit.Mon.Name} attend au bout du plateau qu'un Pokémon de ton équipe soit K.O. pour lui laisser sa place."
-                : $"{unit.Mon.Name} ne peut pas bouger.";
+                ? $"{unit.Mon.Name} attend au bout du plateau qu'un Pokémon de ton équipe soit K.O. pour lui laisser sa place.{legend}"
+                : $"{unit.Mon.Name} ne peut pas bouger.{legend}";
+        if (info is not null && !CanAct)
+            info = $"Aperçu (au tour de {session.Other(userId).Pseudo}) : {info}";
         await Highlight();
+    }
+
+    /// <summary>Ce que disent les marques de la pièce choisie (cadres vert et rouge, croix), seulement celles qui sont là.</summary>
+    private string MatchupLegend()
+    {
+        var parts = new List<string>();
+        if (options.Matchups.Any(m => m.Effect > 1))
+            parts.Add("cadre vert : il leur est super efficace");
+        if (options.Matchups.Any(m => m.Effect < 1))
+            parts.Add("cadre rouge : il ne peut pas les manger");
+        if (options.Blocked.Count > 0)
+            parts.Add("croix rouge : à sa portée, mais son type l'empêche de les manger");
+        return parts.Count == 0 ? "" : $" Sur le plateau, {string.Join(" ; ", parts)}.";
     }
 
     private void ClearSelection() => ClearSelection(false);
@@ -841,12 +948,12 @@ else
     }
 
     /// <summary>
-    /// Case « Animer les Pokémon au repos » : le plateau suit tout de suite ; enregistrée dans le compte (sans compte :
-    /// gardée pour la page seulement).
+    /// Case « Désactiver les animations » (cochée : Pokémon figés au repos) : le plateau suit tout de suite ; enregistrée
+    /// dans le compte (sans compte : gardée pour la page seulement).
     /// </summary>
     private async Task IdleChanged(ChangeEventArgs e)
     {
-        idleAnimated = e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on);
+        idleAnimated = !(e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on));
         if (board is not null)
         {
             try
@@ -869,7 +976,10 @@ else
         Hub.Forfeit(session, userId);
     }
 
-    /// <summary>Marques du plateau : pièce choisie, cases permises (super efficace à part), pièces qui résistent, dernier coup, roi en échec.</summary>
+    /// <summary>
+    /// Marques du plateau : pièce choisie, cases permises (super efficace à part), pièces adverses faibles (cadre vert) ou
+    /// qui résistent (cadre rouge), pièces atteintes que son type ne peut pas manger (croix rouge), dernier coup, roi en échec.
+    /// </summary>
     private async Task Highlight()
     {
         if (board is null || session is null)
@@ -889,6 +999,8 @@ else
                 // Coins dorés : la pièce rejouera ; pas pendant son tour bonus (un seul)
                 moves = options.Targets.Select(t => new { to = t.To, capture = t.VictimId is not null, super = t.Effect > 1 && !bonusTurn }).ToArray(),
                 blocked = options.Blocked.Select(b => b.Square),
+                weak = options.Matchups.Where(m => m.Effect > 1).Select(m => m.Square),
+                resist = options.Matchups.Where(m => m.Effect < 1).Select(m => m.Square),
                 last = lastStep is { Move.IsPass: false } l ? new[] { l.Move.From, l.Move.To } : [],
                 check,
             });
@@ -1032,9 +1144,9 @@ else
     /// Les Pokémon d'une équipe, une ligne par pièce (sprite, symbole et nom de la pièce, Pokémon, type) ; pendant la partie
     /// (<paramref name="color"/>), combien sont sur le plateau et combien sont K.O.
     /// </summary>
-    private RenderFragment TeamList(ChessTeam team, ChessColor? color) => __builder =>
+    private RenderFragment TeamList(ChessTeam team, ChessColor? color, bool shiny = false) => __builder =>
     {
-        <ChessTeamList Team="team" Extra="@(color is { } c ? piece => PieceCount(c, piece) : null)" />
+        <ChessTeamList Team="team" Shiny="shiny" Extra="@(color is { } c ? piece => PieceCount(c, piece) : null)" />
     };
 
     /// <summary>Pendant la partie : combien de pièces de ce camp sont sur le plateau, et combien sont K.O.</summary>
@@ -1112,8 +1224,9 @@ else
     /// ligne (ou colonne) par pièce : les huit pions n'en ont qu'une, même à deux espèces (Nidoran♂ et Nidoran♀, deux
     /// images).
     /// </summary>
-    private static RenderFragment HelpTable(string title, ChessTeam attackers, ChessTeam victims) => __builder =>
+    private static RenderFragment HelpTable(string title, (ChessTeam Team, bool Shiny) attacking, (ChessTeam Team, bool Shiny) eaten) => __builder =>
     {
+        var (attackers, victims) = (attacking.Team, eaten.Team);
         <div class="chess-help-scroll">
             <table class="chess-help-table">
                 <caption>@title</caption>
@@ -1123,7 +1236,7 @@ else
                         @foreach (var piece in PieceOrder)
                         {
                             <th scope="col" class="chess-help-col">
-                                @HelpImages(victims, piece)
+                                @HelpImages(victims, piece, eaten.Shiny)
                                 @HelpLabel(victims, piece)
                             </th>
                         }
@@ -1135,7 +1248,7 @@ else
                         <tr>
                             <th scope="row" class="chess-help-row">
                                 <div class="chess-help-row-content">
-                                    @HelpImages(attackers, piece)
+                                    @HelpImages(attackers, piece, attacking.Shiny)
                                     <div>@HelpLabel(attackers, piece)</div>
                                 </div>
                             </th>
@@ -1168,13 +1281,13 @@ else
         </span>
     };
 
-    /// <summary>Images des Pokémon d'une pièce dans les en-têtes de l'aide (deux pour les pions Nidoran).</summary>
-    private static RenderFragment HelpImages(ChessTeam team, ChessPiece piece) => __builder =>
+    /// <summary>Images des Pokémon d'une pièce dans les en-têtes de la table de type (deux pour les pions Nidoran).</summary>
+    private static RenderFragment HelpImages(ChessTeam team, ChessPiece piece, bool shiny) => __builder =>
     {
         <div class="chess-mon-images">
             @foreach (var mon in team.MembersOf(piece))
             {
-                <img src="@mon.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                <img src="@mon.SpriteUrlOf(shiny)" alt="" data-remplacement="images/pokemon/inconnu.png" />
             }
         </div>
     };

@@ -44,18 +44,21 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("Choisis ton équipe");
         Assert.DoesNotContain("Invitation envoyée", sacha.Text()); // l'ami a répondu
 
-        // Ondine prend l'équipe Feu : grisée pour Sacha
+        // Ondine prend l'équipe Dracaufeu : Sacha sait qu'elle a choisi, pas laquelle (toutes restent libres pour lui)
         await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
-        ondine.WaitForText("Tu as choisi l'équipe Feu");
-        sacha.WaitForAssertion(() => Assert.True(sacha.Button("Prise par ondine").HasAttribute("disabled")));
+        ondine.WaitForText("Tu as choisi l'équipe Dracaufeu");
+        sacha.WaitForText("ondine a choisi son équipe.");
+        Assert.DoesNotContain("Dracaufeu", sacha.Find(".chess-other-chose").TextContent);
+        Assert.All(sacha.FindAll(".chess-team button"), b => Assert.False(b.HasAttribute("disabled")));
+        Assert.Empty(sacha.FindAll(".chess-team.taken"));
 
-        // Ondine change d'avis tant que Sacha n'a pas choisi : l'équipe Feu redevient libre, puis elle la reprend
+        // Ondine change d'avis tant que Sacha n'a pas choisi, puis la reprend
         await ondine.Click("Changer d'équipe");
-        ondine.WaitForText("Tu pourras en changer tant que sacha n'a pas choisi la sienne.");
-        sacha.WaitForAssertion(() => Assert.False(sacha.HasButton("Prise par ondine")));
+        ondine.WaitForText("tu pourras changer la tienne tant que sacha n'a pas choisi.");
+        sacha.WaitForAssertion(() => Assert.Empty(sacha.FindAll(".chess-other-chose")));
         await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
-        ondine.WaitForText("Tu as choisi l'équipe Feu");
-        sacha.WaitForAssertion(() => Assert.True(sacha.Button("Prise par ondine").HasAttribute("disabled")));
+        ondine.WaitForText("Tu as choisi l'équipe Dracaufeu");
+        sacha.WaitForText("ondine a choisi son équipe.");
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
 
         sacha.WaitForText("À toi de jouer.");
@@ -69,11 +72,12 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Contains("Partie contre ondine", sacha.Find(".chess-play .chess-side").TextContent);
         Assert.NotNull(sacha.Find(".chess-side .chess-forfeit"));
 
-        // Ondine clique pendant le tour de Sacha : rien ne se joue, la pièce est seulement décrite
+        // Ondine clique pendant le tour de Sacha : un aperçu de sa pièce, rien ne se joue
         await Click(ondine, "e7");
-        ondine.WaitForText("Salamèche (Feu) · Pion.");
+        ondine.WaitForText("Aperçu (au tour de sacha) : Salamèche (Feu) · Pion.");
         await Click(ondine, "e5");
         Assert.Equal(ChessStage.Playing, Services.GetRequiredService<ChessHub>().Active("sacha")!.Stage);
+        Assert.Empty(Services.GetRequiredService<ChessHub>().Active("sacha")!.Steps(0));
 
         // Sacha choisit un Tarsal, puis sa case
         await Click(sacha, "e2");
@@ -108,8 +112,14 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.Click("Fermer");
         Assert.Empty(sacha.FindAll(".chess-pieces"));
 
-        // Fenêtre « Aide » : qui mange qui, dans les deux sens (Sacha : équipe Psy, Ondine : équipe Feu)
-        await sacha.Click("Aide");
+        // « Pièces » et la table de type : boutons dans la couleur principale du site
+        Assert.Contains("btn-primary", sacha.Find(".chess-pieces-button").ClassName);
+        Assert.Contains("btn-primary", sacha.Find(".chess-help-button").ClassName);
+
+        // Fenêtre « Table de type des pièces » : qui mange qui, dans les deux sens (Sacha : équipe Gallame, Ondine :
+        // équipe Dracaufeu)
+        await sacha.Click("Table de type des pièces");
+        Assert.Equal("Table de type des pièces", sacha.Find(".chess-help h5").TextContent);
         var tables = sacha.FindAll(".chess-help-table");
         Assert.Equal(["Tes Pokémon contre les siens", "Ceux de ondine contre les tiens"],
             tables.Select(t => t.QuerySelector("caption")!.TextContent));
@@ -151,7 +161,7 @@ public sealed class ChessPageTests : PageTestContext
         var (sacha, ondine) = await Invited();
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
-        Assert.Equal(["Équipe Psy", "Équipe Feu", "Équipe Électrik", "Équipe Poison", "Équipe Eau", "Équipe Plante", "Équipe Sol"],
+        Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
         // Une ligne « Pion », deux images
         var pawn = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li").Last();
@@ -162,8 +172,8 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
         sacha.WaitForText("À toi de jouer.");
 
-        // Aide : toujours six colonnes, la colonne des pions avec les deux Nidoran (Psy contre Poison : ×2)
-        await sacha.Click("Aide");
+        // Table de type : toujours six colonnes, la colonne des pions avec les deux Nidoran (Psy contre Poison : ×2)
+        await sacha.Click("Table de type des pièces");
         var columns = sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("thead th.chess-help-col");
         Assert.Equal(6, columns.Length);
         Assert.Equal(2, columns[5].QuerySelectorAll("img").Length);
@@ -254,6 +264,119 @@ public sealed class ChessPageTests : PageTestContext
         .Select(moves => moves!.Cast<object>().FirstOrDefault(m => (int)m.GetType().GetProperty("to")!.GetValue(m)! == square))
         .LastOrDefault(m => m is not null);
 
+    /// <summary>Cases permises (points et coins) du dernier « highlight » envoyé au plateau.</summary>
+    private object[] LastMoves() => [.. ((System.Collections.IEnumerable)JSInterop.Invocations.Last(i => i.Identifier == "highlight").Arguments[0]!
+        .GetType().GetProperty("moves")!.GetValue(JSInterop.Invocations.Last(i => i.Identifier == "highlight").Arguments[0])!).Cast<object>()];
+
+    /// <summary>Cases d'une marque (« weak », « resist », « blocked ») dans le dernier « highlight » envoyé au plateau.</summary>
+    private int[] LastMarks(string name) => [.. (JSInterop.Invocations.Last(i => i.Identifier == "highlight").Arguments[0]!
+        .GetType().GetProperty(name)!.GetValue(JSInterop.Invocations.Last(i => i.Identifier == "highlight").Arguments[0])
+        as IEnumerable<int> ?? []).Order()];
+
+    [Fact]
+    public async Task SelectedPiece_FramesWeakAndResistantPieces_AndCrossesBlockedOnes()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        await ChooseTeams(sacha, ondine); // Sacha : Gallame (Psy), Ondine : Dracaufeu (Feu)
+        sacha.WaitForText("À toi de jouer.");
+
+        // Gallame, sur e1, choisi : Combat contre l'équipe Feu. Super efficace contre Démolosse (Ténèbres, b8 et g8) ;
+        // Malvalame (Spectre, c8 et f8), Goupelin (Psy, d8) et Dracaufeu (Vol, e8) lui résistent. Rien à sa portée
+        await Click(sacha, "e1");
+        sacha.WaitForText("Gallame ne peut pas bouger.");
+        Assert.Equal([Sq("b8"), Sq("g8")], LastMarks("weak"));
+        Assert.Equal([Sq("c8"), Sq("d8"), Sq("e8"), Sq("f8")], LastMarks("resist"));
+        Assert.Empty(LastMarks("blocked"));
+        Assert.Contains("Sur le plateau, cadre vert : il leur est super efficace ; cadre rouge : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
+
+        // 1. e4 Cc6 2. e5 : Démolosse (Ténèbres) en c6 regarde Tarsal (Psy, faible) ; pendant le tour de Sacha, Ondine
+        // choisit son pion d7 (Salamèche, Feu) : Roigada (Eau) lui résiste, à sa portée ou non
+        await Click(sacha, "e2"); await Click(sacha, "e4");
+        ondine.WaitForText("À toi de jouer.");
+        await Click(ondine, "b8"); await Click(ondine, "c6");
+        sacha.WaitForText("À toi de jouer.");
+        await Click(sacha, "e4"); await Click(sacha, "e5");
+        ondine.WaitForText("À toi de jouer.");
+        await Click(ondine, "c6");
+        Assert.Contains(Sq("e5"), LastMarks("weak"));
+
+        // Sacha, pendant le tour d'Ondine, regarde Roigada (Eau) en c1 : les Salamèche (Feu) lui sont faibles, les
+        // Boumata (Dragon, a8 et h8) lui résistent
+        await Click(sacha, "c1");
+        sacha.WaitForText("Aperçu (au tour de ondine) : Roigada (Eau) · Fou.");
+        Assert.Empty(LastMoves());
+        Assert.Equal([Sq("a7"), Sq("b7"), Sq("c7"), Sq("d7"), Sq("e7"), Sq("f7"), Sq("g7"), Sq("h7")], LastMarks("weak"));
+        Assert.Equal([Sq("a8"), Sq("h8")], LastMarks("resist"));
+
+        // Son Tarsal e5 : pas de case montrée (il ne peut pas jouer), et cliquer sur e6 ne joue rien
+        await Click(sacha, "e5");
+        sacha.WaitForText("Aperçu (au tour de ondine) : Tarsal (Psy) · Pion.");
+        Assert.Empty(LastMoves());
+        await Click(sacha, "e6");
+        Assert.Equal(3, Services.GetRequiredService<ChessHub>().Active("sacha")!.Steps(0).Count);
+
+        // Ondine joue : l'aperçu de Sacha s'efface
+        await Click(ondine, "c6"); await Click(ondine, "d4");
+        sacha.WaitForText("À toi de jouer.");
+        Assert.Empty(LastMarks("weak"));
+    }
+
+    [Fact]
+    public async Task SameTeam_IsConfirmedByBoth_ThenBlackIsShiny()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        ondine.WaitForText("Choisis ton équipe");
+        sacha.WaitForText("Choisis ton équipe");
+        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        sacha.WaitForText("ondine a choisi son équipe.");
+        await sacha.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+
+        // La même : les deux le voient, à chacun de la garder ou d'en changer
+        sacha.WaitForText("Vous avez pris la même équipe, ondine et toi : l'équipe Dracaufeu.");
+        ondine.WaitForText("Vous avez pris la même équipe, sacha et toi : l'équipe Dracaufeu.");
+        await sacha.Click("Garder l'équipe Dracaufeu");
+        sacha.WaitForText("Tu la gardes. En attente de la réponse de ondine");
+        ondine.WaitForText("sacha la garde.");
+
+        // Ondine change : Sacha peut garder la sienne, ou changer aussi
+        await ondine.Click("Changer d'équipe");
+        ondine.WaitForText("sacha a choisi son équipe.");
+        sacha.WaitForText("ondine change d'équipe : tu peux garder la tienne, ou en changer aussi.");
+        Assert.True(sacha.HasButton("Changer d'équipe"));
+
+        // Elle reprend la même ; cette fois les deux la gardent : la partie commence, les noirs en chromatique
+        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        ondine.WaitForText("Vous avez pris la même équipe");
+        sacha.WaitForAssertion(() => Assert.False(sacha.Text().Contains("Tu la gardes", StringComparison.Ordinal)));
+        await ondine.Click("Garder l'équipe Dracaufeu");
+        await sacha.Click("Garder l'équipe Dracaufeu");
+        sacha.WaitForText("À toi de jouer.");
+        ondine.WaitForText("Au tour de sacha");
+
+        var session = Services.GetRequiredService<ChessHub>().Active("sacha")!;
+        Assert.True(session.SameTeams);
+        sacha.WaitForAssertion(() => Assert.Equal(2, JSInterop.Invocations.Count(i => i.Identifier == "create")));
+        foreach (var create in JSInterop.Invocations.Where(i => i.Identifier == "create"))
+        {
+            var units = ((System.Collections.IEnumerable)create.Arguments[2]!.GetType().GetProperty("units")!.GetValue(create.Arguments[2])!).Cast<object>();
+            foreach (var unit in units)
+            {
+                var id = (int)unit.GetType().GetProperty("id")!.GetValue(unit)!;
+                Assert.Equal(session.Units().Single(u => u.Id == id).DonjonFolder, unit.GetType().GetProperty("folder")!.GetValue(unit));
+            }
+        }
+        Assert.All(session.Units(), u => Assert.Equal(u.Color == ChessColor.Black, u.Shiny));
+
+        // Fenêtre « Pièces » : les images des noirs en chromatique
+        await sacha.Click("Pièces");
+        var columns = sacha.FindAll(".chess-pieces-teams > div");
+        var black = session.Units().First(u => u is { Color: ChessColor.Black, Piece: ChessPiece.King });
+        Assert.Contains(black.Mon.SpriteUrlOf(true), columns[1].InnerHtml);
+        Assert.DoesNotContain(black.Mon.SpriteUrlOf(true), columns[0].InnerHtml);
+    }
+
     /// <summary>Valeur « idle » passée par la page à echecs.js à la création de chaque plateau.</summary>
     private bool?[] BoardsIdle() => [.. JSInterop.Invocations.Where(i => i.Identifier == "create")
         .Select(i => i.Arguments[2]?.GetType().GetProperty("idle")?.GetValue(i.Arguments[2]) as bool?)];
@@ -272,17 +395,18 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("À toi de jouer.");
         ondine.WaitForText("Au tour de sacha");
 
-        // Chaque plateau naît avec le réglage de son joueur
-        Assert.False(sacha.Find("#chess-idle").HasAttribute("checked"));
-        Assert.True(ondine.Find("#chess-idle").HasAttribute("checked"));
+        // Chaque plateau naît avec le réglage de son joueur (case « Désactiver les animations » : cochée, figés)
+        Assert.Equal("Désactiver les animations", sacha.Find("label[for=chess-idle]").TextContent);
+        Assert.True(sacha.Find("#chess-idle").HasAttribute("checked"));
+        Assert.False(ondine.Find("#chess-idle").HasAttribute("checked"));
         sacha.WaitForAssertion(() => Assert.Equal(2, BoardsIdle().Length));
         Assert.Equal([false, true], BoardsIdle().Order());
 
         // Sacha les remet pendant la partie : le plateau suit, le compte le garde
-        await sacha.Find("#chess-idle").ChangeAsync(new() { Value = true });
+        await sacha.Find("#chess-idle").ChangeAsync(new() { Value = false });
         Assert.Equal(true, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
-        await ondine.Find("#chess-idle").ChangeAsync(new() { Value = false });
+        await ondine.Find("#chess-idle").ChangeAsync(new() { Value = true });
         Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.False((await preferences.SortsAsync("ondine")).ChessIdle);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
@@ -308,7 +432,7 @@ public sealed class ChessPageTests : PageTestContext
         first.WaitForText("Choisis ton équipe");
         second.WaitForText("Choisis ton équipe");
         await first.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
-        second.WaitForAssertion(() => Assert.Contains("taken", second.FindAll(".chess-team")[0].ClassName));
+        second.WaitForText("a choisi son équipe.");
         await second.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
         first.WaitForAssertion(() => Assert.NotNull(first.Find(".chess-board")));
         second.WaitForAssertion(() => Assert.NotNull(second.Find(".chess-board")));
@@ -438,10 +562,10 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("Partie contre Léo (invité)");
 
         // L'invité a la case des animations au repos, pour cette partie seulement (pas de compte où la garder)
-        Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
-        await guest.Find("#chess-idle").ChangeAsync(new() { Value = false });
-        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.False(guest.Find("#chess-idle").HasAttribute("checked"));
+        await guest.Find("#chess-idle").ChangeAsync(new() { Value = true });
+        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
         Assert.DoesNotContain("gardé dans ton compte", guest.Text());
         Assert.True((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessIdle);
 

@@ -3,7 +3,8 @@ using MonsutaPotaru.Services;
 namespace MonsutaPotaru.Tests;
 
 /// <summary>
-/// Parties d'échecs en direct (<see cref="ChessHub"/>) : invitation, choix des équipes (pas la même), coups vérifiés,
+/// Parties d'échecs en direct (<see cref="ChessHub"/>) : invitation, choix des équipes (à l'aveugle ; la même : gardée
+/// ou changée), coups vérifiés, aperçu pendant le tour adverse,
 /// temps écoulé, abandon, page quittée, invitation expirée ; résultats enregistrés (<see cref="ChessRecorder"/>) et
 /// comptés pour les statistiques (<see cref="ChessService"/>).
 /// </summary>
@@ -61,7 +62,7 @@ public sealed class ChessHubTests : IDisposable
     }
 
     [Fact]
-    public void Teams_CannotBeTheSame_AndHostPlaysWhite()
+    public void Teams_AreChosenBlind_AndHostPlaysWhite()
     {
         var (session, _) = _hub.Request(Sacha, Ondine, 120);
         Assert.Null(_hub.Accept(session!, "ondine"));
@@ -69,19 +70,24 @@ public sealed class ChessHubTests : IDisposable
         Assert.Null(_hub.ChooseTeam(session!, "ondine", "feu"));
         Assert.Equal("Tu as déjà choisi ton équipe.", _hub.ChooseTeam(session!, "ondine", "psy"));
 
-        // Ondine revient sur son choix tant que Sacha n'a pas choisi : l'équipe Feu se libère
-        Assert.Equal("Tu n'as pas encore choisi d'équipe.", _hub.ClearTeam(session!, "sacha"));
-        Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.ClearTeam(session!, "pierre"));
+        // Sacha sait qu'Ondine a choisi, pas laquelle
+        Assert.Equal(new ChessTeamChoice(null, true, null, false, false, false), session!.TeamChoice("sacha"));
+        Assert.Equal("feu", session.TeamChoice("ondine").Mine!.Id);
+        Assert.False(session.TeamChoice("ondine").OtherChose);
+
+        // Ondine revient sur son choix tant que Sacha n'a pas choisi
+        Assert.Equal("Tu n'as pas encore choisi d'équipe.", _hub.ClearTeam(session, "sacha"));
+        Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.ClearTeam(session, "pierre"));
+        Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.KeepTeam(session, "pierre"));
+        Assert.Contains("vous n'avez plus la même", _hub.KeepTeam(session, "ondine")); // pas la même : rien à garder
         var changed = 0;
-        session!.Changed += () => changed++;
-        Assert.Null(_hub.ClearTeam(session!, "ondine"));
+        session.Changed += () => changed++;
+        Assert.Null(_hub.ClearTeam(session, "ondine"));
         Assert.Equal(1, changed);
-        Assert.Null(session.TakenBy("sacha"));
+        Assert.False(session.TeamChoice("sacha").OtherChose);
+        Assert.False(session.TeamChoice("sacha").OtherChanging); // pas de même équipe : rien à annoncer
         Assert.Null(session.TeamOf("ondine"));
         Assert.Null(_hub.ChooseTeam(session, "ondine", "feu"));
-        Assert.Equal("feu", session!.TakenBy("sacha")!.Id);
-        Assert.Contains("a déjà pris l'équipe Feu", _hub.ChooseTeam(session, "sacha", "feu"));
-        Assert.Equal(ChessStage.TeamChoice, session.Stage);
         Assert.Null(_hub.ChooseTeam(session, "sacha", "electrique"));
         Assert.Equal(ChessStage.Playing, session.Stage);
         Assert.Contains("la partie a commencé, ton équipe ne change plus", _hub.ClearTeam(session, "ondine"));
@@ -92,6 +98,73 @@ public sealed class ChessHubTests : IDisposable
         Assert.True(session.Snapshot("sacha").MyTurn);
         Assert.False(session.Snapshot("ondine").MyTurn);
         Assert.Equal(_time.Now.UtcDateTime + ChessTiming.Margin + TimeSpan.FromSeconds(120), session.Snapshot("sacha").Deadline);
+        Assert.False(session.SameTeams);
+        Assert.DoesNotContain(session.Units(), u => u.Shiny);
+    }
+
+    [Fact]
+    public void SameTeam_IsKeptByBoth_OrChanged()
+    {
+        var (session, _) = _hub.Request(Sacha, Ondine, 120);
+        Assert.Null(_hub.Accept(session!, "ondine"));
+        Assert.Null(_hub.ChooseTeam(session!, "ondine", "feu"));
+        Assert.Null(_hub.ChooseTeam(session!, "sacha", "feu"));
+
+        // La même : elle se dévoile aux deux, la partie attend
+        Assert.Equal(ChessStage.TeamChoice, session!.Stage);
+        Assert.Equal("feu", session.TeamChoice("sacha").Same!.Id);
+        Assert.Equal("feu", session.TeamChoice("ondine").Same!.Id);
+
+        // Sacha la garde ; Ondine en change : Sacha l'apprend, et peut garder la sienne ou changer aussi
+        Assert.Null(_hub.KeepTeam(session, "sacha"));
+        Assert.Equal((true, false), (session.TeamChoice("sacha").IKeep, session.TeamChoice("sacha").OtherKeeps));
+        Assert.True(session.TeamChoice("ondine").OtherKeeps);
+        Assert.Null(_hub.ClearTeam(session, "ondine"));
+        var sacha = session.TeamChoice("sacha");
+        Assert.Equal(("feu", null, false, true), (sacha.Mine!.Id, sacha.Same, sacha.IKeep, sacha.OtherChanging));
+        Assert.False(session.TeamChoice("ondine").OtherChanging); // c'est elle qui change
+        Assert.True(session.TeamChoice("ondine").OtherChose);
+
+        // Sacha change aussi : les deux rechoisissent, plus rien à annoncer
+        Assert.Null(_hub.ClearTeam(session, "sacha"));
+        Assert.False(session.TeamChoice("sacha").OtherChanging);
+        Assert.False(session.TeamChoice("ondine").OtherChanging);
+        Assert.Equal((false, false), (session.TeamChoice("sacha").OtherChose, session.TeamChoice("ondine").OtherChose));
+
+        // Encore la même (Poison) : les deux la gardent, la partie commence, les noirs en chromatique
+        Assert.Null(_hub.ChooseTeam(session, "sacha", "poison"));
+        Assert.Null(_hub.ChooseTeam(session, "ondine", "poison"));
+        Assert.Null(_hub.KeepTeam(session, "ondine"));
+        Assert.Equal(ChessStage.TeamChoice, session.Stage);
+        Assert.Null(_hub.KeepTeam(session, "sacha"));
+        Assert.Equal(ChessStage.Playing, session.Stage);
+        Assert.True(session.SameTeams);
+        Assert.Equal("poison", session.TeamOf("ondine")!.Id);
+        Assert.All(session.Units(), u => Assert.Equal(u.Color == ChessColor.Black, u.Shiny));
+        var blackKing = session.Units().Single(u => u is { Color: ChessColor.Black, Piece: ChessPiece.King });
+        Assert.Equal((blackKing.Mon.DonjonFolderOf(true), blackKing.Mon.SpriteUrlOf(true)), (blackKing.DonjonFolder, blackKing.SpriteUrl));
+        var whiteKing = session.Units().Single(u => u is { Color: ChessColor.White, Piece: ChessPiece.King });
+        Assert.Equal(whiteKing.Mon.SpriteUrl, whiteKing.SpriteUrl);
+        Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.KeepTeam(session, "sacha"));
+    }
+
+    [Fact]
+    public void Options_PreviewOwnPieces_DuringTheOtherTurn()
+    {
+        var session = Playing(); // Sacha (Psy, blancs) contre Ondine (Feu, noirs) : aux blancs
+        // Ondine regarde son pion e7 (Salamèche, Feu) : ni cases ni échange (elle ne peut pas jouer) ; pas les pièces de Sacha
+        var preview = session.Options("ondine", Sq("e7"));
+        Assert.Empty(preview.Targets);
+        Assert.Empty(preview.Swaps);
+        Assert.Empty(session.Options("ondine", Sq("e2")).Targets);
+        Assert.Equal("Ce n'est pas à toi de jouer.", _hub.Play(session, "ondine", Move("e7", "e5")));
+
+        // Cadres : Salamèche (Feu) contre l'équipe Psy, sur tout le plateau. Tarsal (Psy), Gallame (Combat), Gardevoir
+        // (Fée), Rhinolove (Vol) : neutres ; Kaorine (Sol) : neutre ; Roigada (Eau) résiste (0,5)
+        var matchups = preview.Matchups;
+        Assert.All(matchups, m => Assert.NotEqual(1, m.Effect));
+        Assert.Equal([Sq("c1"), Sq("f1")], matchups.Where(m => m.Effect < 1).Select(m => m.Square).Order());
+        Assert.DoesNotContain(matchups, m => m.Effect > 1);
     }
 
     [Fact]
@@ -102,7 +175,7 @@ public sealed class ChessHubTests : IDisposable
         Assert.Equal("Ce coup n'est pas permis.", _hub.Play(session, "sacha", Move("e2", "e5")));
         Assert.Equal("Ce coup n'est pas permis.", _hub.Play(session, "sacha", Move("e7", "e5"))); // pièce de l'autre
         Assert.Equal("La partie n'est pas en cours.", _hub.Play(session, "pierre", Move("e2", "e4")));
-        Assert.Empty(session.Options("ondine", Sq("e7")).Targets); // pas son tour
+        Assert.Empty(session.Options("ondine", Sq("e7")).Swaps); // pas son tour : un aperçu seulement
         Assert.Equal(2, session.Options("sacha", Sq("e2")).Targets.Count);
 
         var changed = 0;

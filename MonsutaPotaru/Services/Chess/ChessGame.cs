@@ -1,10 +1,20 @@
 namespace MonsutaPotaru.Services;
 
-/// <summary>Une pièce de la partie : son numéro (le même toute la partie, pour l'animer), son camp et son Pokémon.</summary>
+/// <summary>
+/// Une pièce de la partie : son numéro (le même toute la partie, pour l'animer), son camp et son Pokémon ; chromatique
+/// (<see cref="Shiny"/>) pour les noirs d'une partie où les deux joueurs ont la même équipe (on distingue ainsi les camps).
+/// </summary>
 public sealed record ChessUnit(int Id, ChessColor Color, ChessMon Mon)
 {
     public ChessPiece Piece => Mon.Piece;
     public PokeType Type => Mon.Type;
+    public bool Shiny { get; init; }
+
+    /// <summary>Image fixe du Pokémon (chromatique s'il l'est).</summary>
+    public string SpriteUrl => Mon.SpriteUrlOf(Shiny);
+
+    /// <summary>Dossier de ses sprites animés (chromatiques s'il l'est).</summary>
+    public string DonjonFolder => Mon.DonjonFolderOf(Shiny);
 }
 
 /// <summary>Comment la partie s'est finie.</summary>
@@ -30,6 +40,12 @@ public sealed record ChessTarget(int To, int? VictimId, double Effect, IReadOnly
 
 /// <summary>Une pièce adverse que la pièce choisie atteint mais ne peut pas manger (pas très efficace ou sans effet).</summary>
 public sealed record ChessBlocked(int Square, int VictimId, double Effect);
+
+/// <summary>
+/// Une pièce adverse face à la pièce choisie, où qu'elle soit : <see cref="Effect"/> &gt; 1, faible (super efficace :
+/// cadre vert) ; &lt; 1, elle résiste (la pièce ne peut pas la manger : cadre rouge).
+/// </summary>
+public sealed record ChessMatchup(int Square, int VictimId, double Effect);
 
 /// <summary>Une pièce sur le plateau.</summary>
 public sealed record ChessPlaced(int Id, int Square);
@@ -93,11 +109,17 @@ public sealed class ChessGame
         foreach (var (color, team, back, pawns) in new[] { (ChessColor.White, white, 0, 1), (ChessColor.Black, black, 7, 6) })
         {
             for (var file = 0; file < 8; file++)
-                Place(new ChessUnit(id++, color, team.Of(BackRank[file])), Square(back, file));
+                Place(NewUnit(id++, color, team.Of(BackRank[file])), Square(back, file));
             for (var file = 0; file < 8; file++)
-                Place(new ChessUnit(id++, color, team.PawnAt(file)), Square(pawns, file));
+                Place(NewUnit(id++, color, team.PawnAt(file)), Square(pawns, file));
         }
     }
+
+    /// <summary>Les deux camps ont la même équipe : les noirs sont chromatiques.</summary>
+    public bool SameTeams => White.Id == Black.Id;
+
+    private ChessUnit NewUnit(int id, ChessColor color, ChessMon mon) =>
+        new(id, color, mon) { Shiny = SameTeams && color == ChessColor.Black };
 
     private void Place(ChessUnit unit, int square)
     {
@@ -119,11 +141,11 @@ public sealed class ChessGame
         foreach (var (color, piece, square) in pieces)
         {
             var team = color == ChessColor.White ? white : black;
-            game.Place(new ChessUnit(id++, color, piece == ChessPiece.Pawn ? team.PawnAt(FileOf(square)) : team.Of(piece)), square);
+            game.Place(game.NewUnit(id++, color, piece == ChessPiece.Pawn ? team.PawnAt(FileOf(square)) : team.Of(piece)), square);
         }
         foreach (var (color, piece) in ko ?? [])
         {
-            var unit = new ChessUnit(id++, color, (color == ChessColor.White ? white : black).Of(piece));
+            var unit = game.NewUnit(id++, color, (color == ChessColor.White ? white : black).Of(piece));
             game.units[unit.Id] = unit;
             (color == ChessColor.White ? game.whiteKo : game.blackKo).Add(unit);
         }
@@ -242,6 +264,23 @@ public sealed class ChessGame
                 blocked.Add(new ChessBlocked(s, victim.Id, PokeTypes.Effectiveness(unit.Type, victim.Type)));
         }
         return blocked;
+    }
+
+    /// <summary>
+    /// Pièces adverses du plateau, même hors de portée, auxquelles la pièce de cette case est super efficace ou qui lui
+    /// résistent (les neutres n'y sont pas) : les cadres vert et rouge du plateau.
+    /// </summary>
+    public List<ChessMatchup> Matchups(int square)
+    {
+        if (At(square) is not { } unit)
+            return [];
+        List<ChessMatchup> matchups = [];
+        for (var s = 0; s < 64; s++)
+        {
+            if (board[s] is { } victim && victim.Color != unit.Color && PokeTypes.Effectiveness(unit.Type, victim.Type) is var effect && effect != 1)
+                matchups.Add(new ChessMatchup(s, victim.Id, effect));
+        }
+        return matchups;
     }
 
     /// <summary>Coups de la pièce d'après sa marche et les types, sans regarder encore son roi.</summary>

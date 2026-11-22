@@ -15,19 +15,29 @@ public enum ChessColor { White, Black }
 public sealed record ChessMon(ushort Species, byte Form, string Name, PokeType Type, ChessPiece Piece)
 {
     /// <summary>Image fixe (« images/pokemon/26-alola.png ») : choix des équipes, fenêtre « Pièces ».</summary>
-    public string SpriteUrl => PokemonSprites.Url(Species, Form, EntityContext.Gen9, false, 0, false);
+    public string SpriteUrl => SpriteUrlOf(false);
 
-    /// <summary>Dossier des sprites animés Donjon Mystère (« images/donjon/0026/0001/ ») : le plateau.</summary>
-    public string DonjonFolder => PokemonSprites.DonjonFolder(Species, Form, EntityContext.Gen9, false, false, 0);
+    /// <summary>Image fixe, chromatique ou non (les noirs d'une partie où les deux joueurs ont la même équipe le sont).</summary>
+    public string SpriteUrlOf(bool shiny) => PokemonSprites.Url(Species, Form, EntityContext.Gen9, false, 0, shiny);
+
+    /// <summary>
+    /// Dossier des sprites animés Donjon Mystère (« images/donjon/0026/0001/ ») : le plateau. Chromatique : le dossier
+    /// chromatique s'il existe (Roserade n'en a pas : sprites ordinaires).
+    /// </summary>
+    public string DonjonFolderOf(bool shiny) => PokemonSprites.DonjonFolder(Species, Form, EntityContext.Gen9, shiny, false, 0);
 }
 
 /// <summary>
 /// Une équipe toute faite : un Pokémon par pièce, sauf les pions, qui peuvent être deux espèces jouées une colonne sur
 /// deux (Nidoran♂ en a, c, e, g, Nidoran♀ en b, d, f, h). Les Pokémon d'une même pièce ont le même type (une seule
-/// ligne par pièce dans les listes et l'aide).
+/// ligne par pièce dans les listes et l'aide). L'identifiant (« poison ») est gardé en base ; le nom vient du roi
+/// (« Équipe Nidoking », demandé par l'utilisateur le 2026-11-22 : avant, le type du thème, « Équipe Poison »).
 /// </summary>
-public sealed record ChessTeam(string Id, string Name, IReadOnlyList<ChessMon> Members)
+public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members)
 {
+    /// <summary>« Équipe Nidoking » : le nom de son roi.</summary>
+    public string Name => $"Équipe {Of(ChessPiece.King).Name}";
+
     /// <summary>Le (premier) Pokémon de cette pièce.</summary>
     public ChessMon Of(ChessPiece piece) => Members.First(m => m.Piece == piece);
 
@@ -47,10 +57,10 @@ public sealed record ChessTeam(string Id, string Name, IReadOnlyList<ChessMon> M
     /// <summary>Nom des Pokémon de cette pièce, dans une phrase (« Nidoran♂ ou Nidoran♀ »).</summary>
     public string NamesInSentence(ChessPiece piece) => string.Join(" ou ", MembersOf(piece).Select(m => m.Name));
 
-    /// <summary>Nom sans « Équipe » (« Feu ») : tuile « Équipe favorite » des statistiques.</summary>
-    public string ShortName => Name.Replace("Équipe ", "", StringComparison.Ordinal);
+    /// <summary>Nom sans « Équipe » (« Dracaufeu ») : tuile « Équipe favorite » des statistiques.</summary>
+    public string ShortName => Of(ChessPiece.King).Name;
 
-    /// <summary>Nom dans une phrase (« l'équipe Feu »).</summary>
+    /// <summary>Nom dans une phrase (« l'équipe Dracaufeu »).</summary>
     public string InSentence => Name.Replace("Équipe", "équipe", StringComparison.Ordinal);
 }
 
@@ -63,7 +73,7 @@ public static class ChessTeams
 {
     public static readonly IReadOnlyList<ChessTeam> All =
     [
-        new("psy", "Équipe Psy",
+        new("psy",
         [
             new(280, 0, "Tarsal", PokeType.Psychic, ChessPiece.Pawn),
             new(344, 0, "Kaorine", PokeType.Ground, ChessPiece.Rook),
@@ -72,7 +82,7 @@ public static class ChessTeams
             new(282, 0, "Gardevoir", PokeType.Fairy, ChessPiece.Queen),
             new(475, 0, "Gallame", PokeType.Fighting, ChessPiece.King),
         ]),
-        new("feu", "Équipe Feu",
+        new("feu",
         [
             new(4, 0, "Salamèche", PokeType.Fire, ChessPiece.Pawn),
             new(776, 0, "Boumata", PokeType.Dragon, ChessPiece.Rook),
@@ -81,7 +91,7 @@ public static class ChessTeams
             new(655, 0, "Goupelin", PokeType.Psychic, ChessPiece.Queen),
             new(6, 0, "Dracaufeu", PokeType.Flying, ChessPiece.King),
         ]),
-        new("electrique", "Équipe Électrik",
+        new("electrique",
         [
             new(25, 0, "Pikachu", PokeType.Electric, ChessPiece.Pawn),
             new(462, 0, "Magnézone", PokeType.Steel, ChessPiece.Rook),
@@ -90,7 +100,7 @@ public static class ChessTeams
             new(26, 1, "Raichu d'Alola", PokeType.Psychic, ChessPiece.Queen),
             new(785, 0, "Tokorico", PokeType.Fairy, ChessPiece.King),
         ]),
-        new("poison", "Équipe Poison",
+        new("poison",
         [
             new(32, 0, "Nidoran♂", PokeType.Poison, ChessPiece.Pawn),
             new(29, 0, "Nidoran♀", PokeType.Poison, ChessPiece.Pawn),
@@ -100,7 +110,7 @@ public static class ChessTeams
             new(31, 0, "Nidoqueen", PokeType.Ground, ChessPiece.Queen),
             new(34, 0, "Nidoking", PokeType.Poison, ChessPiece.King),
         ]),
-        new("eau", "Équipe Eau",
+        new("eau",
         [
             new(116, 0, "Hypotrempe", PokeType.Water, ChessPiece.Pawn),
             new(131, 0, "Lokhlass", PokeType.Ice, ChessPiece.Rook),
@@ -109,7 +119,7 @@ public static class ChessTeams
             new(730, 0, "Oratoria", PokeType.Fairy, ChessPiece.Queen),
             new(230, 0, "Hyporoi", PokeType.Dragon, ChessPiece.King),
         ]),
-        new("plante", "Équipe Plante",
+        new("plante",
         [
             new(387, 0, "Tortipouss", PokeType.Grass, ChessPiece.Pawn),
             new(652, 0, "Blindépique", PokeType.Fighting, ChessPiece.Rook),
@@ -118,7 +128,7 @@ public static class ChessTeams
             new(407, 0, "Roserade", PokeType.Poison, ChessPiece.Queen),
             new(389, 0, "Torterra", PokeType.Ground, ChessPiece.King),
         ]),
-        new("sol", "Équipe Sol",
+        new("sol",
         [
             new(111, 0, "Rhinocorne", PokeType.Ground, ChessPiece.Pawn),
             new(623, 0, "Golemastoc", PokeType.Ghost, ChessPiece.Rook),

@@ -119,8 +119,9 @@ README : « Comptes », « Administration », « Thèmes ».
 
 ## Préférences : Pokémon des échecs au repos (2026-11-22)
 - Même colonne JSON (`"echecsRepos":false` ; absent ou autre : animés), `SortPreferences.ChessIdle` (vrai par défaut :
-  seul le refus est écrit). Son propre bloc « Échecs » et son propre formulaire (`@formname="chess"`, case `repos` de
-  valeur `oui` ; décochée, rien n'est envoyé) ; « Revenir aux tris d'origine » le garde.
+  seul le refus est écrit). Son propre bloc « Échecs » et son propre formulaire (`@formname="chess"`, case
+  « Désactiver les animations » `figes` de valeur `oui` = figés ; décochée, rien n'est envoyé = animés ; d'abord une case
+  `repos` « Animer les Pokémon au repos » de sens inverse) ; « Revenir aux tris d'origine » le garde.
 - Écriture : `PreferencesService.SetChessIdleAsync`, appelée aussi par la case de la page d'une partie (rien pour un
   invité sans compte). Interface : `docs/claude/echecs.md`.
 

@@ -235,9 +235,13 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   à l'abri (ce tour bonus ne peut alors pas être passé) ; pat ou deux rois seuls : nulle. Un **pion au bout** du
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
-- **Équipes** par défaut (`ChessTeams.cs`) : Psy, Feu, Électrik, Poison, Eau, Plante, Sol, un Pokémon par pièce (les
-  pions de l'équipe Poison : Nidoran♂ en a, c, e, g, Nidoran♀ en b, d, f, h, même type) ; les deux joueurs ne peuvent pas
-  prendre la même. Pas encore d'équipe faite par les joueurs.
+- **Équipes** par défaut (`ChessTeams.cs`), nommées d'après leur roi (« Équipe Nidoking » ; identifiants gardés en
+  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`), un Pokémon par pièce (les pions de l'équipe
+  Nidoking : Nidoran♂ en a, c, e, g, Nidoran♀ en b, d, f, h, même type). Choisies **à l'aveugle** : on sait seulement si
+  l'autre a choisi (`ChessSession.TeamChoice`). La **même** prise par les deux : chacun la garde (`ChessHub.KeepTeam`) ou
+  en change (`ClearTeam` : l'autre l'apprend, et peut changer aussi) ; gardée par les deux, la partie se joue avec la même
+  équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade n'a pas de sprite Donjon chromatique : ordinaire sur
+  le plateau). Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
   sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;
   invitation valable 10 minutes ; l'ami accepte. Ou **partie publique** (`ChessHub.CreatePublic`) : un code de 8
@@ -246,7 +250,7 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   connexion, mais sans compte elle ne montre que « Rejoindre une partie » (code et prénom de 2 à 20 caractères, affiché
   « Léo (invité) », identifiant d'invité tiré par le serveur pour la durée de la page). Essais de codes : 10 par minute
   et par adresse IP (`AccountLimiter.TryChessCode`, IP lue par App.razor et transmise en paramètre protégé). Partie
-  contre un invité : comptée pour l'hôte seulement. Puis chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne) ; l'hôte joue les blancs. Une
+  contre un invité : comptée pour l'hôte seulement. Puis chacun choisit son équipe (il peut en changer tant que l'autre n'a pas choisi la sienne, voir « Équipes ») ; l'hôte joue les blancs. Une
   partie à la fois par joueur. Temps dépassé (`ChessHub.Tick`, il ne court qu'après les animations : `ChessTiming.Playback`),
   abandon, page quittée : défaite. Chaque coup venu du navigateur est revérifié par les règles.
 - **Recommencer** (`ChessHub.Rematch`, comme les échanges) : même adversaire, invité sans compte compris (tant qu'il
@@ -257,12 +261,17 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   la même échelle ; chaque joueur voit son camp en bas, les K.O. endormis sur les côtés. Un coup s'anime : marche (le
   cavalier en L), attaque et blessure pour une prise, puis le Pokémon mangé **marche jusqu'à sa place chez les K.O.**
   (entre les cases, pendant que le mangeur prend la case ; ce trajet compte dans `ChessTiming.Playback`, calculé côté
-  serveur avec la même géométrie), échange de places pour un pion au bout (par le même chemin). Bouton **Pièces** : les deux
-  équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Bouton **Aide** : qui mange qui, deux tableaux croisés
-  (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après `ChessGame.CanEat` et la table des types.
-  Case **« Animer les Pokémon au repos »** : décochée, les pièces du plateau restent sur la première image d'Idle, sauf
-  la pièce sélectionnée, et les K.O. sur celle de Sleep (marche, attaque et blessure restent animées). Gardée dans le compte
-  (`SortPreferences.ChessIdle`, aussi dans « Préférences ») ; sans compte, pour la partie en cours seulement.
+  serveur avec la même géométrie), échange de places pour un pion au bout (par le même chemin). **Pièce choisie** : ses
+  cases ; les pièces adverses de tout le plateau auxquelles elle est super efficace (**cadre vert**) ou qui lui résistent
+  (**cadre rouge**, elle ne peut pas les manger : `ChessGame.Matchups`) ; une **croix rouge** sur celles qu'elle atteint
+  mais ne peut pas manger (`Blocked`). Pendant le tour adverse, on peut choisir ses pièces pour cet **aperçu** (cadres
+  et croix, sans cases : on ne peut pas jouer). Boutons **Pièces** et **Table de type des pièces** dans la couleur principale du
+  thème. « Pièces » : les deux équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Table de type : qui mange
+  qui, deux tableaux croisés (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après
+  `ChessGame.CanEat` et la table des types. Case **« Désactiver les animations »** : cochée, les pièces du plateau restent
+  sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O. sur celle de Sleep (marche, attaque et blessure
+  restent animées). Gardée dans le compte (`SortPreferences.ChessIdle`, aussi dans « Préférences ») ; sans compte, pour
+  la partie en cours seulement.
 - **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
   « Statistiques » (onglet Mini-jeux, bloc « Échecs »). Pièces mangées par chaque camp (`WhiteCaptures`,
   `BlackCaptures`, migration `ChessCaptures` : 0 pour les parties d'avant).
@@ -889,13 +898,13 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes, partie en direct (clics sur le plateau, pièce choisie, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Aide » (qui mange qui), case « Animer les Pokémon au repos », « Recommencer » sur l'écran de fin |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes à l'aveugle (même équipe : la garder ou en changer), partie en direct (clics sur le plateau, pièce choisie et ses cadres vert / rouge, aperçu pendant le tour adverse, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Table de type des pièces » (qui mange qui), case « Désactiver les animations », « Recommencer » sur l'écran de fin |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
-| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes, coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
+| `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes (à l'aveugle, la même gardée ou changée), coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
-| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces qui résistent, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
+| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, cadres vert / rouge des pièces faibles ou qui résistent, croix rouge des prises impossibles, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
 | `MonsutaPotaru/Services/Battle/BattleTeam.cs` | Pokémon d'une sauvegarde → Pokémon du simulateur (format par génération, forme de Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |
@@ -907,7 +916,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs) |
-| `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
+| `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce ; chromatiques pour les noirs d'une partie à même équipe) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
 | `MonsutaPotaru/Services/MiniGames.cs` | Statistiques des mini-jeux : une partie vue par un joueur, parties gagnées, perdues, nulles, joueurs différents (sans les invités), le plus joué ; `MiniGameService` pour l'onglet Mini-jeux |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
 | `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |

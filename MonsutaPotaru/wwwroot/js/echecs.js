@@ -138,6 +138,7 @@ export async function create(container, component, options) {
     let size = fit();
 
     let overlay; // marques, redessinées à chaque changement
+    let crosses; // croix rouges, par-dessus les Pokémon
     const actors = new Map(); // une pièce par numéro : sprite, ombre, position, animation
     let scene, ready;
     const started = new Promise(resolve => ready = resolve);
@@ -187,6 +188,7 @@ export async function create(container, component, options) {
         game.canvas.classList.add("chess-canvas");
         drawBoard(s);
         overlay = s.add.graphics().setDepth(1);
+        crosses = s.add.graphics().setDepth(50);
         for (const u of units.values()) {
             const a = { id: u.id, mine: u.mine, name: u.name, anims: anims.get(u.id), x: 0, y: 0, dir: u.mine ? UP : DOWN, state: "idle", frame: 0, frameTime: 0, alpha: 1, once: false };
             if (a.anims) addTextures(s, a.anims);
@@ -336,6 +338,7 @@ export async function create(container, component, options) {
         if (!overlay) return;
         const g = overlay;
         g.clear();
+        crosses.clear();
         const box = (square, color, alpha) => {
             const o = originOf(square);
             g.fillStyle(color, alpha);
@@ -353,6 +356,9 @@ export async function create(container, component, options) {
         if (Number.isInteger(marks.check)) box(marks.check, 0xff3030, 0.4);
         if (Number.isInteger(hover)) frame(hover, 0xffffff, 0.45, 1);
         if (Number.isInteger(marks.selected)) frame(marks.selected, 0xffe14d, 1, 2);
+        // Pièces adverses face à la pièce choisie : vert, elle leur est super efficace ; rouge, elle ne peut pas les manger
+        for (const square of marks.weak ?? []) frame(square, 0x3cd65a, 1, 2);
+        for (const square of marks.resist ?? []) frame(square, 0xff3b3b, 1, 2);
         for (const move of marks.moves ?? []) {
             const o = originOf(move.to);
             if (!move.capture) {
@@ -369,14 +375,16 @@ export async function create(container, component, options) {
                 g.fillRect(sx > 0 ? cx : cx - 2, sy > 0 ? cy : cy - 7, 2, 7);
             }
         }
-        // Pièce qui résiste : une croix grise dans le coin, la case un peu assombrie
+        // Pièce atteinte mais que son type empêche de manger : une grande croix rouge sur tout le Pokémon (bord sombre,
+        // cœur rouge vif), par-dessus son sprite
         for (const square of marks.blocked ?? []) {
-            box(square, 0x000000, 0.18);
             const o = originOf(square);
-            g.fillStyle(0x3a3a44, 0.95);
-            for (let i = 0; i < 6; i++) {
-                g.fillRect(o.x + SQ - 9 + i, o.y + 3 + i, 2, 1);
-                g.fillRect(o.x + SQ - 4 - i, o.y + 3 + i, 2, 1);
+            for (const [color, size, inset] of [[0x4a0a0a, 4, 0], [0xff2e2e, 2, 1]]) {
+                crosses.fillStyle(color, 1);
+                for (let i = 0; i < 23; i++) {
+                    crosses.fillRect(o.x + 3 + i + inset, o.y + 3 + i + inset, size, size);
+                    crosses.fillRect(o.x + SQ - 7 - i + inset, o.y + 3 + i + inset, size, size);
+                }
             }
         }
     }
@@ -599,7 +607,7 @@ export async function create(container, component, options) {
                 if (current === run && !disposed) { current = null; sync(step.after); } // fini, ou abandonné
             });
         },
-        /** Marques : selected, moves ({ to, capture, super }), blocked, last, check. */
+        /** Marques : selected, moves ({ to, capture, super }), blocked (croix), weak (vert), resist (rouge), last, check. */
         highlight(next) { marks = next ?? {}; drawMarks(); },
         /** Toutes les pièces à leur place, sans animation. */
         setPosition(p) { if (p) sync(p); },

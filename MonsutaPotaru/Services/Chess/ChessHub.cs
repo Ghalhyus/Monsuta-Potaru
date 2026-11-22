@@ -123,6 +123,10 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
     public string? Notice { get; internal set; }
 
     internal string? HostTeam, GuestTeam;
+    // Même équipe prise par les deux : chacun la garde (les deux : partie avec la même équipe) ou en change ; celui qui
+    // en change (ChangingId) le fait savoir à l'autre, qui peut alors changer aussi
+    internal bool HostKeeps, GuestKeeps;
+    internal string? ChangingId;
     internal ChessGame? Game;
     internal DateTime? Deadline;
 
@@ -141,8 +145,31 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
             return ChessTeams.Find(IsHost(userId) ? HostTeam : GuestTeam);
     }
 
-    /// <summary>Équipe déjà prise par l'autre joueur (grisée pour celui-ci).</summary>
-    public ChessTeam? TakenBy(string userId) => TeamOf(Other(userId).UserId);
+    /// <summary>
+    /// Le choix des équipes vu par ce joueur : la sienne, et de l'autre seulement s'il a choisi (pas laquelle), sauf s'ils
+    /// ont pris la même (<see cref="ChessTeamChoice.Same"/>) : à chacun de la garder ou d'en changer.
+    /// </summary>
+    public ChessTeamChoice TeamChoice(string userId)
+    {
+        lock (Gate)
+        {
+            var host = IsHost(userId);
+            var (mine, theirs) = host ? (HostTeam, GuestTeam) : (GuestTeam, HostTeam);
+            var same = Stage == ChessStage.TeamChoice && mine is not null && mine == theirs ? ChessTeams.Find(mine) : null;
+            return new ChessTeamChoice(ChessTeams.Find(mine), theirs is not null, same, host ? HostKeeps : GuestKeeps,
+                host ? GuestKeeps : HostKeeps, ChangingId is { } changing && changing != userId && Involves(changing));
+        }
+    }
+
+    /// <summary>La partie a commencé avec la même équipe des deux côtés (gardée par les deux) : les noirs sont chromatiques.</summary>
+    public bool SameTeams
+    {
+        get
+        {
+            lock (Gate)
+                return Game?.SameTeams == true;
+        }
+    }
 
     /// <summary>Les coups joués, à partir du n° <paramref name="from"/> (la page les anime un à un).</summary>
     public IReadOnlyList<ChessStep> Steps(int from)
@@ -169,14 +196,20 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
             return Game is null ? [] : [.. Game.Units.OrderBy(u => u.Id)];
     }
 
-    /// <summary>Ce que la pièce de cette case peut faire, si c'est à ce joueur de la jouer (sinon rien).</summary>
+    /// <summary>
+    /// Ce que la pièce de cette case peut faire, si c'est une pièce de ce joueur (sinon rien) ; pendant le tour adverse,
+    /// un aperçu : ses cadres et ses croix, mais ni cases ni échange de pion (rien ne peut s'y jouer : demandé par
+    /// l'utilisateur, 2026-11-23 ; <see cref="ChessHub.Play"/> revérifie le tour).
+    /// </summary>
     public ChessOptions Options(string userId, int square)
     {
         lock (Gate)
         {
-            if (Game is not { } game || Stage != ChessStage.Playing || game.Turn != ColorOf(userId) || game.At(square)?.Color != game.Turn)
+            if (Game is not { } game || Stage != ChessStage.Playing || game.At(square)?.Color != ColorOf(userId))
                 return ChessOptions.None;
-            return new ChessOptions(game.Targets(square), game.Blocked(square), game.SwapsFrom(square));
+            var myTurn = game.Turn == ColorOf(userId);
+            return new ChessOptions(myTurn ? game.Targets(square) : [], game.Blocked(square), myTurn ? game.SwapsFrom(square) : [],
+                game.Matchups(square));
         }
     }
 
@@ -200,18 +233,29 @@ public sealed record ChessSnapshot(
     ChessStage Stage, int StepCount, ChessColor? Turn, bool MyTurn, int? BonusSquare, DateTime? Deadline, ChessColor? Winner,
     ChessEnd End, ChessPosition? Position, string? Notice, bool CanPass);
 
-/// <summary>Ce que peut faire la pièce choisie : ses cases, les pièces qu'elle ne peut pas manger, ses échanges avec un K.O.</summary>
-public sealed record ChessOptions(IReadOnlyList<ChessTarget> Targets, IReadOnlyList<ChessBlocked> Blocked, IReadOnlyList<int> Swaps)
+/// <summary>
+/// Le choix des équipes vu par un joueur : la sienne (<see cref="Mine"/>), si l'autre a choisi (sans dire laquelle), la
+/// même équipe prise par les deux (<see cref="Same"/> : chacun la garde ou en change, <see cref="IKeep"/>,
+/// <see cref="OtherKeeps"/>), et si l'autre vient d'en changer (<see cref="OtherChanging"/> : il peut changer aussi).
+/// </summary>
+public sealed record ChessTeamChoice(ChessTeam? Mine, bool OtherChose, ChessTeam? Same, bool IKeep, bool OtherKeeps, bool OtherChanging);
+
+/// <summary>
+/// Ce que peut faire la pièce choisie : ses cases, les pièces qu'elle atteint sans pouvoir les manger, ses échanges avec un
+/// K.O., et les pièces adverses qui lui sont faibles ou lui résistent (<see cref="Matchups"/>, tout le plateau).
+/// </summary>
+public sealed record ChessOptions(IReadOnlyList<ChessTarget> Targets, IReadOnlyList<ChessBlocked> Blocked, IReadOnlyList<int> Swaps,
+    IReadOnlyList<ChessMatchup> Matchups)
 {
-    public static readonly ChessOptions None = new([], [], []);
+    public static readonly ChessOptions None = new([], [], [], []);
     public bool Any => Targets.Count > 0 || Swaps.Count > 0;
 }
 
 /// <summary>
 /// Parties d'échecs Pokémon en direct (Mini-jeux → Échecs), en mémoire : un redémarrage du serveur les arrête. Un joueur
 /// ne joue qu'une partie à la fois. Une invitation (à un ami) ou une partie publique (rejointe par son code, avec ou sans
-/// compte) vaut <see cref="RequestLifetime"/>, tant que son auteur reste sur la page ; puis chacun choisit une équipe (pas
-/// la même), et la partie commence. Chaque coup est vérifié ici
+/// compte) vaut <see cref="RequestLifetime"/>, tant que son auteur reste sur la page ; puis chacun choisit une équipe sans
+/// voir celle de l'autre (la même : chacun la garde ou en change, <see cref="KeepTeam"/>), et la partie commence. Chaque coup est vérifié ici
 /// (<see cref="ChessGame"/>) ; un joueur qui ne joue pas dans le temps choisi par l'hôte perd (<see cref="Tick"/>), comme
 /// celui qui abandonne ou quitte la page.
 /// </summary>
@@ -440,8 +484,10 @@ public sealed class ChessHub : IDisposable
     }
 
     /// <summary>
-    /// Équipe choisie par ce joueur (identifiant venu du navigateur : revérifié), définitive ; pas celle de l'autre. Quand
-    /// les deux sont choisies, la partie commence : aux blancs (l'hôte) de jouer.
+    /// Équipe choisie par ce joueur (identifiant venu du navigateur : revérifié), sans voir celle de l'autre (demandé par
+    /// l'utilisateur, 2026-11-22 ; avant, celle de l'autre était grisée). Quand les deux sont choisies : différentes, la
+    /// partie commence (aux blancs, l'hôte, de jouer) ; la même, chacun la garde ou en change (<see cref="KeepTeam"/>,
+    /// <see cref="ClearTeam"/>).
     /// </summary>
     public string? ChooseTeam(ChessSession session, string userId, string teamId)
     {
@@ -454,26 +500,56 @@ public sealed class ChessHub : IDisposable
             var host = session.IsHost(userId);
             if ((host ? session.HostTeam : session.GuestTeam) is not null)
                 return "Tu as déjà choisi ton équipe.";
-            if ((host ? session.GuestTeam : session.HostTeam) == team.Id)
-                return $"{session.Other(userId).Pseudo} a déjà pris l'{team.InSentence} : choisis-en une autre.";
             if (host)
                 session.HostTeam = team.Id;
             else
                 session.GuestTeam = team.Id;
-            if (session.HostTeam is not null && session.GuestTeam is not null)
-            {
-                session.Game = new ChessGame(ChessTeams.Find(session.HostTeam)!, ChessTeams.Find(session.GuestTeam)!);
-                session.Stage = ChessStage.Playing;
-                session.Deadline = Now + ChessTiming.Margin + TimeSpan.FromSeconds(session.MoveSeconds);
-            }
+            if (session.ChangingId == userId)
+                session.ChangingId = null;
+            (session.HostKeeps, session.GuestKeeps) = (false, false);
+            if (session.HostTeam is not null && session.GuestTeam is not null && session.HostTeam != session.GuestTeam)
+                Start(session);
         }
         session.Notify();
         return null;
     }
 
     /// <summary>
-    /// Ce joueur revient sur son choix d'équipe : possible tant que l'autre n'a pas choisi la sienne (dès que les deux ont
-    /// choisi, la partie commence). Message d'erreur, ou null.
+    /// Les deux ont pris la même équipe : ce joueur la garde. Quand les deux la gardent, la partie commence avec la même
+    /// équipe des deux côtés (les noirs en chromatique). Message d'erreur, ou null.
+    /// </summary>
+    public string? KeepTeam(ChessSession session, string userId)
+    {
+        lock (session.Gate)
+        {
+            if (session.Stage != ChessStage.TeamChoice || !session.Involves(userId))
+                return "Cette partie n'attend plus d'équipe.";
+            if (session.HostTeam is null || session.HostTeam != session.GuestTeam)
+                return $"{session.Other(userId).Pseudo} a changé d'équipe : vous n'avez plus la même.";
+            if (session.IsHost(userId))
+                session.HostKeeps = true;
+            else
+                session.GuestKeeps = true;
+            if (session.HostKeeps && session.GuestKeeps)
+                Start(session);
+        }
+        session.Notify();
+        return null;
+    }
+
+    /// <summary>Les deux équipes sont choisies (et gardées, si c'est la même) : la partie commence, aux blancs de jouer.</summary>
+    private void Start(ChessSession session)
+    {
+        session.Game = new ChessGame(ChessTeams.Find(session.HostTeam)!, ChessTeams.Find(session.GuestTeam)!);
+        session.Stage = ChessStage.Playing;
+        session.ChangingId = null;
+        session.Deadline = Now + ChessTiming.Margin + TimeSpan.FromSeconds(session.MoveSeconds);
+    }
+
+    /// <summary>
+    /// Ce joueur revient sur son choix d'équipe : possible tant que l'autre n'a pas choisi la sienne (deux équipes
+    /// différentes : la partie commence), ou quand les deux ont pris la même (l'autre l'apprend, et peut changer aussi).
+    /// Message d'erreur, ou null.
     /// </summary>
     public string? ClearTeam(ChessSession session, string userId)
     {
@@ -488,10 +564,14 @@ public sealed class ChessHub : IDisposable
             var host = session.IsHost(userId);
             if ((host ? session.HostTeam : session.GuestTeam) is null)
                 return "Tu n'as pas encore choisi d'équipe.";
+            var same = session.HostTeam == session.GuestTeam;
             if (host)
                 session.HostTeam = null;
             else
                 session.GuestTeam = null;
+            (session.HostKeeps, session.GuestKeeps) = (false, false);
+            // Même équipe : l'autre apprend que celui-ci change ; l'autre qui change à son tour : les deux rechoisissent
+            session.ChangingId = same ? userId : session.ChangingId == session.Other(userId).UserId ? null : session.ChangingId;
         }
         session.Notify();
         return null;

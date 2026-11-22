@@ -184,7 +184,7 @@ public sealed class StatisticsPageTests : PageTestContext
 
         cut.WaitForAssertion(() => Assert.Equal(14, cut.FindAll(".stat-value").Count));
         // Générale : jouées, victoires, défaites, nulles, joueurs (comptes), favori ; Échecs : les mêmes, prises, perdues, équipe.
-        Assert.Equal(["4", "1", "2", "1", "2", "Échecs", "4", "1", "2", "1", "2", "5", "5", "Feu"],
+        Assert.Equal(["4", "1", "2", "1", "2", "Échecs", "4", "1", "2", "1", "2", "5", "5", "Dracaufeu"],
             cut.FindAll(".stat-value").Select(v => v.TextContent));
         Assert.Equal(["4 parties", "2 parties"], cut.FindAll(".stat-note").Select(n => n.TextContent));
         // Groupes : Parties, Favori ; Parties, Pièces, Équipe favorite avec ses six Pokémon (roi d'abord)

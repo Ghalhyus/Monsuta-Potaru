@@ -1,7 +1,7 @@
 @using MonsutaPotaru.Services
 @* Les Pokémon d'une équipe d'échecs, une ligne par pièce, du roi au pion : sprite (96 × 96) à 4rem, un pixel d'image par
    pixel d'écran à 150 % ; à côté, le nom en entier et le type, la pièce dessous, puis ce que la page ajoute (Extra :
-   combien sur le plateau et K.O. pendant une partie). Choix des équipes, fenêtre « Pièces », statistiques. Deux espèces
+   combien sur le plateau et K.O. pendant une partie ; Shiny : images chromatiques). Choix des équipes, fenêtre « Pièces », statistiques. Deux espèces
    de pion (Nidoran♂ et Nidoran♀) : une seule ligne, les deux images côte à côte (la colonne des images s'élargit, les
    lignes restent alignées : sous-grille). *@
 <ul class="chess-team-list">
@@ -12,7 +12,7 @@
             <div class="chess-mon-images">
                 @foreach (var member in Team.MembersOf(piece))
                 {
-                    <img src="@member.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                    <img src="@member.SpriteUrlOf(Shiny)" alt="" data-remplacement="images/pokemon/inconnu.png" />
                 }
             </div>
             <div class="chess-mon">
@@ -36,6 +36,9 @@
         [ChessPiece.King, ChessPiece.Queen, ChessPiece.Rook, ChessPiece.Bishop, ChessPiece.Knight, ChessPiece.Pawn];
 
     [Parameter, EditorRequired] public ChessTeam Team { get; set; } = default!;
+
+    /// <summary>Images chromatiques (les noirs d'une partie où les deux joueurs ont la même équipe).</summary>
+    [Parameter] public bool Shiny { get; set; }
 
     /// <summary>Ajout après le nom de la pièce (rien par défaut).</summary>
     [Parameter] public RenderFragment<ChessPiece>? Extra { get; set; }
