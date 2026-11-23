@@ -80,6 +80,73 @@ public sealed class HideSeekPageTests : PageTestContext
 
     private HideSeekSnapshot Shown => _hub.Active("sacha")!.Snapshot("sacha");
 
+    [Fact]
+    public async Task Lobby_MoodAndRandomFill_SetByTheHost_ShownToTheOthers()
+    {
+        ParkHabitats.Load(RealSavesTests.WebRoot()); // types de cases des cartes : humeur des Pokémon
+        // La collection de Sacha : trois Pokémon Eau, deux Feu
+        await using (var db = Db.NewContext())
+        {
+            db.BankPokemon.AddRange(new (ushort, string)[] { (7, "Carapuce"), (54, "Psykokwak"), (129, "Magicarpe"), (4, "Salamèche"), (37, "Goupix") }
+                .Select(p => HideSeekDrawTests.Row("sacha", p.Item1, p.Item2, p.Item2)));
+            await db.SaveChangesAsync();
+        }
+        var happy = new ushort[] { 7, 54, 129, 4, 37 }
+            .Count(s => HideSeekDraw.MoodIn(HideSeekDrawTests.Mon(s), ParkLandscape.Beach, 1) == ParkMood.Happy);
+        Assert.InRange(happy, 1, 4); // le filtre retire quelqu'un, il reste de quoi jouer
+
+        await MakeFriends("sacha", "ondine");
+        var sacha = Render<HideSeek>();
+        var ondine = RenderAs<HideSeek>("ondine");
+        sacha.WaitForText("Créer une partie");
+        await sacha.Click("Créer une partie");
+        sacha.WaitForText("Salle d'attente");
+        await sacha.Find("input.hide-seek-rounds").ChangeAsync(new() { Value = "1" });
+        await sacha.Find("input.hide-seek-count").ChangeAsync(new() { Value = "20" });
+        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = nameof(ParkLandscape.Beach) });
+        sacha.WaitForText("5 Pokémon différents dans ce choix peuvent vivre à la plage : des Pokémon aléatoires complètent le parc.");
+        Assert.True(sacha.Find("input.hide-seek-fill").HasAttribute("checked")); // complété par défaut, tous les Pokémon par défaut
+        Assert.Equal(nameof(HideSeekMood.All), sacha.Find("select.hide-seek-mood").GetAttribute("value"));
+
+        // Sans complément : le parc n'a que les Pokémon du choix
+        await sacha.Find("input.hide-seek-fill").ChangeAsync(new() { Value = false });
+        sacha.WaitForText("5 Pokémon différents dans ce choix peuvent vivre à la plage : le parc n'en aura que 5.");
+        // Heureux seulement : ceux qui aiment la plage
+        await sacha.Find("select.hide-seek-mood").ChangeAsync(new() { Value = nameof(HideSeekMood.Happy) });
+        sacha.WaitForText($"{happy} Pokémon différents dans ce choix peuvent vivre à la plage (heureux dans le parc) : le parc n'en aura que {happy}.");
+        Assert.Contains("un Pokémon est heureux quand un habitat qu'il aime couvre plus de la moitié du parc", sacha.Text());
+        // Paysage au hasard : le nombre dépend du paysage du tour
+        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = "" });
+        sacha.WaitForText("selon le paysage du tour, le parc en aura de");
+        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = nameof(ParkLandscape.Beach) });
+        // Valeur trafiquée : refusée
+        await sacha.Find("select.hide-seek-mood").ChangeAsync(new() { Value = "9" });
+        sacha.WaitForText("Cette humeur n'est pas proposée.");
+        Assert.Equal(HideSeekMood.Happy, Shown.Settings.Mood);
+        Assert.False(Shown.Settings.FillWithRandom);
+        // Des Pokémon aléatoires : pas de case « compléter » (ils remplissent le parc eux-mêmes)
+        await sacha.Find("select.hide-seek-pool").ChangeAsync(new() { Value = nameof(HideSeekPool.Random) });
+        sacha.WaitForText("Pokémon différents (heureux dans le parc) peuvent être tirés.");
+        Assert.Empty(sacha.FindAll("input.hide-seek-fill"));
+        await sacha.Find("select.hide-seek-pool").ChangeAsync(new() { Value = nameof(HideSeekPool.Host) });
+
+        await sacha.Find("select.hide-seek-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.Click("Inviter");
+        ondine.WaitForText("t'invite à une partie de cache-cache");
+        await ondine.Click("Accepter");
+        ondine.WaitForText("En attente du lancement de la partie par sacha");
+        Assert.Contains("Humeur des Pokémon : heureux dans le parc", ondine.Text());
+        Assert.Contains("Pas de Pokémon au hasard pour compléter le parc", ondine.Text());
+
+        // La partie : seulement les Pokémon heureux de la collection
+        await sacha.Click("Lancer la partie");
+        sacha.WaitForText("Prépare-toi…");
+        Assert.NotNull(Shown.Target!.OwnerPseudo); // la cible vient de la collection
+        await Wait(TimeSpan.FromSeconds(HideSeekSettings.DefaultCountdown));
+        sacha.WaitForText("Cherche-le dans le parc !");
+        Assert.Equal($"Tour 1 sur 1 · Plage · {happy} Pokémon", PageTestExtensions.Normalize(sacha.Find(".hide-seek-round").TextContent));
+    }
+
     private static async Task ClickPokemon(IRenderedComponent<HideSeek> cut, int id) =>
         await cut.InvokeAsync(() => cut.Instance.OnPokemonClicked(id));
 
@@ -101,6 +168,16 @@ public sealed class HideSeekPageTests : PageTestContext
         Assert.Equal("4", ondine.Find(".hide-seek-announce-count").TextContent); // le décompte réglé par l'hôte
         Assert.Empty(sacha.FindAll(".hide-seek-panel .hide-seek-target"));
         Assert.Contains("Tour 1 sur 2", sacha.Find(".hide-seek-panel").TextContent);
+        // Le parc de chacun : même graine (le tour) et même début de la recherche (le serveur) : mêmes Pokémon aux mêmes endroits
+        var syncs = JSInterop.Invocations["create"]
+            .Select(i => System.Text.Json.JsonSerializer.SerializeToElement(i.Arguments[2]).GetProperty("sync")).ToList();
+        Assert.Equal(2, syncs.Count); // Sacha et Ondine
+        Assert.All(syncs, s =>
+        {
+            Assert.Equal(Shown.Round!.Seed, s.GetProperty("seed").GetInt32());
+            Assert.InRange(s.GetProperty("startsIn").GetDouble(), 3.9, 4.0); // le décompte réglé, le temps du hub arrêté
+            Assert.Equal(HideSeekDraw.NightLevel(Shown.StartsAt!.Value), s.GetProperty("night").GetDouble()); // 13 h à Paris : le jour
+        });
 
         // Avant la fin de la préparation, un clic ne compte pas
         await ClickPokemon(sacha, target.Id);

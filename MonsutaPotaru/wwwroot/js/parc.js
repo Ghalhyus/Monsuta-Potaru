@@ -115,6 +115,8 @@ const SWIM = { waterShare: 2 / 3, sink: 4 };
 const LAVA_BATH = { share: 1 / 4 };
 const FLY_HEIGHT = 10; // hauteur (pixels de la carte) d'un volant au-dessus de l'eau, son ombre restant sur l'eau
 const FLY_OVER = 0.3; // volant : part de ses promenades qui passent au-dessus de l'eau (un tour, puis il se pose à terre)
+// Simulation commune (cache-cache) : pas de temps fixe (secondes), et temps de calcul au plus par image pour rattraper un retard (ms)
+const SYNC_STEP = 1 / 60, SYNC_BUDGET = 30;
 const SUMMIT_SHARE = 0.4; // volant, à la montagne : part de ses promenades (et de ses arrivées) sur les plateaux et les sommets
 
 // Lignes des planches de SpriteCollab : bas, bas-droite, droite, haut-droite, haut, haut-gauche, gauche, bas-gauche.
@@ -122,10 +124,30 @@ const FRONT = 0;
 const directionOf = (dx, dy) => (((Math.round((90 - Math.atan2(dy, dx) * 180 / Math.PI) / 45)) % 8) + 8) % 8;
 const vectorOf = dir => { const a = (90 - dir * 45) * Math.PI / 180; return [Math.cos(a), Math.sin(a)]; };
 
-const random = (min, max) => min + Math.random() * (max - min);
-const chance = (perSecond, dt) => Math.random() < perSecond * dt; // probabilité par seconde, ramenée au pas de temps
+/**
+ * Hasard de la simulation (décisions, endroits, caractères) : Math.random, ou au cache-cache un tirage à graine commun à
+ * tous les joueurs (seeded) ; avec le même pas de temps (SYNC_STEP), chacun voit les mêmes Pokémon aux mêmes endroits. Le
+ * dessin seul (éclairs, décalage des tuiles animées) tire avec Math.random : il ne doit pas décaler ce tirage.
+ */
+let rand = Math.random;
+/** Tirage à graine (mulberry32) : la même suite de nombres dans tous les navigateurs. */
+function seeded(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+const random = (min, max) => min + rand() * (max - min);
+const chance = (perSecond, dt) => rand() < perSecond * dt; // probabilité par seconde, ramenée au pas de temps
+// Racine exacte partout (Math.hypot peut différer d'un navigateur à l'autre au dernier chiffre : simulation commune)
+const hypot = (x, y) => Math.sqrt(x * x + y * y);
+const squared = v => v * v;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const distance = (a, b) => hypot(a.x - b.x, a.y - b.y);
 
 /** Animations d'un dossier de sprites (AnimData.xml + planches), chargées une fois par dossier ; reprises par le plateau des échecs (echecs.js). */
 const sheets = new Map();
@@ -360,6 +382,15 @@ class Ground {
         const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
         return tx >= 0 && ty >= 0 && tx < this.columns && ty < this.lines && (this.walkable[ty * this.columns + tx] & (LIQUID | AIR)) !== 0;
     }
+    /**
+     * Part des promenades (et des arrivées) d'un nageur dans l'eau : SWIM.waterShare, ou plus quand la terre est rare (la part
+     * de l'eau parmi les cases libres) : à l'océan, quelques îlots de 8 à 68 cases attiraient un tiers des promenades, et
+     * tous les nageurs s'y entassaient. Sans terre : toujours l'eau.
+     */
+    get waterShare() {
+        const all = this.water.length + this.free.length;
+        return all ? Math.max(SWIM.waterShare, this.water.length / all) : 1;
+    }
     center(i) { return { x: (i % this.columns) * TILE + TILE / 2, y: Math.floor(i / this.columns) * TILE + TILE / 2 }; }
 
     /**
@@ -371,7 +402,7 @@ class Ground {
         const fallback = this.free.length ? this.free : this.liquid; // sans terre (océan) : l'eau
         const cells = wanted.length ? wanted : fallback;
         if (!cells.length) return { x: this.width / 2, y: this.height / 2 };
-        const c = this.center(cells[Math.floor(Math.random() * cells.length)]);
+        const c = this.center(cells[Math.floor(rand() * cells.length)]);
         return { x: c.x + random(-4, 4), y: c.y + random(-4, 4) };
     }
 
@@ -548,9 +579,9 @@ class Pokemon {
      * lave, un volant souvent sur les sommets.
      */
     destination() {
-        if (this.swims && this.ground.water.length && (!this.ground.free.length || Math.random() < SWIM.waterShare)) return WATER;
-        if (this.bathes && this.ground.lava.length && Math.random() < LAVA_BATH.share) return LAVA;
-        if (this.flies && this.ground.summits.length && Math.random() < SUMMIT_SHARE) return SUMMIT;
+        if (this.swims && this.ground.water.length && rand() < this.ground.waterShare) return WATER;
+        if (this.bathes && this.ground.lava.length && rand() < LAVA_BATH.share) return LAVA;
+        if (this.flies && this.ground.summits.length && rand() < SUMMIT_SHARE) return SUMMIT;
         return LAND;
     }
 
@@ -615,7 +646,7 @@ class Pokemon {
     /** Avance l'animation ; la marche joue au rythme de la vitesse (les pieds ne glissent pas, ne patinent pas). */
     advanceFrame(dtMs, size) {
         const anim = this.anim;
-        const rate = this.state === "walk" ? clamp(Math.hypot(this.vx, this.vy) / (WALK_ANIMATION_SPEED * size), 0.35, 1.4) : 1;
+        const rate = this.state === "walk" ? clamp(hypot(this.vx, this.vy) / (WALK_ANIMATION_SPEED * size), 0.35, 1.4) : 1;
         this.frameTime += dtMs * rate;
         while (this.frameTime >= anim.durations[this.frame % anim.durations.length]) {
             if (ONCE.has(this.state) && this.frame >= anim.durations.length - 1) { this.frameTime = 0; break; } // reste sur la dernière image
@@ -631,8 +662,8 @@ class Pokemon {
  * cartes de son paysage : « parc-1 », « plage-1 »), size (taille du parc, de 1 à 4 : sa carte), fullscreen (élément mis en
  * plein écran, qui contient <container> et les fenêtres de la page, comme la fiche d'un Pokémon ; sans lui, <container>),
  * names (faux : pas de nom au survol, au cache-cache), fill (vrai : le canvas prend toute la largeur et toute la hauteur
- * qui reste dans la fenêtre, et le zoom, entier, couvre tout le canvas, sans bandes autour de la carte ; on fait glisser
- * pour voir les bords : cache-cache).
+ * qui reste dans la fenêtre ; au départ, le plus petit zoom, où toute la carte se voit sans faire glisser, puis des crans
+ * entiers jusqu'à deux de plus que le zoom qui couvre tout le canvas : cache-cache).
  */
 /** Fin d'une animation jouée une fois : la suite prévue, sinon il se repose. */
 function playedOnce(p, dt) {
@@ -657,7 +688,15 @@ function paceOf(intent) {
 export async function create(container, component, options) {
     const canMove = options?.canMove === true;
     const showNames = options?.names !== false; // nom au survol (pas au cache-cache : il faut reconnaître le Pokémon)
-    const fill = options?.fill === true; // toute la place, zoom qui couvre (cache-cache)
+    const fill = options?.fill === true; // toute la place, zoom de départ où toute la carte se voit (cache-cache)
+    // Simulation commune (cache-cache) : graine du tour, secondes avant son début et nuit (0 à 1), selon le serveur. Pas de
+    // temps fixe compté depuis ce début, la nuit du serveur (pas l'heure de chacun) et sans la souris (les Pokémon ne
+    // viennent pas la voir) : tous les joueurs voient les mêmes Pokémon aux mêmes endroits.
+    const sync = Number.isFinite(options?.sync?.seed) ? options.sync : null;
+    const syncNight = sync ? clamp(Number(sync.night) || 0, 0, 1) : 0;
+    rand = sync ? seeded(sync.seed) : Math.random;
+    const syncStart = sync ? performance.now() + (Number(sync.startsIn) || 0) * 1000 : 0;
+    let syncSteps = 0, syncReady = false; // pas simulés depuis le début ; Pokémon posés (avant : rien ne bouge)
     const fullscreenTarget = options?.fullscreen ?? container; // plein écran : lui, pour que la fiche d'un Pokémon s'y affiche aussi
     const size = Math.max(1, Math.floor(Number(options?.size) || 1));
     const mapName = /^[a-z0-9-]+$/.test(options?.map ?? "") ? options.map : "parc-1";
@@ -744,6 +783,15 @@ export async function create(container, component, options) {
         const area = viewArea();
         return Math.max(1, Math.ceil(width / area.w), Math.ceil(height / area.h));
     };
+    /**
+     * Zoom où toute cette zone tient dans un canvas de cette taille (pixels d'écran), sans faire glisser : pas forcément
+     * entier (un zoom entier laissait la carte toute petite, ou ne la montrait pas entière). Des bandes de forêt ou de fond
+     * restent sur les côtés quand la fenêtre est plus large que la carte.
+     */
+    const fitZoom = (width, height) => {
+        const area = viewArea();
+        return Math.min(width / area.w, height / area.h);
+    };
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
         if (fill) {
@@ -752,7 +800,7 @@ export async function create(container, component, options) {
             const top = container.getBoundingClientRect().top + window.scrollY - transientAbove();
             const height = isFullscreen() ? Math.round(container.clientHeight * ratio)
                 : Math.round(Math.max(240, window.innerHeight - top - spaceBelow()) * ratio);
-            return { ratio, zoom: coverZoom(width, height), width, height };
+            return { ratio, zoom: fitZoom(width, height), cover: coverZoom(width, height), width, height };
         }
         if (isFullscreen()) {
             const height = Math.round(container.clientHeight * ratio);
@@ -767,18 +815,20 @@ export async function create(container, component, options) {
         const zoom = Math.max(1, Math.round(240 * ratio / viewH), Math.min(Math.floor(visible / viewH), fitWidth));
         return { ratio, zoom, width: Math.round(width * ratio), height: zoom * viewH };
     };
-    let maxZoom = 1; // le plus grand zoom permis : le zoom par défaut (on dézoome de là jusqu'à ×1), ou deux crans de plus en mode fill
-    let minZoom = 1; // le plus petit : ×1, ou en mode fill le zoom qui couvre (plus petit, des bandes paraîtraient)
+    let maxZoom = 1; // le plus grand zoom permis : le zoom par défaut (on dézoome de là jusqu'à ×1), ou en mode fill deux crans de plus que le zoom qui couvre
+    let minZoom = 1; // le plus petit : ×1, ou en mode fill le zoom de départ (toute la carte se voit)
     let baseZoom = 1; // zoom de départ, donné par measure
-    /** Règle les zooms permis d'après le zoom mesuré (une autre taille : on revient au zoom de départ). */
-    const setBaseZoom = zoom => {
-        baseZoom = zoom;
-        minZoom = fill ? zoom : 1;
-        maxZoom = fill ? zoom + 2 : zoom;
+    /** Règle les zooms permis d'après la mesure (une autre taille : on revient au zoom de départ). */
+    const setBaseZoom = size => {
+        baseZoom = size.zoom;
+        minZoom = fill ? size.zoom : 1;
+        maxZoom = fill ? Math.max(size.cover, Math.ceil(size.zoom)) + 2 : size.zoom;
     };
+    /** Cran suivant (+1) ou précédent (-1) : le nombre entier d'à côté (le zoom de départ du mode fill peut ne pas l'être). */
+    const stepZoom = direction => direction > 0 ? Math.floor(k + 1e-6) + 1 : Math.ceil(k - 1e-6) - 1;
     const applyZoom = zoom => {
         k = zoom;
-        spriteK = Math.max(Math.min(k, 2), Math.round(k * SPRITE_SIZE));
+        spriteK = Math.max(1, Math.min(Math.round(k), 2), Math.round(k * SPRITE_SIZE)); // entier, même si le zoom ne l'est pas
         spriteScale = spriteK / k;
         if (!scene) return;
         camera.setZoom(k);
@@ -795,7 +845,7 @@ export async function create(container, component, options) {
     };
     /** Centre de la vue, en pixels de la carte (camera.midPoint n'est mis à jour qu'au dessin). */
     const viewCenter = () => ({ x: camera.scrollX + camera.width / 2, y: camera.scrollY + camera.height / 2 });
-    /** Change le zoom (un nombre entier, de ×1 au zoom par défaut) en gardant fixe le point (en pixels du canvas) visé. */
+    /** Change le zoom (entre minZoom et maxZoom) en gardant fixe le point (en pixels du canvas) visé. */
     function zoomTo(zoom, sx = camera.width / 2, sy = camera.height / 2) {
         zoom = clamp(zoom, minZoom, maxZoom);
         if (zoom === k) return;
@@ -810,12 +860,12 @@ export async function create(container, component, options) {
         const center = viewCenter();
         game.scale.setZoom(1 / size.ratio); // canvas en pixels physiques, affiché en pixels CSS
         game.scale.resize(size.width, size.height);
-        if (size.zoom !== baseZoom) { setBaseZoom(size.zoom); applyZoom(baseZoom); } // autre taille (plein écran...) : zoom par défaut
+        if (size.zoom !== baseZoom) { setBaseZoom(size); applyZoom(baseZoom); } // autre taille (plein écran...) : zoom par défaut
         else applyZoom(clamp(k, minZoom, maxZoom));
         camera.centerOn(center.x, center.y);
     };
     const initial = measure();
-    setBaseZoom(initial.zoom);
+    setBaseZoom(initial);
     applyZoom(initial.zoom);
 
     // ---------- Boutons sur la carte : dézoomer, zoomer, plein écran ----------
@@ -831,8 +881,8 @@ export async function create(container, component, options) {
         controls.appendChild(b);
         return b;
     };
-    const zoomOutButton = button("Dézoomer", ICONS.minus, () => zoomTo(k - 1));
-    const zoomInButton = button("Zoomer", ICONS.plus, () => zoomTo(k + 1));
+    const zoomOutButton = button("Dézoomer", ICONS.minus, () => zoomTo(stepZoom(-1)));
+    const zoomInButton = button("Zoomer", ICONS.plus, () => zoomTo(stepZoom(1)));
     const fullscreenButton = button("Plein écran", ICONS.expand, () => {
         if (isFullscreen()) document.exitFullscreen().catch(() => { });
         else fullscreenTarget.requestFullscreen().catch(() => { });
@@ -856,7 +906,7 @@ export async function create(container, component, options) {
         wheel += e.deltaMode === 0 ? e.deltaY : Math.sign(e.deltaY) * 100; // pavé tactile : petits pas cumulés
         if (Math.abs(wheel) < 100) return;
         const r = game.canvas.getBoundingClientRect();
-        zoomTo(k - Math.sign(wheel), (e.clientX - r.left) * game.canvas.width / r.width, (e.clientY - r.top) * game.canvas.height / r.height);
+        zoomTo(stepZoom(-Math.sign(wheel)), (e.clientX - r.left) * game.canvas.width / r.width, (e.clientY - r.top) * game.canvas.height / r.height);
         wheel = 0;
     };
 
@@ -1185,7 +1235,7 @@ export async function create(container, component, options) {
         // Pincement à deux doigts : un cran de zoom chaque fois que l'écart change d'un tiers environ
         const fingers = () => [s.input.pointer1, s.input.pointer2];
         const pinching = () => fingers().every(f => f.isDown);
-        const spread = () => { const [a, b] = fingers(); return Math.hypot(a.x - b.x, a.y - b.y); };
+        const spread = () => { const [a, b] = fingers(); return hypot(a.x - b.x, a.y - b.y); };
         let pinch = null;
         s.input.on("pointerdown", pointer => {
             if (pinching()) { // deux doigts : pincement (un Pokémon porté retourne à sa place)
@@ -1206,14 +1256,14 @@ export async function create(container, component, options) {
             if (!pinching()) return;
             const [a, b] = fingers(), now = spread();
             if (now > pinch.spread * 1.35 || now < pinch.spread / 1.35) {
-                zoomTo(k + (now > pinch.spread ? 1 : -1), (a.x + b.x) / 2, (a.y + b.y) / 2);
+                zoomTo(stepZoom(now > pinch.spread ? 1 : -1), (a.x + b.x) / 2, (a.y + b.y) / 2);
                 pinch.spread = now;
             }
         };
         // Bouton appuyé : au-delà du seuil, la vue défile (même sur un Pokémon, avant la fin de l'appui long)
         const dragMove = pointer => {
             const dx = pointer.x - drag.x, dy = pointer.y - drag.y;
-            if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) drag.moved = true;
+            if (!drag.moved && hypot(dx, dy) > DRAG_THRESHOLD * (window.devicePixelRatio || 1)) drag.moved = true;
             if (drag.moved) camera.setScroll(drag.scrollX - dx / k, drag.scrollY - dy / k);
         };
         s.input.on("pointermove", pointer => {
@@ -1328,6 +1378,9 @@ export async function create(container, component, options) {
         return spot;
     }
 
+    /** Le pointeur tel que les Pokémon le voient : aucun dans la simulation commune (il n'est que chez un joueur). */
+    const pointerForAI = () => sync ? null : mouse;
+
     /** Nouvelle intention quand le Pokémon a fini ce qu'il faisait. */
     function decide(p, night) {
         const friends = friendsOf(p);
@@ -1348,7 +1401,7 @@ export async function create(container, component, options) {
     /** Fatigué : il va dormir près d'un congénère qui dort, sinon sur place ; dans la lave, il en sort d'abord. */
     function goToSleep(p, friends) {
         const sleeper = friends.filter(f => f.state === "sleep").sort((a, b) => distance(p, a) - distance(p, b))[0];
-        if (sleeper && Math.random() < p.personality.sociable && distance(p, sleeper) > 20) {
+        if (sleeper && rand() < p.personality.sociable && distance(p, sleeper) > 20) {
             const side = p.x < sleeper.x ? -1 : 1;
             p.walkTo(sleeper.x + side * random(16, 23), sleeper.y + random(-5, 5), "sleep", p.bed);
         } else if (ground.isFree(p.x, p.y, p.bed)) {
@@ -1374,7 +1427,8 @@ export async function create(container, component, options) {
 
     /** Curieux : il vient voir le pointeur de près, puis le regarde. Vrai s'il s'y intéresse. */
     function visitPointer(p) {
-        if (!mouse || distance(p, mouse) >= 133 || Math.random() >= 0.6 * p.personality.curious) return false;
+        const mouse = pointerForAI();
+        if (!mouse || distance(p, mouse) >= 133 || rand() >= 0.6 * p.personality.curious) return false;
         if (distance(p, mouse) > 30) {
             const angle = Math.atan2(p.y - mouse.y, p.x - mouse.x);
             p.walkTo(mouse.x + Math.cos(angle) * 21, mouse.y + Math.sin(angle) * 16, "curious");
@@ -1391,12 +1445,12 @@ export async function create(container, component, options) {
      */
     function keepCompany(p, friends) {
         const { activity, sociable } = p.personality;
-        const roll = Math.random();
+        const roll = rand();
         friends.sort((a, b) => distance(p, a) - distance(p, b)); // du plus proche au plus loin (visite plus bas)
         const nearest = friends[0];
         if (nearest && distance(p, nearest) < 47) {
             if (roll >= 0.45 + 0.35 * sociable) return false;
-            if (Math.random() < 0.55) {
+            if (rand() < 0.55) {
                 p.face(nearest);
                 p.rest(random(3, 8) / activity);
             } else {
@@ -1406,7 +1460,7 @@ export async function create(container, component, options) {
             return true;
         }
         if (!friends.length || roll >= 0.1 + 0.45 * sociable) return false;
-        const friend = friends[Math.floor(Math.random() ** 2 * friends.length)];
+        const friend = friends[Math.floor(squared(rand()) * friends.length)];
         const angle = random(0, Math.PI * 2);
         p.walkTo(friend.x + Math.cos(angle) * 20, friend.y + Math.sin(angle) * 13, "visit");
         return true;
@@ -1415,11 +1469,11 @@ export async function create(container, component, options) {
     /** Rien de mieux à faire : un tour au-dessus du liquide (volant), explorer, ou regarder autour de soi. */
     function wander(p) {
         const { activity } = p.personality;
-        if (p.moves === "fly" && ground.liquid.length && Math.random() < 0.55 * FLY_OVER) {
+        if (p.moves === "fly" && ground.liquid.length && rand() < 0.55 * FLY_OVER) {
             // Volant : un tour au-dessus de l'eau ou de la lave (il n'y reste pas : arrivé, il repart vers la terre, update).
             const spot = spotNear(p, LIQUID);
             p.walkTo(spot.x, spot.y, "soar", LIQUID);
-        } else if (Math.random() < 0.55) {
+        } else if (rand() < 0.55) {
             // Explorer un endroit du parc, ni trop près ni trop loin (un nageur : surtout dans l'eau ; un type Feu : parfois
             // dans la lave).
             const spot = spotNear(p, p.destination());
@@ -1465,6 +1519,7 @@ export async function create(container, component, options) {
 
     /** Curiosité : un Pokémon éveillé près du pointeur se tourne vers lui, et parfois s'en approche. Vrai s'il en est près. */
     function watchPointer(p, dt) {
+        const mouse = pointerForAI();
         const nearMouse = mouse && distance(p, mouse) < 93;
         if (nearMouse && p.state === "idle") {
             p.face(mouse);
@@ -1490,8 +1545,8 @@ export async function create(container, component, options) {
 
     /** Il regarde autour de lui : un quart de tour, ou de nouveau devant lui. */
     function lookAround(p) {
-        if (Math.random() < 0.25) p.dir = FRONT;
-        else p.dir = (p.dir + (Math.random() < 0.5 ? 1 : 7)) % 8;
+        if (rand() < 0.25) p.dir = FRONT;
+        else p.dir = (p.dir + (rand() < 0.5 ? 1 : 7)) % 8;
         p.lookTimer = random(1.2, 3.5);
     }
 
@@ -1526,6 +1581,7 @@ export async function create(container, component, options) {
 
     /** Arrivé quelque part : il regarde ce qu'il était venu voir (le pointeur, un congénère), puis se repose. */
     function settle(p) {
+        const mouse = pointerForAI();
         if (p.intent === "curious" && mouse) p.face(mouse);
         if (p.intent === "visit" || p.intent === "stroll") {
             // Arrivé chez un congénère : ils se regardent.
@@ -1539,13 +1595,13 @@ export async function create(container, component, options) {
     function steer(p, dt, speed) {
         const next = p.path[0];
         let dx = next.x - p.x, dy = next.y - p.y;
-        const toNext = Math.hypot(dx, dy) || 1;
+        const toNext = hypot(dx, dy) || 1;
         dx /= toNext; dy /= toNext;
         for (const o of pokemon) {
             const d = distance(p, o);
             if (o !== p && d < 15 && d > 0) { dx += (p.x - o.x) / d * 0.6; dy += (p.y - o.y) / d * 0.6; }
         }
-        const norm = Math.hypot(dx, dy) || 1;
+        const norm = hypot(dx, dy) || 1;
         // Virages arrondis, démarrages en douceur.
         const ease = Math.min(1, dt * 6);
         p.vx += (dx / norm * speed - p.vx) * ease;
@@ -1564,7 +1620,7 @@ export async function create(container, component, options) {
 
     /** Regarde où il va, et ne change de direction que franchement (pas de tremblement entre deux directions voisines). */
     function faceMotion(p) {
-        const moving = Math.hypot(p.vx, p.vy);
+        const moving = hypot(p.vx, p.vy);
         if (moving <= 3) return;
         const [fx, fy] = vectorOf(p.dir);
         if ((fx * p.vx + fy * p.vy) / moving < 0.85) p.dir = directionOf(p.vx, p.vy);
@@ -1733,7 +1789,7 @@ export async function create(container, component, options) {
         const sad = moodOf(p) === "sad";
         p.storm.setVisible(sad);
         if (!sad) return;
-        if (clock >= p.nextFlash + STORM.flash * 3) p.nextFlash = clock + random(...STORM.flashEvery);
+        if (clock >= p.nextFlash + STORM.flash * 3) p.nextFlash = clock + STORM.flashEvery[0] + Math.random() * (STORM.flashEvery[1] - STORM.flashEvery[0]); // dessin : pas le tirage commun
         const t = clock - p.nextFlash, flashing = (t >= 0 && t < STORM.flash) || (t >= STORM.flash * 2 && t < STORM.flash * 3);
         const rain = Math.floor(clock / STORM.rain + p.id) % 2 ? "rain2" : "rain1";
         const frame = flashing ? "bolt" : rain;
@@ -1821,17 +1877,33 @@ export async function create(container, component, options) {
         p.wet += ((under ? 1 : 0) - p.wet) * ease;
     }
 
-    let level = nightLevel(), levelAge = 0;
+    let level = sync ? syncNight : nightLevel(), levelAge = 0;
     function tick(delta) {
         const dt = Math.min(0.1, delta / 1000); // onglet en arrière-plan : pas de bond au retour
         levelAge += dt;
-        if (levelAge > 1) { level = nightLevel(); levelAge = 0; } // l'heure, une fois par seconde
+        if (levelAge > 1 && !sync) { level = nightLevel(); levelAge = 0; } // l'heure, une fois par seconde
         if (pressing() && performance.now() - drag.time >= LONG_PRESS)
             pickUp(drag.target, drag.pointer, drag.offset); // appui long sur un Pokémon
         if (held) { edgeScroll(dt); carry(); }
-        step(dt, level);
+        if (sync) stepSynced();
+        else step(dt, level);
         animate(dt);
         draw(level);
+    }
+
+    /**
+     * Simulation commune : autant de pas fixes que de SYNC_STEP écoulés depuis le début du tour, une fois les Pokémon posés.
+     * Un retard (onglet en arrière-plan, page rechargée pendant le tour) se rattrape par morceaux de SYNC_BUDGET ms par image :
+     * les Pokémon filent un instant à leur place.
+     */
+    function stepSynced() {
+        if (!syncReady) return;
+        const due = Math.floor((performance.now() - syncStart) / (SYNC_STEP * 1000));
+        const until = performance.now() + SYNC_BUDGET;
+        while (syncSteps < due && (syncSteps % 64 !== 0 || performance.now() < until)) {
+            step(SYNC_STEP, syncNight);
+            syncSteps++;
+        }
     }
 
     await started;
@@ -1852,8 +1924,8 @@ export async function create(container, component, options) {
     /** Où arrive un nouveau : nageur surtout dans l'eau ; volant souvent sur un sommet (montagne) ; Feu à terre. */
     const arrivalPlace = info => {
         const swims = info.moves === "swim" || info.moves === "swim-lava";
-        if (swims && Math.random() < SWIM.waterShare) return WATER;
-        return info.moves === "fly" && ground.summits.length && Math.random() < SUMMIT_SHARE ? SUMMIT : LAND;
+        if (swims && ground.water.length && rand() < ground.waterShare) return WATER;
+        return info.moves === "fly" && ground.summits.length && rand() < SUMMIT_SHARE ? SUMMIT : LAND;
     };
 
     /** Nouveau Pokémon (planches chargées) : posé à un endroit libre, loin des autres (<placed>), avec ses images. */
@@ -1896,6 +1968,7 @@ export async function create(container, component, options) {
             const placed = [...pokemon];
             for (const item of loaded.filter(Boolean)) placed.push(placeNew(item, placed));
             pokemon = placed;
+            syncReady = true; // simulation commune : une seule liste (le parc d'un tour), posée dans le même ordre partout
             if (hovered && !pokemon.includes(hovered)) hovered = null;
         },
         /** Type de la case sous le point (pixels de la carte) : 0 aucun, 1 sable ... 7 volcan (Services/ParkHabitats.cs). */
@@ -1926,8 +1999,10 @@ export async function create(container, component, options) {
          */
         simulate(seconds, hour) {
             const level = hour === undefined ? nightLevel() : nightLevel(new Date(2000, 0, 1, Math.floor(hour), (hour % 1) * 60));
-            for (let t = 0; t < seconds; t += 1 / 30) { skew += 1 / 30; step(1 / 30, level); }
-            draw(level);
+            // Simulation commune : ses pas fixes, sans nuit (comme stepSynced : comparable d'un navigateur à l'autre)
+            const dt = sync ? SYNC_STEP : 1 / 30;
+            for (let t = 0; t < seconds; t += dt) { skew += dt; step(dt, sync ? syncNight : level); if (sync) syncSteps++; }
+            draw(sync ? syncNight : level);
             return pokemon.map(p => ({ id: p.id, species: p.species, mood: moodOf(p), habitatMood: p.mood, malus: p.malus?.levels ?? 0, moves: p.moves, state: p.state, intent: p.intent,
                 x: Math.round(p.x), y: Math.round(p.y), energy: Math.round(p.energy * 100) / 100,
                 free: ground.isFree(p.x, p.y, p.pass), // jamais sur une case qui lui est interdite

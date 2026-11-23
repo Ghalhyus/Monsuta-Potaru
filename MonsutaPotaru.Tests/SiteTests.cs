@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MonsutaPotaru.Data;
 using MonsutaPotaru.Services;
 
@@ -132,6 +133,56 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Error")).StatusCode);
         var json = await browser.GetAsync("/images/introuvable.json"); // en-tête « no-cache » des descriptions d'images
         Assert.Equal(HttpStatusCode.NotFound, json.StatusCode);
+    }
+
+    /// <summary>
+    /// En développement, les images (hors de la compilation) sont servies par UseStaticFiles comme en production, et non par
+    /// la route de MapStaticAssets qui sert tout wwwroot : elle écrivait un avertissement par fichier, des centaines au
+    /// chargement du parc, qui le rendaient très lent sous le débogueur de Visual Studio.
+    /// </summary>
+    [Fact]
+    public async Task Images_AreServedWithoutAWarningPerFile_InDevelopment()
+    {
+        var logs = new CapturedLogs();
+        using var host = site.WithWebHostBuilder(b => b.ConfigureLogging(l => l.AddProvider(logs)));
+        var webRoot = host.Services.GetRequiredService<IWebHostEnvironment>().WebRootPath;
+        var folder = Path.Combine(webRoot, "images", "essai-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(folder, "AnimData.xml"), "<AnimData/>");
+            await File.WriteAllBytesAsync(Path.Combine(folder, "Idle-Anim.png"), [0x89, 0x50, 0x4E, 0x47]);
+            var browser = host.CreateClient();
+            var xml = await browser.GetAsync($"/images/{Path.GetFileName(folder)}/AnimData.xml");
+            Assert.Equal(HttpStatusCode.OK, xml.StatusCode);
+            Assert.Equal("<AnimData/>", await xml.Content.ReadAsStringAsync());
+            Assert.True(xml.Headers.CacheControl?.NoCache); // les descriptions : revérifiées à chaque fois
+            var png = await browser.GetAsync($"/images/{Path.GetFileName(folder)}/Idle-Anim.png");
+            Assert.Equal(HttpStatusCode.OK, png.StatusCode);
+            Assert.NotEqual(true, png.Headers.CacheControl?.NoCache);
+            Assert.Equal(HttpStatusCode.NotFound, (await browser.GetAsync($"/images/{Path.GetFileName(folder)}/Walk-Anim.png")).StatusCode);
+            Assert.DoesNotContain(logs.Entries, e => e.Level >= LogLevel.Warning && e.Category.Contains("StaticAsset"));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>Journal du site gardé en mémoire (catégorie, niveau).</summary>
+    private sealed class CapturedLogs : ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(string Category, LogLevel Level)> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+        public void Dispose() { }
+
+        private sealed class Logger(CapturedLogs owner, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter) => owner.Entries.Enqueue((category, logLevel));
+        }
     }
 
     [Fact]

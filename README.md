@@ -290,19 +290,25 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 - **Réglages** (revérifiés par le serveur, `HideSeekSettings`) : 1 à 30 tours (5), 15 s à 5 min par tour (1 min), 20 à 80
   Pokémon (40 ; la carte suit : 20 par taille de parc), décompte de 3 à 10 s (5), Pokémon de la collection de l'hôte, de **tous les joueurs** qui
   ont un compte, ou **aléatoires** (hors collection) ; surnommés seulement (pas avec les aléatoires) ; un paysage de parc,
-  ou un **au hasard à chaque tour** (les 8, sans les avoir achetés).
+  ou un **au hasard à chaque tour** (les 8, sans les avoir achetés) ; **humeur des Pokémon** (tous, neutres et heureux,
+  heureux seulement : calculée comme au Parc, sur la carte de la partie, pour tous les Pokémon du parc) ; compléter ou
+  non par des aléatoires.
 - **Tirage** (`HideSeekDraw`) : « Ma collection » entière (banque, sauvegardes, mondes Minecraft ; pas les œufs), telle
   quelle (chromatiques, formes), seulement les espèces qui ont des sprites Donjon (celles qui peuvent aller au parc) et
   qui peuvent vivre dans le paysage du tour (océan : type Eau). Dans un parc, **jamais deux Pokémon de même espèce et
   forme** ; une cible ne revient pas d'un tour à l'autre et vient toujours du choix de l'hôte ; s'il n'a pas assez de
-  Pokémon différents pour remplir le parc, des Pokémon aléatoires complètent. Il faut au moins une cible par tour :
+  Pokémon différents pour remplir le parc, des Pokémon aléatoires complètent (sauf si l'hôte l'a refusé : le parc en a
+  moins, sur la même carte). Il faut au moins une cible par tour :
   sinon « Lancer la partie » est grisé, avec le message.
 - **Un tour** : un décompte réglable (3 à 10 s, 5 par défaut) où la cible est annoncée dans un pop-up, par son image et
   son nom (« Bob (Pikachu) » et son dresseur avec les surnoms), le parc caché derrière (chacun le charge) ; puis la
-  recherche, le parc **sur toute la fenêtre** (zoom net qui couvre, sans bandes ; on fait glisser), le rappel de la
+  recherche, le parc **sur toute la fenêtre** (au départ, toute la carte se voit sans la faire glisser ; on
+  peut zoomer), le rappel de la
   cible, le temps et les scores dans un panneau par-dessus. Le premier qui clique dessus marque un point ; un
   **mauvais clic bloque 3 s** ; le temps écoulé, personne ne marque. La cible est ensuite montrée 5 s (vue centrée, cercle
-  jaune). Les Pokémon se promènent comme au parc (`parc.js`, sans nom au survol ni humeurs).
+  jaune). Les Pokémon se promènent comme au parc (`parc.js`, sans nom au survol ni humeurs), **de la même façon chez
+  tous les joueurs** (hasard à graine tirée par le serveur pour le tour, pas de temps fixe compté depuis le début du
+  tour ; la nuit d'après l'heure de Paris au début du tour, la même pour tous ; pas de curiosité pour la souris).
 - **Fin** : le plus de Pokémon trouvés gagne ; plusieurs en tête : nulle. Un joueur qui part perd (les autres
   continuent ; seul restant, il gagne) ; l'hôte qui part arrête la partie, sans résultat. **« Recommencer »** (l'hôte) :
   nouvelle salle d'attente, mêmes réglages, les autres joueurs invités (proposition sur leur écran de fin).
@@ -939,7 +945,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes (à l'aveugle, la même gardée ou changée), coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Components/Pages/HideSeek.razor` | « Mini-jeux » → « Cache-cache » (`/mini-jeux/cache-cache`, ouverte sans compte pour rejoindre une partie par son code) : invitations reçues, salle d'attente (code, lien, amis invités, réglages de l'hôte, Pokémon disponibles), parc de chaque tour (`parc.js` sans noms), cible, temps, clics, blocage, scores, écran de fin et « Recommencer » |
-| `MonsutaPotaru/Services/HideSeek/HideSeekDraw.cs` | Réglages du cache-cache ; tirage des tours (Pokémon uniques par espèce et forme, paysage respecté, cibles du choix de l'hôte, parc complété par des aléatoires) |
+| `MonsutaPotaru/Services/HideSeek/HideSeekDraw.cs` | Réglages du cache-cache ; tirage des tours (Pokémon uniques par espèce et forme, paysage et humeur respectés, cibles du choix de l'hôte, parc complété ou non par des aléatoires) |
 | `MonsutaPotaru/Services/HideSeek/HideSeekHub.cs` | Parties de cache-cache en direct (singleton, en mémoire) : salle d'attente (8 joueurs, invitations, code), tours (préparation, recherche, cible montrée), clics vérifiés, blocage, départs, fin, « Recommencer » |
 | `MonsutaPotaru/Services/HideSeek/HideSeekRecorder.cs` | Résultats des parties terminées écrits en base ; `HideSeekService` : Pokémon des collections à tirer, statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |

@@ -138,18 +138,26 @@ app.UseHttpsRedirection();
 var images = Path.Combine(app.Environment.WebRootPath, "images");
 // Descriptions des images (AnimData.xml des sprites Donjon Mystère, listes .json) : revérifiées à chaque fois (304 si rien
 // n'a changé). Sans consigne, le navigateur gardait un moment l'ancien AnimData.xml : animations ajoutées (Attack, Hurt)
-// jamais jouées pour les Pokémon déjà vus. Ici et non dans OnPrepareResponse : en développement, MapStaticAssets sert
-// aussi ces fichiers.
+// jamais jouées pour les Pokémon déjà vus.
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    if (path.StartsWithSegments("/images") && (path.Value!.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
-            || path.Value.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers.CacheControl = "no-cache";
-            return Task.CompletedTask;
-        });
+    if (path.StartsWithSegments("/images"))
+    {
+        // En développement, MapStaticAssets ajoute une route qui sert tout fichier de wwwroot, choisie avant ce middleware :
+        // UseStaticFiles laissait alors passer les images, servies par cette route avec un avertissement de trois lignes par
+        // fichier (« not found in the built time manifest »), des centaines au chargement du parc. Sous le débogueur de Visual
+        // Studio, chaque ligne du journal part aussi dans la fenêtre Sortie, ce qui arrête l'appli un instant : parc très lent
+        // à charger. Sans route, les images sont servies par UseStaticFiles, comme en production.
+        context.SetEndpoint(null);
+        if (path.Value!.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                || path.Value.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers.CacheControl = "no-cache";
+                return Task.CompletedTask;
+            });
+    }
     await next();
 });
 Directory.CreateDirectory(images); // absentes (nouveau poste) : le site affiche les images de remplacement

@@ -48,7 +48,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 
 ## Repris par le cache-cache (2026-11-23)
 - `create` accepte `names: false` (pas de nom au survol) et `fill: true` (canvas sur toute la place qui reste, zoom
-  entier qui couvre sans bandes, `minZoom` ; voir `cache-cache.md`), et l'objet rendu a `focus(id)` (vue centrée, Pokémon arrêté face
+  de départ où toute la carte se voit, puis crans entiers ; voir `cache-cache.md`), et l'objet rendu a `focus(id)` (vue centrée, Pokémon arrêté face
   à nous, cercle jaune `spotlightRing` qui pulse ; `null` l'efface). Un changement de `parc.js` se vérifie aussi dans le
   cache-cache (`docs/claude/cache-cache.md`).
 
@@ -571,8 +571,11 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 - Chaque Pokémon : `pass` (cases où il passe : `LAND | WATER` s'il nage ou vole) et `reach` (où il s'arrête : l'eau
   seulement pour un nageur). `nearestFree`, `path`, `lineFree`, `isFree` prennent un masque (`Ground.mask` garde celui
   de la recherche en cours pour `canStep` et `smooth`, sans fonction créée). `walkTo(x, y, intent, reach)`.
-- Nageur : `SWIM.waterShare` (2/3) de ses promenades et de ses arrivées au parc dans l'eau (`randomSpot(WATER)`), y
-  dort. Volant : arrêté au-dessus de l'eau (clic, chemin barré), `decide` l'envoie d'abord se poser ; pas de petite pause
+- Nageur : `ground.waterShare` de ses promenades et de ses arrivées au parc dans l'eau (`randomSpot(WATER)`), y
+  dort : `SWIM.waterShare` (2/3), ou plus quand la terre est rare (part de l'eau parmi les cases libres ; 2026-11-23 :
+  à l'océan, les îlots de 8 à 68 cases attiraient un tiers des promenades, et avec 40 à 80 Pokémon au cache-cache tous
+  s'y entassaient). Plage et lacs inchangés (la règle des 2/3 l'emporte). Océan, taille 3, 60 nageurs : 0 à 5 sur les
+  îlots. Volant : arrêté au-dessus de l'eau (clic, chemin barré), `decide` l'envoie d'abord se poser ; pas de petite pause
   en chemin au-dessus de l'eau ; `FLY_OVER` (30 %) de ses promenades sont un **survol** (intent « soar » vers une case
   d'eau, puis directement vers la terre) : sans ça, sur la plage (terre d'un seul tenant), il ne passait au-dessus de
   l'eau que 3 s sur 900. `preyOf` : seulement une proie là où l'attaquant peut s'arrêter. `putDown` et le cadre :
@@ -635,6 +638,29 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   d'écran), profondeur changée seulement au changement de ligne, nom redessiné seulement quand il change, heure lue une
   fois par seconde, A* sur des tableaux gardés (`Ground`) = 2-5 Ko et 0,18 ms. Ne pas remettre de `Graphics` vidé et
   redessiné à chaque image, ni de calque de tuiles affiché.
+- **Simulation commune (`sync`, cache-cache, 2026-11-23)** : `create(..., { sync: { seed, startsIn } })`. Le hasard de la
+  simulation passe par `rand` (module) : `seeded(seed)` (mulberry32) au lieu de `Math.random` ; le dessin seul (éclairs,
+  décalage des tuiles animées) garde `Math.random`, pour ne pas décaler la suite. Pas fixe `SYNC_STEP` (1/60 s) compté
+  depuis le début du tour (`performance.now()` + `startsIn`), une fois les Pokémon posés (`syncReady`, une seule liste,
+  posée dans le même ordre partout) ; retard (onglet en arrière-plan, page rechargée) rattrapé par morceaux de
+  `SYNC_BUDGET` (30 ms) par image. Sans souris (`pointerForAI`), qui n'est que chez un joueur ; la nuit (`sync.night`,
+  0 à 1) vient du serveur, pas de l'heure de chacun (elle change le sommeil : « Il faudrait quand même la nuit »,
+  2026-11-23). Vérifié aussi la nuit (`night: 1`, forêt, 180 s) : Chromium et Firefox identiques.
+  `Math.hypot` remplacé par `hypot` (racine exacte : `Math.hypot` peut différer au dernier chiffre d'un moteur à l'autre),
+  `rand() ** 2` par `squared`. **Vérifié le 2026-11-23** : même graine, `simulate(180)` (qui prend aussi le pas fixe en
+  mode `sync`) dans Chromium et dans Firefox (WebDriver BiDi, sans tête) : positions et états identiques à 0, 30, 60, 120
+  et 180 s, océan (60 nageurs) et forêt (marcheurs, volants, nageurs) ; vraie partie à deux onglets : mêmes Pokémon aux
+  mêmes endroits. Coût : 0,075 ms par pas avec 80 Pokémon (4,5 ms par seconde). Toute nouvelle source de hasard ou de
+  temps dans la simulation doit passer par `rand` et `dt`, jamais `Math.random`, l'heure ou la souris (sinon les joueurs
+  ne voient plus la même chose) ; Safari (autre bibliothèque mathématique) n'a pas été essayé.
+- **Chargement lent sous Visual Studio (corrigé le 2026-11-23)** : en développement, `MapStaticAssets` ajoute une route
+  qui sert tout fichier de `wwwroot`, choisie avant `UseStaticFiles` ; les images (hors de la compilation) passaient par
+  elle, avec un avertissement de trois lignes par fichier (« not found in the built time manifest ») : des centaines au
+  chargement du parc (AnimData.xml et planches de chaque Pokémon, planches de la carte). Sous le débogueur, chaque ligne
+  du journal part aussi dans la fenêtre Sortie de Visual Studio, ce qui arrête l'appli un instant. `Program.cs` retire la
+  route pour `/images` (`SetEndpoint(null)`) : servies par `UseStaticFiles`, comme en production
+  (`SiteTests.Images_AreServedWithoutAWarningPerFile_InDevelopment`). Sans débogueur, Development et Production chargent
+  pareil (mesuré dans Firefox : carte ~0,3 s, sprites de 80 Pokémon 0,4 à 0,8 s).
 - Sprites absents (images pas récupérées) : le Pokémon n'apparaît pas, sans erreur (`loadSheets` échoue sur un
   `AnimData.xml` en 404 ou sans Idle ni Walk ; avant le 2026-10-31, un 404 donnait des animations vides et `addTextures`
   plantait). Planche `Charge` absente (images d'avant le 2026-10-31) : Idle quand on le soulève.

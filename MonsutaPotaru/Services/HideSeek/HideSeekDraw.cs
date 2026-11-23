@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using MonsutaPotaru.Data;
 using PKHeX.Core;
 
@@ -14,12 +15,25 @@ public enum HideSeekPool
     Random,
 }
 
+/// <summary>Humeur que doivent avoir les Pokémon du parc d'une partie (comme au Parc : d'après les habitats de la carte).</summary>
+public enum HideSeekMood
+{
+    /// <summary>Tous les Pokémon, quelle que soit leur humeur.</summary>
+    All,
+    /// <summary>Neutres ou heureux : pas les malheureux.</summary>
+    NotSad,
+    /// <summary>Heureux seulement : un habitat qu'ils aiment couvre plus de la moitié du parc.</summary>
+    Happy,
+}
+
 /// <summary>
 /// Réglages d'une partie de cache-cache, choisis par l'hôte dans la salle d'attente (venus du navigateur :
 /// <see cref="Error"/> les revérifie) : nombre de tours, durée d'un tour, Pokémon surnommés seulement (pas avec des
 /// Pokémon aléatoires, qui n'ont pas de surnom), d'où viennent les Pokémon, paysage (null : un au hasard à chaque tour),
-/// nombre de Pokémon dans le parc (la taille de la carte en dépend, <see cref="MapSize"/>) et durée du décompte avant
-/// chaque tour (la cible annoncée, le parc caché le temps que chacun le charge).
+/// nombre de Pokémon dans le parc (la taille de la carte en dépend, <see cref="MapSize"/>), durée du décompte avant
+/// chaque tour (la cible annoncée, le parc caché le temps que chacun le charge), humeur demandée à tous les Pokémon du parc
+/// (<see cref="HideSeekCandidate.Fits"/>) et complément par des Pokémon aléatoires quand le choix n'en a pas assez (sans :
+/// moins de Pokémon, sur la même carte).
 /// </summary>
 public sealed record HideSeekSettings(
     int Rounds = HideSeekSettings.DefaultRounds,
@@ -28,7 +42,9 @@ public sealed record HideSeekSettings(
     HideSeekPool Pool = HideSeekPool.Host,
     ParkLandscape? Landscape = null,
     int Count = HideSeekSettings.DefaultCount,
-    int CountdownSeconds = HideSeekSettings.DefaultCountdown)
+    int CountdownSeconds = HideSeekSettings.DefaultCountdown,
+    HideSeekMood Mood = HideSeekMood.All,
+    bool FillWithRandom = true)
 {
     public const int MinRounds = 1, MaxRounds = 30, DefaultRounds = 5;
     public const int MinSeconds = 15, MaxSeconds = 300, DefaultSeconds = 60;
@@ -59,6 +75,8 @@ public sealed record HideSeekSettings(
                 return "Ces Pokémon ne sont pas proposés.";
             if (Landscape is { } landscape && !Enum.IsDefined(landscape))
                 return "Ce parc n'existe pas.";
+            if (!Enum.IsDefined(Mood))
+                return "Cette humeur n'est pas proposée.";
             return null;
         }
     }
@@ -77,6 +95,22 @@ public sealed record HideSeekSettings(
         HideSeekPool.AllPlayers => "Les collections de tous les joueurs",
         HideSeekPool.Random => "Des Pokémon aléatoires (hors collection)",
         _ => "La collection de l'hôte",
+    };
+
+    /// <summary>Nom du choix d'humeur (« Heureux seulement »...).</summary>
+    public static string MoodName(HideSeekMood mood) => mood switch
+    {
+        HideSeekMood.NotSad => "Neutres et heureux",
+        HideSeekMood.Happy => "Heureux seulement",
+        _ => "Tous",
+    };
+
+    /// <summary>« (heureux dans le parc) » après un nombre de Pokémon, ou rien sans humeur demandée.</summary>
+    public string MoodNote => Mood switch
+    {
+        HideSeekMood.Happy => " (heureux dans le parc)",
+        HideSeekMood.NotSad => " (pas malheureux dans le parc)",
+        _ => "",
     };
 
     /// <summary>« Parc au hasard à chaque tour », « Plage ».</summary>
@@ -104,6 +138,17 @@ public sealed record HideSeekCandidate(
     public string DisplayName => IsNicknamed ? $"{Nickname} ({SpeciesName})" : SpeciesName;
 
     public bool Accepted(ParkLandscape landscape) => ParkLandscapes.Refusal(landscape, Type1, Type2) is null;
+
+    /// <summary>
+    /// Peut aller dans le parc de ce paysage pour cette partie : le paysage l'accepte (<see cref="Accepted"/>) et son
+    /// humeur sur la carte de la partie (<see cref="HideSeekSettings.MapSize"/>) est celle demandée (<see cref="HideSeekSettings.Mood"/>).
+    /// </summary>
+    public bool Fits(ParkLandscape landscape, HideSeekSettings settings) => Accepted(landscape) && settings.Mood switch
+    {
+        HideSeekMood.NotSad => HideSeekDraw.MoodIn(this, landscape, settings.MapSize) != ParkMood.Sad,
+        HideSeekMood.Happy => HideSeekDraw.MoodIn(this, landscape, settings.MapSize) == ParkMood.Happy,
+        _ => true,
+    };
 }
 
 /// <summary>
@@ -113,8 +158,12 @@ public sealed record HideSeekCandidate(
 public sealed record HideSeekMon(int Id, string Name, string? OwnerPseudo, ushort Species, string SpriteFolder, string ImageUrl,
     int Family, byte Nature, string? Moves);
 
-/// <summary>Un tour : son paysage, la taille de sa carte, ses Pokémon et la cible (numéro dans <see cref="Pokemon"/>).</summary>
-public sealed record HideSeekRound(int Number, ParkLandscape Landscape, int MapSize, IReadOnlyList<HideSeekMon> Pokemon, int TargetId)
+/// <summary>
+/// Un tour : son paysage, la taille de sa carte, ses Pokémon, la cible (numéro dans <see cref="Pokemon"/>) et la graine du
+/// hasard du parc (parc.js, option sync : tous les joueurs voient les mêmes Pokémon aux mêmes endroits).
+/// </summary>
+public sealed record HideSeekRound(int Number, ParkLandscape Landscape, int MapSize, IReadOnlyList<HideSeekMon> Pokemon, int TargetId,
+    int Seed = 0)
 {
     public HideSeekMon Target => Pokemon.First(p => p.Id == TargetId);
 }
@@ -124,14 +173,69 @@ public sealed record HideSeekRound(int Number, ParkLandscape Landscape, int MapS
 /// (espèce et forme) ; une cible ne revient pas d'un tour à l'autre ; chaque Pokémon peut vivre dans le paysage du tour
 /// (l'océan : seulement ceux qui nagent) et a des sprites Donjon Mystère (il peut aller au parc). La cible vient toujours du
 /// choix de l'hôte (<see cref="HideSeekSettings.Pool"/>) ; s'il n'a pas assez de Pokémon différents pour remplir le parc,
-/// des Pokémon aléatoires complètent.
+/// des Pokémon aléatoires complètent (sauf si l'hôte l'a refusé : le parc en a moins). Avec une humeur demandée
+/// (<see cref="HideSeekSettings.Mood"/>), tous les Pokémon du parc l'ont, la cible comme les autres.
 /// </summary>
 public static class HideSeekDraw
 {
+    /// <summary>
+    /// Nuit du parc d'un tour (parc.js, option sync) : 0 le jour, 1 la nuit (22 h – 6 h), progressive le soir (19 h – 22 h)
+    /// et à l'aube (6 h – 8 h), comme <c>nightLevel</c> de parc.js, mais d'après l'heure de Paris au début du tour (le
+    /// serveur, commun à tous les joueurs : la nuit change le comportement des Pokémon, qui dorment plus).
+    /// </summary>
+    public static double NightLevel(DateTime utc)
+    {
+        var h = ParisTime(utc).TimeOfDay.TotalHours;
+        if (h >= 22 || h < 6)
+            return 1;
+        if (h >= 19)
+            return (h - 19) / 3;
+        if (h < 8)
+            return 1 - (h - 6) / 2;
+        return 0;
+    }
+
+    /// <summary>Heure de Paris ; sans base des fuseaux horaires (serveur incomplet) : heure d'hiver.</summary>
+    private static DateTime ParisTime(DateTime utc)
+    {
+        utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        try
+        {
+            return TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZoneInfo.FindSystemTimeZoneById("Europe/Paris"));
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utc.AddHours(1);
+        }
+    }
+
     /// <summary>Dernière espèce tirée au hasard (9e génération).</summary>
     public const ushort LastSpecies = 1025;
 
     private static IReadOnlyList<HideSeekCandidate>? _randomPool;
+
+    /// <summary>Humeurs déjà calculées : elles ne dépendent que des types, du paysage et de la taille de la carte.</summary>
+    private static readonly ConcurrentDictionary<(byte, byte, ParkLandscape, int), ParkMood> Moods = new();
+
+    /// <summary>
+    /// Humeur de ce Pokémon dans ce paysage, sur la carte de cette taille (<see cref="ParkHabitats.MoodOf"/>, comme au Parc).
+    /// Types de cases pas encore lus : neutre, sans le garder.
+    /// </summary>
+    public static ParkMood MoodIn(HideSeekCandidate candidate, ParkLandscape landscape, int size)
+    {
+        if (ParkHabitats.Map(landscape, size) is not { } map)
+            return ParkMood.Normal;
+        return Moods.GetOrAdd((candidate.Type1, candidate.Type2, landscape, size),
+            _ => ParkHabitats.MoodOf(candidate.Type1, candidate.Type2, map).Mood);
+    }
+
+    /// <summary>
+    /// Nombre de Pokémon différents (clés) de ce choix qui peuvent aller dans le parc : dans ce paysage, ou, sans paysage,
+    /// dans l'un d'eux au moins.
+    /// </summary>
+    public static int Usable(HideSeekSettings settings, IReadOnlyList<HideSeekCandidate> pool, ParkLandscape? landscape) =>
+        pool.Where(c => landscape is { } l ? c.Fits(l, settings) : ParkLandscapes.All.Any(l => c.Fits(l, settings)))
+            .Select(c => c.Key).Distinct().Count();
 
     /// <summary>
     /// Les Pokémon aléatoires (<see cref="RandomPool(Func{ushort, bool})"/>), calculés une fois : il faut redémarrer le
@@ -166,7 +270,7 @@ public static class HideSeekDraw
     /// </summary>
     public static string? Check(HideSeekSettings settings, IReadOnlyList<HideSeekCandidate> pool)
     {
-        var usable = pool.Where(c => settings.Landscape is not { } l || c.Accepted(l)).Select(c => c.Key).Distinct().Count();
+        var usable = Usable(settings, pool, settings.Landscape);
         if (usable >= settings.Rounds)
             return null;
         var where = settings.Landscape is { } landscape ? $" qui peuvent vivre {ParkLandscapes.Where(landscape)}" : "";
@@ -177,14 +281,16 @@ public static class HideSeekDraw
             _ => "Ta collection a",
         };
         var nicknamed = settings.Nicknamed ? " surnommés" : "";
+        var mood = settings.MoodNote;
         return usable == 0
-            ? $"Aucun Pokémon{nicknamed}{where} dans ce choix : change les réglages."
-            : $"{what} {usable} Pokémon{nicknamed} différents{where} : il en faut un par tour ({settings.Rounds}). Baisse le nombre de tours ou change les réglages.";
+            ? $"Aucun Pokémon{nicknamed}{where}{mood} dans ce choix : change les réglages."
+            : $"{what} {usable} Pokémon{nicknamed} différents{where}{mood} : il en faut un par tour ({settings.Rounds}). Baisse le nombre de tours ou change les réglages.";
     }
 
     /// <summary>
     /// Les tours de la partie (null et un message si ce choix ne suffit pas, <see cref="Check"/>). <paramref name="pool"/> :
-    /// les Pokémon d'où viennent les cibles ; <paramref name="fill"/> : ceux qui complètent un parc (Pokémon aléatoires).
+    /// les Pokémon d'où viennent les cibles ; <paramref name="fill"/> : ceux qui complètent un parc (Pokémon aléatoires),
+    /// si l'hôte le veut (<see cref="HideSeekSettings.FillWithRandom"/>).
     /// </summary>
     public static (IReadOnlyList<HideSeekRound>? Rounds, string? Error) Draw(HideSeekSettings settings,
         IReadOnlyList<HideSeekCandidate> pool, IReadOnlyList<HideSeekCandidate> fill, Random random)
@@ -197,17 +303,17 @@ public static class HideSeekDraw
         {
             // Paysage du tour : celui de l'hôte, ou un au hasard parmi ceux où une cible reste possible
             var landscape = settings.Landscape ?? Pick(random,
-                ParkLandscapes.All.Where(l => pool.Any(c => !usedTargets.Contains(c.Key) && c.Accepted(l))).ToList());
-            var targets = Groups(pool, landscape, usedTargets);
+                ParkLandscapes.All.Where(l => pool.Any(c => !usedTargets.Contains(c.Key) && c.Fits(l, settings))).ToList());
+            var targets = Groups(pool, landscape, settings, usedTargets);
             var target = Pick(random, Pick(random, targets));
             usedTargets.Add(target.Key);
 
-            // Le reste du parc : d'autres Pokémon du choix (une clé chacun), puis des aléatoires
+            // Le reste du parc : d'autres Pokémon du choix (une clé chacun), puis des aléatoires (si l'hôte le veut)
             var chosen = new List<HideSeekCandidate> { target };
             var keys = new HashSet<string> { target.Key };
-            foreach (var source in new[] { pool, fill })
+            foreach (var source in settings.FillWithRandom ? new[] { pool, fill } : [pool])
             {
-                foreach (var group in Shuffle(random, Groups(source, landscape, keys)))
+                foreach (var group in Shuffle(random, Groups(source, landscape, settings, keys)))
                 {
                     if (chosen.Count >= settings.Count)
                         break;
@@ -218,14 +324,18 @@ public static class HideSeekDraw
             }
             var ids = Shuffle(random, Enumerable.Range(1, chosen.Count).ToList());
             var mons = chosen.Select((c, i) => ToMon(ids[i], c, landscape)).OrderBy(m => m.Id).ToList();
-            rounds.Add(new HideSeekRound(number, landscape, settings.MapSize, mons, ids[0]));
+            rounds.Add(new HideSeekRound(number, landscape, settings.MapSize, mons, ids[0], random.Next()));
         }
         return (rounds, null);
     }
 
-    /// <summary>Les Pokémon de ce paysage, par clé (espèce et forme), sans les clés de <paramref name="excluded"/>.</summary>
-    private static List<List<HideSeekCandidate>> Groups(IEnumerable<HideSeekCandidate> source, ParkLandscape landscape, HashSet<string> excluded) =>
-        source.Where(c => c.Accepted(landscape) && !excluded.Contains(c.Key))
+    /// <summary>
+    /// Les Pokémon qui peuvent aller dans ce parc (<see cref="HideSeekCandidate.Fits"/>), par clé (espèce et forme), sans les
+    /// clés de <paramref name="excluded"/>.
+    /// </summary>
+    private static List<List<HideSeekCandidate>> Groups(IEnumerable<HideSeekCandidate> source, ParkLandscape landscape,
+        HideSeekSettings settings, HashSet<string> excluded) =>
+        source.Where(c => c.Fits(landscape, settings) && !excluded.Contains(c.Key))
             .GroupBy(c => c.Key).Select(g => g.ToList()).ToList();
 
     private static HideSeekMon ToMon(int id, HideSeekCandidate c, ParkLandscape landscape) => new(id, c.DisplayName, c.OwnerPseudo, c.Species,

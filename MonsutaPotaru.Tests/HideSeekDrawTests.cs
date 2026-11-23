@@ -75,6 +75,7 @@ public sealed class HideSeekDrawTests : IDisposable
             Assert.Equal(poolSpecies.Count, round.Pokemon.Count(p => p.OwnerPseudo == "Sacha"));
         }
         Assert.Equal(5, rounds.Select(r => r.Target.Species).Distinct().Count()); // une cible ne revient pas
+        Assert.Equal(5, rounds.Select(r => r.Seed).Distinct().Count()); // graine du parc (parc.js, sync) : une par tour
     }
 
     [Fact]
@@ -118,6 +119,85 @@ public sealed class HideSeekDrawTests : IDisposable
     }
 
     [Fact]
+    public void Draw_WithAMood_EveryPokemonOfTheParkHasIt_TheTargetToo()
+    {
+        ParkHabitats.Load(RealSavesTests.WebRoot()); // types de cases des cartes : humeur des Pokémon
+        Assert.NotNull(new HideSeekSettings(Mood: (HideSeekMood)9).Error);
+        Assert.Equal("Heureux seulement", HideSeekSettings.MoodName(HideSeekMood.Happy));
+        // À la plage (deux tiers de mer, 2e taille), les Pokémon aléatoires ont toutes les humeurs : le filtre a de quoi trier
+        foreach (var mood in new[] { ParkMood.Happy, ParkMood.Normal, ParkMood.Sad })
+            Assert.Contains(Fill, c => HideSeekDraw.MoodIn(c, ParkLandscape.Beach, 2) == mood);
+        // Eau (Carapuce, Psykokwak, Magicarpe, Stari, Tentacool) et Feu (Salamèche, Goupix, Caninos, Ponyta)
+        List<HideSeekCandidate> pool = [.. new ushort[] { 7, 54, 129, 120, 72, 4, 37, 58, 77 }.Select(s => Mon(s))];
+        foreach (var (mood, allowed) in new (HideSeekMood, ParkMood[])[]
+                 {
+                     (HideSeekMood.Happy, [ParkMood.Happy]),
+                     (HideSeekMood.NotSad, [ParkMood.Happy, ParkMood.Normal]),
+                 })
+        {
+            var settings = new HideSeekSettings(Rounds: 3, Count: 40, Landscape: ParkLandscape.Beach, Mood: mood);
+            var (rounds, error) = HideSeekDraw.Draw(settings, pool, Fill, new Random(7));
+            Assert.Null(error);
+            foreach (var round in rounds!)
+            {
+                Assert.Equal(40, round.Pokemon.Count); // complété par des aléatoires qui ont aussi la bonne humeur
+                Assert.All(round.Pokemon, p => Assert.Contains(HideSeekDraw.MoodIn(Mon(p.Species), ParkLandscape.Beach, 2), allowed));
+                Assert.Contains(HideSeekDraw.MoodIn(Mon(round.Target.Species), ParkLandscape.Beach, 2), allowed);
+                Assert.Equal("Sacha", round.Target.OwnerPseudo);
+            }
+        }
+        // Aucun Pokémon Feu n'est heureux à la plage
+        var fire = new HideSeekSettings(Rounds: 1, Landscape: ParkLandscape.Beach, Mood: HideSeekMood.Happy);
+        Assert.Equal("Aucun Pokémon qui peuvent vivre à la plage (heureux dans le parc) dans ce choix : change les réglages.",
+            HideSeekDraw.Check(fire, [Mon(4), Mon(37), Mon(58)]));
+        Assert.Equal(0, HideSeekDraw.Usable(fire, [Mon(4), Mon(37)], ParkLandscape.Beach));
+    }
+
+    [Fact]
+    public void Draw_WithAMood_AndRandomLandscapes_EachRoundGoesWhereItsTargetIsHappy()
+    {
+        ParkHabitats.Load(RealSavesTests.WebRoot());
+        List<HideSeekCandidate> pool = [.. Enumerable.Range(1, 151).Select(s => Mon((ushort)s))];
+        var settings = new HideSeekSettings(Rounds: 20, Count: 20, Mood: HideSeekMood.Happy);
+        var (rounds, error) = HideSeekDraw.Draw(settings, pool, Fill, new Random(11));
+        Assert.Null(error);
+        Assert.All(rounds!, r => Assert.All(r.Pokemon, p => Assert.Equal(ParkMood.Happy, HideSeekDraw.MoodIn(Mon(p.Species), r.Landscape, 1))));
+        Assert.True(rounds!.Select(r => r.Landscape).Distinct().Count() > 1);
+    }
+
+    [Fact]
+    public void Draw_WithoutRandomFill_ThePoolOnly_FewerPokemon_SameMap()
+    {
+        List<HideSeekCandidate> pool = [Mon(25), Mon(25, shiny: true), Mon(1), Mon(4), Mon(7), Mon(133), Mon(152)];
+        var settings = new HideSeekSettings(Rounds: 3, Count: 60, Landscape: ParkLandscape.Forest, FillWithRandom: false);
+        var (rounds, error) = HideSeekDraw.Draw(settings, pool, Fill, new Random(2));
+        Assert.Null(error);
+        Assert.All(rounds!, r =>
+        {
+            Assert.Equal(6, r.Pokemon.Count); // les 6 espèces du choix, aucune aléatoire
+            Assert.All(r.Pokemon, p => Assert.Equal("Sacha", p.OwnerPseudo));
+            Assert.Equal(Enumerable.Range(1, 6), r.Pokemon.Select(p => p.Id));
+            Assert.Equal(3, r.MapSize); // la carte du nombre réglé (60 Pokémon)
+        });
+        // Avec des Pokémon aléatoires, l'option ne change rien : ils sont eux-mêmes le choix
+        var random = HideSeekDraw.Draw(new HideSeekSettings(Rounds: 1, Count: 30, Pool: HideSeekPool.Random, FillWithRandom: false),
+            Fill, Fill, new Random(2));
+        Assert.Equal(30, random.Rounds![0].Pokemon.Count);
+    }
+
+    [Fact]
+    public void NightLevel_ParisTime_SameForEveryPlayer()
+    {
+        // Novembre : UTC+1 ; juillet : UTC+2
+        Assert.Equal(0, HideSeekDraw.NightLevel(new DateTime(2026, 11, 23, 11, 0, 0, DateTimeKind.Utc))); // midi
+        Assert.Equal(1, HideSeekDraw.NightLevel(new DateTime(2026, 11, 23, 22, 0, 0, DateTimeKind.Utc))); // 23 h
+        Assert.Equal(1, HideSeekDraw.NightLevel(new DateTime(2026, 11, 23, 3, 0, 0, DateTimeKind.Utc))); // 4 h
+        Assert.Equal(0.5, HideSeekDraw.NightLevel(new DateTime(2026, 11, 23, 19, 30, 0, DateTimeKind.Utc)), 6); // 20 h 30
+        Assert.Equal(0.5, HideSeekDraw.NightLevel(new DateTime(2026, 11, 23, 6, 0, 0, DateTimeKind.Utc)), 6); // 7 h, l'aube
+        Assert.Equal(2.5 / 3, HideSeekDraw.NightLevel(new DateTime(2026, 7, 1, 19, 30, 0, DateTimeKind.Utc)), 6); // 21 h 30 l'été
+    }
+
+    [Fact]
     public void RandomPool_EverySpeciesWithSprites_NoNickname()
     {
         var pool = HideSeekDraw.RandomPool(s => s is 25 or 150);
@@ -158,7 +238,7 @@ public sealed class HideSeekDrawTests : IDisposable
         Assert.Equal(2, (await service.PoolAsync(new HideSeekSettings(Pool: HideSeekPool.Random), Sacha, players, s => s is 1 or 2)).Count);
     }
 
-    private static BankPokemon Row(string owner, ushort species, string name, string nickname, bool egg = false)
+    internal static BankPokemon Row(string owner, ushort species, string name, string nickname, bool egg = false)
     {
         var (type1, type2) = PokemonTraits.Types(species, 0);
         return new BankPokemon

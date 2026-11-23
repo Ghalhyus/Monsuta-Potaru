@@ -306,6 +306,12 @@ else
     private Task NicknamedChanged(ChangeEventArgs e) =>
         ChangeSettings(s => s with { NicknamedOnly = e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on) });
 
+    private Task FillChanged(ChangeEventArgs e) =>
+        ChangeSettings(s => s with { FillWithRandom = e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on) });
+
+    private Task MoodChanged(ChangeEventArgs e) =>
+        Enum.TryParse<HideSeekMood>(e.Value?.ToString(), out var mood) ? ChangeSettings(s => s with { Mood = mood }) : Task.CompletedTask;
+
     private Task PoolChanged(ChangeEventArgs e) =>
         Enum.TryParse<HideSeekPool>(e.Value?.ToString(), out var pool) ? ChangeSettings(s => s with { Pool = pool }) : Task.CompletedTask;
 
@@ -327,13 +333,28 @@ else
         }
         var settings = shown.Settings;
         var pool = await Store.PoolAsync(settings, session.Host, session.PlayersNow());
-        var distinct = pool.Where(c => settings.Landscape is not { } l || c.Accepted(l)).Select(c => c.Key).Distinct().Count();
+        var distinct = HideSeekDraw.Usable(settings, pool, settings.Landscape);
         var error = HideSeekDraw.Check(settings, pool);
         poolTooSmall = error is not null;
         poolInfo = error ?? (settings.Pool == HideSeekPool.Random
-            ? $"{distinct} Pokémon différents peuvent être tirés."
-            : $"{distinct} Pokémon différents dans ce choix{(settings.Landscape is { } where ? $" peuvent vivre {ParkLandscapes.Where(where)}" : "")}"
-              + (distinct < settings.Count ? " : des Pokémon aléatoires complètent le parc." : "."));
+            ? $"{distinct} Pokémon différents{settings.MoodNote} peuvent être tirés."
+            : $"{distinct} Pokémon différents dans ce choix{(settings.Landscape is { } where ? $" peuvent vivre {ParkLandscapes.Where(where)}" : "")}{settings.MoodNote}"
+              + FillNote(settings, pool, distinct));
+    }
+
+    /// <summary>Fin de la phrase sur le choix : complété par des Pokémon aléatoires, ou combien de Pokémon le parc aura sans eux.</summary>
+    private static string FillNote(HideSeekSettings settings, IReadOnlyList<HideSeekCandidate> pool, int distinct)
+    {
+        if (settings.FillWithRandom)
+            return distinct < settings.Count ? " : des Pokémon aléatoires complètent le parc." : ".";
+        if (settings.Landscape is not null)
+            return distinct < settings.Count ? $" : le parc n'en aura que {distinct}." : ".";
+        // Paysage au hasard : le nombre de Pokémon du parc dépend du paysage tiré (ceux où une cible au moins est possible)
+        var counts = ParkLandscapes.All.Select(l => HideSeekDraw.Usable(settings, pool, l)).Where(n => n > 0).ToList();
+        var fewest = counts.Count > 0 ? counts.Min() : 0;
+        return fewest < settings.Count
+            ? $" : selon le paysage du tour, le parc en aura de {fewest} à {Math.Min(counts.Max(), settings.Count)}."
+            : ".";
     }
 
     /// <summary>L'hôte lance la partie : les tours sont tirés ici (collections lues en base), puis confiés au hub.</summary>
@@ -443,14 +464,21 @@ else
         await DisposeBoard();
         selfRef ??= DotNetObjectReference.Create(this);
         module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/parc.js");
+        // Simulation commune : la graine du tour, le début de la recherche selon le serveur (les Pokémon bougent à partir de
+        // là, de la même façon chez tous les joueurs ; page rechargée pendant le tour : parc.js rattrape le temps écoulé) et
+        // la nuit
+        var startsAt = snapshot?.StartsAt ?? Hub.UtcNow;
+        var startsIn = (startsAt - Hub.UtcNow).TotalSeconds;
+        var night = HideSeekDraw.NightLevel(startsAt); // l'heure de Paris au début du tour, la même pour tous
         var created = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
         {
             canMove = false,
             names = false,
-            fill = true, // toute la fenêtre, sans bandes : zoom qui couvre (on fait glisser pour voir les bords)
+            fill = true, // toute la fenêtre ; au départ, toute la carte se voit
             map = ParkLandscapes.MapName(round.Landscape),
             size = round.MapSize,
             fullscreen = boardBlock,
+            sync = new { seed = round.Seed, startsIn, night },
         });
         await created.InvokeVoidAsync("setPokemon", round.Pokemon.Select(p => new
         {
@@ -715,12 +743,31 @@ else
                                     }
                                 </select>
 
+                                <label class="form-label" for="hs-mood">Humeur des Pokémon dans le parc</label>
+                                <select id="hs-mood" class="form-select hide-seek-mood" value="@settings.Mood" @onchange="MoodChanged">
+                                    @foreach (var mood in Enum.GetValues<HideSeekMood>())
+                                    {
+                                        <option value="@mood">@HideSeekSettings.MoodName(mood)</option>
+                                    }
+                                </select>
+
                                 <div class="form-check hide-seek-nicknamed-check">
                                     <input class="form-check-input hide-seek-nicknamed" type="checkbox" id="hs-nicknamed" checked="@settings.Nicknamed"
                                            disabled="@(settings.Pool == HideSeekPool.Random)" @onchange="NicknamedChanged" />
                                     <label class="form-check-label" for="hs-nicknamed">Uniquement des Pokémon avec un surnom</label>
                                 </div>
+                                @if (settings.Pool != HideSeekPool.Random)
+                                {
+                                    <div class="form-check hide-seek-fill-check">
+                                        <input class="form-check-input hide-seek-fill" type="checkbox" id="hs-fill" checked="@settings.FillWithRandom" @onchange="FillChanged" />
+                                        <label class="form-check-label" for="hs-fill">Compléter le parc avec des Pokémon au hasard s'il n'y en a pas assez</label>
+                                    </div>
+                                }
                             </div>
+                            @if (settings.Mood != HideSeekMood.All)
+                            {
+                                <p class="small text-muted mb-1">Comme au Parc : un Pokémon est heureux quand un habitat qu'il aime couvre plus de la moitié du parc, malheureux quand un habitat qu'il n'aime pas en couvre la moitié. Tous les Pokémon du parc, la cible comprise, ont l'humeur choisie.</p>
+                            }
                             @if (settings.Pool == HideSeekPool.Random)
                             {
                                 <p class="small text-muted mb-1">Les Pokémon aléatoires n'ont pas de surnom.</p>
@@ -741,6 +788,14 @@ else
                                 <li>Décompte de @settings.CountdownSeconds s avant chaque tour</li>
                                 <li>@HideSeekSettings.PoolName(settings.Pool)@(settings.Nicknamed ? ", seulement ceux qui ont un surnom" : "")</li>
                                 <li>Parc : @settings.LandscapeName</li>
+                                @if (settings.Mood != HideSeekMood.All)
+                                {
+                                    <li>Humeur des Pokémon : @settings.MoodNote.Trim(' ', '(', ')')</li>
+                                }
+                                @if (!settings.FillWithRandom && settings.Pool != HideSeekPool.Random)
+                                {
+                                    <li>Pas de Pokémon au hasard pour compléter le parc</li>
+                                }
                             </ul>
                         }
                     </section>

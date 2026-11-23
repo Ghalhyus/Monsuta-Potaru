@@ -18,8 +18,13 @@ Réponses à mes questions :
 - **2 à 8 joueurs**, amis invités **et** code / lien comme aux échecs (invités sans compte compris) ; salle d'attente,
   l'hôte lance.
 - **Mauvais clic : bloqué 3 secondes** (`HideSeekTiming.Penalty`), « Raté ! C'était … ».
-- **Les Pokémon se promènent** (comportement du parc, sans attaques ni humeurs : tous « normal ») ; chacun voit ses
-  propres déplacements, le serveur vérifie le numéro cliqué.
+- **Les Pokémon se promènent** (comportement du parc, sans attaques ni humeurs : tous « normal ») ; le serveur vérifie
+  le numéro cliqué. **Depuis le 2026-11-23, tous les joueurs voient les mêmes Pokémon aux mêmes endroits** (demande de
+  l'utilisateur, « si ce n'est pas trop coûteux ») : simulation commune de `parc.js` (option `sync`, voir `parc.md`),
+  graine du tour `HideSeekRound.Seed` (tirée par `Draw`), début = `StartsAt` du serveur (`startsIn` passé à `create`).
+  Rien ne passe par le réseau pendant le tour. Pas de Pokémon qui viennent voir la souris au cache-cache. **La nuit**
+  (demandée ensuite) : `HideSeekDraw.NightLevel(StartsAt)`, l'heure de **Paris** au début du tour (le serveur est en UTC
+  dans Docker ; sans base des fuseaux : UTC+1), même formule que `nightLevel` de parc.js, passée dans `sync.night`.
 - **Unicité : espèce + forme** (`HideSeekCandidate.Key` = dossier Donjon de la forme, sans chromatique ni femelle : deux
   formes au même dessin comptent pour une). Une cible ne revient pas dans la partie (les leurres, si).
 - **Cible : image + nom** ; avec « surnommés seulement », « Bob (Pikachu) » et « Pokémon de Sacha ».
@@ -68,10 +73,26 @@ Réponses à mes questions :
 - **Recommencer** : l'hôte seulement (il a les réglages) ; nouvelle salle d'attente, mêmes réglages, les autres joueurs
   encore là invités (`RematchOf`) ; ils voient la proposition sur leur écran de fin (`RematchOffer`), ou dans « Invitations
   reçues ». Un invité sans compte qui quitte l'écran de fin la refuse (`DeclineGuestOffers`).
+- **Options du 2026-11-23 (après essai)** : « les Pokémon du parc doivent aimer le parc » → réglage **Humeur des Pokémon
+  dans le parc** (`HideSeekSettings.Mood`, `HideSeekMood` : Tous par défaut, Neutres et heureux, Heureux seulement ; le
+  joueur choisit, demandé ainsi), valable pour **tous** les Pokémon du parc (cible, leurres du choix, aléatoires du
+  complément). « Ne pas compléter par des Pokémon au hasard » → case **Compléter le parc avec des Pokémon au hasard s'il
+  n'y en a pas assez** (`FillWithRandom`, cochée par défaut) ; décochée : **moins de Pokémon, même carte** (choix de
+  l'utilisateur : la carte reste celle du nombre réglé, `MapSize`). Case masquée avec des Pokémon aléatoires (sans effet).
 
 ## Tirage (`HideSeekDraw`)
 - Paysage du tour, puis la cible (une clé au hasard, puis un Pokémon au hasard de cette clé : un Pikachu en 10 exemplaires
-  n'a pas plus de chances), puis les leurres : d'abord le reste du pool (une clé chacun), ensuite les aléatoires.
+  n'a pas plus de chances), puis les leurres : d'abord le reste du pool (une clé chacun), ensuite les aléatoires (sauf
+  `FillWithRandom` décoché : le parc s'arrête au pool).
+- **Filtre commun** `HideSeekCandidate.Fits(paysage, réglages)` : `Accepted` (paysage) et l'humeur demandée, calculée
+  comme au Parc (`ParkHabitats.MoodOf` sur la carte du paysage à la taille `MapSize`) par `HideSeekDraw.MoodIn`, gardée
+  par (types, paysage, taille) : 1 025 aléatoires × 8 paysages × 30 tours sinon. Types de cases pas lus (tests sans
+  `ParkHabitats.Load`) : neutre. Utilisé pour le paysage au hasard (seulement ceux où une cible convient), la cible et
+  les leurres, et `Usable` (Pokémon différents possibles, pour `Check` et la salle d'attente ; sans paysage : ceux qui
+  conviennent à l'un d'eux). Salle d'attente sans complément : « le parc n'en aura que N », ou, au hasard, « de A à B
+  selon le paysage du tour » (paysages où une cible au moins est possible). Vérifié le 2026-11-23 : volcan, aléatoires,
+  « Heureux seulement » → 204 Pokémon possibles, parc rempli de Feu ; tests `HideSeekDrawTests.Draw_WithAMood_*`,
+  `Draw_WithoutRandomFill_*`, `HideSeekPageTests.Lobby_MoodAndRandomFill_*`.
 - `RandomPool()` : chaque espèce 1 à 1025 qui a des sprites Donjon, forme 0, calculé une fois (gardé seulement s'il n'est
   pas vide : images absentes au démarrage).
 - `HideSeekCandidate.Key` est calculée à la construction (des `File.Exists` : ne pas la recalculer à chaque accès).
@@ -79,10 +100,15 @@ Réponses à mes questions :
 ## Page et parc (`HideSeek.razor`, `parc.js`)
 - **Plein cadre** : `create` avec `fill: true` (parc.js) : le canvas prend toute la largeur et la hauteur qui reste dans
   la fenêtre (moins les marges du bas des parents, `spaceBelow` : sans ça, la page défilait de la marge de
-  `.ardoise-content`) ; le zoom de départ est le plus petit zoom **entier** où la zone visible (`viewArea` : zone « Parc »
-  et `VIEW_MARGIN`) couvre tout le canvas (`coverZoom`), sans bandes ; on ne dézoome pas en dessous (`minZoom`), on
-  zoome de deux crans au plus. Le parc déborde souvent : on fait glisser. Vérifié le 2026-11-23 en 1333 × 800 (la
-  fenêtre de l'utilisateur en pixels CSS) : canvas jusqu'en bas, pas de défilement, Parc inchangé (`fill` absent).
+  `.ardoise-content`). **Zoom de départ = le plus dézoomé** (demande du 2026-11-23 : « voir toute la map sans la
+  bouger ») : `fitZoom`, où toute la zone visible (`viewArea` : zone « Parc » et `VIEW_MARGIN`) tient dans le canvas,
+  **pas forcément entier** (un zoom entier laissait la carte toute petite) ; la forêt de la carte, ou le fond, remplit
+  les côtés. On ne dézoome pas en dessous (`minZoom`) ; on zoome par crans entiers (`stepZoom` : le nombre entier
+  d'à côté) jusqu'à deux de plus que le zoom entier qui couvre tout le canvas (`coverZoom`, l'ancien zoom de départ),
+  puis on fait glisser. `spriteK` reste entier. Vérifié le 2026-11-23 en 1333 × 800 (Forêt, 40 Pokémon : zoom 1,29 puis
+  2, 3, 4 et retour) ; canvas jusqu'en bas, pas de défilement, Parc inchangé (`fill` absent). Dans une fenêtre étroite,
+  le panneau peut couvrir le bord droit de la zone (zoomer et faire glisser) ; sur l'écran de l'utilisateur (21:9), la
+  carte laisse de la place de chaque côté.
 - Un nouveau parc à chaque tour (`dispose` puis `create`, comme `StartEngine` du Parc), créé dans `OnAfterRenderAsync`
   (`ShowRound`, l'élément du parc doit être rendu ; `boardRound` empêche d'en créer deux). Options de `create` ajoutées
   pour le jeu : `names: false` (pas de nom au survol, il ferait trouver la cible) ; méthode `focus(id)` (vue centrée,
