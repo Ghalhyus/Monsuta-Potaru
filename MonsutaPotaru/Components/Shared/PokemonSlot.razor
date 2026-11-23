@@ -6,7 +6,7 @@
      tabindex="@(IsClickable ? 0 : -1)"
      aria-disabled="@(!IsClickable)"
      aria-pressed="@Selected"
-     aria-expanded="@(Expanded is { } expanded ? (expanded ? "true" : "false") : null)"
+     aria-expanded="@Expanded?.ToString().ToLowerInvariant()"
      title="@Title"
      draggable="@(CanDrag ? "true" : "false")"
      data-drag-count="@(DragCount > 1 ? DragCount : null)"

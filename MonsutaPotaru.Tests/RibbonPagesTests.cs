@@ -191,7 +191,7 @@ public sealed class RibbonPagesTests : PageTestContext
         Assert.Contains("23 / 40 rubans", dialog.TextContent);
         Assert.Contains("le jeu n'a gardé que le nombre de ces rubans, pas lesquels", dialog.TextContent);
         Assert.Empty(dialog.QuerySelectorAll(".ribbon-item.missing"));
-        Assert.Equal(40, Regex.Matches(dialog.TextContent, "Inconnu").Count);
+        Assert.Equal(40, dialog.TextContent.Split("Inconnu").Length - 1);
     }
 
     [Fact]

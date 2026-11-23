@@ -171,7 +171,7 @@ public sealed class ChessGameTests
         Assert.False(game.CanPass);
         Assert.DoesNotContain(ChessMove.Pass, game.LegalMoves());
         Assert.Null(game.Play(ChessMove.Pass));
-        Assert.Equal(new[] { "d4", "d6", "e4", "e6", "f4", "f6" }, game.MovesFrom(Sq("e5")).Select(m => ChessGame.Name(m.To)).Order());
+        Assert.Equal(["d4", "d6", "e4", "e6", "f4", "f6"], game.MovesFrom(Sq("e5")).Select(m => ChessGame.Name(m.To)).Order());
         Play(game, "e5", "e6");
         Assert.Equal(B, game.Turn);
         Assert.False(game.InCheck(W));

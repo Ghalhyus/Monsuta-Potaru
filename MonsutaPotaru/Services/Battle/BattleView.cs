@@ -233,6 +233,32 @@ public sealed class BattleView(string viewer)
         }
     }
 
+    /// <summary>« faint » : le Pokémon tombe à 0 PV, compté parmi les K.O. de son camp.</summary>
+    private Translation Faint(string who, string? side)
+    {
+        Update(who, f => f with { Hp = 0 });
+        if (side is not null)
+            fainted[side] = fainted.GetValueOrDefault(side) + 1;
+        return ($"{Mon(who)} est K.O. !", BattleCue.Faint, side);
+    }
+
+    /// <summary>« -curestatus » : le statut disparaît ; la phrase seulement si le jeu l'annonce (message, talent).</summary>
+    private Translation CureStatus(BattleLine line, string who, string? side)
+    {
+        var from = line.Tag("from");
+        Update(who, f => f with { Status = null });
+        var shown = !line.Has("silent") && (line.Has("msg") || Effect(from).Kind == AbilityEffect);
+        return (shown ? CureText(who, line.Arg(1), from) : null, BattleCue.None, side);
+    }
+
+    /// <summary>« -cureteam » (Glas de Soin, Aromathérapie) : plus de statut pour le Pokémon au combat de ce camp.</summary>
+    private Translation CureTeam(string? side, string? from)
+    {
+        foreach (var key in active.Keys.Where(k => k == side).ToList())
+            active[key] = active[key] is { } f ? f with { Status = null } : null;
+        return (from == "move: Aromatherapy" ? "Une odeur apaisante se répand !" : "Un carillon retentit !", BattleCue.None, side);
+    }
+
     /// <summary>Lignes qui changent un Pokémon sur le terrain : entrée, attaque, PV, K.O., statut, forme. Null : pas l'une d'elles.</summary>
     private Translation? FighterChange(BattleLine line)
     {
@@ -253,21 +279,14 @@ public sealed class BattleView(string viewer)
                 SetHp(who, line.Arg(1));
                 return (Unless(silent, () => HealText(who, from, line.Tag("of"), line.Tag("wisher"))), BattleCue.Heal, side);
             case "faint":
-                Update(who, f => f with { Hp = 0 });
-                if (side is not null)
-                    fainted[side] = fainted.GetValueOrDefault(side) + 1;
-                return ($"{Mon(who)} est K.O. !", BattleCue.Faint, side);
+                return Faint(who, side);
             case "-status":
                 Update(who, f => f with { Status = line.Arg(1) });
                 return (StatusText(who, line.Arg(1), from, line.Tag("of")), BattleCue.None, side);
             case "-curestatus":
-                Update(who, f => f with { Status = null });
-                var shown = !silent && (line.Has("msg") || Effect(from).Kind == AbilityEffect);
-                return (shown ? CureText(who, line.Arg(1), from) : null, BattleCue.None, side);
+                return CureStatus(line, who, side);
             case "-cureteam":
-                foreach (var key in active.Keys.Where(k => k == side).ToList())
-                    active[key] = active[key] is { } f ? f with { Status = null } : null;
-                return (from == "move: Aromatherapy" ? "Une odeur apaisante se répand !" : "Un carillon retentit !", BattleCue.None, side);
+                return CureTeam(side, from);
             case "-formechange":
                 var (_, forme, _) = BattleNames.SpeciesOf(line.Arg(1));
                 Update(who, f => f with { Forme = forme });

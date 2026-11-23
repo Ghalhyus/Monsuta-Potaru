@@ -360,7 +360,7 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .livingdex-section { grid-column: 1 / -1; margin: .75rem 0 0; font-size: 1.1rem; }
 .livingdex-section:first-child { margin-top: 0; }
 
-/* Complétion : sections (boutons avec leur barre), étapes groupées par lieu (coche, texte, précision ; ratée en rouge). */
+/* Complétion : les sections sont des boutons avec leur barre ; les étapes, groupées par lieu, ont une coche, un texte et une précision, en rouge si elles sont ratées. */
 .completion-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .5rem; }
 .completion-section {
     display: flex; flex-direction: column; gap: .25rem; padding: .5rem .75rem; border: 2px solid var(--bs-border-color);

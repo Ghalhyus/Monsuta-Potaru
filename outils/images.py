@@ -67,6 +67,9 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+# Textes répétés (lieux, libellés)
+DOSSIER_CHROMATIQUE = 'chromatique/'
+
 PKHEX = "https://raw.githubusercontent.com/kwsch/PKHeX/26.10.18"  # même version que le paquet PKHeX.Core du site
 POKEAPI = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites"
 POKEAPI_DATA = "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv"
@@ -111,7 +114,7 @@ def pokemon_jobs():
     """
     species = len(lines("other/en/text_Species_en.txt")) - 1  # la ligne 0 est « Egg »
     jobs = {"pokemon/inconnu.png": f"{POKEAPI}/pokemon/0.png"}
-    folders = {"": "pokemon", "chromatique/": "pokemon/shiny"}  # dossier du site → dossier de PokéAPI
+    folders = {"": "pokemon", DOSSIER_CHROMATIQUE: "pokemon/shiny"}  # dossier du site → dossier de PokéAPI
     for number in range(1, species + 1):
         for mine, theirs in folders.items():
             jobs[f"pokemon/{mine}{number}.png"] = f"{POKEAPI}/{theirs}/{number}.png"
@@ -369,7 +372,7 @@ LIVINGDEX_COVERS = {"rouge": "File:Red EN boxart.png", "bleu": "File:Blue EN box
 # 3e génération (de face, déjà là), et ici de dos (dos/), chromatiques (chromatique/, dos/chromatique/). Émeraude a les dos de
 # Rubis / Saphir. Formes : celles des living dex (Zarbi, Deoxys du jeu) et Morphéo selon le temps (Pokémon 10013 à 10015).
 BATTLE_SPRITES = ["rubis-saphir", "emeraude", "rouge-feu-vert-feuille"]
-BATTLE_VARIANTS = {"": "", "chromatique/": "shiny/", "dos/": "back/", "dos/chromatique/": "back/shiny/"}
+BATTLE_VARIANTS = {"": "", DOSSIER_CHROMATIQUE: "shiny/", "dos/": "back/", "dos/chromatique/": "back/shiny/"}
 CASTFORM_3 = {"351-sunny": "10013", "351-rainy": "10014", "351-snowy": "10015"}
 
 
@@ -390,7 +393,7 @@ def livingdex_jobs():
     chromatiques : pas en 1re génération, qui n'en a pas), et jaquettes officielles (Bulbagarden Archives)."""
     jobs, missing = {}, []
     for folder, (theirs, count) in LIVINGDEX_SPRITES.items():
-        variants = {"": ""} if folder in ("rouge-bleu", "jaune") else {"": "", "chromatique/": "shiny/"}
+        variants = {"": ""} if folder in ("rouge-bleu", "jaune") else {"": "", DOSSIER_CHROMATIQUE: "shiny/"}
         for mine_variant, their_variant in variants.items():
             for number in range(1, count + 1):
                 jobs[f"livingdex/{folder}/{mine_variant}{number}.png"] = f"{POKEAPI}/pokemon/versions/{theirs}/{their_variant}{number}.png"

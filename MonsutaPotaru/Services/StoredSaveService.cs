@@ -181,18 +181,8 @@ public sealed class StoredSaveService(
         if (await DuplicateRefusalAsync(db, ownerId, pokemon, exceptSaveId: save.Id) is { } duplicate)
             return duplicate;
         var modification = await db.SaveModifications.FindAsync(save.IdentityKey);
-        if (modification is not null)
-        {
-            if (!save.DownloadedSinceModification)
-                return new(StoreStatus.ModifiedOnServer,
-                    $"{Capitalize(DescribeServerChanges(modification))} a modifié cette sauvegarde sur le serveur : télécharge-la et remplace celle de ton jeu avant de la mettre à jour.");
-            if (CheckServerModification(modification, identity, data, save.Data) is { } refused)
-                return refused;
-        }
-        else if (identity.PlayTimeSeconds < save.PlayTimeSeconds && !acceptOlder)
-            return new(StoreStatus.OlderPlayTime,
-                $"Ce fichier a moins de temps de jeu que la version stockée ({SaveIdentity.FormatPlayTime(save.PlayTimeSeconds)} → {SaveIdentity.FormatPlayTime(identity.PlayTimeSeconds)}) : c'est peut-être une ancienne copie.",
-                save.PlayTimeSeconds, identity.PlayTimeSeconds);
+        if (VersionRefusal(modification, save, identity, data, acceptOlder) is { } refusal)
+            return refusal;
 
         await using var tx = await db.Database.BeginTransactionAsync();
 
@@ -249,6 +239,27 @@ public sealed class StoredSaveService(
     /// <paramref name="current"/> : fichier stocké, qui reste la version modifiée tant que la trace existe (null après une
     /// suppression).
     /// </summary>
+    /// <summary>
+    /// Refus de la nouvelle version d'une partie : modifiée par le serveur et pas téléchargée depuis, pas assez avancée
+    /// par rapport à la version modifiée, ou moins de temps de jeu (sans <paramref name="acceptOlder"/>). Null : acceptée.
+    /// </summary>
+    private static StoreResult? VersionRefusal(SaveModification? modification, StoredSave save, SaveIdentity identity, byte[] data,
+        bool acceptOlder)
+    {
+        if (modification is not null)
+        {
+            if (!save.DownloadedSinceModification)
+                return new(StoreStatus.ModifiedOnServer,
+                    $"{Capitalize(DescribeServerChanges(modification))} a modifié cette sauvegarde sur le serveur : télécharge-la et remplace celle de ton jeu avant de la mettre à jour.");
+            return CheckServerModification(modification, identity, data, save.Data);
+        }
+        if (identity.PlayTimeSeconds < save.PlayTimeSeconds && !acceptOlder)
+            return new(StoreStatus.OlderPlayTime,
+                $"Ce fichier a moins de temps de jeu que la version stockée ({SaveIdentity.FormatPlayTime(save.PlayTimeSeconds)} → {SaveIdentity.FormatPlayTime(identity.PlayTimeSeconds)}) : c'est peut-être une ancienne copie.",
+                save.PlayTimeSeconds, identity.PlayTimeSeconds);
+        return null;
+    }
+
     private static StoreResult? CheckServerModification(SaveModification? modification, SaveIdentity identity, byte[] data, byte[]? current)
     {
         if (modification is null || identity.PlayTimeSeconds > modification.PlayTimeSeconds)

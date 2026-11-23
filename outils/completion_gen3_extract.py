@@ -5,6 +5,74 @@ import os
 import re
 
 
+DEFINE = re.compile(r'^[^\S\n]*#define\s+(\w+)', re.M)
+SPACES = re.compile(r'\s*')
+
+
+def defines(src):
+    r"""(nom, valeur) de chaque « #define NOM valeur ». Comme re.finditer(r'^\s*#define\s+(\w+)\s+([^\n]+)$', src, re.M),
+    sans retour en arrière : la valeur commence après les blancs qui suivent le nom (sauts de ligne compris) et va jusqu'au
+    bout de la ligne."""
+    pos = 0
+    while m := DEFINE.search(src, pos):
+        pos = m.end()
+        start = end = SPACES.match(src, m.end()).end()
+        if end == m.end():
+            continue  # pas de blanc après le nom
+        if end == len(src):  # que des blancs jusqu'à la fin : la valeur est le dernier blanc hors saut de ligne
+            start = next((i for i in range(end - 1, m.end(), -1) if src[i] != '\n'), None)
+            if start is None:
+                continue
+        stop = src.find('\n', start)
+        stop = len(src) if stop < 0 else stop
+        yield m.group(1), src[start:stop]
+        pos = stop
+
+
+TRAINER_HEAD = re.compile(r'\[(TRAINER_\w+)\]\s*=\s*\{')
+
+
+def block_end(src, start):
+    """Début et fin du premier « saut de ligne, blancs, }, » à partir de start ; None sans."""
+    q = src.find('},', start)
+    while q >= 0:
+        i = q
+        while i > start and src[i - 1].isspace():
+            i -= 1
+        p = src.find('\n', i, q)
+        if p >= 0:
+            return p, q + 2
+        q = src.find('},', q + 1)
+    return None
+
+
+def trainer_blocks(src):
+    r"""(TRAINER_…, corps) de chaque dresseur de trainers.h. Comme
+    re.finditer(r'\[(TRAINER_\w+)\]\s*=\s*\{(.*?)\n\s*\},', src, re.S), sans retour en arrière."""
+    pos = 0
+    while (m := TRAINER_HEAD.search(src, pos)) and (end := block_end(src, m.end())):
+        yield m.group(1), src[m.end():end[0]]
+        pos = end[1]
+
+
+LEVEL = re.compile(r'\.(?:lvl|level)\s*=\s*(\d+)')
+SPECIES = re.compile(r'\.species\s*=\s*(SPECIES_\w+)')
+
+
+def levels_and_species(text):
+    r"""(niveau, espèce) de chaque Pokémon d'une équipe : l'espèce qui suit le niveau, avant la prochaine « } ». Comme
+    re.findall(r'\.(?:lvl|level)\s*=\s*(\d+)[^}]*?\.species\s*=\s*(SPECIES_\w+)', text), sans retour en arrière."""
+    pos = 0
+    while m := LEVEL.search(text, pos):
+        s = SPECIES.search(text, m.end())
+        close = text.find('}', m.end())
+        if s and (close < 0 or s.start() < close):
+            yield m.group(1), s.group(1)
+            pos = s.end()
+        else:
+            pos = m.start() + 1
+
+
 def c_constants(paths):
     """Constantes de fichiers C : « #define NOM expression » et énumérations (« enum { A, B = 5, C } »), évaluées."""
     raw = {}
@@ -12,9 +80,9 @@ def c_constants(paths):
         src = open(path, encoding='utf-8', errors='replace').read()
         src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
         src = re.sub(r'//[^\n]*', '', src)
-        for m in re.finditer(r'^\s*#define\s+(\w+)\s+([^\n]+)$', src, re.M):
-            raw[m.group(1)] = m.group(2).strip()
-        for m in re.finditer(r'\benum\s*\w*\s*\{(.*?)\}', src, re.S):
+        for name, value in defines(src):
+            raw[name] = value.strip()
+        for m in re.finditer(r'\benum(?:\w+\s*|\s*(?:\w+\s*)?)\{([^}]*)\}', src):
             value = '0'
             step = 0
             for item in m.group(1).split(','):
@@ -48,7 +116,7 @@ def c_constants(paths):
             raise KeyError(name)
         return values[name]
 
-    for name in list(raw):
+    for name in raw:
         try:
             ev(name)
         except KeyError:
@@ -96,21 +164,19 @@ def extract(root):
     tfile = next(p for p in (R('src', 'data', 'trainers.h'), R('src', 'data', 'trainers_en.h')) if os.path.exists(p))
     tsrc = open(tfile, encoding='utf-8', errors='replace').read()
     party_of, class_of = {}, {}
-    for m in re.finditer(r'\[(TRAINER_\w+)\]\s*=\s*\{(.*?)\n\s*\},', tsrc, re.S):
-        body = m.group(2)
+    for trainer, body in trainer_blocks(tsrc):
         p = re.search(r'(?:sParty_|gTrainerParty_)(\w+)', body)
         c = re.search(r'\.trainerClass\s*=\s*(\w+)', body)
         if p:
-            party_of[m.group(1)] = p.group(0)
+            party_of[trainer] = p.group(0)
         if c:
-            class_of[m.group(1)] = c.group(1)
+            class_of[trainer] = c.group(1)
     psrc = open(R('src', 'data', 'trainer_parties.h'), encoding='utf-8', errors='replace').read()
     parties = {}
     # Sans « ; » dans le corps : une équipe vide sur une ligne ({DUMMY_TRAINER_MON};) ne déborde pas sur la suivante
     for m in re.finditer(r'\b((?:sParty_|gTrainerParty_)\w+)\[\]\s*=\s*\{([^;]*)\};', psrc):
         # Chaque Pokémon : son niveau, puis son espèce (les capacités, entre accolades, viennent après)
-        team = [(int(lvl), national[k[sp]]) for lvl, sp in
-                re.findall(r'\.(?:lvl|level)\s*=\s*(\d+)[^}]*?\.species\s*=\s*(SPECIES_\w+)', m.group(2))]
+        team = [(int(lvl), national[k[sp]]) for lvl, sp in levels_and_species(m.group(2))]
         parties[m.group(1)] = team
 
     # Rouge Feu / Vert Feuille : objets cachés qui réapparaissent au hasard (leur drapeau change sans cesse) : pas comptés
@@ -129,16 +195,16 @@ def extract(root):
             if 'ITEM_BALL' in o.get('graphics_id', ''):
                 it = re.search(r'finditem\s+(ITEM_\w+)(?:,\s*(\d+))?', script)
                 if it and flag in k:
-                    ground.append(dict(map=name, item=it.group(1), count=int(it.group(2) or 1), flag=flag))
+                    ground.append({'map': name, 'item': it.group(1), 'count': int(it.group(2) or 1), 'flag': flag})
                 continue
             for t in re.finditer(r'trainerbattle_\w+\s+(TRAINER_\w+)', script):
                 if t.group(1) in k and t.group(1) not in seen_trainers:
                     seen_trainers.add(t.group(1))
-                    trainers.append(dict(map=name, id=t.group(1), cls=class_of.get(t.group(1)), hide=None if flag == '0' else flag,
-                                         team=parties.get(party_of.get(t.group(1)), [])))
+                    trainers.append({'map': name, 'id': t.group(1), 'cls': class_of.get(t.group(1)), 'hide': None if flag == '0' else flag,
+                                         'team': parties.get(party_of.get(t.group(1)), [])})
         for b in m.get('bg_events', []):
             if b.get('type') == 'hidden_item' and b.get('flag') in k and b['flag'] not in renewable:
-                hidden.append(dict(map=name, item=b['item'], flag=b['flag']))
+                hidden.append({'map': name, 'item': b['item'], 'flag': b['flag']})
         sfile = os.path.join(os.path.dirname(f), 'scripts.inc')
         if not os.path.exists(sfile):
             continue
@@ -148,8 +214,8 @@ def extract(root):
             for t in re.finditer(r'trainerbattle_\w+\s+(TRAINER_\w+)', text):
                 if t.group(1) in k and t.group(1) not in seen_trainers:
                     seen_trainers.add(t.group(1))
-                    trainers.append(dict(map=name, id=t.group(1), cls=class_of.get(t.group(1)), hide=None,
-                                         team=parties.get(party_of.get(t.group(1)), [])))
+                    trainers.append({'map': name, 'id': t.group(1), 'cls': class_of.get(t.group(1)), 'hide': None,
+                                         'team': parties.get(party_of.get(t.group(1)), [])})
             lines = text.split('\n')
             for i, line in enumerate(lines):
                 g = re.match(r'\s*(?:giveitem|giveitem_std|giveitem_msg|additem)\b.*?\b(ITEM_\w+)(?:,\s*(\d+))?', line)
@@ -158,13 +224,13 @@ def extract(root):
                 after = [re.match(r'\s*setflag\s+(FLAG_\w+)', l) for l in lines[i + 1:i + 8]]
                 after = [x.group(1) for x in after if x]
                 before = re.findall(r'(?:goto_if_set|checkflag|call_if_set)\s+(FLAG_\w+)', '\n'.join(lines[:i]))
-                flag = after[0] if after else (before[0] if before else None)
+                flag = (after or before or [None])[0]  # le drapeau posé juste après, sinon celui testé avant
                 if flag and flag in k:
-                    gifts.append(dict(map=name, item=g.group(1), count=int(g.group(2) or 1), flag=flag))
+                    gifts.append({'map': name, 'item': g.group(1), 'count': int(g.group(2) or 1), 'flag': flag})
     sections = [x['id'] for x in json.load(open(R('src', 'data', 'region_map', 'region_map_sections.json'), encoding='utf-8'))['map_sections']] \
         if os.path.exists(R('src', 'data', 'region_map', 'region_map_sections.json')) else None
-    return dict(k=k, national=national, trainer_start=trainer_start, initial=initial, ground=ground, hidden=hidden, trainers=trainers,
-                gifts=gifts, mapsec=mapsec, sections=sections, scripts=scripts)
+    return {'k': k, 'national': national, 'trainer_start': trainer_start, 'initial': initial, 'ground': ground, 'hidden': hidden, 'trainers': trainers,
+                'gifts': gifts, 'mapsec': mapsec, 'sections': sections, 'scripts': scripts}
 
 
 if __name__ == '__main__':

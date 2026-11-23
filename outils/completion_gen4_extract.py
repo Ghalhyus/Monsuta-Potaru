@@ -21,6 +21,9 @@ import os
 import re
 import struct
 
+# Textes répétés (lieux, libellés)
+HIDDEN_ITEMS_H = 'hidden_items.h'
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Constantes
@@ -76,6 +79,18 @@ def c_defines(paths, values=None):
     return values
 
 
+ZONE_EVENTS = re.compile(r'NARC_zone_event_release_narc_(\d+)_bin')
+
+
+def map_headers(src):
+    r"""En-têtes de cartes de map_header.c : (contenu entre accolades, dernier fichier d'événements, carte). Comme
+    re.finditer(r'\{([^{}]*NARC_zone_event_release_narc_(\d+)_bin[^{}]*)\},\s*//\s*MAP_(\w+)', src), sans retour en
+    arrière."""
+    for m in re.finditer(r'\{([^{}]*)\},\s*//\s*MAP_(\w+)', src):
+        if narcs := ZONE_EVENTS.findall(m.group(1)):
+            yield m.group(1), narcs[-1], m.group(2)
+
+
 def blocks(src):
     """Étiquette d'un script (« Route201_Potion: ») → son texte, jusqu'à la suivante."""
     parts = re.split(r'^(\w+):', src, flags=re.M)
@@ -98,9 +113,9 @@ def gifts_in(lines, k, set_flag, before_flag, item_re, map_name, out):
         after = [re.match(set_flag, x) for x in lines[i + 1:i + 9]]
         after = [x.group(1) for x in after if x]
         before = re.findall(before_flag, '\n'.join(lines[max(0, i - 40):i]))
-        flag = after[0] if after else (before[-1] if before else None)
+        flag = (after or before[-1:] or [None])[0]  # le drapeau posé juste après, sinon le dernier testé avant
         if flag and flag in k and item in k:
-            out.append(dict(map=map_name, item=item, count=qty, flag=flag))
+            out.append({'map': map_name, 'item': item, 'count': qty, 'flag': flag})
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -134,7 +149,7 @@ def extract_pt(root):
     # Objets cachés : drapeau → objet et quantité (include/data/field/hidden_items.h)
     hidden_of = {m.group(3): (m.group(1), int(m.group(2))) for m in re.finditer(
         r'HIDDEN_ITEM_ENTRY\((ITEM_\w+),\s*(\d+),\s*\d+,\s*(FLAG_\w+)\)',
-        open(R('include', 'data', 'field', 'hidden_items.h'), encoding='utf-8').read())}
+        open(R('include', 'data', 'field', HIDDEN_ITEMS_H), encoding='utf-8').read())}
 
     initial = set(re.findall(r'SetFlag\s+(FLAG_\w+)', open(R('res', 'field', 'scripts', 'init_new_game.s'), encoding='utf-8').read()))
     # Drapeaux qu'un script efface : le personnage peut réapparaître (selon l'heure, le jour…)
@@ -148,7 +163,7 @@ def extract_pt(root):
     def trainer(map_name, tid, hide, obj=True):
         if tid in k and tid not in seen and tid != 'TRAINER_NONE':
             seen.add(tid)
-            trainers.append(dict(map=map_name, id=tid, cls=classes.get(tid), hide=hide, team=parties.get(tid, []), num=k[tid], object=obj))
+            trainers.append({'map': map_name, 'id': tid, 'cls': classes.get(tid), 'hide': hide, 'team': parties.get(tid, []), 'num': k[tid], 'object': obj})
 
     for d in sorted(glob.glob(R('res', 'field', 'maps', '*', 'header.json'))):
         d = os.path.dirname(d)
@@ -164,13 +179,13 @@ def extract_pt(root):
             if o.get('script', '') in visible:
                 item, qty = visible[o['script']]
                 if hide in k:
-                    ground.append(dict(map=name, item=item, count=qty, flag=hide))
+                    ground.append({'map': name, 'item': item, 'count': qty, 'flag': hide})
             elif 'trainer' in o:
                 trainer(name, o['trainer']['id'], hide)
         for b in ev.get('bg_events', []):
             if 'hidden_item' in b and b['hidden_item'] in hidden_of and b['hidden_item'] in k:
                 item, qty = hidden_of[b['hidden_item']]
-                hidden.append(dict(map=name, item=item, count=qty, flag=b['hidden_item']))
+                hidden.append({'map': name, 'item': item, 'count': qty, 'flag': b['hidden_item']})
         sfile = os.path.join(d, 'scripts.s')
         if not os.path.exists(sfile):
             continue
@@ -187,8 +202,8 @@ def extract_pt(root):
     for kind, count in (('tm', 92), ('hm', 8)):
         for n in range(1, count + 1):
             tm_moves.append(json.load(open(R('res', 'items', 'data', f'{kind}{n:02}.json'), encoding='utf-8'))['teachesMove'])
-    return dict(k=k, trainers=trainers, ground=ground, hidden=hidden, gifts=gifts, mapsec=mapsec, initial=initial,
-                trainer_start=k['TRAINER_DEFEATED_FLAGS_START'], tm_moves=tm_moves, cleared={k[f] for f in cleared if f in k})
+    return {'k': k, 'trainers': trainers, 'ground': ground, 'hidden': hidden, 'gifts': gifts, 'mapsec': mapsec, 'initial': initial,
+                'trainer_start': k['TRAINER_DEFEATED_FLAGS_START'], 'tm_moves': tm_moves, 'cleared': {k[f] for f in cleared if f in k}}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -198,7 +213,7 @@ def extract_hgss(root):
     R = lambda *p: os.path.join(root, *p)
     inc = R('include', 'constants')
     k = c_defines([os.path.join(inc, f) for f in ('flags.h', 'vars.h', 'items.h', 'species.h', 'moves.h', 'trainers.h',
-                                                   'trainer_class.h', 'std_script.h', 'hidden_items.h', 'map_sections.h')])
+                                                   'trainer_class.h', 'std_script.h', HIDDEN_ITEMS_H, 'map_sections.h')])
     by_value = {}
     for name, value in k.items():
         if name.startswith('TRAINER_') and not name.startswith('TRAINER_FLAG'):
@@ -231,7 +246,7 @@ def extract_hgss(root):
     # Objets cachés : sHiddenItemParam = {objet, quantité, …, numéro} ; drapeau FLAG_HIDDENITEM_X (numéro HIDDENITEM_X)
     hidden_param = {}
     for m in re.finditer(r'\{\s*(ITEM_\w+),\s*(\d+),\s*\d+,\s*\d+,\s*(\d+)\s*\}',
-                         open(R('src', 'data', 'fieldmap', 'hidden_items.h'), encoding='utf-8').read()):
+                         open(R('src', 'data', 'fieldmap', HIDDEN_ITEMS_H), encoding='utf-8').read()):
         hidden_param[int(m.group(3))] = (m.group(1), int(m.group(2)))
 
     initial = set(re.findall(r'SetFlag\s+(FLAG_\w+)', open(R('files', 'fielddata', 'script', 'scr_seq', 'scr_seq_0149.s'),
@@ -246,7 +261,7 @@ def extract_hgss(root):
     def trainer(map_name, tid, hide, obj=True):
         if tid in k and tid not in seen and tid != 'TRAINER_NONE':
             seen.add(tid)
-            trainers.append(dict(map=map_name, id=tid, cls=classes.get(tid), hide=hide, team=parties.get(tid, []), num=k[tid], object=obj))
+            trainers.append({'map': map_name, 'id': tid, 'cls': classes.get(tid), 'hide': hide, 'team': parties.get(tid, []), 'num': k[tid], 'object': obj})
 
     for f in sorted(glob.glob(R('files', 'fielddata', 'eventdata', 'zone_event', '*.json'))):
         name = re.sub(r'^\d+_', '', os.path.basename(f)[:-5])
@@ -260,14 +275,14 @@ def extract_hgss(root):
                 trainer(name, t.group(1), hide)
             elif script.startswith('std_itemball_') and k.get(script) in balls and hide in k:
                 item, qty = balls[k[script]]
-                ground.append(dict(map=name, item=item, count=qty, flag=hide))
+                ground.append({'map': name, 'item': item, 'count': qty, 'flag': hide})
         for b in ev.get('bgs', []):
             script = str(b.get('scriptId', ''))
             if script.startswith('std_hiddenitem_'):
                 key = script[len('std_'):].upper()  # HIDDENITEM_R29_R30_T21_NUGGET
                 if key in k and k[key] in hidden_param and 'FLAG_' + key in k:
                     item, qty = hidden_param[k[key]]
-                    hidden.append(dict(map=name, item=item, count=qty, flag='FLAG_' + key))
+                    hidden.append({'map': name, 'item': item, 'count': qty, 'flag': 'FLAG_' + key})
 
     for f in sorted(glob.glob(R('files', 'fielddata', 'script', 'scr_seq', 'scr_seq_*_*.s'))):
         name = re.match(r'scr_seq_\d+_(\w+)\.s', os.path.basename(f)).group(1)
@@ -279,8 +294,8 @@ def extract_hgss(root):
                      r'\s*(?:SetVar\s+VAR_SPECIAL_x8004,|GoToIfNoItemSpace)\s*(ITEM_\w+)', name, gifts)
 
     # Capacités des CT et CS : les mêmes que Platine (lues là-bas)
-    return dict(k=k, trainers=trainers, ground=ground, hidden=hidden, gifts=gifts, mapsec=mapsec, initial=initial,
-                trainer_start=k['TRAINER_FLAG_BASE'], tm_moves=None, cleared={k[f] for f in cleared if f in k})
+    return {'k': k, 'trainers': trainers, 'ground': ground, 'hidden': hidden, 'gifts': gifts, 'mapsec': mapsec, 'initial': initial,
+                'trainer_start': k['TRAINER_FLAG_BASE'], 'tm_moves': None, 'cleared': {k[f] for f in cleared if f in k}}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -309,13 +324,13 @@ def dp_events(data):
     pos += 4
     for _ in range(n):
         script, typ = struct.unpack_from('<HH', data, pos)
-        bgs.append(dict(script=script, type=typ))
+        bgs.append({'script': script, 'type': typ})
         pos += 20
     n, = struct.unpack_from('<I', data, pos)
     pos += 4
     for _ in range(n):
         f = struct.unpack_from('<HHHHHHhHHHhhHHi', data, pos)
-        objs.append(dict(gfx=f[1], ttype=f[3], flag=f[4], script=f[5]))
+        objs.append({'gfx': f[1], 'ttype': f[3], 'flag': f[4], 'script': f[5]})
         pos += 32
     return bgs, objs
 
@@ -351,12 +366,11 @@ def extract_dp(root, pt):
 
     # Cartes : fichier de scripts, fichier d'événements et lieu (arm9/src/map_header.c)
     headers = []
-    for m in re.finditer(r'\{([^{}]*NARC_zone_event_release_narc_(\d+)_bin[^{}]*)\},\s*//\s*MAP_(\w+)',
-                         open(R('arm9', 'src', 'map_header.c'), encoding='utf-8').read()):
-        scr = re.findall(r'NARC_scr_seq_release_narc_(\d+)_bin', m.group(1))
-        sec = re.search(r'(MAPSEC_\w+)', m.group(1))
-        headers.append(dict(map=m.group(3), scripts=int(scr[0]), events=int(m.group(2)),
-                            mapsec=k.get(sec.group(1)) if sec else None))
+    for block, events, map_name in map_headers(open(R('arm9', 'src', 'map_header.c'), encoding='utf-8').read()):
+        scr = re.findall(r'NARC_scr_seq_release_narc_(\d+)_bin', block)
+        sec = re.search(r'(MAPSEC_\w+)', block)
+        headers.append({'map': map_name, 'scripts': int(scr[0]), 'events': int(events),
+                            'mapsec': k.get(sec.group(1)) if sec else None})
 
     # Dresseurs : files/poketool/trainer/trdata.json (numéro, classe, équipe)
     parties, classes = {}, {}
@@ -407,7 +421,7 @@ def extract_dp(root, pt):
         tid = trainer_names.get(num)
         if tid and tid not in seen:
             seen.add(tid)
-            trainers.append(dict(map=map_name, id=tid, cls=classes.get(tid), hide=hide, team=parties.get(tid, []), num=num, object=obj))
+            trainers.append({'map': map_name, 'id': tid, 'cls': classes.get(tid), 'hide': hide, 'team': parties.get(tid, []), 'num': num, 'object': obj})
 
     for h in headers:
         name = h['map']
@@ -422,12 +436,12 @@ def extract_dp(root, pt):
                 trainer(name, s - 5000 + 1, hide)
             elif 7000 <= s < 8000 and s in balls and balls[s][0] and hide:
                 item, qty = balls[s]
-                ground.append(dict(map=name, item=item, count=qty, flag=hide))
+                ground.append({'map': name, 'item': item, 'count': qty, 'flag': hide})
         for b in bgs:
             if 8000 <= b['script'] < 8800 and b['script'] - 8000 in hidden_param:
                 item, qty = hidden_param[b['script'] - 8000]
                 if item:
-                    hidden.append(dict(map=name, item=item, count=qty, flag=DP_HIDDEN_FLAGS_START + b['script'] - 8000))
+                    hidden.append({'map': name, 'item': item, 'count': qty, 'flag': DP_HIDDEN_FLAGS_START + b['script'] - 8000})
         data = narc('scr', h['scripts'])
         scripts_of.setdefault(name, data)
         for _, (num, _) in dp_find(data, OP_TRAINERBATTLE, None, None):
@@ -440,6 +454,6 @@ def extract_dp(root, pt):
             qty = dp_find(data[pos + 6:pos + 12], OP_SETVAR, 0x8005, None)
             after = dp_find(data[pos:pos + 60], OP_SETFLAG, None)
             if after:
-                gifts.append(dict(map=name, item=items_by_value[item], count=qty[0][1][1] if qty else 1, flag=after[0][1][0]))
-    return dict(k=k, trainers=trainers, ground=ground, hidden=hidden, gifts=gifts, mapsec=mapsec, initial=initial,
-                trainer_start=DP_TRAINER_FLAGS_START, tm_moves=None, scripts=scripts_of, cleared=cleared)
+                gifts.append({'map': name, 'item': items_by_value[item], 'count': qty[0][1][1] if qty else 1, 'flag': after[0][1][0]})
+    return {'k': k, 'trainers': trainers, 'ground': ground, 'hidden': hidden, 'gifts': gifts, 'mapsec': mapsec, 'initial': initial,
+                'trainer_start': DP_TRAINER_FLAGS_START, 'tm_moves': None, 'scripts': scripts_of, 'cleared': cleared}

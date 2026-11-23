@@ -11,7 +11,7 @@
 @inject PlayerService Players
 @inject PreferencesService Preferences
 
-<PageTitle>@(Visitor && playerChecked && player is null ? "Joueur introuvable" : view is null ? "Complétion" : $"Complétion de {view.Game.Name}")</PageTitle>
+<PageTitle>@TabTitle</PageTitle>
 
 @* Une complétion : la progression globale (moyenne des sections ; All the Mons : toutes les étapes, chacune autant), un
    bouton par section avec sa barre, puis les étapes de la section choisie, groupées par lieu dans l'ordre de l'aventure
@@ -344,6 +344,17 @@ else if (view is not null)
             stepsView = (await Preferences.SortsAsync(viewerId)).CompletionView;
         }
         filter = FilterSlugs.FirstOrDefault(f => f.Value == FilterFromQuery) is { Value: not null } found ? found.Key : Filter.All;
+    }
+
+    /// <summary>Titre de l'onglet : le joueur introuvable, ou la complétion (et son jeu une fois chargée).</summary>
+    private string TabTitle
+    {
+        get
+        {
+            if (Visitor && playerChecked && player is null)
+                return "Joueur introuvable";
+            return view is null ? "Complétion" : $"Complétion de {view.Game.Name}";
+        }
     }
 
     /// <summary>Sections de cette complétion, dans l'ordre de la page.</summary>

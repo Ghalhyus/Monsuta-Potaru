@@ -10,7 +10,7 @@ namespace MonsutaPotaru.Tests;
 /// <summary>Page « Ma collection » : liste, recherche, origine, tris, colonnes, fiche, filtres en pastilles, visite d'un joueur.</summary>
 public sealed class CollectionPageTests : PageTestContext
 {
-    private IReadOnlyList<AngleSharp.Dom.IElement> Slots(IRenderedComponent<Collection> cut) => cut.FindAll(".collection .slot");
+    private static IReadOnlyList<AngleSharp.Dom.IElement> Slots(IRenderedComponent<Collection> cut) => cut.FindAll(".collection .slot");
 
     [Fact]
     public async Task MinecraftPokemon_Card_WithoutFile()

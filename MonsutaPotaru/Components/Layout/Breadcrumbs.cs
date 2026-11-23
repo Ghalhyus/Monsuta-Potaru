@@ -20,7 +20,7 @@ public static class Breadcrumbs
     /// <summary>Étapes pour une adresse relative à la racine du site (« joueurs/Sacha/parc?x=1 ») ; vide pour une page inconnue.</summary>
     public static IReadOnlyList<Crumb> For(string? relativeUrl)
     {
-        var path = (relativeUrl ?? "").Split(['?', '#'])[0];
+        var path = (relativeUrl ?? "").Split('?', '#')[0];
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
             return [new("Accueil", null)];

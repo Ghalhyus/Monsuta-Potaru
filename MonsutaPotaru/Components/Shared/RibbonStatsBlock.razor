@@ -57,7 +57,14 @@
     private static string Pokemon(int count) => $"{count} Pokémon";
 
     /// <summary>« Tes 3 Pokémon suivis », « Ton Pokémon suivi » (« Ses », « Son » pour un visiteur).</summary>
-    private string Tracked => Stats.Count == 1
-        ? $"{(Visitor ? "Son" : "Ton")} Pokémon suivi"
-        : $"{(Visitor ? "Ses" : "Tes")} {Stats.Count} Pokémon suivis";
+    private string Tracked
+    {
+        get
+        {
+            if (Stats.Count == 1)
+                return Visitor ? "Son Pokémon suivi" : "Ton Pokémon suivi";
+            var owner = Visitor ? "Ses" : "Tes";
+            return $"{owner} {Stats.Count} Pokémon suivis";
+        }
+    }
 }

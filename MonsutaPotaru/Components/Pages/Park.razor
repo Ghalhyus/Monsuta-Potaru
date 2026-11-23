@@ -723,12 +723,12 @@ else
         && MatchesSearch(c);
 
     /// <summary>Message quand la recherche, les pastilles et la liste « Pokémon affichés » ne laissent aucun Pokémon.</summary>
-    private string EmptyMessage() =>
-        !string.IsNullOrWhiteSpace(search) || !criteria.IsEmpty
-            ? "Aucun Pokémon ne correspond."
-            : shownFilter == ShownFilter.ThisPark
-                ? "Ce parc n'a pas encore de Pokémon."
-                : "Tous tes Pokémon vivent déjà dans un parc.";
+    private string EmptyMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(search) || !criteria.IsEmpty)
+            return "Aucun Pokémon ne correspond.";
+        return shownFilter == ShownFilter.ThisPark ? "Ce parc n'a pas encore de Pokémon." : "Tous tes Pokémon vivent déjà dans un parc.";
+    }
 
     private bool MatchesSearch(ParkCandidate c) =>
         string.IsNullOrWhiteSpace(search)

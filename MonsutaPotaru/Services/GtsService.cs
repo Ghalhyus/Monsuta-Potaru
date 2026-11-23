@@ -429,18 +429,23 @@ public sealed partial class GtsService(IDbContextFactory<ApplicationDbContext> d
             return null;
         var slot = SlotAt(sav, entry.Position);
         var inSave = slot is { } sl ? TradeService.Get(sav, sl) : null;
-        string? problem = null;
-        if (slot is null)
-            problem = $"Ce Pokémon n'est ni dans l'équipe ni dans les boîtes ({entry.Location}) : il ne peut pas aller sur la GTS.";
-        else if (inSave is not { Species: > 0 } || PokemonFingerprint.Of(inSave) != entry.Fingerprint)
-            problem = "Ce Pokémon a changé de place dans sa sauvegarde : recharge la page.";
-        else if (inSave.IsEgg)
-            problem = "Un œuf ne peut pas aller sur la GTS.";
-        else if (slot is { InParty: false } box && sav.IsBoxSlotOverwriteProtected(box.Box, box.Slot))
-            problem = "Cette case est verrouillée par le jeu : ce Pokémon ne peut pas en sortir.";
-        else if (slot is { InParty: true } party && !KeepsAPokemon(sav, party.Slot))
-            problem = "C'est le dernier Pokémon (hors œufs) de l'équipe : il ne peut pas la quitter.";
-        return new(entry, inSave ?? pk, save, sav, slot, TradeFamily.Of(sav), Label(save), problem);
+        return new(entry, inSave ?? pk, save, sav, slot, TradeFamily.Of(sav), Label(save), SourceProblem(entry, sav, slot, inSave));
+    }
+
+    /// <summary>Pourquoi ce Pokémon d'une sauvegarde stockée ne peut pas aller sur la GTS (null : il peut).</summary>
+    private static string? SourceProblem(BankPokemon entry, SaveFile sav, TradeSlot? slot, PKM? inSave)
+    {
+        if (slot is not { } place)
+            return $"Ce Pokémon n'est ni dans l'équipe ni dans les boîtes ({entry.Location}) : il ne peut pas aller sur la GTS.";
+        if (inSave is not { Species: > 0 } || PokemonFingerprint.Of(inSave) != entry.Fingerprint)
+            return "Ce Pokémon a changé de place dans sa sauvegarde : recharge la page.";
+        if (inSave.IsEgg)
+            return "Un œuf ne peut pas aller sur la GTS.";
+        if (!place.InParty && sav.IsBoxSlotOverwriteProtected(place.Box, place.Slot))
+            return "Cette case est verrouillée par le jeu : ce Pokémon ne peut pas en sortir.";
+        if (place.InParty && !KeepsAPokemon(sav, place.Slot))
+            return "C'est le dernier Pokémon (hors œufs) de l'équipe : il ne peut pas la quitter.";
+        return null;
     }
 
     /// <summary>L'équipe garde un Pokémon qui n'est pas un œuf sans celui de la case <paramref name="index"/>.</summary>
@@ -737,6 +742,17 @@ public sealed partial class GtsService(IDbContextFactory<ApplicationDbContext> d
         PKM Received, string ReceivedName, ushort? ReceivedEvolvedTo, PKM Given, string GivenName, ushort? GivenEvolvedTo, string Arrival,
         TradeShowPokemon OfferedShow, TradeShowPokemon ReceivedShow, TradeShowPokemon GivenShow, TradeShowPokemon GivenArriving);
 
+    /// <summary>Sauvegarde stockée du Pokémon, lue (null : il est au stockage interne) ; Found faux si elle a disparu ou est illisible.</summary>
+    private static async Task<(bool Found, ReadSave? Stored)> ReadStoredAsync(ApplicationDbContext db, string userId, BankPokemon entry)
+    {
+        if (entry.StoredSaveId is not { } saveId)
+            return (true, null);
+        var save = await db.StoredSaves.FirstOrDefaultAsync(s => s.Id == saveId && s.OwnerId == userId);
+        if (save is null || !StoredSaveService.TryRead(save.Data, save.FileName, out var read))
+            return (false, null);
+        return (true, new(save, read));
+    }
+
     private async Task<(Prepared? Ready, string? Problem)> PrepareAsync(ApplicationDbContext db, string userId, int offerId, int bankId)
     {
         var offer = await OnlineOfferAsync(db, userId, offerId);
@@ -745,16 +761,11 @@ public sealed partial class GtsService(IDbContextFactory<ApplicationDbContext> d
         var entry = await db.BankPokemon.AsNoTracking().FirstOrDefaultAsync(p => p.Id == bankId && p.OwnerId == userId);
         if (entry is null || BankService.ToPkm(entry) is not { } pk)
             return (null, "Ce Pokémon n'est plus dans ta collection : choisis-en un autre.");
-        ReadSave? stored = null;
-        if (entry.StoredSaveId is { } saveId)
-        {
-            var save = await db.StoredSaves.FirstOrDefaultAsync(s => s.Id == saveId && s.OwnerId == userId);
-            if (save is null || !StoredSaveService.TryRead(save.Data, save.FileName, out var read))
-                return (null, "Ce Pokémon n'est plus dans ta collection : choisis-en un autre.");
-            stored = new(save, read);
-            var slot = SlotAt(read, entry.Position);
-            pk = slot is { } sl && TradeService.Get(read, sl) is { Species: > 0 } inSave ? inSave : pk;
-        }
+        var (found, stored) = await ReadStoredAsync(db, userId, entry);
+        if (!found)
+            return (null, "Ce Pokémon n'est plus dans ta collection : choisis-en un autre.");
+        if (stored is not null && SlotAt(stored.Sav, entry.Position) is { } slot && TradeService.Get(stored.Sav, slot) is { Species: > 0 } inSave)
+            pk = inSave;
         // La demande, revérifiée sur le Pokémon lui-même (légalité recalculée) : la liste vient du navigateur.
         if (!WantedOf(offer).Matches(pk.Species, pk.CurrentLevel, pk.Gender, pk.IsShiny, PokemonInfo.IsLegal(pk), pk.IsEgg))
             return (null, $"Ce Pokémon ne répond pas à la demande de l'offre ({Describe(WantedOf(offer))}).");
@@ -908,27 +919,33 @@ public sealed partial class GtsService(IDbContextFactory<ApplicationDbContext> d
     /// </summary>
     internal static TradeSlot? SlotAt(SaveFile sav, int position)
     {
-        var n = 0;
+        if (position < 0)
+            return null;
+        var found = OccupiedSlots(sav).Skip(position).Take(1).ToList();
+        return found is [{ Locked: false } occupied] ? occupied.Slot : null;
+    }
+
+    /// <summary>Cases occupées de la sauvegarde, dans l'ordre de « Ma collection » : l'équipe, puis les boîtes (verrouillées comprises).</summary>
+    private static IEnumerable<(TradeSlot Slot, bool Locked)> OccupiedSlots(SaveFile sav)
+    {
         if (sav.HasParty)
         {
             for (int i = 0; i < sav.PartyCount; i++)
             {
-                if (sav.GetPartySlotAtIndex(i) is { Species: > 0 } && n++ == position)
-                    return TradeSlot.Party(i);
+                if (sav.GetPartySlotAtIndex(i) is { Species: > 0 })
+                    yield return (TradeSlot.Party(i), false);
             }
         }
-        if (sav.HasBox)
+        if (!sav.HasBox)
+            yield break;
+        for (int b = 0; b < sav.BoxCount; b++)
         {
-            for (int b = 0; b < sav.BoxCount; b++)
+            for (int s = 0; s < sav.BoxSlotCount; s++)
             {
-                for (int s = 0; s < sav.BoxSlotCount; s++)
-                {
-                    if (sav.GetBoxSlotAtIndex(b, s) is { Species: > 0 } && n++ == position)
-                        return sav.IsBoxSlotLocked(b, s) ? null : new TradeSlot(b, s);
-                }
+                if (sav.GetBoxSlotAtIndex(b, s) is { Species: > 0 })
+                    yield return (new TradeSlot(b, s), sav.IsBoxSlotLocked(b, s));
             }
         }
-        return null;
     }
 
     /// <summary>Retire le Pokémon de sa case : l'équipe se resserre, la case d'une boîte reste vide.</summary>

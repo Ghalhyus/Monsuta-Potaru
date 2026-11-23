@@ -42,7 +42,7 @@ public sealed record PokemonCriteria
     /// <summary>Bornes de niveau ramenées à 1-100 (vide ou 0 : pas de borne), inversées si le minimum dépasse le maximum.</summary>
     public PokemonCriteria WithLevels(int? min, int? max)
     {
-        byte? Clamp(int? level) => level is > 0 ? (byte)Math.Min(level.Value, 100) : null;
+        static byte? Clamp(int? level) => level is > 0 ? (byte)Math.Min(level.Value, 100) : null;
         var (low, high) = (Clamp(min), Clamp(max));
         return low > high ? this with { MinLevel = high, MaxLevel = low } : this with { MinLevel = low, MaxLevel = high };
     }

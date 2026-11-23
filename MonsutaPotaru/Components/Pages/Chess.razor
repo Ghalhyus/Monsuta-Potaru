@@ -812,13 +812,7 @@ else
         var unit = session.At(square);
         if (!CanAct)
         {
-            if (CanPreview)
-            {
-                await Preview(square, unit);
-                return;
-            }
-            info = unit is null ? null : Describe(unit);
-            StateHasChanged();
+            await OnSquareWhileWaiting(square, unit);
             return;
         }
         if (snapshot?.BonusSquare is { } bonus && selected != bonus)
@@ -827,45 +821,71 @@ else
             selected = bonus;
             options = session.Options(userId, bonus);
         }
-        if (selected is { } from && from != square)
+        if (selected is { } from && from != square && await TryTarget(from, square))
+            return;
+        await OnPieceOrEmptySquare(square, unit);
+        StateHasChanged();
+    }
+
+    /// <summary>Clic quand ce n'est pas à moi de jouer : l'aperçu des coups de l'autre, ou la fiche de la pièce.</summary>
+    private async Task OnSquareWhileWaiting(int square, ChessUnit? unit)
+    {
+        if (CanPreview)
         {
-            if (options.Targets.FirstOrDefault(t => t.To == square) is { } target)
-            {
-                if (target.Revives.Count > 0)
-                {
-                    pendingTo = square;
-                    swapChoices = target.Revives;
-                    info = null;
-                    StateHasChanged();
-                    return;
-                }
-                await PlayMove(new ChessMove(from, square));
-                return;
-            }
-            if (options.Blocked.FirstOrDefault(b => b.Square == square) is { } blocked)
-            {
-                info = Refusal(session.At(from)!, UnitOf(blocked.VictimId)!, blocked.Effect);
-                StateHasChanged();
-                return;
-            }
+            await Preview(square, unit);
+            return;
         }
-        if (unit is not null && unit.Color == session.ColorOf(userId) && snapshot?.BonusSquare is null)
+        info = unit is null ? null : Describe(unit);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Clic sur une case où la pièce choisie peut aller (le coup se joue, ou le choix du K.O. qui revient s'ouvre) ou sur
+    /// une pièce qu'elle ne peut pas manger (pourquoi). Faux : rien de cela, le clic est traité comme un autre.
+    /// </summary>
+    private async Task<bool> TryTarget(int from, int square)
+    {
+        if (options.Targets.FirstOrDefault(t => t.To == square) is { } target)
+        {
+            if (target.Revives.Count > 0)
+            {
+                pendingTo = square;
+                swapChoices = target.Revives;
+                info = null;
+                StateHasChanged();
+                return true;
+            }
+            await PlayMove(new ChessMove(from, square));
+            return true;
+        }
+        if (options.Blocked.FirstOrDefault(b => b.Square == square) is not { } blocked)
+            return false;
+        info = Refusal(session!.At(from)!, UnitOf(blocked.VictimId)!, blocked.Effect);
+        StateHasChanged();
+        return true;
+    }
+
+    /// <summary>Clic sur une de mes pièces (choisie), une pièce de l'autre (sa fiche) ou une case vide (plus de sélection).</summary>
+    private async Task OnPieceOrEmptySquare(int square, ChessUnit? unit)
+    {
+        var bonusTurn = snapshot?.BonusSquare is not null;
+        var mine = session!.ColorOf(userId);
+        if (unit is not null && unit.Color == mine && !bonusTurn)
         {
             await Select(square);
         }
-        else if (unit is not null && unit.Color != session.ColorOf(userId))
+        else if (unit is not null && unit.Color != mine)
         {
             info = Describe(unit);
-            if (snapshot?.BonusSquare is null)
+            if (!bonusTurn)
                 ClearSelection(keepInfo: true);
             await Highlight();
         }
-        else if (snapshot?.BonusSquare is null)
+        else if (!bonusTurn)
         {
             ClearSelection();
             await Highlight();
         }
-        StateHasChanged();
     }
 
     /// <summary>
@@ -1111,36 +1131,44 @@ else
         if (snapshot.Stage == ChessStage.Cancelled)
             return "Partie annulée.";
         if (snapshot.Stage == ChessStage.Done && !animating && played >= snapshot.StepCount)
-        {
-            var mine = session.ColorOf(userId);
-            var result = snapshot.Winner switch
-            {
-                null => "Match nul",
-                var winner when winner == mine => "Victoire !",
-                _ => "Défaite…",
-            };
-            var why = snapshot.End switch
-            {
-                ChessEnd.Checkmate => "échec et mat",
-                ChessEnd.KingEaten => "roi mangé",
-                ChessEnd.Stalemate => "pat",
-                ChessEnd.OnlyKings => "il ne reste que les rois",
-                ChessEnd.Forfeit => "abandon",
-                ChessEnd.Timeout => "temps écoulé",
-                ChessEnd.Left => "partie quittée",
-                _ => "",
-            };
-            return why.Length > 0 ? $"{result} ({why})" : result;
-        }
+            return ResultText(session, snapshot);
         if (animating || played < snapshot.StepCount)
             return "…";
-        if (!snapshot.MyTurn)
-            return $"Au tour de {session.Other(userId).Pseudo}…";
-        if (snapshot.BonusSquare is { } bonus && session.At(bonus) is { } unit)
-            return snapshot.CanPass
+        return snapshot.MyTurn ? MyTurnText(session, snapshot) : $"Au tour de {session.Other(userId).Pseudo}…";
+    }
+
+    /// <summary>Fin de la partie : « Victoire ! (échec et mat) », « Match nul (pat) »…</summary>
+    private string ResultText(ChessSession current, ChessSnapshot shown)
+    {
+        var mine = current.ColorOf(userId);
+        var result = shown.Winner switch
+        {
+            null => "Match nul",
+            var winner when winner == mine => "Victoire !",
+            _ => "Défaite…",
+        };
+        var why = shown.End switch
+        {
+            ChessEnd.Checkmate => "échec et mat",
+            ChessEnd.KingEaten => "roi mangé",
+            ChessEnd.Stalemate => "pat",
+            ChessEnd.OnlyKings => "il ne reste que les rois",
+            ChessEnd.Forfeit => "abandon",
+            ChessEnd.Timeout => "temps écoulé",
+            ChessEnd.Left => "partie quittée",
+            _ => "",
+        };
+        return why.Length > 0 ? $"{result} ({why})" : result;
+    }
+
+    /// <summary>À moi de jouer : le tour bonus (rejouer ou passer), ou un coup normal (roi en échec ou non).</summary>
+    private string MyTurnText(ChessSession current, ChessSnapshot shown)
+    {
+        if (shown.BonusSquare is { } bonus && current.At(bonus) is { } unit)
+            return shown.CanPass
                 ? $"Super efficace ! {unit.Mon.Name} rejoue : choisis sa case, ou passe."
                 : $"Super efficace ! {unit.Mon.Name} rejoue : ton roi est en échec, choisis une case qui le met à l'abri.";
-        return lastStep is { Check: true } && lastStep.Color != session.ColorOf(userId) ? "À toi de jouer : ton roi est en échec !" : "À toi de jouer.";
+        return lastStep is { Check: true } && lastStep.Color != current.ColorOf(userId) ? "À toi de jouer : ton roi est en échec !" : "À toi de jouer.";
     }
 
     private string StatusClass() => snapshot switch

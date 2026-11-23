@@ -1043,9 +1043,13 @@ public static class LivingDexGames
     /// « 386-speed.png » (Deoxys Vitesse), « 492-sky.png » (Shaymin Céleste) : noms de PokéAPI, à garder en accord avec
     /// outils/images.py (LIVINGDEX_FORMS). Ensuite, l'image de la collection (<see cref="Fallback"/>).
     /// </summary>
-    public static string Sprite(LivingDexGameInfo game, LivingDexSlot slot) => game.SpriteFolder is null
-        ? Fallback(game, slot)
-        : $"{game.SpriteFolder}{(game.Shiny ? "chromatique/" : "")}{slot.Species}{FormSuffix(slot)}.png";
+    public static string Sprite(LivingDexGameInfo game, LivingDexSlot slot)
+    {
+        if (game.SpriteFolder is null)
+            return Fallback(game, slot);
+        var shiny = game.Shiny ? "chromatique/" : "";
+        return $"{game.SpriteFolder}{shiny}{slot.Species}{FormSuffix(slot)}.png";
+    }
 
     private static string FormSuffix(LivingDexSlot slot) => (slot.Species, slot.Form) switch
     {
@@ -1455,6 +1459,26 @@ public sealed class LivingDexService(
         return candidates;
     }
 
+    /// <summary>
+    /// Pourquoi ce living dex ne peut pas être créé sur cette sauvegarde stockée (null : il peut l'être) : le global n'a
+    /// pas de sauvegarde, un jeu sans chromatiques, ou une sauvegarde d'un autre jeu (un monde Minecraft pour All the Mons).
+    /// </summary>
+    private static string? GameRefusal(LivingDexGame game, bool shiny, byte[] data, string fileName, string identityKey)
+    {
+        if (GlobalLivingDex.IsGlobal(game))
+            return "Le living dex global n'a pas de sauvegarde.";
+        var gameName = LivingDexGames.Get(game).Name;
+        var allTheMons = AllTheMonsLivingDex.Is(game);
+        if (shiny && !LivingDexGames.HasShiny(LivingDexGames.Get(game)))
+            return allTheMons ? $"Pas encore de living dex chromatique {gameName}." : $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.";
+        var world = identityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+        if (allTheMons)
+            return world ? null : $"Cette sauvegarde n'est pas un monde {gameName}.";
+        if (!world && StoredSaveService.TryRead(data, fileName, out var sav) && LivingDexGames.For(sav).Contains(game))
+            return null;
+        return $"Cette sauvegarde n'est pas une partie de {gameName}.";
+    }
+
     /// <summary>Living dex d'un jeu sur une sauvegarde stockée ; chromatique : il ne compte que ses chromatiques.</summary>
     public async Task<LivingDexResult> CreateAsync(string ownerId, int saveId, LivingDexGame game, bool shiny = false)
     {
@@ -1463,15 +1487,8 @@ public sealed class LivingDexService(
             .Select(s => new { s.FileName, s.Data, s.IdentityKey }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        if (GlobalLivingDex.IsGlobal(game))
-            return new(false, "Le living dex global n'a pas de sauvegarde.");
-        var gameName = LivingDexGames.Get(game).Name;
-        if (shiny && !LivingDexGames.HasShiny(LivingDexGames.Get(game)))
-            return new(false, AllTheMonsLivingDex.Is(game) ? $"Pas encore de living dex chromatique {gameName}."
-                : $"{gameName} n'a pas de chromatiques : pas de living dex chromatique.");
-        var world = save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
-        if (AllTheMonsLivingDex.Is(game) ? !world : world || !StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !LivingDexGames.For(sav).Contains(game))
-            return new(false, AllTheMonsLivingDex.Is(game) ? $"Cette sauvegarde n'est pas un monde {gameName}." : $"Cette sauvegarde n'est pas une partie de {gameName}.");
+        if (GameRefusal(game, shiny, save.Data, save.FileName, save.IdentityKey) is { } refusal)
+            return new(false, refusal);
         var name = LivingDexGames.Get(game, shiny).Name;
         if (await db.LivingDexes.AnyAsync(d => d.OwnerId == ownerId && d.Game == game && d.Shiny == shiny))
             return new(false, $"Tu as déjà un living dex {name} : supprime-le pour en créer un autre.");
@@ -1651,8 +1668,8 @@ public sealed class LivingDexService(
     }
 
     /// <summary>Exemplaires trouvés pour les cases (voir <see cref="EntriesAsync"/>).</summary>
-    private sealed record SlotCopies(List<OwnedCopy> Available, Dictionary<int, OwnedCopy> MegaCopies,
-        Dictionary<int, (OwnedCopy? Copy, string Note)> BagMegas, IReadOnlySet<int> Bag);
+    private sealed record SlotCopies(List<OwnedCopy> Available, Dictionary<int, OwnedCopy> Megas,
+        Dictionary<int, (OwnedCopy? Copy, string Note)> MegasInBag, IReadOnlySet<int> Bag);
 
     /// <summary>Case Méga ou Gigamax (index) → son exemplaire, pris en premier : il faut un exemplaire de plus pour chacune.</summary>
     private static Dictionary<int, OwnedCopy> MegaCopies(IReadOnlyList<LivingDexSlot> slots, List<OwnedCopy> owned)
@@ -1683,9 +1700,9 @@ public sealed class LivingDexService(
     {
         var (copy, note) = slot switch
         {
-            { MegaInBag: true } => copies.BagMegas[index],
+            { MegaInBag: true } => copies.MegasInBag[index],
             { MegaItem: not 0 } or { MegaMove: not 0 } or { Gigamax: true } =>
-                (copies.MegaCopies.GetValueOrDefault(index), MegaNote(slot, copies.MegaCopies.ContainsKey(index))),
+                (copies.Megas.GetValueOrDefault(index), MegaNote(slot, copies.Megas.ContainsKey(index))),
             { KeyItem: not 0 } => FindWithItem(copies.Available, slot, mode, copies.Bag),
             _ => (Find(copies.Available, slot, mode), null),
         };

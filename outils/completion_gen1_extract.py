@@ -1,6 +1,9 @@
 """Lecture des désassemblages pokered / pokeyellow pour outils/completion_gen1.py (complétion de 1re génération)."""
 import os, re, glob, json, sys
 
+# Textes répétés (lieux, libellés)
+MOTIF_ASM = '*.asm'
+
 
 def consts(path):
     v = 0
@@ -18,7 +21,9 @@ def consts(path):
             continue
         p = re.split(r'[\s,]+', line)
         if p[0] == 'const_def':
-            v = (int(p[1][1:], 16) if p[1].startswith('$') else int(p[1])) if len(p) > 1 else 0
+            v = 0
+            if len(p) > 1:
+                v = int(p[1][1:], 16) if p[1].startswith('$') else int(p[1])
         elif p[0] in ('const', 'const_export'):
             out[p[1]] = v
             v += 1
@@ -53,7 +58,7 @@ def extract(root):
     # Objets : constante -> (fichier, object_event)
     objconst = {}
     files = {}
-    for f in glob.glob(R('data', 'maps', 'objects', '*.asm')):
+    for f in glob.glob(R('data', 'maps', 'objects', MOTIF_ASM)):
         names = []
         objs = []
         for line in open(f, encoding='utf-8'):
@@ -84,7 +89,7 @@ def extract(root):
     for i, (mp, oc, st) in enumerate(states):
         f, obj = objconst.get(oc, (None, None))
         if obj and len(obj) >= 7 and obj[2] == 'SPRITE_POKE_BALL' and obj[6] in items:
-            ground.append(dict(flag=i, map=mp, toggle=toggles[i], item=obj[6], itemId=items[obj[6]], initial=st))
+            ground.append({'flag': i, 'map': mp, 'toggle': toggles[i], 'item': obj[6], 'itemId': items[obj[6]], 'initial': st})
     blocks = {}
     mp = None
     for line in open(R('data', 'events', 'hidden_events.asm'), encoding='utf-8'):
@@ -107,12 +112,12 @@ def extract(root):
 
     hidden = []
     for i, (mp, x, y) in enumerate(coords('hidden_item_coords.asm', 'hidden_item')):
-        kind, arg = blocks[(mp, x, y)]
-        hidden.append(dict(flag=i, map=mp, item=arg, itemId=items[arg]))
+        _, arg = blocks[(mp, x, y)]
+        hidden.append({'flag': i, 'map': mp, 'item': arg, 'itemId': items[arg]})
     coins = []
     for i, (mp, x, y) in enumerate(coords('hidden_coins.asm', 'hidden_coin')):
-        kind, arg = blocks[(mp, x, y)]
-        coins.append(dict(flag=i, map=mp, coins=int(arg.split('+')[1])))
+        _, arg = blocks[(mp, x, y)]
+        coins.append({'flag': i, 'map': mp, 'coins': int(arg.split('+')[1])})
     parties = {}
     cls = None
     for line in open(R('data', 'trainers', 'parties.asm'), encoding='utf-8'):
@@ -140,9 +145,10 @@ def extract(root):
 
     species = consts(R('constants', 'pokemon_constants.asm'))
     trainers = []
-    for f in sorted(glob.glob(R('scripts', '*.asm'))):
+    for f in sorted(glob.glob(R('scripts', MOTIF_ASM))):
         src = open(f, encoding='utf-8').read()
-        headers = dict(re.findall(r'^(\w+TrainerHeader\w*):\s*\n\s*trainer\s+(EVENT_\w+)', src, re.M))
+        # Étiquette d'un en-tête de dresseur (« Route3TrainerHeader0: »), puis « trainer EVENT_… » à la ligne
+        headers = {a: b for a, b in re.findall(r'^(\w+):[^\S\n]*\n\s*trainer\s+(EVENT_\w+)', src, re.M) if 'TrainerHeader' in a[1:]}
         if not headers:
             continue
         text_to_header = {}
@@ -152,7 +158,7 @@ def extract(root):
             h = re.search(r'ld hl, (\w+TrainerHeader\w*)', body)
             if label.endswith('Text') and h:
                 text_to_header[label] = h.group(1)
-        textconst = dict((b, a) for a, b in re.findall(r'dw_const\s+(\w+),\s*(TEXT_\w+)', src))
+        textconst = {b: a for a, b in re.findall(r'dw_const\s+(\w+),\s*(TEXT_\w+)', src)}
         base = os.path.basename(f)[:-4]
         found = set()
         for o in files.get(base, []):
@@ -160,7 +166,7 @@ def extract(root):
                 h = text_to_header.get(textconst[o[5]])
                 if h:
                     ev = headers[h]
-                    trainers.append(dict(event=ev, flag=events[ev], file=base, species=o[6], level=int(o[7]), team=None))
+                    trainers.append({'event': ev, 'flag': events[ev], 'file': base, 'species': o[6], 'level': int(o[7]), 'team': None})
                     found.add(ev)
                 continue
             if len(o) >= 8 and o[6].startswith('OPP_') and o[5] in textconst:
@@ -171,16 +177,16 @@ def extract(root):
                 k = cls_data(o[6])
                 n = int(o[7])
                 team = parties[k][n - 1] if k and n <= len(parties[k]) else None
-                trainers.append(dict(event=ev, flag=events[ev], file=base, cls=o[6], n=n, team=team))
+                trainers.append({'event': ev, 'flag': events[ev], 'file': base, 'cls': o[6], 'n': n, 'team': team})
                 found.add(ev)
         for h, ev in headers.items():
             if ev not in found:
-                trainers.append(dict(event=ev, flag=events[ev], file=base, cls=None, n=None, team=None))
+                trainers.append({'event': ev, 'flag': events[ev], 'file': base, 'cls': None, 'n': None, 'team': None})
     trades = []
     for line in open(R('data', 'events', 'trades.asm'), encoding='utf-8'):
         m = re.match(r'\s*npctrade\s+(\w+),\s*(\w+),\s*\w+,\s*"(\w+)"\s*;\s*(.*)', line)
         if m:
-            trades.append(dict(index=len(trades), give=m.group(1), get=m.group(2), nick=m.group(3), where=m.group(4)))
+            trades.append({'index': len(trades), 'give': m.group(1), 'get': m.group(2), 'nick': m.group(3), 'where': m.group(4)})
     dex = consts(R('constants', 'pokedex_constants.asm'))
     # Arène de Cramois'Île : ses dresseurs (quiz, sans en-tête) dans l'ordre des objets, après Auguste.
     cinnabar = []
@@ -192,7 +198,7 @@ def extract(root):
             'EVENT_GOT_HELIX_FOSSIL', 'EVENT_GOT_HITMONLEE', 'EVENT_GOT_HITMONCHAN', 'EVENT_GOT_BULBASAUR_IN_CERULEAN',
             'EVENT_GOT_CHARMANDER_ON_ROUTE_24', 'EVENT_GOT_SQUIRTLE_FROM_OFFICER_JENNY'}
     gifts = {}
-    for f in sorted(glob.glob(R('scripts', '*.asm'))):
+    for f in sorted(glob.glob(R('scripts', MOTIF_ASM))):
         src = open(f, encoding='utf-8').read()
         for m in re.finditer(r'(?:SetEvent|SetEventReuseHL|CheckAndSetEvent|SetEvents)\s+([\w, ]+)', src):
             for name in re.findall(r'EVENT_GOT_\w+', m.group(1)):
@@ -200,8 +206,8 @@ def extract(root):
                     gifts[name] = (os.path.basename(f)[:-4], None)
     gifts = dict(sorted(gifts.items(), key=lambda kv: events[kv[0]]))
     tm_moves = {'TM': [m for k, m in tms if k == 'tm'], 'HM': [m for k, m in tms if k == 'hm']}
-    return dict(cinnabar=cinnabar, gifts=gifts, tm_moves=tm_moves,events=events, ground=ground, hidden=hidden, coins=coins, trainers=trainers, trades=trades,
-                tms=tms, moves=moves, items=items, dex=dex, toggles=toggles, states=states, objfiles=sorted(files))
+    return {'cinnabar': cinnabar, 'gifts': gifts, 'tm_moves': tm_moves,'events': events, 'ground': ground, 'hidden': hidden, 'coins': coins, 'trainers': trainers, 'trades': trades,
+                'tms': tms, 'moves': moves, 'items': items, 'dex': dex, 'toggles': toggles, 'states': states, 'objfiles': sorted(files)}
 
 
 if __name__ == '__main__':

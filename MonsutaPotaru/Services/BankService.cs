@@ -388,6 +388,30 @@ public sealed class BankService(
         mon.OriginalTrainerName
         ?? (string.Equals(mon.OriginalTrainerId, world.PlayerId, StringComparison.OrdinalIgnoreCase) ? accountName : "Joueur Minecraft");
 
+    /// <summary>Refus si un Pokémon déposé est déjà au stockage interne ou sur la GTS (vieille copie de la sauvegarde).</summary>
+    private static async Task EnsureNotStoredAsync(ApplicationDbContext db, string ownerId, SaveSession session)
+    {
+        var deposited = session.Deposits.Select(d => d.Cobblemon?.Fingerprint ?? PokemonFingerprint.Of(d.Pokemon!)).ToList();
+        var inStorage = await PokemonFingerprint.FindAsync(db, ownerId, deposited, internalOnly: true);
+        if (inStorage.Count == 0)
+            return;
+        var name = inStorage[0].IsEgg ? "Un Œuf" : inStorage[0].SpeciesName;
+        var message = inStorage[0].StoredSaveLabel == PokemonFingerprint.GtsLabel ? AlreadyOnGtsMessage(name) : AlreadyInStorageMessage(name);
+        throw new InvalidOperationException(message + " Annule son dépôt, puis valide de nouveau.");
+    }
+
+    /// <summary>Retire du stockage interne les Pokémon retirés ; refus si l'un d'eux n'y est plus.</summary>
+    private static async Task DeleteWithdrawalsAsync(ApplicationDbContext db, string ownerId, SaveSession session)
+    {
+        foreach (var w in session.Withdrawals)
+        {
+            // Jamais un Pokémon de sauvegarde stockée : ils sont en lecture seule.
+            var deleted = await db.BankPokemon.Where(p => p.Id == w.BankId && p.OwnerId == ownerId && p.StoredSaveId == null).ExecuteDeleteAsync();
+            if (deleted == 0)
+                throw new InvalidOperationException("Un des Pokémon retirés n'est plus dans le stockage interne (retiré depuis un autre onglet ?). Annule et recommence.");
+        }
+    }
+
     /// <summary>
     /// Enregistre en base les dépôts et retraits en attente, garde une copie de la sauvegarde
     /// avant/après, puis renvoie le fichier modifié à télécharger.
@@ -409,22 +433,8 @@ public sealed class BankService(
         // Un Pokémon déjà au stockage interne ne peut pas y entrer une seconde fois (vieille copie de la sauvegarde) : la
         // page refuse déjà une telle sauvegarde au chargement, ceci couvre un dépôt fait entre-temps depuis un autre onglet.
         // Vérifié avant les retraits, sinon retirer l'original et déposer sa copie le dupliquerait.
-        var deposited = session.Deposits.Select(d => d.Cobblemon?.Fingerprint ?? PokemonFingerprint.Of(d.Pokemon!)).ToList();
-        var inStorage = await PokemonFingerprint.FindAsync(db, ownerId, deposited, internalOnly: true);
-        if (inStorage.Count > 0)
-        {
-            var name = inStorage[0].IsEgg ? "Un Œuf" : inStorage[0].SpeciesName;
-            throw new InvalidOperationException((inStorage[0].StoredSaveLabel == PokemonFingerprint.GtsLabel ? AlreadyOnGtsMessage(name) : AlreadyInStorageMessage(name))
-                + " Annule son dépôt, puis valide de nouveau.");
-        }
-
-        foreach (var w in session.Withdrawals)
-        {
-            // Jamais un Pokémon de sauvegarde stockée : ils sont en lecture seule.
-            var deleted = await db.BankPokemon.Where(p => p.Id == w.BankId && p.OwnerId == ownerId && p.StoredSaveId == null).ExecuteDeleteAsync();
-            if (deleted == 0)
-                throw new InvalidOperationException("Un des Pokémon retirés n'est plus dans le stockage interne (retiré depuis un autre onglet ?). Annule et recommence.");
-        }
+        await EnsureNotStoredAsync(db, ownerId, session);
+        await DeleteWithdrawalsAsync(db, ownerId, session);
 
         // Taille de la collection, vérifiée dans la transaction : les retraits viennent de libérer leur place.
         var afterWithdrawals = await CollectionCapacity.GetUsageAsync(db, ownerId);

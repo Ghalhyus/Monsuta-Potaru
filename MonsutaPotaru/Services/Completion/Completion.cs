@@ -366,10 +366,12 @@ internal sealed class CompletionFlags(SaveFile sav)
     /// <summary>Pokémon de la sauvegarde (équipe et boîtes, sans les œufs) : leurs rubans comptent (« RB:clé »).</summary>
     private readonly Lazy<List<PKM>> pokemon = new(() => [.. sav.GetAllPKM().Where(p => p.Species != 0 && !p.IsEgg)]);
 
-    public CompletionState State(CompletionRow row) =>
-        Test(row.Done) ? CompletionState.Done
-        : row.Missed is not null && Test(row.Missed) ? CompletionState.Missed
-        : CompletionState.Missing;
+    public CompletionState State(CompletionRow row)
+    {
+        if (Test(row.Done))
+            return CompletionState.Done;
+        return row.Missed is not null && Test(row.Missed) ? CompletionState.Missed : CompletionState.Missing;
+    }
 
     public bool Test(string condition) =>
         condition.Split('|').Any(alternative => alternative.Split('+').All(Atom));

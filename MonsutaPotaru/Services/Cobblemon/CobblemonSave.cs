@@ -128,9 +128,11 @@ public sealed partial class CobblemonSave
                     yield return (mon, $"{PageName(b + 1)}, case {s + 1}");
     }
 
-    private CobblemonSave(Dictionary<string, byte[]> files, string playerId, string partyPath, NbtCompound party, string pcPath, NbtCompound pc,
-        string? worldName, long seed, int? playTime)
+    private CobblemonSave(Dictionary<string, byte[]> files, string playerId, (string Path, NbtCompound Data) partyFile,
+        (string Path, NbtCompound Data) pcFile, string? worldName, long seed, int? playTime)
     {
+        var (partyPath, party) = partyFile;
+        var (pcPath, pc) = pcFile;
         _files = files;
         PlayerId = playerId;
         _partyPath = partyPath;
@@ -235,26 +237,10 @@ public sealed partial class CobblemonSave
         }
 
         // Seuls les fichiers utiles sont gardés, avec leur chemin depuis le dossier du monde.
-        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var (name, data) in entries)
-        {
-            if (data is null || !name.StartsWith(root, StringComparison.Ordinal))
-                continue;
-            var relative = name[root.Length..];
-            var keep = stores.Any(s => s.Name == name && !s.Json && s.Player == player)
-                || relative == "level.dat"
-                || relative.Equals($"stats/{player}.json", StringComparison.OrdinalIgnoreCase)
-                || relative.Equals($"advancements/{player}.json", StringComparison.OrdinalIgnoreCase)
-                || TeamFile().IsMatch(relative); // triés plus bas : seulement l'équipe du joueur
-            if (!keep)
-                continue;
-            if (data.Length > MaxKeptFileBytes)
-            {
-                error = $"Fichier trop gros dans le monde ({relative}).";
-                return null;
-            }
-            files[relative] = data;
-        }
+        var storeNames = stores.Where(s => !s.Json && s.Player == player).Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
+        var files = KeptFiles(entries, root, player, storeNames, out error);
+        if (files is null)
+            return null;
         KeepPlayerTeam(files, player);
 
         try
@@ -266,41 +252,78 @@ public sealed partial class CobblemonSave
                 error = "Le PC de ce monde est illisible (nombre de boîtes absent).";
                 return null;
             }
-
-            string? worldName = null;
-            long seed = 0;
-            if (files.TryGetValue("level.dat", out var level))
+            if (!TryReadLevel(files, out var worldName, out var seed))
             {
-                var data = Nbt.Read(level).Compound("Data");
-                worldName = data?.String("LevelName");
-                var worldSeed = data?.Compound("WorldGenSettings")?.Integer("seed") ?? data?.Integer("RandomSeed");
-                if (worldName is null || worldSeed is null)
-                {
-                    error = "Le fichier level.dat est illisible (nom ou graine du monde absents).";
-                    return null;
-                }
-                seed = worldSeed.Value;
+                error = "Le fichier level.dat est illisible (nom ou graine du monde absents).";
+                return null;
             }
-
-            int? playTime = null;
-            var statsKey = files.Keys.FirstOrDefault(k => k.StartsWith("stats/", StringComparison.Ordinal));
-            if (statsKey is not null)
+            if (!TryReadPlayTime(files, out var playTime))
             {
-                playTime = PlayTimeOf(files[statsKey]);
-                if (playTime is null)
-                {
-                    error = "Le fichier des statistiques du joueur est illisible (temps de jeu absent).";
-                    return null;
-                }
+                error = "Le fichier des statistiques du joueur est illisible (temps de jeu absent).";
+                return null;
             }
-
-            return new CobblemonSave(files, player, party[root.Length..], partyNbt, pc[root.Length..], pcNbt, worldName, seed, playTime);
+            return new CobblemonSave(files, player, (party[root.Length..], partyNbt), (pc[root.Length..], pcNbt), worldName, seed, playTime);
         }
         catch (Exception e) when (e is InvalidDataException or IOException)
         {
             error = $"Fichier de Cobblemon illisible : {e.Message}";
             return null;
         }
+    }
+
+    /// <summary>
+    /// Fichiers utiles du monde, par chemin depuis son dossier : stockages du joueur, level.dat, ses statistiques et ses
+    /// succès, fichiers des équipes FTB. Null (avec un message) si l'un d'eux est trop gros.
+    /// </summary>
+    private static Dictionary<string, byte[]>? KeptFiles(List<(string Name, byte[]? Data)> entries, string root, string player,
+        HashSet<string> storeNames, out string error)
+    {
+        error = "";
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var (name, data) in entries.Where(e => e.Data is not null && e.Name.StartsWith(root, StringComparison.Ordinal)))
+        {
+            var relative = name[root.Length..];
+            var keep = storeNames.Contains(name)
+                || relative == "level.dat"
+                || relative.Equals($"stats/{player}.json", StringComparison.OrdinalIgnoreCase)
+                || relative.Equals($"advancements/{player}.json", StringComparison.OrdinalIgnoreCase)
+                || TeamFile().IsMatch(relative); // triés plus tard : seulement l'équipe du joueur
+            if (!keep)
+                continue;
+            if (data!.Length > MaxKeptFileBytes)
+            {
+                error = $"Fichier trop gros dans le monde ({relative}).";
+                return null;
+            }
+            files[relative] = data;
+        }
+        return files;
+    }
+
+    /// <summary>Nom et graine du monde, d'après level.dat (sans level.dat : rien, et c'est accepté). Faux s'il est illisible.</summary>
+    private static bool TryReadLevel(Dictionary<string, byte[]> files, out string? worldName, out long seed)
+    {
+        (worldName, seed) = (null, 0);
+        if (!files.TryGetValue("level.dat", out var level))
+            return true;
+        var data = Nbt.Read(level).Compound("Data");
+        worldName = data?.String("LevelName");
+        var worldSeed = data?.Compound("WorldGenSettings")?.Integer("seed") ?? data?.Integer("RandomSeed");
+        if (worldName is null || worldSeed is null)
+            return false;
+        seed = worldSeed.Value;
+        return true;
+    }
+
+    /// <summary>Temps de jeu d'après les statistiques du joueur (sans statistiques : null, et c'est accepté). Faux si elles sont illisibles.</summary>
+    private static bool TryReadPlayTime(Dictionary<string, byte[]> files, out int? playTime)
+    {
+        playTime = null;
+        var statsKey = files.Keys.FirstOrDefault(k => k.StartsWith("stats/", StringComparison.Ordinal));
+        if (statsKey is null)
+            return true;
+        playTime = PlayTimeOf(files[statsKey]);
+        return playTime is not null;
     }
 
     /// <summary>

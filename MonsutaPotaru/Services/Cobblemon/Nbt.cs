@@ -11,49 +11,49 @@ public enum NbtType : byte
 }
 
 /// <summary>Une valeur NBT : nombre, texte, tableau, liste ou ensemble nommé (<see cref="NbtCompound"/>).</summary>
-public interface NbtTag
+public interface INbtTag
 {
     NbtType Type { get; }
 
     /// <summary>Copie indépendante (un Pokémon déposé ne doit plus bouger avec la sauvegarde).</summary>
-    NbtTag Clone();
+    INbtTag Clone();
 }
 
 /// <summary>Nombre ou texte : <see cref="Value"/> est un byte (signé), short, int, long, float, double ou string.</summary>
-public sealed class NbtValue(NbtType type, object value) : NbtTag
+public sealed class NbtValue(NbtType type, object value) : INbtTag
 {
     public NbtType Type => type;
     public object Value { get; } = value;
-    public NbtTag Clone() => new NbtValue(type, Value);
+    public INbtTag Clone() => new NbtValue(type, Value);
 }
 
 /// <summary>Tableau d'octets, d'entiers ou d'entiers longs.</summary>
-public sealed class NbtArray(NbtType type, Array values) : NbtTag
+public sealed class NbtArray(NbtType type, Array values) : INbtTag
 {
     public NbtType Type => type;
     public Array Values { get; } = values;
-    public NbtTag Clone() => new NbtArray(type, (Array)Values.Clone());
+    public INbtTag Clone() => new NbtArray(type, (Array)Values.Clone());
 }
 
 /// <summary>Liste de valeurs du même type (<see cref="ElementType"/>, End pour une liste vide).</summary>
-public sealed class NbtList(NbtType elementType, List<NbtTag> items) : NbtTag
+public sealed class NbtList(NbtType elementType, List<INbtTag> items) : INbtTag
 {
     public NbtType Type => NbtType.List;
     public NbtType ElementType { get; } = elementType;
-    public List<NbtTag> Items { get; } = items;
-    public NbtTag Clone() => new NbtList(ElementType, Items.Select(i => i.Clone()).ToList());
+    public List<INbtTag> Items { get; } = items;
+    public INbtTag Clone() => new NbtList(ElementType, Items.Select(i => i.Clone()).ToList());
 }
 
 /// <summary>Ensemble de valeurs nommées, dans l'ordre du fichier (gardé à la réécriture).</summary>
-public sealed class NbtCompound : NbtTag
+public sealed class NbtCompound : INbtTag
 {
-    private readonly List<KeyValuePair<string, NbtTag>> _entries = [];
+    private readonly List<KeyValuePair<string, INbtTag>> _entries = [];
 
     public NbtType Type => NbtType.Compound;
-    public IEnumerable<KeyValuePair<string, NbtTag>> Entries => _entries;
+    public IEnumerable<KeyValuePair<string, INbtTag>> Entries => _entries;
     public IEnumerable<string> Keys => _entries.Select(e => e.Key);
 
-    public NbtTag? this[string name]
+    public INbtTag? this[string name]
     {
         get => _entries.FirstOrDefault(e => e.Key == name).Value;
         set
@@ -86,7 +86,7 @@ public sealed class NbtCompound : NbtTag
 
     public bool Flag(string name) => Integer(name) is { } v && v != 0;
 
-    public NbtTag Clone()
+    public INbtTag Clone()
     {
         var copy = new NbtCompound();
         foreach (var (key, tag) in _entries)
@@ -140,100 +140,69 @@ public static class Nbt
         return packed.ToArray();
     }
 
-    private static NbtTag ReadPayload(BinaryReaderBE r, NbtType type, int depth)
+    private static INbtTag ReadPayload(BinaryReaderBE r, NbtType type, int depth)
     {
         if (depth > MaxDepth)
             throw new InvalidDataException("Fichier NBT trop imbriqué.");
-        switch (type)
+        return type switch
         {
-            case NbtType.Byte: return new NbtValue(type, (sbyte)r.Byte());
-            case NbtType.Short: return new NbtValue(type, r.Short());
-            case NbtType.Int: return new NbtValue(type, r.Int());
-            case NbtType.Long: return new NbtValue(type, r.Long());
-            case NbtType.Float: return new NbtValue(type, BitConverter.Int32BitsToSingle(r.Int()));
-            case NbtType.Double: return new NbtValue(type, BitConverter.Int64BitsToDouble(r.Long()));
-            case NbtType.String: return new NbtValue(type, r.String());
-            case NbtType.ByteArray:
-            {
-                var bytes = r.Bytes(r.Length());
-                var values = new sbyte[bytes.Length];
-                for (int i = 0; i < bytes.Length; i++) values[i] = (sbyte)bytes[i];
-                return new NbtArray(type, values);
-            }
-            case NbtType.IntArray:
-            {
-                var values = new int[r.Length(4)];
-                for (int i = 0; i < values.Length; i++) values[i] = r.Int();
-                return new NbtArray(type, values);
-            }
-            case NbtType.LongArray:
-            {
-                var values = new long[r.Length(8)];
-                for (int i = 0; i < values.Length; i++) values[i] = r.Long();
-                return new NbtArray(type, values);
-            }
-            case NbtType.List:
-            {
-                var elementType = (NbtType)r.Byte();
-                var count = r.Int();
-                if (count < 0 || count > r.Remaining)
-                    throw new InvalidDataException("Liste NBT de longueur invalide.");
-                var items = new List<NbtTag>(count);
-                for (int i = 0; i < count; i++)
-                    items.Add(ReadPayload(r, elementType, depth + 1));
-                return new NbtList(elementType, items);
-            }
-            case NbtType.Compound:
-            {
-                var compound = new NbtCompound();
-                while (true)
-                {
-                    var childType = (NbtType)r.Byte();
-                    if (childType == NbtType.End)
-                        return compound;
-                    var name = r.String();
-                    compound[name] = ReadPayload(r, childType, depth + 1);
-                }
-            }
-            default:
-                throw new InvalidDataException($"Type NBT inconnu ({(byte)type}).");
-        }
+            NbtType.Byte => new NbtValue(type, (sbyte)r.Byte()),
+            NbtType.Short => new NbtValue(type, r.Short()),
+            NbtType.Int => new NbtValue(type, r.Int()),
+            NbtType.Long => new NbtValue(type, r.Long()),
+            NbtType.Float => new NbtValue(type, BitConverter.Int32BitsToSingle(r.Int())),
+            NbtType.Double => new NbtValue(type, BitConverter.Int64BitsToDouble(r.Long())),
+            NbtType.String => new NbtValue(type, r.String()),
+            NbtType.ByteArray => new NbtArray(type, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, sbyte>(r.Bytes(r.Length())).ToArray()),
+            NbtType.IntArray => new NbtArray(type, ReadArray(r.Length(4), r.Int)),
+            NbtType.LongArray => new NbtArray(type, ReadArray(r.Length(8), r.Long)),
+            NbtType.List => ReadList(r, depth),
+            NbtType.Compound => ReadCompound(r, depth),
+            _ => throw new InvalidDataException($"Type NBT inconnu ({(byte)type})."),
+        };
     }
 
-    private static void WritePayload(BinaryWriterBE w, NbtTag tag)
+    /// <summary>count valeurs lues une à une, dans l'ordre.</summary>
+    private static T[] ReadArray<T>(int count, Func<T> read)
+    {
+        var values = new T[count];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = read();
+        return values;
+    }
+
+    private static NbtList ReadList(BinaryReaderBE r, int depth)
+    {
+        var elementType = (NbtType)r.Byte();
+        var count = r.Int();
+        if (count < 0 || count > r.Remaining)
+            throw new InvalidDataException("Liste NBT de longueur invalide.");
+        var items = new List<INbtTag>(count);
+        for (int i = 0; i < count; i++)
+            items.Add(ReadPayload(r, elementType, depth + 1));
+        return new NbtList(elementType, items);
+    }
+
+    private static NbtCompound ReadCompound(BinaryReaderBE r, int depth)
+    {
+        var compound = new NbtCompound();
+        for (var childType = (NbtType)r.Byte(); childType != NbtType.End; childType = (NbtType)r.Byte())
+        {
+            var name = r.String();
+            compound[name] = ReadPayload(r, childType, depth + 1);
+        }
+        return compound;
+    }
+
+    private static void WritePayload(BinaryWriterBE w, INbtTag tag)
     {
         switch (tag)
         {
             case NbtValue v:
-                switch (v.Value)
-                {
-                    case sbyte b: w.Byte((byte)b); break;
-                    case short s: w.Short(s); break;
-                    case int i: w.Int(i); break;
-                    case long l: w.Long(l); break;
-                    case float f: w.Int(BitConverter.SingleToInt32Bits(f)); break;
-                    case double d: w.Long(BitConverter.DoubleToInt64Bits(d)); break;
-                    case string s: w.String(s); break;
-                    default: throw new InvalidOperationException($"Valeur NBT inattendue : {v.Value.GetType().Name}.");
-                }
+                WriteValue(w, v.Value);
                 break;
             case NbtArray a:
-                w.Int(a.Values.Length);
-                switch (a.Values)
-                {
-                    case sbyte[] bytes:
-                        foreach (var b in bytes)
-                            w.Byte((byte)b);
-                        break;
-                    case int[] ints:
-                        foreach (var i in ints)
-                            w.Int(i);
-                        break;
-                    case long[] longs:
-                        foreach (var l in longs)
-                            w.Long(l);
-                        break;
-                }
+                WriteArray(w, a.Values);
                 break;
             case NbtList list:
                 w.Byte((byte)(list.Items.Count == 0 ? list.ElementType : list.Items[0].Type));
@@ -249,6 +218,41 @@ public static class Nbt
                     WritePayload(w, child);
                 }
                 w.Byte((byte)NbtType.End);
+                break;
+        }
+    }
+
+    private static void WriteValue(BinaryWriterBE w, object value)
+    {
+        switch (value)
+        {
+            case sbyte b: w.Byte((byte)b); break;
+            case short s: w.Short(s); break;
+            case int i: w.Int(i); break;
+            case long l: w.Long(l); break;
+            case float f: w.Int(BitConverter.SingleToInt32Bits(f)); break;
+            case double d: w.Long(BitConverter.DoubleToInt64Bits(d)); break;
+            case string s: w.String(s); break;
+            default: throw new InvalidOperationException($"Valeur NBT inattendue : {value.GetType().Name}.");
+        }
+    }
+
+    private static void WriteArray(BinaryWriterBE w, Array values)
+    {
+        w.Int(values.Length);
+        switch (values)
+        {
+            case sbyte[] bytes:
+                foreach (var b in bytes)
+                    w.Byte((byte)b);
+                break;
+            case int[] ints:
+                foreach (var i in ints)
+                    w.Int(i);
+                break;
+            case long[] longs:
+                foreach (var l in longs)
+                    w.Long(l);
                 break;
         }
     }

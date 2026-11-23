@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using Bunit;
 using Microsoft.AspNetCore.Components;
@@ -10,8 +11,11 @@ namespace MonsutaPotaru.Tests;
 /// Infobulles d'aide (« ? ») : le composant, sa place dans l'en-tête d'une page et d'un bloc, et les pages dont l'aide est
 /// passée du texte sous le titre à une infobulle.
 /// </summary>
-public sealed class HelpTipTests : PageTestContext
+public sealed partial class HelpTipTests : PageTestContext
 {
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Spaces();
+
     /// <summary>L'infobulle de l'en-tête (ou du bloc) : un details dans la ligne du titre, l'aide dans sa bulle.</summary>
     private static IElement Tip<T>(IRenderedComponent<T> cut, string heading) where T : IComponent
     {
@@ -29,7 +33,7 @@ public sealed class HelpTipTests : PageTestContext
             blocks.Add(bubble.TextContent);
         foreach (var block in blocks)
         {
-            var text = System.Text.RegularExpressions.Regex.Replace(block.Trim(), @"\s+", " ");
+            var text = Spaces().Replace(block.Trim(), " ");
             Assert.True(text.Length <= 260, $"Bloc trop long ({text.Length} caractères) : {text}");
         }
     }

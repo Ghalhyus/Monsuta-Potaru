@@ -110,6 +110,149 @@ function durationOf(a, state) {
     return anim ? anim.durations.reduce((t, d) => t + d, 0) : 400;
 }
 
+/** Panneaux des K.O. : fond sombre, une case creusée par place. */
+function paintPanels(put, random) {
+    for (const x0 of [0, WIDTH - PANEL]) {
+        for (let y = 0; y < HEIGHT; y++) {
+            for (let x = x0; x < x0 + PANEL; x++) put(x, y, panelColor(x, y, x0, random));
+        }
+    }
+}
+
+/** Couleur d'un pixel d'un panneau des K.O. (x0 : son bord gauche) : bord, case creusée (grain au hasard) ou fond. */
+function panelColor(x, y, x0, random) {
+    if (y === 0 || y === HEIGHT - 1 || x === x0 || x === x0 + PANEL - 1) return PANEL_EDGE;
+    const inSlots = y >= BORDER && y < BORDER + 8 * SQ;
+    const sx = (x - x0) % SQ, sy = (y - BORDER) % SQ;
+    if (!inSlots || sx < 3 || sx >= SQ - 3 || sy < 3 || sy >= SQ - 3) return PANEL_BG;
+    return shade(PANEL_SLOT, random() < 0.08 ? 4 : 0);
+}
+
+/** Cadre de pierre : briques de 5 pixels de haut, décalées d'une rangée à l'autre. */
+function paintFrame(put, random) {
+    for (let y = 0; y < FRAME; y++) {
+        for (let x = BOARD_X; x < BOARD_X + FRAME; x++) put(x, y, frameColor(x - BOARD_X, y, random));
+    }
+}
+
+/** Couleur d'un pixel du cadre (lx : depuis son bord gauche) ; le grain de la pierre est tiré même sous le bord. */
+function frameColor(lx, y, random) {
+    const brick = (lx + (Math.floor(y / 5) % 2) * 7) % 14;
+    let color = STONE;
+    if (y % 5 === 4 || brick === 13) color = MORTAR;
+    else if (y % 5 === 0 || brick === 0) color = STONE_LIGHT;
+    else if (random() < 0.18) color = shade(STONE, random() < 0.5 ? -9 : 7);
+    const edge = lx === 0 || y === 0 || lx === FRAME - 1 || y === FRAME - 1;
+    return edge ? PANEL_EDGE : color;
+}
+
+/** Cases : a1 foncée ; grain, puis un pixel de relief (clair en haut à gauche, sombre en bas à droite). */
+function paintSquares(put, random, originOf) {
+    for (let square = 0; square < 64; square++) {
+        const base = ((square >> 3) + (square & 7)) % 2 === 0 ? DARK : LIGHT;
+        const { x: x0, y: y0 } = originOf(square);
+        for (let y = 0; y < SQ; y++) {
+            for (let x = 0; x < SQ; x++) put(x0 + x, y0 + y, squareColor(x, y, base, random));
+        }
+    }
+}
+
+/** Couleur d'un pixel d'une case (x, y : dans la case) : grain au hasard, relief sur les bords. */
+function squareColor(x, y, base, random) {
+    const r = random();
+    let color = base;
+    if (r < 0.07) color = shade(base, -10);
+    else if (r < 0.12) color = shade(base, 8);
+    if (x === 0 || y === 0) color = shade(base, 16);
+    if (x === SQ - 1 || y === SQ - 1) color = shade(base, -18);
+    return color;
+}
+
+/** Lettres des colonnes (bas) et chiffres des rangées (gauche), dans le sens du joueur. */
+function paintLabels(put, originOf) {
+    for (let file = 0; file < 8; file++) {
+        const { x } = originOf(file);
+        paintGlyph(put, "ABCDEFGH"[file], x + SQ / 2 - 1, FRAME - BORDER + 2);
+    }
+    for (let rank = 0; rank < 8; rank++) {
+        const { y } = originOf(rank * 8);
+        paintGlyph(put, String(rank + 1), BOARD_X + 3, y + SQ / 2 - 3);
+    }
+}
+
+/** Un caractère de 3 × 5 pixels, avec une ombre d'un pixel dessous. */
+function paintGlyph(put, char, gx, gy) {
+    const pattern = GLYPHS[char];
+    for (let i = 0; i < 15; i++) {
+        if (pattern[i] !== "#") continue;
+        put(gx + (i % 3), gy + Math.floor(i / 3) + 1, shade(MORTAR, -20)); // ombre d'un pixel
+        put(gx + (i % 3), gy + Math.floor(i / 3), LABEL);
+    }
+}
+
+/** Case pleine d'une couleur (o : son coin haut gauche). */
+function fillBox(g, o, color, alpha) {
+    g.fillStyle(color, alpha);
+    g.fillRect(o.x, o.y, SQ, SQ);
+}
+
+/** Cadre d'une case, de cette épaisseur. */
+function fillFrame(g, o, color, alpha, width) {
+    g.fillStyle(color, alpha);
+    g.fillRect(o.x, o.y, SQ, width);
+    g.fillRect(o.x, o.y + SQ - width, SQ, width);
+    g.fillRect(o.x, o.y, width, SQ);
+    g.fillRect(o.x + SQ - width, o.y, width, SQ);
+}
+
+/** Case où la pièce choisie peut aller : un point, ou quatre coins pour une prise (dorés si super efficace). */
+function drawMoveMark(g, o, move) {
+    if (!move.capture) {
+        const cx = o.x + SQ / 2, cy = o.y + SQ / 2;
+        g.fillStyle(0x1c2733, 0.5);
+        g.fillRect(cx - 2, cy - 3, 4, 6);
+        g.fillRect(cx - 3, cy - 2, 6, 4);
+        return;
+    }
+    g.fillStyle(move.super ? 0xffd23c : 0xff5a4a, 1);
+    for (const [cx, cy, sx, sy] of [[o.x, o.y, 1, 1], [o.x + SQ, o.y, -1, 1], [o.x, o.y + SQ, 1, -1], [o.x + SQ, o.y + SQ, -1, -1]]) {
+        g.fillRect(sx > 0 ? cx : cx - 7, sy > 0 ? cy : cy - 2, 7, 2);
+        g.fillRect(sx > 0 ? cx : cx - 2, sy > 0 ? cy : cy - 7, 2, 7);
+    }
+}
+
+/** Grande croix rouge sur tout le Pokémon (bord sombre, cœur rouge vif). */
+function drawCross(crosses, o) {
+    for (const [color, size, inset] of [[0x4a0a0a, 4, 0], [0xff2e2e, 2, 1]]) {
+        crosses.fillStyle(color, 1);
+        for (let i = 0; i < 23; i++) {
+            crosses.fillRect(o.x + 3 + i + inset, o.y + 3 + i + inset, size, size);
+            crosses.fillRect(o.x + SQ - 7 - i + inset, o.y + 3 + i + inset, size, size);
+        }
+    }
+}
+
+/** Avance l'animation de delta ms ; jouée une fois, elle reste sur sa dernière image. */
+function advanceFrame(a, anim, delta) {
+    a.frameTime += delta;
+    while (a.frameTime >= anim.durations[a.frame % anim.durations.length]) {
+        if (a.once && a.frame >= anim.durations.length - 1) { a.frameTime = 0; break; } // reste sur la dernière image
+        a.frameTime -= anim.durations[a.frame % anim.durations.length];
+        a.frame = (a.frame + 1) % anim.durations.length;
+    }
+}
+
+/** Image, place et ombre du sprite d'un Pokémon. */
+function placeSprite(a, anim) {
+    if (anim) {
+        const row = Math.min(a.state === "sleep" ? 0 : a.dir, anim.rows - 1);
+        a.sprite.setTexture(anim.key, row * anim.columns + a.frame % anim.columns);
+    }
+    a.sprite.setPosition(Math.round(a.x), Math.round(a.y - SPRITE_UP - (a.anims ? 0 : 3)))
+        .setDepth(10 + a.y / 1000).setAlpha(a.alpha).setVisible(a.visible);
+    a.shadow.setPosition(Math.round(a.x), Math.round(a.y)).setAlpha(a.alpha).setVisible(a.visible && a.state !== "sleep");
+}
+
 /**
  * Plateau dans <container> ; <component> (Chess.razor) est prévenu des clics. Options : flip (les noirs en bas : je joue
  * les noirs), units (toutes les pièces : id, mine, folder des sprites, name), position (Board : id et case ; WhiteKo,
@@ -288,72 +431,11 @@ export async function create(container, component, options) {
             const i = (y * WIDTH + x) * 4;
             image.data[i] = r; image.data[i + 1] = g; image.data[i + 2] = b; image.data[i + 3] = 255;
         };
-        const random = seeded(20261122);
-
-        // Panneaux des K.O. : fond sombre, une case creusée par place
-        for (const x0 of [0, WIDTH - PANEL]) {
-            for (let y = 0; y < HEIGHT; y++) {
-                for (let x = x0; x < x0 + PANEL; x++) {
-                    const edge = y === 0 || y === HEIGHT - 1 || x === x0 || x === x0 + PANEL - 1;
-                    const inSlots = y >= BORDER && y < BORDER + 8 * SQ;
-                    const sx = (x - x0) % SQ, sy = (y - BORDER) % SQ;
-                    const slot = inSlots && sx >= 3 && sx < SQ - 3 && sy >= 3 && sy < SQ - 3;
-                    let color = slot ? shade(PANEL_SLOT, random() < 0.08 ? 4 : 0) : PANEL_BG;
-                    if (edge) color = PANEL_EDGE;
-                    put(x, y, color);
-                }
-            }
-        }
-
-        // Cadre de pierre : briques de 5 pixels de haut, décalées d'une rangée à l'autre
-        for (let y = 0; y < FRAME; y++) {
-            for (let x = BOARD_X; x < BOARD_X + FRAME; x++) {
-                const lx = x - BOARD_X;
-                const course = Math.floor(y / 5);
-                const brick = (lx + (course % 2) * 7) % 14;
-                let color = STONE;
-                if (y % 5 === 4 || brick === 13) color = MORTAR;
-                else if (y % 5 === 0 || brick === 0) color = STONE_LIGHT;
-                if (color === STONE && random() < 0.18) color = shade(STONE, random() < 0.5 ? -9 : 7);
-                if (lx === 0 || y === 0 || lx === FRAME - 1 || y === FRAME - 1) color = PANEL_EDGE;
-                put(x, y, color);
-            }
-        }
-
-        // Cases : a1 foncée ; grain, puis un pixel de relief (clair en haut à gauche, sombre en bas à droite)
-        for (let square = 0; square < 64; square++) {
-            const base = ((square >> 3) + (square & 7)) % 2 === 0 ? DARK : LIGHT;
-            const { x: x0, y: y0 } = originOf(square);
-            for (let y = 0; y < SQ; y++) {
-                for (let x = 0; x < SQ; x++) {
-                    let color = base;
-                    const r = random();
-                    if (r < 0.07) color = shade(base, -10);
-                    else if (r < 0.12) color = shade(base, 8);
-                    if (x === 0 || y === 0) color = shade(base, 16);
-                    if (x === SQ - 1 || y === SQ - 1) color = shade(base, -18);
-                    put(x0 + x, y0 + y, color);
-                }
-            }
-        }
-
-        // Lettres des colonnes (bas) et chiffres des rangées (gauche), dans le sens du joueur
-        const glyph = (char, gx, gy) => {
-            const pattern = GLYPHS[char];
-            for (let i = 0; i < 15; i++) {
-                if (pattern[i] !== "#") continue;
-                put(gx + (i % 3), gy + Math.floor(i / 3) + 1, shade(MORTAR, -20)); // ombre d'un pixel
-                put(gx + (i % 3), gy + Math.floor(i / 3), LABEL);
-            }
-        };
-        for (let file = 0; file < 8; file++) {
-            const { x } = originOf(file);
-            glyph("ABCDEFGH"[file], x + SQ / 2 - 1, FRAME - BORDER + 2);
-        }
-        for (let rank = 0; rank < 8; rank++) {
-            const { y } = originOf(rank * 8);
-            glyph(String(rank + 1), BOARD_X + 3, y + SQ / 2 - 3);
-        }
+        const random = seeded(20261122); // tirés dans le même ordre : panneaux, cadre, cases
+        paintPanels(put, random);
+        paintFrame(put, random);
+        paintSquares(put, random, originOf);
+        paintLabels(put, originOf);
         ctx.putImageData(image, 0, 0);
         texture.refresh();
         s.add.image(0, 0, "echiquier").setOrigin(0, 0).setDepth(0);
@@ -365,19 +447,8 @@ export async function create(container, component, options) {
         const g = overlay;
         g.clear();
         crosses.clear();
-        const box = (square, color, alpha) => {
-            const o = originOf(square);
-            g.fillStyle(color, alpha);
-            g.fillRect(o.x, o.y, SQ, SQ);
-        };
-        const frame = (square, color, alpha, width) => {
-            const o = originOf(square);
-            g.fillStyle(color, alpha);
-            g.fillRect(o.x, o.y, SQ, width);
-            g.fillRect(o.x, o.y + SQ - width, SQ, width);
-            g.fillRect(o.x, o.y, width, SQ);
-            g.fillRect(o.x + SQ - width, o.y, width, SQ);
-        };
+        const box = (square, color, alpha) => fillBox(g, originOf(square), color, alpha);
+        const frame = (square, color, alpha, width) => fillFrame(g, originOf(square), color, alpha, width);
         for (const square of marks.last ?? []) box(square, 0xffe066, 0.3);
         if (Number.isInteger(marks.check)) box(marks.check, 0xff3030, 0.4);
         if (Number.isInteger(hover)) frame(hover, 0xffffff, 0.45, 1);
@@ -385,34 +456,10 @@ export async function create(container, component, options) {
         // Pièces adverses face à la pièce choisie : vert, elle leur est super efficace ; rouge, elle ne peut pas les manger
         for (const square of marks.weak ?? []) frame(square, 0x3cd65a, 1, 2);
         for (const square of marks.resist ?? []) frame(square, 0xff3b3b, 1, 2);
-        for (const move of marks.moves ?? []) {
-            const o = originOf(move.to);
-            if (!move.capture) {
-                const cx = o.x + SQ / 2, cy = o.y + SQ / 2;
-                g.fillStyle(0x1c2733, 0.5);
-                g.fillRect(cx - 2, cy - 3, 4, 6);
-                g.fillRect(cx - 3, cy - 2, 6, 4);
-                continue;
-            }
-            // Prise : quatre coins (dorés si super efficace : la pièce rejouera)
-            g.fillStyle(move.super ? 0xffd23c : 0xff5a4a, 1);
-            for (const [cx, cy, sx, sy] of [[o.x, o.y, 1, 1], [o.x + SQ, o.y, -1, 1], [o.x, o.y + SQ, 1, -1], [o.x + SQ, o.y + SQ, -1, -1]]) {
-                g.fillRect(sx > 0 ? cx : cx - 7, sy > 0 ? cy : cy - 2, 7, 2);
-                g.fillRect(sx > 0 ? cx : cx - 2, sy > 0 ? cy : cy - 7, 2, 7);
-            }
-        }
-        // Pièce atteinte mais que son type empêche de manger : une grande croix rouge sur tout le Pokémon (bord sombre,
-        // cœur rouge vif), par-dessus son sprite
-        for (const square of marks.blocked ?? []) {
-            const o = originOf(square);
-            for (const [color, size, inset] of [[0x4a0a0a, 4, 0], [0xff2e2e, 2, 1]]) {
-                crosses.fillStyle(color, 1);
-                for (let i = 0; i < 23; i++) {
-                    crosses.fillRect(o.x + 3 + i + inset, o.y + 3 + i + inset, size, size);
-                    crosses.fillRect(o.x + SQ - 7 - i + inset, o.y + 3 + i + inset, size, size);
-                }
-            }
-        }
+        // Cases permises : un point ; prise : quatre coins (dorés si super efficace : la pièce rejouera)
+        for (const move of marks.moves ?? []) drawMoveMark(g, originOf(move.to), move);
+        // Pièce atteinte mais que son type empêche de manger : une grande croix rouge sur tout le Pokémon, par-dessus son sprite
+        for (const square of marks.blocked ?? []) drawCross(crosses, originOf(square));
     }
 
     // ---------- Pièces ----------
@@ -445,26 +492,16 @@ export async function create(container, component, options) {
         const chosen = idleAnimated ? null : selectedId();
         for (const a of actors.values()) {
             const anim = animOf(a);
-            if (anim) {
-                if (!idleAnimated && (a.state === "idle" || a.state === "sleep") && a.id !== chosen) {
-                    // Figé au repos (sur le plateau, ou endormi chez les K.O.) : la première image (sélectionné, il
-                    // repartira du début de l'animation)
-                    a.frame = 0;
-                    a.frameTime = 0;
-                } else {
-                    a.frameTime += delta;
-                    while (a.frameTime >= anim.durations[a.frame % anim.durations.length]) {
-                        if (a.once && a.frame >= anim.durations.length - 1) { a.frameTime = 0; break; } // reste sur la dernière image
-                        a.frameTime -= anim.durations[a.frame % anim.durations.length];
-                        a.frame = (a.frame + 1) % anim.durations.length;
-                    }
-                }
-                const row = Math.min(a.state === "sleep" ? 0 : a.dir, anim.rows - 1);
-                a.sprite.setTexture(anim.key, row * anim.columns + a.frame % anim.columns);
+            const frozen = !idleAnimated && (a.state === "idle" || a.state === "sleep") && a.id !== chosen;
+            if (anim && frozen) {
+                // Figé au repos (sur le plateau, ou endormi chez les K.O.) : la première image (sélectionné, il
+                // repartira du début de l'animation)
+                a.frame = 0;
+                a.frameTime = 0;
+            } else if (anim) {
+                advanceFrame(a, anim, delta);
             }
-            a.sprite.setPosition(Math.round(a.x), Math.round(a.y - SPRITE_UP - (a.anims ? 0 : 3)))
-                .setDepth(10 + a.y / 1000).setAlpha(a.alpha).setVisible(a.visible);
-            a.shadow.setPosition(Math.round(a.x), Math.round(a.y)).setAlpha(a.alpha).setVisible(a.visible && a.state !== "sleep");
+            placeSprite(a, anim);
         }
     }
 
@@ -547,11 +584,45 @@ export async function create(container, component, options) {
     let current = null;
     const CANCELLED = Symbol("annulé");
 
+    /**
+     * Prise : le mangeur s'approche de sa proie, l'attaque, elle est blessée, puis elle part chez les K.O. (le mangeur
+     * s'installe dès qu'elle a quitté la case) ou s'efface (le roi mangé). go : chaque étape s'arrête si le coup est abandonné.
+     */
+    async function capture(step, mover, path, go) {
+        const after = step.after, to = step.move.to;
+        const victim = actors.get(step.capturedId);
+        const target = footOf(step.capturedSquare);
+        const before = path.length > 1 ? path.at(-2) : { x: mover.x, y: mover.y };
+        const dx = target.x - before.x, dy = target.y - before.y, length = Math.hypot(dx, dy) || 1;
+        const stop = length > APPROACH ? { x: target.x - dx / length * APPROACH, y: target.y - dy / length * APPROACH } : before;
+        await go(walk(mover, [...path.slice(0, -1), stop]));
+        face(mover, victim);
+        face(victim, mover);
+        const attack = once(mover, "attack");
+        await go(wait(durationOf(mover, "attack") * 0.4));
+        await go(once(victim, "hurt"));
+        await go(attack);
+        if (koIndex(victim, after) >= 0) {
+            // Le K.O. part vers sa place ; dès qu'il a quitté la case (une demi-case), le mangeur s'y installe
+            const leaving = toKo(victim, step.capturedSquare, after);
+            await go(wait(walkMs / 2));
+            await go(Promise.all([leaving, walk(mover, [footOf(to)])]));
+        } else {
+            await go(fade(victim, 0)); // le roi mangé : la partie est finie, il n'a pas de place chez les K.O.
+            victim.visible = false;
+            await go(walk(mover, [footOf(to)]));
+        }
+    }
+
     /** Anime un coup (ChessStep), puis met tout le monde à sa place exacte. */
     async function play(step, run) {
         if (!scene || disposed) return;
         const after = step.after;
-        const go = async promise => { const result = await promise; if (current !== run || disposed) throw CANCELLED; return result; };
+        const go = async promise => {
+            const result = await promise;
+            if (current !== run || disposed) throw CANCELLED;
+            return result;
+        };
         try {
             const mover = actors.get(step.unitId);
             if (step.move.isPass || !mover) {
@@ -564,32 +635,8 @@ export async function create(container, component, options) {
                 return;
             }
             const path = pathOf(from, to);
-            if (step.capturedId !== null && step.capturedId !== undefined) {
-                const victim = actors.get(step.capturedId);
-                const target = footOf(step.capturedSquare);
-                const before = path.length > 1 ? path.at(-2) : { x: mover.x, y: mover.y };
-                const dx = target.x - before.x, dy = target.y - before.y, length = Math.hypot(dx, dy) || 1;
-                const stop = length > APPROACH ? { x: target.x - dx / length * APPROACH, y: target.y - dy / length * APPROACH } : before;
-                await go(walk(mover, [...path.slice(0, -1), stop]));
-                face(mover, victim);
-                face(victim, mover);
-                const attack = once(mover, "attack");
-                await go(wait(durationOf(mover, "attack") * 0.4));
-                await go(once(victim, "hurt"));
-                await go(attack);
-                if (koIndex(victim, after) >= 0) {
-                    // Le K.O. part vers sa place ; dès qu'il a quitté la case (une demi-case), le mangeur s'y installe
-                    const leaving = toKo(victim, step.capturedSquare, after);
-                    await go(wait(walkMs / 2));
-                    await go(Promise.all([leaving, walk(mover, [footOf(to)])]));
-                } else {
-                    await go(fade(victim, 0)); // le roi mangé : la partie est finie, il n'a pas de place chez les K.O.
-                    victim.visible = false;
-                    await go(walk(mover, [footOf(to)]));
-                }
-            } else {
-                await go(walk(mover, path));
-            }
+            if (step.capturedId !== null && step.capturedId !== undefined) await capture(step, mover, path, go);
+            else await go(walk(mover, path));
             if (step.rookId !== null && step.rookId !== undefined) await go(walk(actors.get(step.rookId), [footOf(step.rookTo)]));
             if (step.revivedId !== null && step.revivedId !== undefined) await go(swap(mover, actors.get(step.revivedId), to, after));
         } catch (e) {
@@ -605,11 +652,10 @@ export async function create(container, component, options) {
      */
     async function swap(pawn, revived, square, after) {
         const from = revived ? koIndex(revived, position) : -1;
-        await Promise.all([
-            toKo(pawn, square, after),
-            revived && from >= 0 ? walk(revived, [...koRoute(square, revived.mine, from).reverse().slice(1), footOf(square)])
-                : revived ? walk(revived, [footOf(square)]) : Promise.resolve(),
-        ]);
+        let back = Promise.resolve();
+        if (revived && from >= 0) back = walk(revived, [...koRoute(square, revived.mine, from).reverse().slice(1), footOf(square)]);
+        else if (revived) back = walk(revived, [footOf(square)]);
+        await Promise.all([toKo(pawn, square, after), back]);
     }
 
     return {

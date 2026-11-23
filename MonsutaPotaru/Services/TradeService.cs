@@ -195,9 +195,11 @@ public sealed class TradeService(IDbContextFactory<ApplicationDbContext> dbFacto
         var sent = Get(first, firstGives.Slot) is { Species: > 0 } pk && PokemonFingerprint.Of(pk) == firstGives.Fingerprint ? pk : null;
         var sentIsEgg = sent?.IsEgg ?? firstGives.IsEgg;
         return Candidates(second, first, (slot, received) =>
-            !LeavesAPokemon(first, firstGives.Slot, received.IsEgg) ? $"L'équipe de « {Label(pair.ToSave)} » garderait seulement des œufs."
-            : !LeavesAPokemon(second, slot, sentIsEgg) ? $"L'équipe de « {Label(pair.FromSave)} » garderait seulement des œufs."
-            : null);
+        {
+            if (!LeavesAPokemon(first, firstGives.Slot, received.IsEgg))
+                return $"L'équipe de « {Label(pair.ToSave)} » garderait seulement des œufs.";
+            return LeavesAPokemon(second, slot, sentIsEgg) ? null : $"L'équipe de « {Label(pair.FromSave)} » garderait seulement des œufs.";
+        });
     }
 
     /// <summary>« Noire — Ghal », comme <see cref="StoredSaveInfo.Label"/>.</summary>

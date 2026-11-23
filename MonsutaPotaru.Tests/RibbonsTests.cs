@@ -5,8 +5,11 @@ using MonsutaPotaru.Services;
 namespace MonsutaPotaru.Tests;
 
 /// <summary>Rubans comptés par le suivi (« Défis » → « Rubans ») et leur lecture dans chaque format de PKHeX.</summary>
-public sealed class RibbonsTests
+public sealed partial class RibbonsTests
 {
+    [GeneratedRegex("\"([a-z0-9]+)\"")]
+    private static partial Regex QuotedKey();
+
     private static RibbonState State(List<RibbonState> states, string key) => states.Single(s => s.Ribbon.Key == key);
 
     [Fact]
@@ -145,8 +148,8 @@ public sealed class RibbonsTests
     public void ImagesScript_DownloadsEveryRibbon()
     {
         var script = File.ReadAllText(Path.Combine(RealSavesTests.WebRoot(), "..", "..", "outils", "images.py"));
-        List<string> Keys(string name) => [.. Regex.Matches(Regex.Match(script, name + @" = \[(.*?)\]", RegexOptions.Singleline).Groups[1].Value,
-            "\"([a-z0-9]+)\"").Select(m => m.Groups[1].Value)];
+        List<string> Keys(string name) => [.. QuotedKey().Matches(Regex.Match(script, name + @" = \[(.*?)\]", RegexOptions.Singleline).Groups[1].Value)
+            .Select(m => m.Groups[1].Value)];
         Assert.Equal(Ribbons.All.Select(r => r.Key.ToLowerInvariant()), Keys("RIBBONS"));
         Assert.Equal(Ribbons.ContestParts.Concat(Ribbons.BattleParts).Select(p => p.Key.ToLowerInvariant()), Keys("RIBBON_PARTS"));
     }

@@ -324,18 +324,30 @@ public sealed class InventoryService(
 
         var details = hasPc ? Describe(moves) : Describe(wanted);
         var change = new ServerChange(save, written.Data, written.Money, deposit ? "depot-objets" : "retrait-objets", m => m.ItemsChanged = true);
-        var error = await SaveServerChangeAsync(db, ownerId, [change], async now =>
-        {
-            if (await MoveOwnedItemsAsync(db, ownerId, wanted, deposit) is { } failure)
-                return failure;
-            var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
-            var kind = deposit ? WalletOperationKind.DepositItemsToSave : WalletOperationKind.WithdrawItemsFromSave;
-            AddOperation(db, ownerId, now, save, new WalletEntry(kind, 0, balance, details));
-            return null;
-        });
+        var error = await SaveServerChangeAsync(db, ownerId, [change], now => RecordItemsMoveAsync(db, ownerId, save, wanted, deposit, details, now));
         if (error is not null)
             return new(false, error);
+        return ItemsMoved(ownerId, save, label, deposit, details);
+    }
 
+    /// <summary>
+    /// Dans la transaction de la sauvegarde : l'inventaire du compte gagne ou perd les objets, et le portefeuille note le
+    /// mouvement. Un message si l'inventaire n'a plus assez d'un objet.
+    /// </summary>
+    private async Task<string?> RecordItemsMoveAsync(ApplicationDbContext db, string ownerId, StoredSave save, Dictionary<int, int> wanted,
+        bool deposit, string details, DateTime now)
+    {
+        if (await MoveOwnedItemsAsync(db, ownerId, wanted, deposit) is { } failure)
+            return failure;
+        var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
+        var kind = deposit ? WalletOperationKind.DepositItemsToSave : WalletOperationKind.WithdrawItemsFromSave;
+        AddOperation(db, ownerId, now, save, new WalletEntry(kind, 0, balance, details));
+        return null;
+    }
+
+    /// <summary>Journal et message d'un dépôt ou d'un retrait d'objets réussi.</summary>
+    private ItemTransferResult ItemsMoved(string ownerId, StoredSave save, string label, bool deposit, string details)
+    {
         if (logger.IsEnabled(LogLevel.Information))
             logger.LogInformation("Utilisateur {User} : objets {Direction} la sauvegarde {Id} ({Details}).",
                 ownerId, deposit ? "déposés dans" : "retirés de", save.Id, details);
@@ -443,27 +455,16 @@ public sealed class InventoryService(
     public async Task<ItemTransferResult> TransferBetweenSavesAsync(string ownerId, int firstSaveId, int secondSaveId,
         IReadOnlyList<SaveItemMove> moves)
     {
-        if (firstSaveId == secondSaveId)
-            return new(false, "Choisis deux sauvegardes différentes.");
-        if (moves.Any(m => m.Count < 0))
-            return new(false, "Les quantités ne peuvent pas être négatives.");
-        if (moves.Any(m => m.FromSaveId != firstSaveId && m.FromSaveId != secondSaveId))
-            return new(false, "Un objet vient d'une autre sauvegarde que les deux choisies.");
+        if (MovesProblem(firstSaveId, secondSaveId, moves) is { } problem)
+            return new(false, problem);
         var kept = moves.Where(m => m.Count > 0).ToList();
-        if (kept.Count == 0)
-            return new(false, "Glisse au moins un objet d'une sauvegarde à l'autre.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var saves = await db.StoredSaves.Where(s => s.OwnerId == ownerId && (s.Id == firstSaveId || s.Id == secondSaveId)).ToListAsync();
         if (saves.Count != 2)
             return new(false, "Une des deux sauvegardes n'existe plus.");
-        var sides = new List<TransferSide>();
-        foreach (var save in saves.OrderBy(s => s.Id == firstSaveId ? 0 : 1))
-        {
-            if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav))
-                return new(false, $"Impossible de lire « {save.GameName} — {save.TrainerName} ».");
-            sides.Add(new TransferSide(save, sav));
-        }
+        if (ReadSides(saves, firstSaveId, out var sides) is { } unreadable)
+            return new(false, unreadable);
         var (first, second) = (sides[0], sides[1]);
         foreach (var move in kept)
         {
@@ -471,39 +472,10 @@ public sealed class InventoryService(
             Add(from.Sent, move.From, move.ItemId, move.Count);
             Add(to.Received, move.To, move.ItemId, move.Count);
         }
+        if (ChangeBags(sides, out var changes) is { } refused)
+            return new(false, refused);
 
-        // Retraits des deux côtés, puis dépôts ; chaque fichier est relu pour vérifier que le jeu a bien pris les quantités.
-        foreach (var side in sides)
-        {
-            if (side.Sent.Keys.Concat(side.Received.Keys).Contains(BagPlace.Pc) && !SaveBag.HasPc(side.Sav))
-                return new(false, $"« {side.Label} » n'a pas de PC d'objets.");
-            if (ChangeBag(side.Sav, side.Sent, deposit: false, side.Save.GameName) is { } refused)
-                return new(false, $"« {side.Label} » : {refused}");
-        }
-        foreach (var side in sides)
-        {
-            if (ChangeBag(side.Sav, side.Received, deposit: true, side.Save.GameName) is { } refused)
-                return new(false, $"« {side.Label} » : {refused}");
-        }
-        var changes = new List<ServerChange>();
-        foreach (var side in sides)
-        {
-            if (Written(side.Save, side.Sav) is not { } written)
-                return new(false, $"La modification du sac n'est pas prise en charge pour ce jeu ({side.Save.GameName}).");
-            changes.Add(new ServerChange(side.Save, written.Data, written.Money, "transfert-objets", m => m.ItemsChanged = true));
-        }
-
-        var error = await SaveServerChangeAsync(db, ownerId, changes, async now =>
-        {
-            var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
-            foreach (var side in sides)
-            {
-                var other = ReferenceEquals(side, first) ? second : first;
-                AddOperation(db, ownerId, now, side.Save,
-                    new WalletEntry(WalletOperationKind.TransferItemsBetweenSaves, 0, balance, TransferDetails(side, other)));
-            }
-            return null;
-        });
+        var error = await SaveServerChangeAsync(db, ownerId, changes, now => RecordTransferAsync(db, ownerId, first, second, now));
         if (error is not null)
             return new(false, error);
 
@@ -512,6 +484,70 @@ public sealed class InventoryService(
                 ownerId, firstSaveId, secondSaveId, TransferDetails(first, second));
         return new(true, $"Transfert fait entre « {first.Label} » et « {second.Label} ». Télécharge les deux sauvegardes depuis " +
                          "« Mes sauvegardes » et remets-les dans tes jeux pour y avoir ces objets.");
+    }
+
+    /// <summary>Pourquoi ces mouvements ne peuvent pas être faits entre ces deux sauvegardes (null : ils peuvent l'être).</summary>
+    private static string? MovesProblem(int firstSaveId, int secondSaveId, IReadOnlyList<SaveItemMove> moves)
+    {
+        if (firstSaveId == secondSaveId)
+            return "Choisis deux sauvegardes différentes.";
+        if (moves.Any(m => m.Count < 0))
+            return "Les quantités ne peuvent pas être négatives.";
+        if (moves.Any(m => m.FromSaveId != firstSaveId && m.FromSaveId != secondSaveId))
+            return "Un objet vient d'une autre sauvegarde que les deux choisies.";
+        return moves.Any(m => m.Count > 0) ? null : "Glisse au moins un objet d'une sauvegarde à l'autre.";
+    }
+
+    /// <summary>Les deux sauvegardes lues, la première choisie en tête ; un message si l'une est illisible.</summary>
+    private static string? ReadSides(List<StoredSave> saves, int firstSaveId, out List<TransferSide> sides)
+    {
+        sides = [];
+        foreach (var save in saves.OrderBy(s => s.Id == firstSaveId ? 0 : 1))
+        {
+            if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav))
+                return $"Impossible de lire « {save.GameName} — {save.TrainerName} ».";
+            sides.Add(new TransferSide(save, sav));
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Retraits des deux côtés, puis dépôts ; chaque fichier est relu pour vérifier que le jeu a bien pris les quantités.
+    /// Un message (rien n'est écrit) si une sauvegarde refuse.
+    /// </summary>
+    private string? ChangeBags(List<TransferSide> sides, out List<ServerChange> changes)
+    {
+        changes = [];
+        foreach (var side in sides)
+        {
+            if (side.Sent.Keys.Concat(side.Received.Keys).Contains(BagPlace.Pc) && !SaveBag.HasPc(side.Sav))
+                return $"« {side.Label} » n'a pas de PC d'objets.";
+            if (ChangeBag(side.Sav, side.Sent, deposit: false, side.Save.GameName) is { } refused)
+                return $"« {side.Label} » : {refused}";
+        }
+        foreach (var side in sides)
+        {
+            if (ChangeBag(side.Sav, side.Received, deposit: true, side.Save.GameName) is { } refused)
+                return $"« {side.Label} » : {refused}";
+        }
+        foreach (var side in sides)
+        {
+            if (Written(side.Save, side.Sav) is not { } written)
+                return $"La modification du sac n'est pas prise en charge pour ce jeu ({side.Save.GameName}).";
+            changes.Add(new ServerChange(side.Save, written.Data, written.Money, "transfert-objets", m => m.ItemsChanged = true));
+        }
+        return null;
+    }
+
+    /// <summary>Une ligne de journal pour chacune des deux sauvegardes d'un transfert direct.</summary>
+    private async Task<string?> RecordTransferAsync(ApplicationDbContext db, string ownerId, TransferSide first, TransferSide second,
+        DateTime now)
+    {
+        var balance = await db.Wallets.Where(w => w.OwnerId == ownerId).Select(w => w.Money).FirstOrDefaultAsync();
+        foreach (var (side, other) in new[] { (first, second), (second, first) })
+            AddOperation(db, ownerId, now, side.Save,
+                new WalletEntry(WalletOperationKind.TransferItemsBetweenSaves, 0, balance, TransferDetails(side, other)));
+        return null;
     }
 
     /// <summary>Une des deux sauvegardes d'un transfert direct : ce qu'elle envoie et ce qu'elle reçoit, à chaque endroit.</summary>
@@ -524,7 +560,11 @@ public sealed class InventoryService(
 
     private static void Add(Dictionary<BagPlace, Dictionary<int, int>> moves, BagPlace place, int item, int count)
     {
-        var quantities = moves.TryGetValue(place, out var existing) ? existing : moves[place] = [];
+        if (!moves.TryGetValue(place, out var quantities))
+        {
+            quantities = [];
+            moves[place] = quantities;
+        }
         quantities[item] = quantities.GetValueOrDefault(item) + count;
     }
 
@@ -559,9 +599,17 @@ public sealed class InventoryService(
     }
 
     /// <summary>« 5 × Potion, 2 × Pierre Lune » ; avec l'endroit si la sauvegarde a un PC (« 5 × Potion (sac), 1 × Pierre Lune (PC) »).</summary>
+    /// <summary>« (PC) » ou « (sac) » derrière un objet, seulement si la sauvegarde a un PC.</summary>
+    private static string PlaceSuffix(bool hasPc, BagPlace place)
+    {
+        if (!hasPc)
+            return "";
+        return place == BagPlace.Pc ? " (PC)" : " (sac)";
+    }
+
     private string DescribePlaced(Dictionary<BagPlace, Dictionary<int, int>> moves, bool hasPc) =>
         string.Join(", ", moves.OrderBy(m => m.Key).SelectMany(m => Ordered(m.Value)
-            .Select(q => $"{q.Value} × {info.ItemName(q.Key)}{(hasPc ? (m.Key == BagPlace.Pc ? " (PC)" : " (sac)") : "")}")));
+            .Select(q => $"{q.Value} × {info.ItemName(q.Key)}{PlaceSuffix(hasPc, m.Key)}")));
 
     private static bool SameCounts(Dictionary<int, int> actual, Dictionary<int, int> expected) =>
         actual.Count == expected.Count && expected.All(e => actual.GetValueOrDefault(e.Key) == e.Value);

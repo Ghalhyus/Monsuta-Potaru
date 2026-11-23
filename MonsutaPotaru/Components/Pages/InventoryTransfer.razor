@@ -479,10 +479,10 @@
         var save = SaveOf(side)!;
         var place = columns[side].Place;
         var stacks = save.ItemsIn(place).ToDictionary(i => i.ItemId);
-        foreach (var arriving in pending.Keys.Where(k => k.From != side && k.ToPlace == place).Select(k => k.ItemId).Distinct())
+        foreach (var arriving in pending.Keys.Where(k => k.From != side && k.ToPlace == place).Select(k => k.ItemId).Distinct()
+                     .Where(id => !stacks.ContainsKey(id)))
         {
-            if (!stacks.ContainsKey(arriving))
-                stacks[arriving] = new ItemStack(arriving, SaveBag.CategoryOf(arriving) ?? ItemCategory.Items, Info.ShortItemName(arriving),
+            stacks[arriving] = new ItemStack(arriving, SaveBag.CategoryOf(arriving) ?? ItemCategory.Items, Info.ShortItemName(arriving),
                     PokemonInfo.ItemSpriteUrl(arriving), 0);
         }
         var rows = new List<Row>();
@@ -592,9 +592,10 @@
     [JSInvokable]
     public Task Drop(string fromSide, int itemId) => InvokeAsync(() =>
     {
-        var side = fromSide == SideSlug(Side.Left) ? Side.Left : fromSide == SideSlug(Side.Right) ? Side.Right : (Side?)null;
-        if (side is { } s)
-            Send(s, itemId);
+        if (fromSide == SideSlug(Side.Left))
+            Send(Side.Left, itemId);
+        else if (fromSide == SideSlug(Side.Right))
+            Send(Side.Right, itemId);
         StateHasChanged();
     });
 
@@ -631,7 +632,7 @@
         }
     }
 
-    private string PlaceLabel(Side side, BagPlace place) => SaveOf(side)!.HasPc ? (place == BagPlace.Pc ? "PC" : "sac") : "sac";
+    private string PlaceLabel(Side side, BagPlace place) => SaveOf(side)!.HasPc && place == BagPlace.Pc ? "PC" : "sac";
 
     /// <summary>« Valider » : les deux sauvegardes modifiées en une seule opération, revérifiée par le service.</summary>
     private async Task Validate()
@@ -662,7 +663,7 @@
 
     // ---------- Recherche et tri ----------
 
-    private bool Matches(Row row, ColumnState state) =>
+    private static bool Matches(Row row, ColumnState state) =>
         string.IsNullOrWhiteSpace(state.Search)
         || French.IndexOf(row.Item.Name, state.Search.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 

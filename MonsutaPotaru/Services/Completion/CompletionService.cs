@@ -117,6 +117,26 @@ public sealed class CompletionService(
         return candidates;
     }
 
+    /// <summary>
+    /// Pourquoi cette sauvegarde stockée n'est pas une partie de ce jeu (null : elle l'est). Un monde Minecraft pour All the
+    /// Mons, une sauvegarde de jeu pour les jeux (le navigateur peut envoyer l'un pour l'autre).
+    /// </summary>
+    private static string? GameMismatch(LivingDexGame game, string gameName, byte[] data, string fileName, string identityKey)
+    {
+        var world = identityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
+        if (AllTheMonsLivingDex.Is(game) || world)
+        {
+            if (AllTheMonsLivingDex.Is(game) == world)
+                return null;
+            return world ? $"Ce monde Minecraft n'est pas une partie de {gameName}." : $"Cette sauvegarde n'est pas un monde {gameName}.";
+        }
+        if (StoredSaveService.TryRead(data, fileName, out var sav) && CompletionGames.For(sav).Contains(game))
+            return null;
+        return sav is SAV1 { Japanese: true } or SAV2 { Japanese: true } or SAV2 { Korean: true }
+            ? "Les sauvegardes japonaises et coréennes n'ont pas encore de complétion."
+            : $"Cette sauvegarde n'est pas une partie de {gameName}.";
+    }
+
     /// <summary>Complétion d'un jeu sur une sauvegarde stockée du compte.</summary>
     public async Task<CompletionResult> CreateAsync(string ownerId, int saveId, LivingDexGame game)
     {
@@ -128,17 +148,8 @@ public sealed class CompletionService(
             .Select(s => new { s.FileName, s.Data, s.IdentityKey }).FirstOrDefaultAsync();
         if (save is null)
             return new(false, "Cette sauvegarde n'existe plus.");
-        // Un monde Minecraft pour All the Mons, une sauvegarde de jeu pour les jeux (le navigateur peut envoyer l'un pour l'autre).
-        var world = save.IdentityKey.StartsWith(CobblemonSave.IdentityPrefix, StringComparison.Ordinal);
-        if (AllTheMonsLivingDex.Is(game) || world)
-        {
-            if (AllTheMonsLivingDex.Is(game) != world)
-                return new(false, world ? $"Ce monde Minecraft n'est pas une partie de {gameName}." : $"Cette sauvegarde n'est pas un monde {gameName}.");
-        }
-        else if (!StoredSaveService.TryRead(save.Data, save.FileName, out var sav) || !CompletionGames.For(sav).Contains(game))
-            return new(false, sav is SAV1 { Japanese: true } or SAV2 { Japanese: true } or SAV2 { Korean: true }
-                ? "Les sauvegardes japonaises et coréennes n'ont pas encore de complétion."
-                : $"Cette sauvegarde n'est pas une partie de {gameName}.");
+        if (GameMismatch(game, gameName, save.Data, save.FileName, save.IdentityKey) is { } mismatch)
+            return new(false, mismatch);
         if (await db.Completions.AnyAsync(c => c.OwnerId == ownerId && c.Game == game))
             return new(false, $"Tu as déjà une complétion de {gameName} : supprime-la pour en créer une autre.");
         if (await db.Completions.AnyAsync(c => c.StoredSaveId == saveId))

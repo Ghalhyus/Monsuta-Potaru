@@ -131,7 +131,7 @@ public sealed class BattleHub : IDisposable
 {
     public static readonly TimeSpan RequestLifetime = TimeSpan.FromMinutes(10);
 
-    private readonly object gate = new();
+    private readonly Lock gate = new();
     private readonly List<BattleSession> sessions = [];
     private readonly Timer? timer;
     private readonly TimeProvider time;
@@ -414,24 +414,28 @@ public sealed class BattleHub : IDisposable
     internal static string? Refusal(BattleRequest request, BattleChoice choice)
     {
         if (choice.Switch)
-        {
-            if (choice.Index < 1 || choice.Index > request.Side.Pokemon.Count)
-                return "Ce Pokémon n'existe pas.";
-            var target = request.Side.Pokemon[choice.Index - 1];
-            if (target.Active)
-                return "Ce Pokémon est déjà au combat.";
-            if (target.Condition.EndsWith("fnt", StringComparison.Ordinal))
-                return "Ce Pokémon est K.O.";
-            if (!request.MustSwitch && request.Active is [{ Trapped: true }, ..])
-                return "Ton Pokémon ne peut pas être rappelé !";
-            return null;
-        }
+            return SwitchRefusal(request, choice.Index);
         if (request.MustSwitch)
             return "Choisis le Pokémon à envoyer.";
         var moves = request.Active is [{ } active, ..] ? active.Moves : [];
         if (choice.Index < 1 || choice.Index > moves.Count)
             return "Cette capacité n'existe pas.";
         return moves[choice.Index - 1].IsDisabled ? "Cette capacité ne peut pas être utilisée !" : null;
+    }
+
+    /// <summary>Pourquoi ce Pokémon (n° index de l'équipe, à partir de 1) ne peut pas être envoyé (null : il peut l'être).</summary>
+    private static string? SwitchRefusal(BattleRequest request, int index)
+    {
+        if (index < 1 || index > request.Side.Pokemon.Count)
+            return "Ce Pokémon n'existe pas.";
+        var target = request.Side.Pokemon[index - 1];
+        if (target.Active)
+            return "Ce Pokémon est déjà au combat.";
+        if (target.Condition.EndsWith("fnt", StringComparison.Ordinal))
+            return "Ce Pokémon est K.O.";
+        if (!request.MustSwitch && request.Active is [{ Trapped: true }, ..])
+            return "Ton Pokémon ne peut pas être rappelé !";
+        return null;
     }
 
     /// <summary>« Fuite » : le joueur abandonne, l'autre gagne.</summary>

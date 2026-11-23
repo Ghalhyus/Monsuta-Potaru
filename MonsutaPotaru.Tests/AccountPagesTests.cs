@@ -115,7 +115,7 @@ public sealed class AccountPagesTests : PageTestContext
         await StoreReal("sacha", "noir.sav");
         var dexes = Services.GetRequiredService<LivingDexService>();
         var candidate = (await dexes.ListCandidatesAsync("sacha")).Single();
-        Assert.True((await dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games.First())).Ok);
+        Assert.True((await dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games[0])).Ok);
         var cut = Render<Saves>();
         await cut.Click("Supprimer");
         cut.WaitForText("sera supprimé aussi");

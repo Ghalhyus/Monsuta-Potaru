@@ -77,7 +77,7 @@ def extract(root):
         except (KeyError, ValueError, IndexError):
             return None
 
-    ground, hidden, trainers, gifts, statics = [], [], [], [], []
+    ground, hidden, trainers, gifts = [], [], [], []
     trades_at = {}
     for f in sorted(glob.glob(R('maps', '*.asm'))):
         name = os.path.basename(f)[:-4]
@@ -85,7 +85,7 @@ def extract(root):
         labels = blocks(src)
         body = dict(labels)
         # Objets de la carte : type, étiquette, drapeau qui les cache
-        for m in re.finditer(r'^\s*object_event\s+(.*)$', src, re.M):
+        for m in re.finditer(r'^[^\S\n]*object_event\s+(\S.*|)$', src, re.M):
             a = args(m.group(1))
             if len(a) < 13:
                 continue
@@ -94,16 +94,16 @@ def extract(root):
             if kind == 'OBJECTTYPE_ITEMBALL':
                 it = re.search(r'itemball\s+(\w+)(?:,\s*(\d+))?', text)
                 if it and flag in events:
-                    ground.append(dict(map=name, item=it.group(1), count=int(it.group(2) or 1), flag=flag,
-                                       initial=flag in initial))
+                    ground.append({'map': name, 'item': it.group(1), 'count': int(it.group(2) or 1), 'flag': flag,
+                                       'initial': flag in initial})
             elif kind == 'OBJECTTYPE_TRAINER':
                 tr = re.search(r'trainer\s+(\w+),\s*(\w+),\s*(EVENT_\w+)', text)
                 if tr:
-                    trainers.append(dict(map=name, cls=tr.group(1), id=tr.group(2), flag=tr.group(3),
-                                         hide=None if flag == '-1' else flag, team=party(tr.group(1), tr.group(2))))
+                    trainers.append({'map': name, 'cls': tr.group(1), 'id': tr.group(2), 'flag': tr.group(3),
+                                         'hide': None if flag == '-1' else flag, 'team': party(tr.group(1), tr.group(2))})
         for label, text in labels:
             for it in re.finditer(r'hiddenitem\s+(\w+),\s*(EVENT_\w+)', text):
-                hidden.append(dict(map=name, item=it.group(1), flag=it.group(2)))
+                hidden.append({'map': name, 'item': it.group(1), 'flag': it.group(2)})
             # Cadeaux : un objet donné, puis le drapeau levé juste après (ou vérifié avant, dans le même bloc)
             lines = text.split('\n')
             for i, line in enumerate(lines):
@@ -113,9 +113,9 @@ def extract(root):
                 after = [re.match(r'\s*setevent\s+(EVENT_\w+)', l) for l in lines[i + 1:i + 8]]
                 after = [x.group(1) for x in after if x]
                 before = re.findall(r'checkevent\s+(EVENT_\w+)', '\n'.join(lines[:i]))
-                ev = after[0] if after else (before[0] if before else None)
+                ev = (after or before or [None])[0]  # le drapeau posé juste après, sinon celui testé avant
                 if ev:
-                    gifts.append(dict(map=name, item=g.group(1), flag=ev, label=label))
+                    gifts.append({'map': name, 'item': g.group(1), 'flag': ev, 'label': label})
             for t in re.finditer(r'^\s*trade\s+(NPC_TRADE_\w+)', text, re.M):
                 trades_at.setdefault(t.group(1), name)
     npc = consts(R('constants', 'npc_trade_constants.asm'))
@@ -124,7 +124,7 @@ def extract(root):
         m = re.match(r'\s*npctrade\s+(.*)', line)
         if m:
             a = args(m.group(1))
-            trades.append(dict(give=a[1], get=a[2]))
+            trades.append({'give': a[1], 'get': a[2]})
     for k, v in npc.items():
         if k.startswith('NPC_TRADE_') and v < len(trades):
             trades[v]['index'] = v
@@ -151,8 +151,8 @@ def extract(root):
         if label:
             before_events[label] = total - pos  # octets entre cette étiquette et wEventFlags
         pos += n
-    return dict(before_events=before_events, events=events, items=items, moves=moves, dex=dex, tms=tms, initial=initial, ground=ground,
-                hidden=hidden, trainers=trainers, gifts=gifts, trades=trades)
+    return {'before_events': before_events, 'events': events, 'items': items, 'moves': moves, 'dex': dex, 'tms': tms, 'initial': initial, 'ground': ground,
+                'hidden': hidden, 'trainers': trainers, 'gifts': gifts, 'trades': trades}
 
 
 if __name__ == '__main__':

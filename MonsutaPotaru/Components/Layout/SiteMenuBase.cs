@@ -65,7 +65,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     {
         if (currentUrl is not { } url)
             return false;
-        var first = url.Split(['/', '?', '#'])[0];
+        var first = url.Split('/', '?', '#')[0];
         return pages.Any(p => string.Equals(first, p, StringComparison.OrdinalIgnoreCase));
     }
 

@@ -233,9 +233,9 @@ public static class GlobalLivingDex
     /// <summary>Cases du mode Ultime, sans doublon (une même clé : la première gardée), dans leur ordre d'arrivée.</summary>
     private sealed class SlotSet
     {
-        public Dictionary<(ushort, int, string), (GlobalSlot Slot, int Order)> Slots { get; } = [];
+        public Dictionary<(ushort, int, string), (GlobalSlot Slot, int Order)> Entries { get; } = [];
 
-        public void Add(GlobalSlot slot) => Slots.TryAdd(Key(slot), (slot, Slots.Count));
+        public void Add(GlobalSlot slot) => Entries.TryAdd(Key(slot), (slot, Entries.Count));
     }
 
     private static List<GlobalSlot> BuildUltimateSlots()
@@ -256,7 +256,7 @@ public static class GlobalLivingDex
         foreach (var form in new byte[] { 0, 1 })
             set.Add(new GlobalSlot(Toxtricity, form, EntityContext.Gen8, FormKey(Toxtricity, form, EntityContext.Gen8),
                 $"{SpeciesName(Toxtricity)} Gigamax ({(form == 0 ? "forme Aigüe" : "forme Grave")})", Gigamax: true));
-        return Ordered(set.Slots.Values.SelectMany(s => Split(s.Slot).Select(split => (split, s.Order))));
+        return Ordered(set.Entries.Values.SelectMany(s => Split(s.Slot).Select(split => (split, s.Order))));
     }
 
     /// <summary>Cases des formes d'un jeu que ses boîtes peuvent garder (sauf Méga, Primo et formes exclues).</summary>
@@ -394,13 +394,13 @@ public static class GlobalLivingDex
 
     /// <summary>Pokémon du stockage interne, vu par le living dex global (ou d'un monde Minecraft, living dex All the Mons).</summary>
     /// <param name="Sweet">Décoration (Charmilly), sinon null.</param>
-    /// <param name="Key">
+    /// <param name="KnownKey">
     /// Clé de forme déjà connue (Pokémon de Minecraft, <see cref="CobblemonPokemon.FormKey"/>) ; null : tirée de
     /// <paramref name="Form"/> dans <paramref name="Context"/>.
     /// </param>
     /// <param name="Base">Forme par défaut de l'espèce (Minecraft) : remplit aussi la case de la forme par défaut, quel que soit son nom.</param>
     public sealed record Copy(int Id, ushort Species, byte Form, EntityContext Context, byte? Gender, int HeldItem, byte? Sweet,
-        bool CanGigantamax, bool KnowsDragonAscent, string? Key = null, bool Base = false);
+        bool CanGigantamax, bool KnowsDragonAscent, string? KnownKey = null, bool Base = false);
 
     /// <summary>
     /// Exemplaire de chaque case, chacun ne servant qu'une fois : d'abord les cases qui demandent un exemplaire de plus
@@ -410,7 +410,7 @@ public static class GlobalLivingDex
     {
         var result = new Copy?[slots.Count];
         var used = new HashSet<int>();
-        var keys = copies.ToDictionary(c => c.Id, c => (c.Key, mode) switch
+        var keys = copies.ToDictionary(c => c.Id, c => (c.KnownKey, mode) switch
         {
             ({ } key, LivingDexMode.Complete) => CompleteKey(c.Species, key),
             ({ } key, _) => key,
@@ -425,14 +425,14 @@ public static class GlobalLivingDex
     }
 
     /// <summary>Attribution en cours (<see cref="Assign"/>) : chaque exemplaire ne sert qu'une fois.</summary>
-    private sealed record Assignment(IReadOnlyList<GlobalSlot> Slots, Copy?[] Result, HashSet<int> Used, Dictionary<ushort, List<Copy>> BySpecies)
+    private sealed record Assignment(IReadOnlyList<GlobalSlot> Targets, Copy?[] Result, HashSet<int> Used, Dictionary<ushort, List<Copy>> BySpecies)
     {
         /// <summary>Donne aux cases vides choisies (<paramref name="which"/>) le premier exemplaire libre qui convient.</summary>
         public void Pass(Func<GlobalSlot, bool> which, Func<GlobalSlot, Copy, bool> fills)
         {
-            for (var i = 0; i < Slots.Count; i++)
+            for (var i = 0; i < Targets.Count; i++)
             {
-                var slot = Slots[i];
+                var slot = Targets[i];
                 if (Result[i] is not null || !which(slot))
                     continue;
                 var copy = BySpecies.GetValueOrDefault(slot.Species)?.FirstOrDefault(c => !Used.Contains(c.Id) && fills(slot, c));

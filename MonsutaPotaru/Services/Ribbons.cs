@@ -63,7 +63,15 @@ public sealed record RibbonState(RibbonInfo Ribbon, bool Owned, int? Count = nul
     public int Worth => Ribbon.Parts?.Count ?? 1;
 
     /// <summary>Rubans obtenus, comptés comme <see cref="Worth"/> : le compteur d'un souvenir (connu même quand le détail ne l'est pas).</summary>
-    public int Earned => Ribbon.Parts is null ? (Owned ? 1 : 0) : Math.Min(Count ?? 0, Worth);
+    public int Earned
+    {
+        get
+        {
+            if (Ribbon.Parts is not null)
+                return Math.Min(Count ?? 0, Worth);
+            return Owned ? 1 : 0;
+        }
+    }
 
     /// <summary>Il en manque encore : ruban simple pas obtenu, ou souvenir pas au complet.</summary>
     public bool Missing => Earned < Worth;
@@ -166,11 +174,13 @@ public static class Ribbons
     private static readonly (string Key, string Name)[] ContestCategories =
         [("Cool", "Sang-Froid"), ("Beauty", "Beauté"), ("Cute", "Grâce"), ("Smart", "Intelligence"), ("Tough", "Robustesse")];
 
+    private const string Master = "Master";
+
     private static readonly (string Key, string Suffix, string Rank)[] HoennRanks =
-        [("", "", "Normal"), ("Super", " Super", "Super"), ("Hyper", " Hyper", "Hyper"), ("Master", " Master", "Master")];
+        [("", "", "Normal"), ("Super", " Super", "Super"), ("Hyper", " Hyper", "Hyper"), (Master, " Master", Master)];
 
     private static readonly (string Key, string Suffix, string Rank)[] SinnohRanks =
-        [("", "", "Normal"), ("Great", " Méga", "Méga"), ("Ultra", " Ultra", "Ultra"), ("Master", " Master", "Master")];
+        [("", "", "Normal"), ("Great", " Méga", "Méga"), ("Ultra", " Ultra", "Ultra"), (Master, " Master", Master)];
 
     /// <summary>
     /// Les 40 rubans de Souvenir Concours : 5 catégories × 4 rangs à Hoenn (Normal, Super, Hyper, Master), autant à
@@ -236,7 +246,11 @@ public static class Ribbons
     {
         if (pk is IRibbonSetMemory6)
         {
-            bool? all = count == 0 ? false : count >= parts.Count ? true : null;
+            bool? all = null; // en partie : le détail n'est pas connu
+            if (count == 0)
+                all = false;
+            else if (count >= parts.Count)
+                all = true;
             return [.. parts.Select(p => new RibbonPartState(p, all))];
         }
         return [.. parts.Select(p => new RibbonPartState(p, pk is not null && HasPart(pk, p.Key)))];

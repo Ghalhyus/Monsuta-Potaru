@@ -286,7 +286,7 @@ public sealed class ChessGame
         List<ChessMatchup> matchups = [];
         for (var s = 0; s < 64; s++)
         {
-            if (board[s] is { } victim && victim.Color != unit.Color && PokeTypes.Effectiveness(unit.Type, victim.Type) is var effect && effect != 1)
+            if (board[s] is { } victim && victim.Color != unit.Color && PokeTypes.Effectiveness(unit.Type, victim.Type) is var effect and not 1d)
                 matchups.Add(new ChessMatchup(s, victim.Id, effect));
         }
         return matchups;
@@ -296,12 +296,13 @@ public sealed class ChessGame
     private IEnumerable<ChessMove> Candidates(int from, ChessUnit unit)
     {
         var (rank, file) = (RankOf(from), FileOf(from));
-        if (unit.Piece == ChessPiece.Pawn)
-        {
-            foreach (var move in PawnMoves(from, unit, rank, file))
-                yield return move;
-            yield break;
-        }
+        foreach (var move in unit.Piece == ChessPiece.Pawn ? PawnMoves(from, unit, rank, file) : PieceMoves(from, unit))
+            yield return move;
+    }
+
+    /// <summary>Coups d'une pièce qui n'est pas un pion : ses directions, puis les roques pour le roi.</summary>
+    private IEnumerable<ChessMove> PieceMoves(int from, ChessUnit unit)
+    {
         var reach = unit.Piece switch
         {
             ChessPiece.Knight => KnightJumps.Select(j => (j, false)),
@@ -310,71 +311,86 @@ public sealed class ChessGame
             ChessPiece.Bishop => Diagonal.Select(j => (j, true)),
             _ => Straight.Concat(Diagonal).Select(j => (j, true)),
         };
-        foreach (var ((dr, df), slides) in reach)
+        var moves = reach.SelectMany(r => Ray(from, unit, r.j, r.Item2));
+        return unit.Piece == ChessPiece.King ? moves.Concat(Castles(from, unit)) : moves;
+    }
+
+    /// <summary>
+    /// Cases atteintes dans une direction : jusqu'à une pièce (mangée si c'est un adversaire qu'il peut manger) ou au bord ;
+    /// une seule case sans <paramref name="slides"/> (cavalier, roi).
+    /// </summary>
+    private IEnumerable<ChessMove> Ray(int from, ChessUnit unit, (int Rank, int File) step, bool slides)
+    {
+        var (dr, df) = step;
+        for (var (r, f) = (RankOf(from) + dr, FileOf(from) + df); Inside(r, f); (r, f) = (r + dr, f + df))
         {
-            for (var (r, f) = (rank + dr, file + df); Inside(r, f); (r, f) = (r + dr, f + df))
+            var to = Square(r, f);
+            if (board[to] is { } other)
             {
-                var to = Square(r, f);
-                if (board[to] is { } other)
-                {
-                    if (other.Color != unit.Color && CanEat(unit.Type, other.Type))
-                        yield return new ChessMove(from, to);
-                    break;
-                }
-                yield return new ChessMove(from, to);
-                if (!slides)
-                    break;
+                if (other.Color != unit.Color && CanEat(unit.Type, other.Type))
+                    yield return new ChessMove(from, to);
+                yield break;
             }
-        }
-        if (unit.Piece == ChessPiece.King)
-        {
-            foreach (var castle in Castles(from, unit))
-                yield return castle;
+            yield return new ChessMove(from, to);
+            if (!slides)
+                yield break;
         }
     }
 
     private IEnumerable<ChessMove> PawnMoves(int from, ChessUnit unit, int rank, int file)
     {
-        var forward = Forward(unit.Color);
         var revivable = Revivable(unit.Color);
-        if (rank == LastRank(unit.Color))
-        {
-            foreach (var id in revivable) // déjà au bout : l'échange avec un K.O. arrivé depuis
-                yield return new ChessMove(from, from, id);
-            yield break;
-        }
-        // Arrivée au bout : un coup par Pokémon K.O. qui peut le remplacer (sinon le pion y attend)
-        IEnumerable<ChessMove> Arrive(int to) => RankOf(to) == LastRank(unit.Color) && revivable.Count > 0
+        var moves = rank == LastRank(unit.Color)
+            ? revivable.Select(id => new ChessMove(from, from, id)) // déjà au bout : l'échange avec un K.O. arrivé depuis
+            : PawnPushes(from, unit, rank, file, revivable).Concat(PawnCaptures(from, unit, rank, file, revivable));
+        foreach (var move in moves)
+            yield return move;
+    }
+
+    /// <summary>Arrivée du pion : au bout, un coup par Pokémon K.O. qui peut le remplacer (sinon le pion y attend).</summary>
+    private static IEnumerable<ChessMove> Arrive(int from, int to, ChessColor color, IReadOnlyCollection<int> revivable) =>
+        RankOf(to) == LastRank(color) && revivable.Count > 0
             ? revivable.Select(id => new ChessMove(from, to, id))
             : [new ChessMove(from, to)];
 
+    /// <summary>Le pion avance d'une case, ou de deux depuis sa rangée de départ.</summary>
+    private IEnumerable<ChessMove> PawnPushes(int from, ChessUnit unit, int rank, int file, IReadOnlyCollection<int> revivable)
+    {
+        var forward = Forward(unit.Color);
         var one = Square(rank + forward, file);
-        if (board[one] is null)
+        if (board[one] is not null)
+            yield break;
+        foreach (var move in Arrive(from, one, unit.Color, revivable))
+            yield return move;
+        var start = unit.Color == ChessColor.White ? 1 : 6;
+        var two = one + 8 * forward;
+        if (rank == start && board[two] is null)
+            yield return new ChessMove(from, two);
+    }
+
+    /// <summary>Le pion mange en diagonale (en passant compris).</summary>
+    private IEnumerable<ChessMove> PawnCaptures(int from, ChessUnit unit, int rank, int file, IReadOnlyCollection<int> revivable)
+    {
+        var forward = Forward(unit.Color);
+        foreach (var df in new[] { -1, 1 }.Where(df => Inside(rank + forward, file + df)))
         {
-            foreach (var move in Arrive(one))
-                yield return move;
-            var start = unit.Color == ChessColor.White ? 1 : 6;
-            var two = one + 8 * forward;
-            if (rank == start && board[two] is null)
-                yield return new ChessMove(from, two);
-        }
-        foreach (var df in new[] { -1, 1 })
-        {
-            if (!Inside(rank + forward, file + df))
-                continue;
             var to = Square(rank + forward, file + df);
             if (board[to] is { } other && other.Color != unit.Color && CanEat(unit.Type, other.Type))
             {
-                foreach (var move in Arrive(to))
+                foreach (var move in Arrive(from, to, unit.Color, revivable))
                     yield return move;
             }
-            else if (board[to] is null && to == EnPassant && board[to - 8 * forward] is { Piece: ChessPiece.Pawn } passed
-                     && passed.Color != unit.Color && CanEat(unit.Type, passed.Type))
+            else if (CanTakeEnPassant(unit, to, forward))
             {
                 yield return new ChessMove(from, to);
             }
         }
     }
+
+    /// <summary>La case est celle de la prise en passant et le pion adverse qui vient de la sauter peut être mangé.</summary>
+    private bool CanTakeEnPassant(ChessUnit unit, int to, int forward) =>
+        board[to] is null && to == EnPassant && board[to - 8 * forward] is { Piece: ChessPiece.Pawn } passed
+        && passed.Color != unit.Color && CanEat(unit.Type, passed.Type);
 
     /// <summary>Roques : roi et tour jamais déplacés, cases entre eux vides, roi ni en échec ni de passage sur une case menacée.</summary>
     private IEnumerable<ChessMove> Castles(int from, ChessUnit king)
@@ -550,7 +566,7 @@ public sealed class ChessGame
         {
             var passer = board[BonusSquare!.Value]!;
             BonusSquare = null;
-            return Record(color, move, passer.Id, null, -1, 1, null, -1, -1, null, false, $"{passer.Mon.Name} ne rejoue pas.");
+            return Record(color, move, new StepActors(passer.Id, null, -1, 1, null, -1, -1, null), false, $"{passer.Mon.Name} ne rejoue pas.");
         }
 
         var mover = board[move.From]!;
@@ -558,8 +574,27 @@ public sealed class ChessGame
         var effect = victim is { } v ? PokeTypes.Effectiveness(mover.Type, v.Unit.Type) : 1;
         var rook = CastleRook(move, mover);
         ChessUnit? revived = move.Revive is { } reviveId ? units[reviveId] : null;
+        MovePieces(color, move, mover, victim, rook, revived);
+        var actors = new StepActors(mover.Id, victim?.Unit.Id, victim?.Square ?? -1, effect,
+            rook is null ? null : board[rook.Value.To]!.Id, rook?.From ?? -1, rook?.To ?? -1, revived?.Id);
 
-        // Position
+        var text = Story(mover, move, victim?.Unit, rook is not null, revived);
+        BonusSquare = null;
+        if (victim is { Unit.Piece: ChessPiece.King })
+        {
+            (Winner, End) = (color, ChessEnd.KingEaten);
+            return Record(color, move, actors, false, $"{text} Le roi est mangé : victoire !");
+        }
+        var bonus = false;
+        if (victim is not null && effect > 1)
+            text += SuperEffective(color, move.To, onBonusTurn, out bonus);
+        return Record(color, move, actors, bonus, text);
+    }
+
+    /// <summary>La position après le coup : le mangé chez les K.O. (sauf le roi), la tour du roque, le pion échangé avec un K.O.</summary>
+    private void MovePieces(ChessColor color, ChessMove move, ChessUnit mover, (ChessUnit Unit, int Square)? victim, (int From, int To)? rook,
+        ChessUnit? revived)
+    {
         if (victim is { } eaten)
         {
             board[eaten.Square] = null;
@@ -584,42 +619,36 @@ public sealed class ChessGame
         EnPassant = mover.Piece == ChessPiece.Pawn && Math.Abs(RankOf(move.To) - RankOf(move.From)) == 2
             ? (move.From + move.To) / 2
             : null;
-
-        var text = Story(mover, move, victim?.Unit, rook is not null, revived);
-        if (victim is { Unit.Piece: ChessPiece.King })
-        {
-            (Winner, End) = (color, ChessEnd.KingEaten);
-            BonusSquare = null;
-            return Record(color, move, mover.Id, victim?.Unit.Id, victim?.Square ?? -1, effect, rook is null ? null : board[rook.Value.To]!.Id,
-                rook?.From ?? -1, rook?.To ?? -1, revived?.Id, false, $"{text} Le roi est mangé : victoire !");
-        }
-
-        // Tour bonus : super efficace, et la pièce (ou le Pokémon revenu à sa place) peut encore bouger ; un seul par tour
-        BonusSquare = null;
-        var bonus = false;
-        if (victim is not null && effect > 1 && onBonusTurn)
-        {
-            text += $" C'est super efficace, mais {board[move.To]!.Mon.Name} a déjà rejoué.";
-        }
-        else if (victim is not null && effect > 1)
-        {
-            BonusSquare = move.To;
-            bonus = MovesFrom(move.To).Count > 0;
-            if (!bonus)
-                BonusSquare = null;
-            text += bonus
-                ? $" C'est super efficace ! {board[move.To]!.Mon.Name} rejoue."
-                : $" C'est super efficace, mais {board[move.To]!.Mon.Name} ne peut plus bouger.";
-            if (bonus && InCheck(color))
-                text += " Il doit mettre son roi à l'abri.";
-        }
-        return Record(color, move, mover.Id, victim?.Unit.Id, victim?.Square ?? -1, effect, rook is null ? null : board[rook.Value.To]!.Id,
-            rook?.From ?? -1, rook?.To ?? -1, revived?.Id, bonus, text);
     }
 
+    /// <summary>
+    /// Tour bonus après un coup super efficace : la pièce (ou le Pokémon revenu à sa place) rejoue si elle peut encore bouger,
+    /// un seul par tour. La suite du récit ; <paramref name="bonus"/> : elle rejoue.
+    /// </summary>
+    private string SuperEffective(ChessColor color, int square, bool onBonusTurn, out bool bonus)
+    {
+        bonus = false;
+        var name = board[square]!.Mon.Name;
+        if (onBonusTurn)
+            return $" C'est super efficace, mais {name} a déjà rejoué.";
+        BonusSquare = square;
+        bonus = MovesFrom(square).Count > 0;
+        if (!bonus)
+        {
+            BonusSquare = null;
+            return $" C'est super efficace, mais {name} ne peut plus bouger.";
+        }
+        return InCheck(color)
+            ? $" C'est super efficace ! {name} rejoue. Il doit mettre son roi à l'abri."
+            : $" C'est super efficace ! {name} rejoue.";
+    }
+
+    /// <summary>Pièces d'un coup : celle qui bouge, celle qui est mangée et sa case, la tour du roque, le Pokémon revenu.</summary>
+    private readonly record struct StepActors(int UnitId, int? CapturedId, int CapturedSquare, double Effect, int? RookId, int RookFrom,
+        int RookTo, int? RevivedId);
+
     /// <summary>Fin du coup : au tour de l'autre (sauf tour bonus), échec, mat, pat ou rois seuls.</summary>
-    private ChessStep Record(ChessColor color, ChessMove move, int unitId, int? capturedId, int capturedSquare, double effect,
-        int? rookId, int rookFrom, int rookTo, int? revivedId, bool bonus, string text)
+    private ChessStep Record(ChessColor color, ChessMove move, StepActors a, bool bonus, string text)
     {
         var enemy = Other(color);
         var check = !IsOver && InCheck(enemy);
@@ -645,8 +674,8 @@ public sealed class ChessGame
         {
             text += " Échec !";
         }
-        var step = new ChessStep(steps.Count + 1, color, move, unitId, capturedId, capturedSquare, effect, rookId, rookFrom, rookTo,
-            revivedId, bonus, check, Winner, End, text, Position());
+        var step = new ChessStep(steps.Count + 1, color, move, a.UnitId, a.CapturedId, a.CapturedSquare, a.Effect, a.RookId, a.RookFrom,
+            a.RookTo, a.RevivedId, bonus, check, Winner, End, text, Position());
         steps.Add(step);
         return step;
     }

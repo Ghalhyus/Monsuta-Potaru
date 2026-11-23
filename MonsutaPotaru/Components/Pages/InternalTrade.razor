@@ -47,7 +47,7 @@ else
        haut pendant que la grille défile (internal-trade-sticky, app.css). *@
     @if (!Choosing)
     {
-        @Steps
+        @Steps()
     }
 
     @switch (step)
@@ -88,9 +88,9 @@ else
                             <option value="">@(firstSave is null ? "Choisis d'abord la première…" : "Choisis une sauvegarde…")</option>
                             @if (firstSave is not null)
                             {
-                                @foreach (var s in saves.Where(s => firstSave.Partners.Contains(s.Save.Id)))
+                                @foreach (var partner in saves.Where(s => firstSave.Partners.Contains(s.Save.Id)).Select(s => s.Save))
                                 {
-                                    <option value="@s.Save.Id">@s.Save.LabelAndFile</option>
+                                    <option value="@partner.Id">@partner.LabelAndFile</option>
                                 }
                             }
                         </select>
@@ -105,7 +105,7 @@ else
 
         case Step.Send:
             <div class="internal-trade-sticky">
-                @Steps
+                @Steps()
                 <Block Title="2. Choisis le Pokémon envoyé">
                     <Actions>
                         <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Back">← Retour</button>
@@ -126,7 +126,7 @@ else
 
         case Step.Receive:
             <div class="internal-trade-sticky">
-                @Steps
+                @Steps()
                 <Block Title="3. Choisis le Pokémon reçu">
                     <Actions>
                         <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Back">← Retour</button>
@@ -211,6 +211,14 @@ else
     private enum Step { Saves, Send, Receive, Confirm, Done }
 
     private static readonly string[] StepNames = ["Sauvegardes", "Pokémon envoyé", "Pokémon reçu", "Confirmation"];
+
+    /// <summary>Étape n° index du fil d'Ariane : faite, en cours ou à venir.</summary>
+    private string StepState(int index)
+    {
+        if ((int)step > index || step == Step.Done)
+            return "done";
+        return (int)step == index ? "current" : "";
+    }
 
     private string userId = "";
     private TradeShow? show; // animation de l'échange qui vient de se faire, jusqu'à « Passer » ou « Continuer »
@@ -430,13 +438,13 @@ else
     private bool Choosing => step is Step.Send or Step.Receive;
 
     /// <summary>Repère des quatre étapes (faites, en cours, à venir).</summary>
-    private RenderFragment Steps => __builder =>
+    private RenderFragment Steps() => __builder =>
     {
         <ol class="internal-trade-steps" aria-label="Étapes de l'échange">
             @for (int i = 0; i < StepNames.Length; i++)
             {
                 var index = i;
-                var state = (int)step > index || step == Step.Done ? "done" : (int)step == index ? "current" : "";
+                var state = StepState(index);
                 <li class="internal-trade-step @state" aria-current="@((int)step == index ? "step" : null)">
                     <span class="internal-trade-step-number">@(state == "done" ? "✓" : (index + 1).ToString())</span>
                     <span>@StepNames[index]</span>
@@ -477,19 +485,24 @@ else
             <div class="trade-candidates">
                 @foreach (var candidate in shown)
                 {
-                    var c = candidate;
-                    <button type="button" class="trade-candidate @(chosen == c ? "selected" : "")" title="@(c.Problem ?? c.Location)"
-                            disabled="@(busy || c.Problem is not null)" @onclick="() => choose(c)">
-                        <img src="@c.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
-                        <span class="trade-candidate-name">@c.Name@(c.IsShiny ? " ✨" : "")</span>
-                        <span class="small text-muted">@(c.IsEgg ? "Œuf" : $"N.{c.Level}") · @c.Location</span>
-                        @if (c.Problem is not null)
-                        {
-                            <span class="small text-danger">Impossible</span>
-                        }
-                    </button>
+                    @CandidateButton(candidate, chosen, choose)
                 }
             </div>
         }
+    };
+
+    /// <summary>Un Pokémon de la grille : choisi, ou grisé avec sa raison s'il ne peut pas être échangé.</summary>
+    private RenderFragment CandidateButton(TradeCandidate c, TradeCandidate? chosen, Action<TradeCandidate> choose) => __builder =>
+    {
+        <button type="button" class="trade-candidate @(chosen == c ? "selected" : "")" title="@(c.Problem ?? c.Location)"
+                disabled="@(busy || c.Problem is not null)" @onclick="() => choose(c)">
+            <img src="@c.SpriteUrl" alt="" loading="lazy" data-remplacement="images/pokemon/inconnu.png" />
+            <span class="trade-candidate-name">@c.Name@(c.IsShiny ? " ✨" : "")</span>
+            <span class="small text-muted">@(c.IsEgg ? "Œuf" : $"N.{c.Level}") · @c.Location</span>
+            @if (c.Problem is not null)
+            {
+                <span class="small text-danger">Impossible</span>
+            }
+        </button>
     };
 }

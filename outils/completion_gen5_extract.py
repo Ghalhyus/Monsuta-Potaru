@@ -23,6 +23,7 @@ import struct
 from completion_gen5_rom import Rom, commands, disassemble, flow, texts
 
 # Textes répétés (lieux, libellés)
+VERSION_FINALE = '\\((B|W|B2|W2)\\)$'
 EXT_JSON = '.json'
 
 # Premier drapeau des dresseurs et des objets cachés (FlagsEditorEX ; pokebw2 : generated/flags.txt)
@@ -88,13 +89,13 @@ def field_items(fl):
     for flag, (cat, where, _, desc, _) in fl.items():
         if cat not in ('FIELD ITEM', 'HIDDEN ITEM'):
             continue
-        place_version = re.search(r'\((B|W|B2|W2)\)$', where)  # « White Forest (W) »
+        place_version = re.search(VERSION_FINALE, where)  # « White Forest (W) »
         name = re.sub(r'^Found ', '', re.sub(r' item ball disappeared$', '', desc))
         if 'recurring' in name.lower():
             continue  # objet caché qui revient : pas une étape
         variants = []
         for part in name.split(' / '):
-            m = re.search(r'\((B|W|B2|W2)\)$', part)
+            m = re.search(VERSION_FINALE, part)
             variants.append((part[:m.start()].rstrip(), m.group(1)) if m else (part, place_version and place_version.group(1)))
         (ground if cat == 'FIELD ITEM' else hidden)[flag] = variants
     return ground, hidden
@@ -205,7 +206,7 @@ def fallback(found, items, fl, english):
     for flag, variants in items.items():
         if flag not in found:
             where = fl[flag][1]
-            if m := re.search(r'\((B|W|B2|W2)\)$', where):  # « White Forest (W) » → « White Forest »
+            if m := re.search(VERSION_FINALE, where):  # « White Forest (W) » → « White Forest »
                 where = where[:m.start()].rstrip() + where[m.end():]
             if where not in english:
                 raise SystemExit(f'Lieu inconnu : {where} (drapeau {flag:#x})')

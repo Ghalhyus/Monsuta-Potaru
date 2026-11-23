@@ -321,8 +321,8 @@ public static class SaveBag
     }
 
     /// <summary>Ce qu'un dépôt vérifie pour chaque objet (<see cref="DepositProblem"/>).</summary>
-    private sealed record DepositCheck(SaveFile Sav, BagPlace Place, string GameName, Func<int, string> Name, HashSet<int> Locked,
-        Dictionary<int, int> Total, Dictionary<int, int> Capacity, Dictionary<int, int> Have);
+    private sealed record DepositCheck(SaveFile Sav, BagPlace Place, string GameName, Func<int, string> Name, HashSet<int> LockedItems,
+        Dictionary<int, int> Totals, Dictionary<int, int> Capacities, Dictionary<int, int> Have);
 
     /// <summary>Pourquoi cette quantité de cet objet ne peut pas être déposée ; null si elle peut l'être.</summary>
     private static string? DepositProblem(DepositCheck check, int item, int quantity)
@@ -330,13 +330,13 @@ public static class SaveBag
         var name = check.Name(item);
         if (CategoryOf(item) is null)
             return $"{name} ne peut pas être transféré.";
-        if (check.Locked.Contains(item))
+        if (check.LockedItems.Contains(item))
             return LockedMessage(name);
-        var already = check.Total.GetValueOrDefault(item);
+        var already = check.Totals.GetValueOrDefault(item);
         if (IsLimited(check.Sav, item) && already + quantity > LimitedMachineThreshold - 1)
             return $"{name} : la sauvegarde en contient déjà {already}, et une CT à usage unique est limitée à " +
                    $"{LimitedMachineThreshold - 1} par sauvegarde ({LimitedMachineThreshold - 1 - already} de plus).";
-        if (!check.Capacity.TryGetValue(item, out var max))
+        if (!check.Capacities.TryGetValue(item, out var max))
             return UnknownItemMessage(check, item, name);
         var current = check.Have.GetValueOrDefault(item);
         if (current + quantity > max)

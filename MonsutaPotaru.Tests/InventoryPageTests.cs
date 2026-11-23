@@ -83,7 +83,7 @@ public sealed class InventoryPageTests : PageTestContext
         foreach (var tab in new[] { "Pokéballs", "Baies", "CT", "Objets", "Médicaments" })
             await cut.FindAll("[role=tab]").First(t => t.TextContent.Contains(tab)).ClickAsync(new());
         Assert.Contains("Lecture seule : clique sur un objet", cut.Text());
-        await cut.FindAll("table button.btn-link").First().ClickAsync(new());
+        await cut.FindAll("table button.btn-link")[0].ClickAsync(new());
         cut.WaitForText("Total");
         Assert.Contains("Ludo", cut.Find(".journal-panel").TextContent);
         await cut.Find(".journal-panel .btn-close").ClickAsync(new());

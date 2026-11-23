@@ -32,9 +32,14 @@ public static class ChessTiming
     {
         var after = step.After;
         double squares = step.Squares;
-        if (step.CapturedId is { } victim && KoPlace(after, victim) is var (color, index) && index >= 0)
-            squares += KoWalkSquares(step.CapturedSquare, color, index);
-        if (step.RevivedId is not null && KoPlace(after, step.UnitId) is var (side, pawnIndex) && pawnIndex >= 0)
+        if (step.CapturedId is { } victim)
+        {
+            var (color, index) = KoPlace(after, victim);
+            if (index >= 0)
+                squares += KoWalkSquares(step.CapturedSquare, color, index);
+        }
+        var (side, pawnIndex) = step.RevivedId is null ? (ChessColor.White, -1) : KoPlace(after, step.UnitId);
+        if (pawnIndex >= 0)
         {
             // Le revenu part de sa place d'avant le coup, inconnue ici : la plus longue des places possibles (il y en a
             // autant qu'après le coup, le pion ayant pris la sienne)
@@ -76,7 +81,11 @@ public static class ChessTiming
         double slotX = (mine ? Width - Panel : 0) + slotCol * Sq + Sq / 2.0;
         double gapX = mine ? BoardX + Frame + Gap / 2.0 : Panel + Gap / 2.0;
         int line1 = slotRow >= row ? row + 1 : row;
-        int line2 = slotRow > row ? slotRow : slotRow < row ? slotRow + 1 : line1;
+        int line2 = line1;
+        if (slotRow > row)
+            line2 = slotRow;
+        else if (slotRow < row)
+            line2 = slotRow + 1;
         return Sq / 2.0 + Math.Abs(gapX - startX) + Math.Abs(line2 - line1) * Sq + Math.Abs(slotX - gapX) + Sq / 2.0;
     }
 
@@ -153,11 +162,11 @@ public sealed class ChessSession(ChessParty host, ChessParty guest, int moveSeco
     {
         lock (Gate)
         {
-            var host = IsHost(userId);
-            var (mine, theirs) = host ? (HostTeam, GuestTeam) : (GuestTeam, HostTeam);
+            var isHost = IsHost(userId);
+            var (mine, theirs) = isHost ? (HostTeam, GuestTeam) : (GuestTeam, HostTeam);
             var same = Stage == ChessStage.TeamChoice && mine is not null && mine == theirs ? ChessTeams.Find(mine) : null;
-            return new ChessTeamChoice(ChessTeams.Find(mine), theirs is not null, same, host ? HostKeeps : GuestKeeps,
-                host ? GuestKeeps : HostKeeps, ChangingId is { } changing && changing != userId && Involves(changing));
+            return new ChessTeamChoice(ChessTeams.Find(mine), theirs is not null, same, isHost ? HostKeeps : GuestKeeps,
+                isHost ? GuestKeeps : HostKeeps, ChangingId is { } changing && changing != userId && Involves(changing));
         }
     }
 
@@ -276,6 +285,7 @@ public sealed class ChessHub : IDisposable
     public const string GuestIdPrefix = "invite-";
 
     private const string AlreadyPlaying = "Tu as déjà une partie en cours.";
+    private const string NoTeamExpected = "Cette partie n'attend plus d'équipe.";
 
     private readonly Lock gate = new();
     private readonly List<ChessSession> sessions = [];
@@ -498,7 +508,7 @@ public sealed class ChessHub : IDisposable
         lock (session.Gate)
         {
             if (session.Stage != ChessStage.TeamChoice || !session.Involves(userId))
-                return "Cette partie n'attend plus d'équipe.";
+                return NoTeamExpected;
             var host = session.IsHost(userId);
             if ((host ? session.HostTeam : session.GuestTeam) is not null)
                 return "Tu as déjà choisi ton équipe.";
@@ -525,7 +535,7 @@ public sealed class ChessHub : IDisposable
         lock (session.Gate)
         {
             if (session.Stage != ChessStage.TeamChoice || !session.Involves(userId))
-                return "Cette partie n'attend plus d'équipe.";
+                return NoTeamExpected;
             if (session.HostTeam is null || session.HostTeam != session.GuestTeam)
                 return $"{session.Other(userId).Pseudo} a changé d'équipe : vous n'avez plus la même.";
             if (session.IsHost(userId))
@@ -558,11 +568,11 @@ public sealed class ChessHub : IDisposable
         lock (session.Gate)
         {
             if (!session.Involves(userId))
-                return "Cette partie n'attend plus d'équipe.";
+                return NoTeamExpected;
             if (session.Stage != ChessStage.TeamChoice)
                 return session.Stage == ChessStage.Playing
                     ? $"{session.Other(userId).Pseudo} a choisi son équipe : la partie a commencé, ton équipe ne change plus."
-                    : "Cette partie n'attend plus d'équipe.";
+                    : NoTeamExpected;
             var host = session.IsHost(userId);
             if ((host ? session.HostTeam : session.GuestTeam) is null)
                 return "Tu n'as pas encore choisi d'équipe.";
@@ -573,7 +583,10 @@ public sealed class ChessHub : IDisposable
                 session.GuestTeam = null;
             (session.HostKeeps, session.GuestKeeps) = (false, false);
             // Même équipe : l'autre apprend que celui-ci change ; l'autre qui change à son tour : les deux rechoisissent
-            session.ChangingId = same ? userId : session.ChangingId == session.Other(userId).UserId ? null : session.ChangingId;
+            if (same)
+                session.ChangingId = userId;
+            else if (session.ChangingId == session.Other(userId).UserId)
+                session.ChangingId = null;
         }
         session.Notify();
         return null;

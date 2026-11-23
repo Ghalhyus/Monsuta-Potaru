@@ -14,6 +14,9 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class CompletionServiceTests : IDisposable
 {
+    /// <summary>Autres sortes de conditions : drapeau, Pokédex.</summary>
+    private static readonly string[] OtherConditionKinds = ["F", "P"];
+
     private readonly TestDatabase _db = new("sacha", "ondine", "pierre");
     private readonly StoredSaveService _saves;
     private readonly CompletionService _completions;
@@ -66,7 +69,7 @@ public sealed class CompletionServiceTests : IDisposable
                     case "T": Assert.InRange(int.Parse(parts[1]), 0, sav.EventSpawnFlags.Length - 1); break;
                     case "R": Assert.InRange(int.Parse(parts[1]), 0x299C, 0x29F2); Assert.InRange(int.Parse(parts[2]), 0, 7); break;
                     case "B": Assert.InRange(int.Parse(parts[1]), 0, 7); break;
-                    default: Assert.Contains(parts[0], new[] { "F", "P" }); break;
+                    default: Assert.Contains(parts[0], OtherConditionKinds); break;
                 }
             }
             // Jaune seulement : l'amitié de Pikachu, Jessie et James, les trois Pokémon de départ offerts

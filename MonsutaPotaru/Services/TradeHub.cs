@@ -58,7 +58,7 @@ public sealed class TradeHub : IDisposable
 {
     public static readonly TimeSpan RequestLifetime = TimeSpan.FromMinutes(10);
 
-    private readonly object gate = new();
+    private readonly Lock gate = new();
     private readonly List<TradeSession> sessions = [];
     private readonly Timer expiry;
     private readonly TimeProvider time;

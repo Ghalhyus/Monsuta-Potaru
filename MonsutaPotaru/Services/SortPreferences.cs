@@ -166,7 +166,9 @@ public static class SiteSorts
     }
 
     public static SortQuery CollectionQuery(CollectionSort sort) =>
-        new(Slug(sort.By), sort.Reversed ? (IsDescending(sort) ? "desc" : "asc") : null);
+        new(Slug(sort.By), sort.Reversed ? Direction(sort) : null);
+
+    private static string Direction(CollectionSort sort) => IsDescending(sort) ? "desc" : "asc";
 
     // ---------- Living dex : « ordre=desc » pour décroissant ----------
 

@@ -12,6 +12,9 @@ namespace MonsutaPotaru.Tests;
 /// </summary>
 public sealed class CompletionGen2Tests : IDisposable
 {
+    /// <summary>Variables des cadeaux du pêcheur (« U:… ») acceptées.</summary>
+    private static readonly int[] FishingGuruVariables = [0x2A8C, 0x2A67];
+
     private readonly TestDatabase _db = new("sacha", "ondine", "pierre");
     private readonly StoredSaveService _saves;
     private readonly CompletionService _completions;
@@ -56,7 +59,7 @@ public sealed class CompletionGen2Tests : IDisposable
                 {
                     case "E": Assert.InRange(int.Parse(parts[1]), 0, 1999); break;
                     case "R" or "S": Assert.InRange(int.Parse(parts[1]), 0x23E4, 0x2600); break;
-                    case "U": Assert.Contains(int.Parse(parts[1]), new[] { 0x2A8C, 0x2A67 }); break;
+                    case "U": Assert.Contains(int.Parse(parts[1]), FishingGuruVariables); break;
                     case "D": Assert.InRange(int.Parse(parts[1]), 1, 251); break;
                     default: Assert.Fail($"Condition inattendue en 2e génération : {atom}"); break;
                 }

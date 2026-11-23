@@ -67,7 +67,7 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, IDb
     {
         if (pseudo.Length < PseudoMinLength || pseudo.Length > PseudoMaxLength)
             return $"Le pseudo doit faire de {PseudoMinLength} à {PseudoMaxLength} caractères.";
-        foreach (var rune in pseudo.EnumerateRunes().Where(r => !Rune.IsLetterOrDigit(r) && r.Value is not (' ' or '-' or '.' or '_')))
+        if (pseudo.EnumerateRunes().Where(r => !Rune.IsLetterOrDigit(r) && r.Value is not (' ' or '-' or '.' or '_')).Cast<Rune?>().FirstOrDefault() is { } rune)
             return $"Le pseudo ne peut pas contenir « {rune} » : lettres, chiffres, espaces, tirets, points et tirets bas seulement.";
         if (!pseudo.EnumerateRunes().Any(Rune.IsLetterOrDigit))
             return "Le pseudo doit contenir au moins une lettre ou un chiffre.";

@@ -58,6 +58,20 @@ UNKNOWN = set()
 MISSING_PLACES = set()
 
 
+def number_before(text, word):
+    r"""Nombre écrit juste avant la première occurrence de word qui en a un (« 12 trainers » → '12') ; None sans. Comme
+    re.search(r'(?<!\d)(\d+)' + word), sans retour en arrière."""
+    pos = text.find(word)
+    while pos >= 0:
+        start = pos
+        while start > 0 and text[start - 1].isdecimal():
+            start -= 1
+        if start < pos:
+            return text[start:pos]
+        pos = text.find(word, pos + 1)
+    return None
+
+
 def lines_of(path):
     return [line.rstrip('\n').lstrip('﻿') for line in open(path, encoding='utf-8')]
 
@@ -334,7 +348,7 @@ def gifts(c):
             n = re.match(r'(\d+)', why).group(1)
             place, detail = 'Jaderaude', f'Muramasa, {n} membre{"s" if n != "1" else ""} du Clan des Monstres battu{"s" if n != "1" else ""}'
         else:
-            n = re.search(r'(?<!\d)(\d+) trainers', why).group(1)
+            n = number_before(why, ' trainers')
             place, detail = c.place(loc), f'représentant de la Ligue, {n} dresseurs battus'
         out.append((place, detail, c.f(name), item, count))
     return out
@@ -453,7 +467,7 @@ def encounters(c, rows, version):
         if row[CATEGORIE] != 'Légendaire / fixe' or not for_version(row, version):
             continue
         text = row['Objectif'].strip()
-        m = re.match(r"(?:Faire évoluer )?(.+?)(?: \(2e exemplaire\))?(?: \(?niv\..*| en .+| via .+|$)", text)
+        m = re.match(r"(?:Faire évoluer )?(.+?)(?: \(2e exemplaire\))?(?: \(?niv\..*| en .+| via .+)?$", text)
         name = m.group(1).strip()
         if name.startswith(('Montrer', 'Obtenir')):
             continue  # pas un Pokémon (Fléaux montrés à Mora, Friandises de Jeffry Andise)

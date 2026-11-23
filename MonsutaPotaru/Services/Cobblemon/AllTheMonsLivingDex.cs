@@ -89,16 +89,20 @@ public static class AllTheMonsLivingDex
                 if (stone == 0)
                     continue; // Méga-Rayquaza, sans gemme : déjà dans le global (Draco-Ascension)
                 var name = names[form];
-                var dash = name.IndexOf("-Mega", StringComparison.Ordinal);
-                string? baseKey = null;
-                if (dash > 0)
-                    baseKey = name[..dash];
-                else if (species == Floette)
-                    baseKey = "Eternal";
+                var baseKey = MegaBaseKey(species, name);
                 yield return new GlobalSlot(species, form, EntityContext.Gen9a, name, MegaName(species, name, baseKey),
                     HeldItem: stone, BaseFormKey: baseKey);
             }
         }
+    }
+
+    /// <summary>Forme que doit avoir le Pokémon qui méga-évolue (« F-Mega » : « F ») ; Floette : Éternelle ; null sinon.</summary>
+    private static string? MegaBaseKey(ushort species, string formName)
+    {
+        var dash = formName.IndexOf("-Mega", StringComparison.Ordinal);
+        if (dash > 0)
+            return formName[..dash];
+        return species == Floette ? "Eternal" : null;
     }
 
     /// <summary>« Méga-Raichu X », « Méga-Mistigrix ♀ », « Méga-Nigirigon (forme Affalée) », « Primo-Kyogre ».</summary>
@@ -193,5 +197,5 @@ public static class AllTheMonsLivingDex
     public static GlobalLivingDex.Copy Copy(int id, CobblemonPokemon mon) =>
         new(id, mon.DexNumber, mon.Form, CobblemonPokemon.FormContext, mon.Gender, mon.HeldItem, mon.Sweet, mon.CanGigantamax,
             mon.Species == LivingDexGames.Rayquaza && mon.ReadMoves().Any(m => m.Move == LivingDexGames.DragonAscent),
-            Key: mon.FormKey, Base: mon.IsBaseForm && mon.FormKey == CobblemonPokemon.FormKeyOf(mon.Species, "normal")); // pas Zarbi « ? »
+            KnownKey: mon.FormKey, Base: mon.IsBaseForm && mon.FormKey == CobblemonPokemon.FormKeyOf(mon.Species, "normal")); // pas Zarbi « ? »
 }

@@ -631,6 +631,26 @@ class Pokemon {
  * son paysage : « parc-1 », « plage-1 »), size (taille du parc, de 1 à 4 : sa carte), fullscreen (élément mis en plein
  * écran, qui contient <container> et les fenêtres de la page, comme la fiche d'un Pokémon ; sans lui, <container>).
  */
+/** Fin d'une animation jouée une fois : la suite prévue, sinon il se repose. */
+function playedOnce(p, dt) {
+    p.timer -= dt;
+    if (p.timer > 0) return;
+    const afterPlay = p.afterPlay;
+    p.afterPlay = null;
+    if (afterPlay) afterPlay();
+    else p.rest(random(1, 3));
+}
+
+/** Allure selon ce qu'il va faire : plus lent vers son lit, plus vite pour fuir ou attaquer. */
+function paceOf(intent) {
+    switch (intent) {
+        case "sleep": return 0.7;
+        case "flee": return FLEE.speed;
+        case "attack": return 1.3;
+        default: return 1;
+    }
+}
+
 export async function create(container, component, options) {
     const canMove = options?.canMove === true;
     const fullscreenTarget = options?.fullscreen ?? container; // plein écran : lui, pour que la fiche d'un Pokémon s'y affiche aussi
@@ -1388,16 +1408,6 @@ export async function create(container, component, options) {
         else walk(p, dt);
     }
 
-    /** Fin d'une animation jouée une fois : la suite prévue, sinon il se repose. */
-    function playedOnce(p, dt) {
-        p.timer -= dt;
-        if (p.timer > 0) return;
-        const afterPlay = p.afterPlay;
-        p.afterPlay = null;
-        if (afterPlay) afterPlay();
-        else p.rest(random(1, 3));
-    }
-
     /** Endormi : il reprend de l'énergie, et se réveille une fois reposé (la nuit, rarement). */
     function sleepOn(p, dt, night) {
         p.energy = Math.min(1, p.energy + dt * (night > 0.5 ? ENERGY.sleepNight : ENERGY.sleepDay));
@@ -1438,16 +1448,6 @@ export async function create(container, component, options) {
         if (Math.random() < 0.25) p.dir = FRONT;
         else p.dir = (p.dir + (Math.random() < 0.5 ? 1 : 7)) % 8;
         p.lookTimer = random(1.2, 3.5);
-    }
-
-    /** Allure selon ce qu'il va faire : plus lent vers son lit, plus vite pour fuir ou attaquer. */
-    function paceOf(intent) {
-        switch (intent) {
-            case "sleep": return 0.7;
-            case "flee": return FLEE.speed;
-            case "attack": return 1.3;
-            default: return 1;
-        }
     }
 
     /** Marche vers le prochain point de passage, en s'écartant des autres ; arrivé, il fait ce qu'il était venu faire. */

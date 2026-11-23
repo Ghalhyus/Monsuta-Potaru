@@ -74,7 +74,7 @@ public sealed class SiteMenusTests : PageTestContext
         // Accueil seul avant les rubriques ; chaque rubrique a son icône (seule visible, menu replié)
         Assert.Equal(["Accueil"], cut.FindAll(".ardoise-nav > a .ardoise-label").Select(Text));
         Assert.Equal(["bi-pokeball-nav-menu", "bi-bag-nav-menu", "bi-trophy-nav-menu", "bi-person-badge-nav-menu", "bi-dice-nav-menu", "bi-save-nav-menu"],
-            groups.Select(g => g.QuerySelector(".ardoise-group-title .bi")!.ClassList.Last()));
+            groups.Select(g => g.QuerySelector(".ardoise-group-title .bi")!.ClassList[^1]));
     }
 
     [Fact]

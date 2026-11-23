@@ -55,7 +55,7 @@ public sealed class LivingDexPagesTests : PageTestContext
         var cut = Render<LivingDexes>();
         await cut.Click("+ Créer un living dex");
         var candidate = (await Dexes.ListCandidatesAsync("sacha")).Single();
-        var game = candidate.Games.First();
+        var game = candidate.Games[0];
         var generation = LivingDexGames.Get(game).Generation;
         await cut.FindAll(".livingdex-generation-toggle")[generation - 1].ClickAsync(new());
         var radio = cut.FindAll(".livingdex-game").First(l => l.TextContent.Contains(LivingDexGames.Get(game).Name)).QuerySelector("input")!;
@@ -176,7 +176,7 @@ public sealed class LivingDexPagesTests : PageTestContext
         await Dexes.CreateGlobalAsync("sacha", shiny: true);
         await StoreReal("sacha", "noir.sav");
         var candidate = (await Dexes.ListCandidatesAsync("sacha")).Single();
-        Assert.True((await Dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games.First())).Ok);
+        Assert.True((await Dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games[0])).Ok);
 
         foreach (var query in new[] { "", "?mode=regional", "?mode=complet", "?mode=ultime&tri=completion&ordre=desc" })
         {
@@ -277,7 +277,7 @@ public sealed class LivingDexPagesTests : PageTestContext
 
         await StoreReal("sacha", "noir.sav");
         var candidate = (await Dexes.ListCandidatesAsync("sacha")).Single();
-        var id = (await Dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games.First())).Id!.Value;
+        var id = (await Dexes.CreateAsync("sacha", candidate.SaveId, candidate.Games[0])).Id!.Value;
         foreach (var query in new[] { "?mode=regional", "?filtre=possedes", "?filtre=manquants" })
         {
             Navigation.NavigateTo($"livingdex/{id}{query}");
