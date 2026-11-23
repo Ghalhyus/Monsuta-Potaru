@@ -28,6 +28,12 @@ import subprocess
 import sys
 import zipfile
 
+# Textes répétés (lieux, libellés)
+EXT_JSON = '.json'
+MOTIF_JAR = '*.jar'
+TABLEAU_DEBUT = '    ['
+TABLEAU_FIN = '    ];'
+
 # ---------- SNBT (format des fichiers de FTB Quests) ----------
 
 TOKEN = re.compile(r'\s*(?:(?P<str>"(?:[^"\\]|\\.)*")|(?P<punct>[{}\[\]:,;])|(?P<atom>[^\s{}\[\]:,;"]+))')
@@ -55,7 +61,7 @@ def snbt_atom(a):
         return a == 'true'
     if re.fullmatch(r'-?\d+[LbBsS]?', a):
         return int(a.rstrip('LbBsS'))
-    if re.fullmatch(r'-?\d*\.?\d+(?:[eE][-+]?\d+)?[dDfF]?', a):
+    if re.fullmatch(r'-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?[dDfF]?', a):
         return float(a.rstrip('dDfF'))
     return a
 
@@ -181,7 +187,7 @@ def minecraft_files(instance):
     jar = os.path.join(install, 'versions', '1.21.1', '1.21.1.jar')
     with open(os.path.join(install, 'versions', '1.21.1', '1.21.1.json'), encoding='utf-8') as f:
         index_id = json.load(f)['assetIndex']['id']
-    with open(os.path.join(install, 'assets', 'indexes', index_id + '.json'), encoding='utf-8') as f:
+    with open(os.path.join(install, 'assets', 'indexes', index_id + EXT_JSON), encoding='utf-8') as f:
         objects = json.load(f)['objects']
     h = objects['minecraft/lang/fr_fr.json']['hash']
     return jar, os.path.join(install, 'assets', 'objects', h[:2], h)
@@ -228,7 +234,7 @@ def read_advancements(instance, minecraft_jar):
 
     def scan_zip(z):
         for n in z.namelist():
-            if '/advancement' in n and n.endswith('.json'):
+            if '/advancement' in n and n.endswith(EXT_JSON):
                 add(n, lambda n=n: z.read(n))
             elif n.endswith('.jar'):
                 try:
@@ -243,7 +249,7 @@ def read_advancements(instance, minecraft_jar):
             if '/advancement' in '/' + rel:
                 add('data/' + rel if not rel.startswith('data/') else rel, lambda f=f: open(f, 'rb').read())
 
-    sources = [minecraft_jar] + sorted(glob.glob(os.path.join(instance, 'mods', '*.jar')))
+    sources = [minecraft_jar] + sorted(glob.glob(os.path.join(instance, 'mods', MOTIF_JAR)))
     sources += sorted(glob.glob(os.path.join(instance, 'datapacks', '*.zip')))
     for source in sources:
         try:
@@ -411,19 +417,19 @@ def main():
     minecraft_jar, minecraft_fr = minecraft_files(instance)
 
     lang = Lang()
-    for jar in [minecraft_jar] + sorted(glob.glob(os.path.join(instance, 'mods', '*.jar'))):
+    for jar in [minecraft_jar] + sorted(glob.glob(os.path.join(instance, 'mods', MOTIF_JAR))):
         read_jar_langs(lang, jar)
     with open(minecraft_fr, encoding='utf-8') as f:
         lang.add('fr_fr', json.load(f))
     for d in glob.glob(os.path.join(instance, 'kubejs', 'assets', '*', 'lang')):
         for code in ('en_us', 'fr_fr'):
-            p = os.path.join(d, code + '.json')
+            p = os.path.join(d, code + EXT_JSON)
             if os.path.exists(p):
                 with open(p, encoding='utf-8-sig') as f:
                     lang.add(code, json.load(f))
 
     mods = {'minecraft', 'neoforge'}
-    for jar in glob.glob(os.path.join(instance, 'mods', '*.jar')):
+    for jar in glob.glob(os.path.join(instance, 'mods', MOTIF_JAR)):
         mods |= mod_ids(jar)
 
     raw = read_advancements(instance, minecraft_jar)
@@ -475,27 +481,27 @@ def main():
         '',
         'public static class AllTheMonsCompletionData',
         '{',
-        f'    /// <summary>Version du modpack relevée.</summary>',
+        '    /// <summary>Version du modpack relevée.</summary>',
         f'    public const string ModpackVersion = {cs(version)};',
         '',
         '    /// <summary>Chapitres du livre de quêtes, dans son ordre : groupe (vide pour les premiers) et titre.</summary>',
         '    public static readonly AllTheMonsChapter[] Chapters =',
-        '    [',
+        TABLEAU_DEBUT,
     ]
     lines += [f'        new({cs(g)}, {cs(t)}),' for g, t in chapters]
-    lines += ['    ];', '',
+    lines += [TABLEAU_FIN, '',
               '    /// <summary>Quêtes : identifiant de FTB Quests, chapitre (rang dans <see cref="Chapters"/>), titre, cachée.</summary>',
-              '    public static readonly AllTheMonsQuest[] Quests =', '    [']
+              '    public static readonly AllTheMonsQuest[] Quests =', TABLEAU_DEBUT]
     lines += [f'        new({cs(i)}, {c}, {cs(t)}{", true" if h else ""}),' for i, c, t, h in quests]
-    lines += ['    ];', '',
+    lines += [TABLEAU_FIN, '',
               '    /// <summary>Onglets de l\'écran des progrès : titre de leur succès racine.</summary>',
-              '    public static readonly string[] Tabs =', '    [']
+              '    public static readonly string[] Tabs =', TABLEAU_DEBUT]
     lines += [f'        {cs(titles[r])},' for r in tab_roots]
-    lines += ['    ];', '',
+    lines += [TABLEAU_FIN, '',
               '    /// <summary>Succès : identifiant, onglet (rang dans <see cref="Tabs"/>), titre, caché.</summary>',
-              '    public static readonly AllTheMonsAdvancement[] Advancements =', '    [']
+              '    public static readonly AllTheMonsAdvancement[] Advancements =', TABLEAU_DEBUT]
     lines += [f'        new({cs(k)}, {t}, {cs(title)}{", true" if h else ""}),' for k, t, title, h in advancements]
-    lines += ['    ];', '}', '']
+    lines += [TABLEAU_FIN, '}', '']
     with open(output, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines))
     fr_titles = sum(1 for k, *_ in advancements

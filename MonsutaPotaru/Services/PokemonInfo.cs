@@ -162,9 +162,9 @@ public sealed partial class PokemonInfo
     public PokemonView Describe(CobblemonPokemon mon, string trainerName)
     {
         var speciesName = mon.Species == 0 ? CobblemonPokemon.ShortId(mon.SpeciesId) : SpeciesName.GetSpeciesName(mon.Species, French);
-        var heldItem = mon.HeldItemId is not { } itemId ? "—"
-            : mon.HeldItem > 0 ? Get(_items, mon.HeldItem)
-            : CobblemonPokemon.ShortId(itemId);
+        var heldItem = "—";
+        if (mon.HeldItemId is { } itemId)
+            heldItem = mon.HeldItem > 0 ? Get(_items, mon.HeldItem) : CobblemonPokemon.ShortId(itemId);
         return new PokemonView(
             mon.Species,
             mon.Form,
@@ -177,7 +177,7 @@ public sealed partial class PokemonInfo
             mon.Nature is { } nature ? Get(_strings.natures, nature) : "?",
             mon.Ability > 0 ? Get(_strings.abilitylist, mon.Ability) : CobblemonPokemon.ShortId(mon.Nbt.Compound("Ability")?.String("AbilityName") ?? "?"),
             heldItem,
-            mon.Moves.Select(m => m.Move > 0 ? Get(_strings.movelist, m.Move) : CobblemonPokemon.ShortId(m.Id)).ToList(),
+            mon.ReadMoves().Select(m => m.Move > 0 ? Get(_strings.movelist, m.Move) : CobblemonPokemon.ShortId(m.Id)).ToList(),
             trainerName,
             "",
             CobblemonSave.GameName,

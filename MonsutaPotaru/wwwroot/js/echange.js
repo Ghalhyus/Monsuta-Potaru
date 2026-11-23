@@ -7,12 +7,15 @@
 // le navigateur (localStorage).
 
 const SOUND_KEY = "echange-son";
-const STOPPED = Symbol("arrêtée");
+const STOPPED = new Error("Animation arrêtée"); // rejet attendu quand on passe l'animation
 const LETTER = 28; // millisecondes par lettre
 const HOLD = 1100; // temps de lecture après une phrase
 const SILHOUETTE = "brightness(0) invert(1) drop-shadow(0 0 6px rgba(255, 255, 255, .9))";
 const VOLUME = .6;
 const FANFARE_MAX = 8000; // au plus, attente de la fin de la fanfare (fichier qui ne se termine pas)
+
+/** Lance step(item, index) sur chaque élément, chacun après la fin du précédent ; s'arrête au premier refus. */
+const inTurn = (items, step) => items.reduce((done, item, i) => done.then(() => step(item, i)), Promise.resolve());
 
 const sessions = new WeakMap(); // racine de l'animation → { abort, music }
 
@@ -85,19 +88,20 @@ async function run(root, signal, music) {
     const say = async line => {
         text.textContent = "";
         text.classList.add("trade-show-text-on");
-        for (let i = 1; i <= line.length; i++) {
-            text.textContent = line.slice(0, i);
-            await wait(LETTER);
-        }
+        await inTurn(Array.from({ length: line.length }), (_, i) => {
+            text.textContent = line.slice(0, i + 1);
+            return wait(LETTER);
+        });
         await wait(HOLD);
     };
+    const sayAll = part => inTurn(lines(part), say);
     const show = (element, visible = true) => element.classList.toggle("trade-show-visible", visible);
 
     // 1. Envoi : le Pokémon apparaît, dit au revoir, rentre dans sa Poké Ball, qui s'envole.
     music.play(music.trade);
     show(sent);
     await animate(sent, [{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "scale(1)" }], { duration: 500, easing: "ease-out" });
-    for (const line of lines("envoi")) await say(line);
+    await sayAll("envoi");
     await animate(sent, [{ filter: "none" }, { filter: SILHOUETTE }], { duration: 350 });
     show(ball);
     await Promise.all([
@@ -127,15 +131,14 @@ async function run(root, signal, music) {
     ]);
     await animate(received, [{ filter: SILHOUETTE }, { filter: "none" }], { duration: 400 });
     received.style.filter = "";
-    for (const line of lines("arrivee")) await say(line);
+    await sayAll("arrivee");
 
     // 4. Évolutions par échange ; sans évolution, le thème s'éteint doucement.
-    if (!$('[data-acteur="evolution-0"]')) music.fadeOut(music.trade, 1.5);
-    for (let i = 0; ; i++) {
-        const actor = $(`[data-acteur="evolution-${i}"]`);
-        if (!actor) break;
-        await evolve(actor, i);
-    }
+    const evolutions = [];
+    for (let actor = $('[data-acteur="evolution-0"]'); actor; actor = $(`[data-acteur="evolution-${evolutions.length}"]`))
+        evolutions.push(actor);
+    if (evolutions.length === 0) music.fadeOut(music.trade, 1.5);
+    await inTurn(evolutions, evolve);
     text.classList.add("trade-show-text-on");
 
     async function evolve(actor, i) {
@@ -151,7 +154,7 @@ async function run(root, signal, music) {
         music.fadeOut(music.trade, .5);
         music.play(music.evolution);
         await animate(actor, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
-        for (const line of lines(`evolution-${i}-debut`)) await say(line);
+        await sayAll(`evolution-${i}-debut`);
 
         screen.classList.add("trade-show-evolving");
         text.classList.remove("trade-show-text-on");
@@ -162,15 +165,14 @@ async function run(root, signal, music) {
         const changes = [];
         for (let d = 620; d > 45; d *= .82) changes.push(d);
         for (let n = 0; n < 14; n++) changes.push(45);
-        let showAfter = false;
-        for (const d of changes) {
-            showAfter = !showAfter;
+        await inTurn(changes, (d, n) => {
+            const showAfter = n % 2 === 0; // la nouvelle forme d'abord, puis l'ancienne, et ainsi de suite
             before.style.display = showAfter ? "none" : "";
             after.style.display = showAfter ? "" : "none";
             const shown = showAfter ? after : before;
             shown.animate([{ transform: "scale(.92)" }, { transform: "scale(1)" }], { duration: Math.min(d, 200) });
-            await wait(d);
-        }
+            return wait(d);
+        });
 
         // Éclair, nouvelle forme.
         await animate(flash, [{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
@@ -184,7 +186,7 @@ async function run(root, signal, music) {
             animate(flash, [{ opacity: 1 }, { opacity: 0 }], { duration: 900, easing: "ease-out" }),
             animate(after, [{ transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 900, easing: "ease-out" }),
         ]);
-        for (const line of lines(`evolution-${i}-fin`)) await say(line);
+        await sayAll(`evolution-${i}-fin`);
         await Promise.race([fanfare, wait(FANFARE_MAX)]); // le message reste jusqu'à la fin de la fanfare
         await wait(400);
     }

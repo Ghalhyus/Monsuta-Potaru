@@ -51,7 +51,7 @@ def c_defines(paths, values=None):
         src = open(path, encoding='utf-8', errors='replace').read()
         src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
         src = re.sub(r'//[^\n]*', '', src)
-        for m in re.finditer(r'^[ \t]*#define[ \t]+(\w+)[ \t]+([^\n]+)$', src, re.M):
+        for m in re.finditer(r'^[ \t]*#define[ \t]+(\w+)[ \t]([^\n]+)$', src, re.M):
             raw[m.group(1)] = m.group(2).strip()
     values = {} if values is None else values
 
@@ -68,7 +68,7 @@ def c_defines(paths, values=None):
             raise KeyError(name)
         return values[name]
 
-    for name in list(raw):
+    for name in raw:
         try:
             ev(name)
         except KeyError:

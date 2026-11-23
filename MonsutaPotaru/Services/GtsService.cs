@@ -92,7 +92,7 @@ public sealed class GtsEvents
 /// dans sa boîte de réception : aucune sauvegarde n'est écrite sans que son joueur soit là. Il le récupère dans le
 /// stockage interne ou dans la sauvegarde de son choix.
 /// </summary>
-public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory, StoredSaveService storedSaves, PokemonInfo info,
+public sealed partial class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory, StoredSaveService storedSaves, PokemonInfo info,
     GtsEvents events, ILogger<GtsService> logger)
 {
     /// <summary>Offres en ligne en même temps, par compte.</summary>
@@ -188,8 +188,6 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
             _ => games,
         };
     }
-
-    private static TradeFamily FamilyOf(GtsPokemon g) => new((EntityContext)g.FamilyContext, (GameBoyRegion)g.FamilyRegion);
 
     private static GtsWanted WantedOf(GtsPokemon g) =>
         new(g.WantedSpecies, g.WantedMinLevel, g.WantedMaxLevel, g.WantedGender, g.WantedShiny, g.WantedLegalOnly);
@@ -377,7 +375,11 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
 
     /// <summary>Place de l'équipe (« Équipe 2 ») ou d'une boîte (« Boîte 3, case 12 », nom de boîte du joueur compris).</summary>
     private static bool InPartyOrBox(string? location) =>
-        location is not null && (location.StartsWith("Équipe ", StringComparison.Ordinal) || System.Text.RegularExpressions.Regex.IsMatch(location, @", case \d+$"));
+        location is not null && (location.StartsWith("Équipe ", StringComparison.Ordinal) || BoxSlot().IsMatch(location));
+
+    /// <summary>Fin d'une place de boîte (« …, case 12 »). Délai d'une seconde : le texte vient de la sauvegarde.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@", case \d+$", System.Text.RegularExpressions.RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial System.Text.RegularExpressions.Regex BoxSlot();
 
     /// <summary>Offres en ligne du joueur, les plus récentes d'abord.</summary>
     public async Task<List<GtsOfferView>> MyOffersAsync(string userId)
@@ -414,7 +416,7 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
     private sealed record Source(BankPokemon Entry, PKM Pokemon, StoredSave? Save, SaveFile? Sav, TradeSlot? Slot, TradeFamily Family,
         string Origin, string? Problem);
 
-    private async Task<Source?> ReadSourceAsync(ApplicationDbContext db, string userId, int bankId)
+    private static async Task<Source?> ReadSourceAsync(ApplicationDbContext db, string userId, int bankId)
     {
         var entry = await db.BankPokemon.AsNoTracking().FirstOrDefaultAsync(p => p.Id == bankId && p.OwnerId == userId);
         if (entry is null || BankService.ToPkm(entry) is not { } pk)
@@ -428,7 +430,9 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
         var slot = SlotAt(sav, entry.Position);
         var inSave = slot is { } sl ? TradeService.Get(sav, sl) : null;
         string? problem = null;
-        if (inSave is not { Species: > 0 } || PokemonFingerprint.Of(inSave) != entry.Fingerprint)
+        if (slot is null)
+            problem = $"Ce Pokémon n'est ni dans l'équipe ni dans les boîtes ({entry.Location}) : il ne peut pas aller sur la GTS.";
+        else if (inSave is not { Species: > 0 } || PokemonFingerprint.Of(inSave) != entry.Fingerprint)
             problem = "Ce Pokémon a changé de place dans sa sauvegarde : recharge la page.";
         else if (inSave.IsEgg)
             problem = "Un œuf ne peut pas aller sur la GTS.";
@@ -436,8 +440,6 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
             problem = "Cette case est verrouillée par le jeu : ce Pokémon ne peut pas en sortir.";
         else if (slot is { InParty: true } party && !KeepsAPokemon(sav, party.Slot))
             problem = "C'est le dernier Pokémon (hors œufs) de l'équipe : il ne peut pas la quitter.";
-        if (slot is null && problem is null)
-            problem = $"Ce Pokémon n'est ni dans l'équipe ni dans les boîtes ({entry.Location}) : il ne peut pas aller sur la GTS.";
         return new(entry, inSave ?? pk, save, sav, slot, TradeFamily.Of(sav), Label(save), problem);
     }
 
@@ -607,7 +609,7 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
         string? Location, byte Context, byte[]? Data);
 
     /// <summary>Offres (parmi <paramref name="offers"/>) pour lesquelles le joueur a un Pokémon qui convient, d'un jeu compatible.</summary>
-    private async Task<HashSet<int>> OwnedAsync(ApplicationDbContext db, string userId, List<GtsPokemon> offers)
+    private static async Task<HashSet<int>> OwnedAsync(ApplicationDbContext db, string userId, List<GtsPokemon> offers)
     {
         if (offers.Count == 0)
             return [];
@@ -636,6 +638,9 @@ public sealed class GtsService(IDbContextFactory<ApplicationDbContext> dbFactory
     private static bool Fits(OwnedRow r, GtsWanted wanted) =>
         wanted.Matches(r.Species, r.Level, r.Gender ?? 2, r.IsShiny, r.IsLegal, r.IsEgg)
         && (r.StoredSaveId is null || InPartyOrBox(r.Location));
+
+    /// <summary>Famille d'échange d'un Pokémon déposé sur la GTS.</summary>
+    private static TradeFamily FamilyOf(GtsPokemon g) => new((EntityContext)g.FamilyContext, (GameBoyRegion)g.FamilyRegion);
 
     /// <summary>Famille d'un Pokémon de la collection : celle de sa sauvegarde, ou de son format au stockage interne.</summary>
     private static TradeFamily? FamilyOf(OwnedRow r, Dictionary<int, TradeFamily> saves)

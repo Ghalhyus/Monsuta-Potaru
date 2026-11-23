@@ -692,7 +692,7 @@ export async function create(container, component, options) {
         .filter(e => e.compareDocumentPosition(container) & Node.DOCUMENT_POSITION_FOLLOWING)
         .reduce((sum, e) => {
             const style = getComputedStyle(e);
-            return sum + e.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+            return sum + e.getBoundingClientRect().height + Number.parseFloat(style.marginTop) + Number.parseFloat(style.marginBottom);
         }, 0);
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
@@ -1677,7 +1677,8 @@ export async function create(container, component, options) {
         if (!sad) return;
         if (clock >= p.nextFlash + STORM.flash * 3) p.nextFlash = clock + random(...STORM.flashEvery);
         const t = clock - p.nextFlash, flashing = (t >= 0 && t < STORM.flash) || (t >= STORM.flash * 2 && t < STORM.flash * 3);
-        const frame = flashing ? "bolt" : Math.floor(clock / STORM.rain + p.id) % 2 ? "rain2" : "rain1";
+        const rain = Math.floor(clock / STORM.rain + p.id) % 2 ? "rain2" : "rain1";
+        const frame = flashing ? "bolt" : rain;
         const sway = Math.round(Math.sin(clock * 1.3 + p.id) * 0.8 * spriteK) / spriteK * spriteScale;
         // Bas du nuage (ligne STORM.cloud.length de l'image) posé au-dessus de la tête, comme le nom au survol
         const bottom = p.y - p.altitude - lift - h * 0.6 - STORM.gap;

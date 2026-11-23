@@ -78,7 +78,12 @@ public sealed class ChessService(IDbContextFactory<ApplicationDbContext> dbFacto
             var opponent = white ? c.BlackId : c.WhiteId;
             return new ChessPlay(
                 new MiniGamePlay(MiniGames.Chess, MiniGamePlay.AccountOrNull(opponent), c.At,
-                    c.WinnerId is null ? MiniGameOutcome.Draw : c.WinnerId == userId ? MiniGameOutcome.Won : MiniGameOutcome.Lost),
+                    c.WinnerId switch
+                    {
+                        null => MiniGameOutcome.Draw,
+                        var winner when winner == userId => MiniGameOutcome.Won,
+                        _ => MiniGameOutcome.Lost,
+                    }),
                 white ? c.WhiteTeam : c.BlackTeam, white ? c.WhiteCaptures : c.BlackCaptures, white ? c.BlackCaptures : c.WhiteCaptures);
         }).ToList();
     }

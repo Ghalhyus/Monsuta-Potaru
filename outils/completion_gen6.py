@@ -32,8 +32,43 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from completion_gen3 import anchored_rank  # noqa: E402
+from completion_gen3 import anchored_rank, split_on, split_paren, strip_paren  # noqa: E402
 from completion_gen6_rom import TRAINER_FLAGS, read_trainers  # noqa: E402
+
+# Textes répétés (lieux, libellés)
+ARENE = 'Arène'
+ARENE_DE_CLEMENTI_VILLE = 'Arène de Clémenti-Ville'
+ATOLL_DE_COMBAT = 'Atoll de Combat'
+CAVERNE_GELEE = 'Caverne Gelée'
+FORET_DE_NEUVARTAULT = 'Forêt de Neuvartault'
+FORET_IMPENETRABLE = 'Forêt Impénétrable'
+GROTTE_INCONNUE = 'Grotte Inconnue'
+GROTTE_ORIGINE = 'Grotte Origine'
+GROTTE_OUBLIEE = 'Grotte Oubliée'
+GROTTE_TREFONDS = 'Grotte Tréfonds'
+GROTTE_ZENITH = 'Grotte Zénith'
+ILE_DU_SUD = 'Île du Sud'
+LAVANDIA_SEA = 'Lavandia Sea'
+LIGUE_POKEMON = 'Ligue Pokémon'
+MAISON_DE_COMBAT = 'Maison de Combat'
+MEROUVILLE = 'Mérouville'
+PILIER_CELESTE = 'Pilier Céleste'
+PLAINE_SANS_NOM = 'Plaine sans Nom'
+PLANQUE_AQUA = 'Planque Aqua'
+PLANQUE_AQUA_MAGMA = 'Planque Aqua/Magma'
+PLANQUE_MAGMA = 'Planque Magma'
+PORT_TEMPERES = 'Port Tempères'
+PROF_PLATANE_OU_JOYAU_D_ILLUMIS = "Prof. Platane ou Joyau d'Illumis"
+ROUTE_110 = 'Route 110'
+ROUTE_111 = 'Route 111'
+ROUTE_119 = 'Route 119'
+ROUTE_12 = 'Route 12'
+ROUTE_120 = 'Route 120'
+ROUTE_16 = 'Route 16'
+ROUTE_7 = 'Route 7'
+ROUTE_8 = 'Route 8'
+ROUTE_VICTOIRE = 'Route Victoire'
+TOUR_MAITRISE = 'Tour Maîtrise'
 
 LOCAL_FLAGS = 0x60  # en dessous : propres à la carte
 MAX_ITEM = 775  # dernier objet de Rubis Oméga / Saphir Alpha (Flûte Éon)
@@ -42,40 +77,40 @@ MAX_ITEM = 775  # dernier objet de Rubis Oméga / Saphir Alpha (Flûte Éon)
 # une route ou un chenal se range d'office près de son numéro.
 ANCHORS = {
     # X / Y
-    'Bourg Croquis': 'Quarellis', 'Route 1': 'Quarellis', 'Forêt de Neuvartault': 'Route 3', 'Route 6': 'Palais Chaydeuvre',
-    'Château de Combat': 'Route 7', 'Bourg Pokéflûte': 'Route 7', 'Ville Pokéflûte': 'Route 7', 'Route 9': 'Route 8',
-    'Cave Connecterre': 'Route 8', 'Roche-sur-Gliffe': 'Route 8', 'Route 10': "Cromlac'h", 'Route 11': 'Grotte Miroitante',
-    'Aquarium de Roche-sur-Gliffe': 'Roche-sur-Gliffe', 'Baie Azur': 'Route 12', "Palais du Lac": 'Route 12',
-    'Route 15': 'Romant-sous-Bois', 'Romant-sous-Bois': 'Arène de Romant-sous-Bois', 'Route 16': 'Romant-sous-Bois',
-    'Route 17': 'La Frescale', 'Caverne Gelée': 'La Frescale', 'Mozheim': 'Route 18', 'Route 18': 'Flusselles',
+    'Bourg Croquis': 'Quarellis', 'Route 1': 'Quarellis', FORET_DE_NEUVARTAULT: 'Route 3', 'Route 6': 'Palais Chaydeuvre',
+    'Château de Combat': ROUTE_7, 'Bourg Pokéflûte': ROUTE_7, 'Ville Pokéflûte': ROUTE_7, 'Route 9': ROUTE_8,
+    'Cave Connecterre': ROUTE_8, 'Roche-sur-Gliffe': ROUTE_8, 'Route 10': "Cromlac'h", 'Route 11': 'Grotte Miroitante',
+    'Aquarium de Roche-sur-Gliffe': 'Roche-sur-Gliffe', 'Baie Azur': ROUTE_12, "Palais du Lac": ROUTE_12,
+    'Route 15': 'Romant-sous-Bois', 'Romant-sous-Bois': 'Arène de Romant-sous-Bois', ROUTE_16: 'Romant-sous-Bois',
+    'Route 17': 'La Frescale', CAVERNE_GELEE: 'La Frescale', 'Mozheim': 'Route 18', 'Route 18': 'Flusselles',
     'Route 20': 'Route 19', 'Village Pokémon': 'Route 20', 'Auffrac-les-Congères': "Arène d'Auffrac-les-Congères",
-    'Route 21': 'Route Victoire', 'Route 22': 'Bourg Croquis', 'Antre Néréen': 'Batisques', 'Grotte Coda': 'Route Victoire',
-    'Grotte Inconnue': 'Village Pokémon', 'Château Rillou': 'Route 7', 'Port Tempères': 'Arène de Port Tempères',
-    'Centrale de Kalos': 'Route 13', 'Usine de Poké Balls': 'Route 15', 'Tour Maîtrise': 'Yantreizh',
+    'Route 21': ROUTE_VICTOIRE, 'Route 22': 'Bourg Croquis', 'Antre Néréen': 'Batisques', 'Grotte Coda': ROUTE_VICTOIRE,
+    GROTTE_INCONNUE: 'Village Pokémon', 'Château Rillou': ROUTE_7, PORT_TEMPERES: 'Arène de Port Tempères',
+    'Centrale de Kalos': 'Route 13', 'Usine de Poké Balls': 'Route 15', TOUR_MAITRISE: 'Yantreizh',
     # Rubis Oméga / Saphir Alpha
     'Bourg-en-Vol': 'Route 101', 'Rosyères': 'Route 113', 'Chemin Ardent': 'Route 112', 'Sentier Sinuroc': 'Mont Chimnée',
-    'Vergazon': 'Tunnel Mérazon', 'Parc Safari': 'Route 121', 'Grotte Tréfonds': 'Chenal 125', 'Pacifiville': 'Chenal 131',
-    'Planque Magma': 'Planque Aqua/Magma', 'Planque Aqua': 'Planque Aqua/Magma', 'Lavandia Sea': 'Route 110',
-    'Rosaville': 'Route 113', 'Désert': 'Route 111', 'Chemin Mystère': 'Route 111', 'Vermilava': 'Arène de Vermilava',
-    'Clémenti-Ville': 'Arène de Clémenti-Ville', 'Cimetronelle': 'Arène de Cimetronelle', 'Atalanopolis':
-    "Arène d'Atalanopolis", 'Lavandia Mer': 'Lavandia', 'Pilier Céleste': 'Route 131', 'Grotte Fondmer': 'Caverne Fondmer',
-    'Ruines Désert': 'Route 111', 'Bateau Abandonné': 'Chenal 108', 'Musée Océano': 'Musée Océanographique',
-    'Fort de Vanitas': 'Fort-Vanitas', 'Porte de P. Tempères': 'Port Tempères', 'Porte de R. s/Gliffe': 'Roche-sur-Gliffe',
-    'Le Marina': 'Chenal 108', 'Maison des Pièges': 'Route 110', 'Éternara': 'Ligue Pokémon',
+    'Vergazon': 'Tunnel Mérazon', 'Parc Safari': 'Route 121', GROTTE_TREFONDS: 'Chenal 125', 'Pacifiville': 'Chenal 131',
+    PLANQUE_MAGMA: PLANQUE_AQUA_MAGMA, PLANQUE_AQUA: PLANQUE_AQUA_MAGMA, LAVANDIA_SEA: ROUTE_110,
+    'Rosaville': 'Route 113', 'Désert': ROUTE_111, 'Chemin Mystère': ROUTE_111, 'Vermilava': 'Arène de Vermilava',
+    'Clémenti-Ville': ARENE_DE_CLEMENTI_VILLE, 'Cimetronelle': 'Arène de Cimetronelle', 'Atalanopolis':
+    "Arène d'Atalanopolis", 'Lavandia Mer': 'Lavandia', PILIER_CELESTE: 'Route 131', 'Grotte Fondmer': 'Caverne Fondmer',
+    'Ruines Désert': ROUTE_111, 'Bateau Abandonné': 'Chenal 108', 'Musée Océano': 'Musée Océanographique',
+    'Fort de Vanitas': 'Fort-Vanitas', 'Porte de P. Tempères': PORT_TEMPERES, 'Porte de R. s/Gliffe': 'Roche-sur-Gliffe',
+    'Le Marina': 'Chenal 108', 'Maison des Pièges': ROUTE_110, 'Éternara': LIGUE_POKEMON,
     # Mirages (après l'Épisode Delta)
     'Forêt Mirage': 'Hoenn', 'Grotte Mirage': 'Hoenn', 'Mont Mirage': 'Hoenn', 'Île Mirage': 'Hoenn',
-    'Gouffre Informe': 'Hoenn', 'Grotte Zénith': 'Hoenn', "Île de l'Arc": 'Hoenn',
+    'Gouffre Informe': 'Hoenn', GROTTE_ZENITH: 'Hoenn', "Île de l'Arc": 'Hoenn',
 }
 
 # Lieux de FlagsEditorEX absents de la liste de PKHeX (ou à préciser) : nom anglais de PKHeX, ou nom français direct (« = »)
 PLACE_EN = {'Power Plant': 'Kalos Power Plant', 'PokeBall Factory': 'Poké Ball Factory', 'Lysandre Lab': 'Lysandre Labs',
-            'Weather Institute': 'Weather Institute', 'Desert': 'Route 111'}
+            'Weather Institute': 'Weather Institute', 'Desert': ROUTE_111}
 # Planques : une seule version (OR : Magma, AS : Aqua) ; la planque commune prend le nom de la version
 HIDEOUTS = {'Team Magma / Aqua Hideout': None, 'Team Aqua Hideout 2': 'AS', 'Team Aqua hideout': 'AS',
             'Team Magma hideout': 'OR', 'Team Magma Hideout 2': 'OR'}
 
 SUBPLACES = {
-    'Gym': 'Arène', 'Poké Center': 'Centre Pokémon', 'Underwater': "sous l'eau", 'House': 'maison', 'Fossil Lab': 'Labo Fossile',
+    'Gym': ARENE, 'Poké Center': 'Centre Pokémon', 'Underwater': "sous l'eau", 'House': 'maison', 'Fossil Lab': 'Labo Fossile',
     "Sycamore's Lab": 'Labo Platane', 'Hotel': 'hôtel', 'Hotel Room': 'hôtel', 'Café Woof': 'Café Ouaf', 'Station': 'gare',
     "Trainer's School": 'École des Dresseurs', 'Office Building': 'immeuble', 'Ranch House': 'ranch', 'Courtyard': 'jardins',
     'Berry Fields': 'Champs de Baies', 'Summit': 'sommet', 'Seaside Cycling Road': 'Piste Cyclable', 'Seashore House':
@@ -152,8 +187,8 @@ class Ctx:
     def place(self, loc):
         """Lieu français d'un lieu de FlagsEditorEX (« Lumiose City (South Boulevard) » → « Illumis »)."""
         if loc in HIDEOUTS:
-            return 'Planque Magma' if self.version == 'OR' else 'Planque Aqua'
-        base = re.sub(r'\s*\(.*\)$', '', loc)
+            return PLANQUE_MAGMA if self.version == 'OR' else PLANQUE_AQUA
+        base = strip_paren(loc)
         base = PLACE_EN.get(base, base)
         if base not in self.place_fr:
             UNKNOWN.add(f'lieu {loc}')
@@ -168,14 +203,16 @@ def floor(token):
     m = re.fullmatch(r'(\d+)F', token)
     if m:
         n = int(m.group(1)) - 1
-        return 'rez-de-chaussée' if n == 0 else '1er étage' if n == 1 else f'{n}e étage'
+        if n == 0:
+            return 'rez-de-chaussée'
+        return '1er étage' if n == 1 else f'{n}e étage'
     return None
 
 
 def subplace(sub):
     """Précision française d'un sous-lieu de FlagsEditorEX (« Gym 2F » → « Arène », « B1F » → « sous-sol 1 »)."""
     sub = re.sub(r'^\(.*?\)\s*', '', sub).strip()
-    sub = re.sub(r'\s*\(.*\)$', '', sub)
+    sub = strip_paren(sub)
     if not sub:
         return None
     if f := floor(sub):
@@ -187,7 +224,7 @@ def subplace(sub):
     if words[-1] and floor(words[-1]):
         head = ' '.join(words[:-1])
         if head == 'Gym':
-            return 'Arène'
+            return ARENE
         return SUBPLACES.get(head, None) and f'{SUBPLACES[head]}, {floor(words[-1])}'
     if re.fullmatch(r'[\w\s]+ \d', sub):
         return SUBPLACES.get(sub.rsplit(' ', 1)[0])
@@ -206,7 +243,7 @@ def item_parts(c, text):
     text = re.sub(r'^the ', '', text.strip())
     parts = []
     for piece in re.split(r', | and | / ', text):
-        m = re.fullmatch(r'(.+?)(?: \(x(\d+)\))?', piece.strip())
+        m = re.fullmatch(r'(.+?)(?: \(x(\d+)\))?$', piece.strip())
         name, count = m.group(1), int(m.group(2) or 1)
         tm = re.fullmatch(r'(TM|HM)(\d+) \(.*\)', name)
         parts.append((c.item(f'{tm.group(1)}{int(tm.group(2)):02d}' if tm else name), count))
@@ -216,14 +253,16 @@ def item_parts(c, text):
 def tm_number(c, item):
     name = c.items_en[item]
     m = re.fullmatch(r'(TM|HM)(\d+)', name)
-    return int(m.group(2)) + (100 if m.group(1) == 'HM' else 0) if m else 0
+    if not m:
+        return 0
+    return int(m.group(2)) + (100 if m.group(1) == 'HM' else 0)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Étapes choisies à la main (check-lists de l'utilisateur)
 
 def badge(n, name, leader, city):
-    return (city, 'Arène', f'Badge {name} ({leader})', f'B:{n}')
+    return (city, ARENE, f'Badge {name} ({leader})', f'B:{n}')
 
 
 def xy_story(c, version):
@@ -238,20 +277,20 @@ def xy_story(c, version):
         ('Illumis (labo)', None, 'Combattre le Prof. Platane et choisir un starter de Kanto', c.w('WK_SYS_SECOND_POKETYPE', 3)),
         ('Route 5', None, 'Battre Tierno', c.w('WK_SCENE_R05', 2)),
         ('Palais Chaydeuvre', None, 'Retrouver Couafarel et recevoir la Poké Flûte', c.k('Poké Flute')),
-        ('Route 7', None, 'Réveiller Ronflex', c.f('FV_R07_KABI_EV')),
-        ('Route 7', None, 'Combat multi contre Tierno et Trovato', c.w('WK_SCENE_R07', 14)),
+        (ROUTE_7, None, 'Réveiller Ronflex', c.f('FV_R07_KABI_EV')),
+        (ROUTE_7, None, 'Combat multi contre Tierno et Trovato', c.w('WK_SCENE_R07', 14)),
         ('Grotte Étincelante', None, 'Chasser la Team Flare de la Grotte Étincelante', c.w('WK_SCENE_D03R0102', 4)),
-        ('Route 8', None, 'Recevoir la Canne', c.k('Old Rod')),
+        (ROUTE_8, None, 'Recevoir la Canne', c.k('Old Rod')),
         ('Relifac-le-Haut', None, 'Recevoir la Bicyclette', 'K:450|K:713'),
         badge(1, 'Mur', 'Lino', 'Relifac-le-Haut'),
         ('Relifac-le-Haut', None, 'Recevoir la CS04 Force', c.k('HM04')),
         ("Cromlac'h", None, 'Battre Cornélia', c.w('WK_SCENE_T04', 4)),
         badge(2, 'Lutte', 'Cornélia', 'Yantreizh'),
-        ('Tour Maîtrise', None, 'Recevoir le Méga-Anneau', c.k('Mega Ring')),
+        (TOUR_MAITRISE, None, 'Recevoir le Méga-Anneau', c.k('Mega Ring')),
         ('Yantreizh', None, 'Recevoir la CS03 Surf', c.k('HM03')),
-        ('Port Tempères', None, 'Recevoir la Super Canne', c.k('Good Rod')),
-        ('Port Tempères', None, 'Recevoir la CS02 Vol (Prof. Platane)', c.k('HM02')),
-        badge(3, 'Végétal', 'Amaro', 'Port Tempères'),
+        (PORT_TEMPERES, None, 'Recevoir la Super Canne', c.k('Good Rod')),
+        (PORT_TEMPERES, None, 'Recevoir la CS02 Vol (Prof. Platane)', c.k('HM02')),
+        badge(3, 'Végétal', 'Amaro', PORT_TEMPERES),
         ('Route 13', None, 'Trouver le Passe Centrale', c.k('Power Plant Pass') + '|' + c.w('WK_SCENE_D12R0103', 3)),
         ('Centrale de Kalos', None, 'Chasser la Team Flare de la Centrale', c.w('WK_SCENE_D12R0103', 3)),
         badge(4, 'Tension', 'Lem', 'Illumis'),
@@ -263,11 +302,11 @@ def xy_story(c, version):
         ('Route 19', None, 'Recevoir la CS05 Cascade', c.k('HM05')),
         # Conseil 4 : drapeau levé par le script de chaque salle (lu dans la ROM : salle 251 → 0x177…), sans doute remis à
         # zéro pour les revanches : la Ligue déjà gagnée compte aussi
-        ('Ligue Pokémon', 'Chambre du Brasier', 'Battre Malva (Conseil 4)', c.a('FE_PLR0302_BIGFOUR2_01', 'SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', 'Chambre du Barrage', 'Battre Narcisse (Conseil 4)', c.a('FE_PLR0402_BIGFOUR4_01', 'SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', "Chambre de l'Alliage", 'Battre Thyméo (Conseil 4)', c.a('FE_PLR0502_BIGFOUR1_01', 'SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', 'Chambre de la Guivre', 'Battre Dracéna (Conseil 4)', c.a('FE_PLR0602_BIGFOUR3_01', 'SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', None, 'Battre la Maîtresse Dianthéa et entrer au Panthéon', c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, 'Chambre du Brasier', 'Battre Malva (Conseil 4)', c.a('FE_PLR0302_BIGFOUR2_01', 'SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, 'Chambre du Barrage', 'Battre Narcisse (Conseil 4)', c.a('FE_PLR0402_BIGFOUR4_01', 'SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, "Chambre de l'Alliage", 'Battre Thyméo (Conseil 4)', c.a('FE_PLR0502_BIGFOUR1_01', 'SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, 'Chambre de la Guivre', 'Battre Dracéna (Conseil 4)', c.a('FE_PLR0602_BIGFOUR3_01', 'SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre la Maîtresse Dianthéa et entrer au Panthéon', c.f('SYS_FLAG_GAME_CLEAR')),
         ('Gare du TMV (Illumis)', None, 'Recevoir le Pokédex National et le Passe TMV', c.k('TMV Pass')),
         ('Labo Platane', None, 'Recevoir le PokéRadar', c.k('Poké Radar')),
         ('Flusselles (cadran solaire)', None, 'Faire améliorer le Méga-Anneau (Méga-Gemmes cachées)',
@@ -284,13 +323,13 @@ def oras_story(c, version):
         ('Bourg-en-Vol (labo)', None, 'Recevoir le Navi-Dex', c.f('SYS_FLAG_NAVI_ZUKAN_SET')),
         ('Clémenti-Ville', None, 'Aider Timmy à capturer un Tarsal (Navi-Fun)', c.f('SYS_FLAG_NAVI_PLAY_SET')),
         ('Bois Clémenti', None, 'Recevoir le Multi Exp', c.k('Exp. Share')),
-        ('Mérouville', None, 'Recevoir la CS01 Coupe', c.k('HM01')),
-        badge(0, 'Roche', 'Roxanne', 'Mérouville'),
-        ('Mérouville', None, 'Recevoir le Navi-Show', c.f('SYS_FLAG_NAVI_TV_SET')),
+        (MEROUVILLE, None, 'Recevoir la CS01 Coupe', c.k('HM01')),
+        badge(0, 'Roche', 'Roxanne', MEROUVILLE),
+        (MEROUVILLE, None, 'Recevoir le Navi-Show', c.f('SYS_FLAG_NAVI_TV_SET')),
         ('Myokara', None, 'Recevoir la Canne', c.k('Old Rod')),
         badge(1, 'Poing', 'Bastien', 'Myokara'),
         ('Poivressel', None, 'Recevoir le Passe Concours', c.k('Contest Pass')),
-        ('Route 110', None, "Recevoir le Cherch'Objet", c.k('Dowsing Machine')),
+        (ROUTE_110, None, "Recevoir le Cherch'Objet", c.k('Dowsing Machine')),
         ('Lavandia', None, 'Recevoir un vélo (Cross ou Course)', c.k('Mach Bike', 'Acro Bike')),
         ('Lavandia', None, 'Recevoir la CS06 Éclate-Roc', c.k('HM06')),
         badge(2, 'Dynamo', 'Voltère', 'Lavandia'),
@@ -298,26 +337,26 @@ def oras_story(c, version):
         ('Mont Chimnée', None, 'Recevoir les Lunettes Sable', c.k('Go-Goggles')),
         badge(3, 'Chaleur', 'Adriane', 'Vermilava'),
         # Clémenti-Ville est déjà un lieu du début (Timmy) : l'Arène à part, sinon le badge y serait regroupé
-        ('Arène de Clémenti-Ville', None, 'Badge Balance (Norman)', 'B:4'),
-        ('Arène de Clémenti-Ville', None, 'Recevoir la CS03 Surf', c.k('HM03')),
-        ('Île du Sud', None, 'Recevoir ' + ('Latios' if omega else 'Latias') + ' et le Méga-Bracelet',
+        (ARENE_DE_CLEMENTI_VILLE, None, 'Badge Balance (Norman)', 'B:4'),
+        (ARENE_DE_CLEMENTI_VILLE, None, 'Recevoir la CS03 Surf', c.k('HM03')),
+        (ILE_DU_SUD, None, 'Recevoir ' + ('Latios' if omega else 'Latias') + ' et le Méga-Bracelet',
          c.k('Mega Bracelet')),
-        ('Route 119', None, 'Recevoir la CS02 Vol', c.k('HM02')),
-        ('Route 120', None, 'Recevoir le Devon Scope', c.k('Devon Scope')),
+        (ROUTE_119, None, 'Recevoir la CS02 Vol', c.k('HM02')),
+        (ROUTE_120, None, 'Recevoir le Devon Scope', c.k('Devon Scope')),
         badge(5, 'Plume', 'Alizée', 'Cimetronelle'),
-        ('Planque Aqua/Magma', None, f'Explorer la planque de la {team}', c.k('Magma Suit' if omega else 'Aqua Suit')),
+        (PLANQUE_AQUA_MAGMA, None, f'Explorer la planque de la {team}', c.k('Magma Suit' if omega else 'Aqua Suit')),
         badge(6, 'Esprit', 'Lévy et Tatia', 'Algatia'),
         ('Algatia', None, 'Recevoir la CS07 Plongée', c.k('HM07')),
-        ('Grotte Origine', None, 'Capturer ' + ('Primo-Groudon' if omega else 'Primo-Kyogre'),
+        (GROTTE_ORIGINE, None, 'Capturer ' + ('Primo-Groudon' if omega else 'Primo-Kyogre'),
          c.f('SYS_FLAG_CAPTURE_GURAADON' if omega else 'SYS_FLAG_CAPTURE_KAIOOGA')),
-        ('Grotte Origine', None, 'Recevoir la Flûte Éon', c.k('Eon Flute')),
+        (GROTTE_ORIGINE, None, 'Recevoir la Flûte Éon', c.k('Eon Flute')),
         badge(7, 'Pluie', 'Marc', 'Atalanopolis'),
         ('Arène d\'Atalanopolis', None, 'Recevoir la CS05 Cascade', c.k('HM05')),
-        ('Ligue Pokémon', None, 'Battre le Maître Pierre Rochard et entrer au Panthéon', c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre le Maître Pierre Rochard et entrer au Panthéon', c.f('SYS_FLAG_GAME_CLEAR')),
         ('Hoenn', None, "Commencer l'Épisode Delta", c.f('SYS_FLAG_DELTA_SET')),
-        ('Pilier Céleste', None, 'Capturer Rayquaza', c.f('SYS_FLAG_CAPTURE_REKKUUZA') + '|D:384'),
+        (PILIER_CELESTE, None, 'Capturer Rayquaza', c.f('SYS_FLAG_CAPTURE_REKKUUZA') + '|D:384'),
         ('Espace', None, 'Capturer Deoxys', c.f('SYS_FLAG_CAPTURE_DEOKISISU')),
-        ('Atoll de Combat', None, 'Recevoir le Passe Bateau (Norman)', 'K:736'),
+        (ATOLL_DE_COMBAT, None, 'Recevoir le Passe Bateau (Norman)', 'K:736'),
         ('Sanctuaire (Chenal 134)', None, 'Ouvrir les grottes du Trio des Golems', c.f('SYS_FLAG_RELEASE_D104D116D117')),
     ]
 
@@ -328,12 +367,12 @@ def xy_encounters(c, version):
     return [
         ('Repaire Team Flare', None, 716 if x else 717, 'D:716' if x else 'D:717', None),
         ('Grotte Coda', None, 718, c.f('FE_EV_POKE03_CAPTURE'), None),
-        ('Grotte Inconnue', None, 150, c.f('FE_MYUUTUU_CAPTURE'), None),
+        (GROTTE_INCONNUE, None, 150, c.f('FE_MYUUTUU_CAPTURE'), None),
         ('Kalos', 'errant, selon le starter', 144, 'D:144|D:145|D:146', 'Artikodin, Électhor ou Sulfura'),
-        ('Route 7', None, 143, c.f('FE_R07_KABIGON_01'), None),
+        (ROUTE_7, None, 143, c.f('FE_R07_KABIGON_01'), None),
         ('Illumis (labo)', 'starter de Kanto', 1, c.w('WK_SYS_SECOND_POKETYPE', 3), 'Bulbizarre, Salamèche ou Carapuce'),
-        ('Tour Maîtrise', 'Cornélia', 448, 'D:448', None),
-        ('Route 12', 'cadeau', 131, 'D:131', None),
+        (TOUR_MAITRISE, 'Cornélia', 448, 'D:448', None),
+        (ROUTE_12, 'cadeau', 131, 'D:131', None),
         ('Roche-sur-Gliffe', 'fossile', 696, 'D:696|D:698', 'Ptyranidur ou Amagara'),
         ('Roche-sur-Gliffe', 'Vieil Ambre', 142, 'D:142', None),
         ('Roche-sur-Gliffe', 'fossile', 138 if not x else 345,
@@ -355,45 +394,45 @@ def oras_encounters(c, version):
 
     lati, other = ('RATHIOSU', 'RATHIASU') if omega else ('RATHIASU', 'RATHIOSU')
     u = [
-        ('Île du Sud', 'cadeau', 381 if omega else 380, cap(lati), None),
-        ('Île du Sud', 'Flûte Éon', 380 if omega else 381, cap(other), None),
-        ('Grotte Origine', None, 383 if omega else 382, cap('GURAADON' if omega else 'KAIOOGA'), None),
-        ('Pilier Céleste', None, 384, cap('REKKUUZA') + '|D:384', None),
+        (ILE_DU_SUD, 'cadeau', 381 if omega else 380, cap(lati), None),
+        (ILE_DU_SUD, 'Flûte Éon', 380 if omega else 381, cap(other), None),
+        (GROTTE_ORIGINE, None, 383 if omega else 382, cap('GURAADON' if omega else 'KAIOOGA'), None),
+        (PILIER_CELESTE, None, 384, cap('REKKUUZA') + '|D:384', None),
         ('Espace', None, 386, cap('DEOKISISU'), None),
         ('Ruines Désert', None, 377, cap('REZIROKKU'), None),
         ("Grotte de l'Îlot", None, 378, cap('REZIAISU'), None),
         ('Tombeau Antique', None, 379, cap('REZISUTIRU'), None),
         ("Grotte de l'Îlot", None, 486, cap('REZIGIGASU'), None),
-        ('Lavandia Sea', None, 250 if omega else 249, cap('HOUOU' if omega else 'RUGIA'), None),
-        ('Forêt Impénétrable', 'mirage', 243, cap('RAIKOU'), None),
-        ('Forêt Impénétrable', 'mirage', 244, cap('ENTEI'), None),
-        ('Forêt Impénétrable', 'mirage', 245, cap('SUIKUN'), None),
-        ('Grotte Oubliée', 'mirage', 480, cap('YUKUSII'), None),
-        ('Grotte Oubliée', 'mirage', 481, cap('EMURITTO'), None),
-        ('Grotte Oubliée', 'mirage', 482, cap('AGUNOMU'), None),
+        (LAVANDIA_SEA, None, 250 if omega else 249, cap('HOUOU' if omega else 'RUGIA'), None),
+        (FORET_IMPENETRABLE, 'mirage', 243, cap('RAIKOU'), None),
+        (FORET_IMPENETRABLE, 'mirage', 244, cap('ENTEI'), None),
+        (FORET_IMPENETRABLE, 'mirage', 245, cap('SUIKUN'), None),
+        (GROTTE_OUBLIEE, 'mirage', 480, cap('YUKUSII'), None),
+        (GROTTE_OUBLIEE, 'mirage', 481, cap('EMURITTO'), None),
+        (GROTTE_OUBLIEE, 'mirage', 482, cap('AGUNOMU'), None),
         ('Faille', 'au-dessus de Myokara', 484 if omega else 483, cap('PARUKIA' if omega else 'DHIARUGA'), None),
         ('Faille', 'au-dessus de Myokara', 487, cap('GIRATHINA'), None),
-        ('Grotte Zénith', 'mirage', 485, cap('HIIDORAN'), None),
+        (GROTTE_ZENITH, 'mirage', 485, cap('HIIDORAN'), None),
         ("Île de l'Arc", 'mirage', 488, cap('KURESERIA'), None),
         ('Grotte Évanescente', 'mirage', 643 if omega else 644, cap('RESIRAMU' if omega else 'ZEKUROMU'), None),
         ('Gouffre Informe', 'mirage', 646, cap('KYUREMU'), None),
-        ('Plaine sans Nom', 'mirage', 638, cap('KOBARUON'), None),
-        ('Plaine sans Nom', 'mirage', 639, cap('TERAKION'), None),
-        ('Plaine sans Nom', 'mirage', 640, cap('BIRIZION'), None),
+        (PLAINE_SANS_NOM, 'mirage', 638, cap('KOBARUON'), None),
+        (PLAINE_SANS_NOM, 'mirage', 639, cap('TERAKION'), None),
+        (PLAINE_SANS_NOM, 'mirage', 640, cap('BIRIZION'), None),
         ('Grand Envol', 'nuages noirs', 641 if omega else 642, cap('TORUNEROSU' if omega else 'BORUTOROSU'), None),
         ('Grand Envol', 'nuages noirs', 645, cap('RANDOROSU'), None),
-        ('Lavandia Sea', None, 442, c.f('FE_D115R0109_CAP_MIKARUGE_01'), None),
+        (LAVANDIA_SEA, None, 442, c.f('FE_D115R0109_CAP_MIKARUGE_01'), None),
     ]
     for flag in ('FV_D114R0102_BIRIRIDAMA01', 'FV_D114R0102_BIRIRIDAMA02', 'FV_D114R0102_BIRIRIDAMA03',
                  'FV_D114R0102_BIRIRIDAMA04'):
         u.append(('New Lavandia', 'déguisé en objet', 100, c.f(flag), None))
-    for flag, where in (('FV_R120A_STOPPER_01', 'pont'), ('FV_R119A_STOPPER_04', 'Route 119'),
+    for flag, where in (('FV_R120A_STOPPER_01', 'pont'), ('FV_R119A_STOPPER_04', ROUTE_119),
                         ('FV_R120A_STOPPER_04', 'escalier'), ('FV_R120A_STOPPER_05', 'hautes herbes'),
                         ('FV_T104_STOPPER_01', 'Vermilava'), ('FV_C107R0601_STOPPER_01', 'Centre Spatial')):
-        zone = {'Route 119': 'Route 119', 'Vermilava': 'Vermilava', 'Centre Spatial': 'Algatia'}.get(where, 'Route 120')
-        u.append((zone, f'invisible ({where})' if zone == 'Route 120' else 'invisible', 352, c.f(flag), None))
-    hideout = ('Planque Magma', 'FV_D120R0106_POKE_01', 'FV_D120R0106_POKE_02') if omega else \
-        ('Planque Aqua', 'FV_D109R0106_POKE_01', 'FV_D109R0106_POKE_02')
+        zone = {ROUTE_119: ROUTE_119, 'Vermilava': 'Vermilava', 'Centre Spatial': 'Algatia'}.get(where, ROUTE_120)
+        u.append((zone, f'invisible ({where})' if zone == ROUTE_120 else 'invisible', 352, c.f(flag), None))
+    hideout = (PLANQUE_MAGMA, 'FV_D120R0106_POKE_01', 'FV_D120R0106_POKE_02') if omega else \
+        (PLANQUE_AQUA, 'FV_D109R0106_POKE_01', 'FV_D109R0106_POKE_02')
     for flag in hideout[1:]:
         u.append((hideout[0], 'déguisé en objet', 101, c.f(flag), None))
     u += [
@@ -464,70 +503,70 @@ def contests(c):
 # (Pharampite, Ptéraïte de X / Y) n'y sont pas. Exclues : Latiasite et Latiosite de X / Y (échange depuis Rubis Oméga /
 # Saphir Alpha).
 XY_MEGA = [
-    ('Illumis', 'Prof. Platane ou Joyau d\'Illumis', 'Venusaurite', None),
-    ('Illumis', 'Prof. Platane ou Joyau d\'Illumis', 'Charizardite X', 'X'),
-    ('Illumis', 'Prof. Platane ou Joyau d\'Illumis', 'Charizardite Y', 'Y'),
-    ('Illumis', 'Prof. Platane ou Joyau d\'Illumis', 'Blastoisinite', None),
-    ('Tour Maîtrise', 'avec Lucario', 'Lucarionite', None),
+    ('Illumis', PROF_PLATANE_OU_JOYAU_D_ILLUMIS, 'Venusaurite', None),
+    ('Illumis', PROF_PLATANE_OU_JOYAU_D_ILLUMIS, 'Charizardite X', 'X'),
+    ('Illumis', PROF_PLATANE_OU_JOYAU_D_ILLUMIS, 'Charizardite Y', 'Y'),
+    ('Illumis', PROF_PLATANE_OU_JOYAU_D_ILLUMIS, 'Blastoisinite', None),
+    (TOUR_MAITRISE, 'avec Lucario', 'Lucarionite', None),
     ('Romant-sous-Bois', None, 'Gengarite', None),
-    ('Caverne Gelée', None, 'Abomasite', None),
+    (CAVERNE_GELEE, None, 'Abomasite', None),
     ('Illumis', 'Tarsal de Dianthéa', 'Gardevoirite', None),
     ('Batisques', 'rival', 'Absolite', None),
-    ('Grotte Inconnue', None, 'Mewtwonite X', 'X'),
-    ('Grotte Inconnue', None, 'Mewtwonite Y', 'Y'),
+    (GROTTE_INCONNUE, None, 'Mewtwonite X', 'X'),
+    (GROTTE_INCONNUE, None, 'Mewtwonite Y', 'Y'),
     ('Grotte Miroitante', '20h-21h', 'Alakazite', None),
     ('Grotte Étincelante', '20h-21h', 'Kangaskhanite', None),
-    ('Forêt de Neuvartault', '20h-21h', 'Pinsirite', 'X'),
-    ('Forêt de Neuvartault', '20h-21h', 'Heracronite', 'Y'),
+    (FORET_DE_NEUVARTAULT, '20h-21h', 'Pinsirite', 'X'),
+    (FORET_DE_NEUVARTAULT, '20h-21h', 'Heracronite', 'Y'),
     ('Mozheim', '20h-21h', 'Gyaradosite', None),
-    ('Caverne Gelée', '20h-21h', 'Scizorite', None),
-    ('Route 16', '20h-21h', 'Manectite', 'X'),
-    ('Route 16', '20h-21h', 'Houndoominite', 'Y'),
+    (CAVERNE_GELEE, '20h-21h', 'Scizorite', None),
+    (ROUTE_16, '20h-21h', 'Manectite', 'X'),
+    (ROUTE_16, '20h-21h', 'Houndoominite', 'Y'),
     ('Relifac-le-Haut', 'Arène, 20h-21h', 'Tyranitarite', 'X'),
     ('Relifac-le-Haut', 'Arène, 20h-21h', 'Aggronite', 'Y'),
     ('Fort-Vanitas', '20h-21h', 'Mawilite', None),
     ('Romant-sous-Bois', '20h-21h', 'Medichamite', None),
     ('Route 22', 'Chambre Néant', 'Banettite', None),
-    ('Route Victoire', '20h-21h', 'Garchompite', None),
+    (ROUTE_VICTOIRE, '20h-21h', 'Garchompite', None),
     ('Kalos', 'distribution', 'Blazikenite', None),
 ]
 ORAS_MEGA = [
     ('Nénucrique', None, 'Altarianite', None),
-    ('Atoll de Combat', None, 'Cameruptite', None),
-    ('Lavandia Sea', None, 'Beedrillite', None),
+    (ATOLL_DE_COMBAT, None, 'Cameruptite', None),
+    (LAVANDIA_SEA, None, 'Beedrillite', None),
     ('Site Météore', 'après Delta', 'Salamencite', None),
     ('Hoenn', 'distribution (avec Diancie)', 'Diancite', None),
-    ('Grotte Tréfonds', None, 'Slowbronite', None),
+    (GROTTE_TREFONDS, None, 'Slowbronite', None),
     ('Autéquia', 'après Delta', 'Galladite', None),
     ('Route 114', 'Pierre Rochard ou 1 500 P', 'Sceptilite', None),
     ('Route 114', 'Pierre Rochard ou 1 500 P', 'Swampertite', None),
-    ('Route 120', 'Pierre Rochard (Poussifeu)', 'Blazikenite', None),
-    ('Île du Sud', None, 'Latiasite', None),
-    ('Île du Sud', None, 'Latiosite', None),
+    (ROUTE_120, 'Pierre Rochard (Poussifeu)', 'Blazikenite', None),
+    (ILE_DU_SUD, None, 'Latiasite', None),
+    (ILE_DU_SUD, None, 'Latiosite', None),
     ('Lavandia', None, 'Lopunnite', None),
-    ('Ligue Pokémon', 'Pierre Rochard, 2e victoire', 'Metagrossite', None),
-    ('Atoll de Combat', 'Beladonis', 'Audinite', None),
-    ('Grotte Tréfonds', 'marée basse', 'Glalitite', None),
-    ('Mérouville', 'Pierre Insolite', 'Pidgeotite', None),
-    ('Atoll de Combat', None, 'Sharpedonite', None),
+    (LIGUE_POKEMON, 'Pierre Rochard, 2e victoire', 'Metagrossite', None),
+    (ATOLL_DE_COMBAT, 'Beladonis', 'Audinite', None),
+    (GROTTE_TREFONDS, 'marée basse', 'Glalitite', None),
+    (MEROUVILLE, 'Pierre Insolite', 'Pidgeotite', None),
+    (ATOLL_DE_COMBAT, None, 'Sharpedonite', None),
     ('Grotte Granite', 'Vélo Course', 'Steelixite', None),
     ('Atalanopolis', None, 'Sablenite', None),
     ('Poivressel', None, 'Alakazite', None),
-    ('Route 110', 'Piste Cyclable', 'Manectite', None),
+    (ROUTE_110, 'Piste Cyclable', 'Manectite', None),
     ('Vergazon', None, 'Mawilite', None),
     ('Tunnel Mérazon', None, 'Aggronite', None),
     ('Vermilava', None, 'Houndoominite', None),
-    ('Grotte Zénith', None, 'Charizardite Y', None),
+    (GROTTE_ZENITH, None, 'Charizardite Y', None),
     ('Mont Mémoria', None, 'Medichamite', None),
     ('Mont Mémoria', None, 'Banettite', None),
     ('Route 123', None, 'Gyaradosite', None),
     ('Chenal 127', None, 'Heracronite', None),
     ('Chenal 124', None, 'Pinsirite', None),
-    ('Mérouville', 'Delta', 'Aerodactylite', None),
-    ('Ligue Pokémon', None, 'Mewtwonite Y', None),
+    (MEROUVILLE, 'Delta', 'Aerodactylite', None),
+    (LIGUE_POKEMON, None, 'Mewtwonite Y', None),
     ('Pacifiville', None, 'Kangaskhanite', None),
     ('New Lavandia', None, 'Ampharosite', None),
-    ('Atoll de Combat', None, 'Gengarite', None),
+    (ATOLL_DE_COMBAT, None, 'Gengarite', None),
 ]
 
 
@@ -547,14 +586,13 @@ def checklist_machines(path):
 
 def clean_place(text):
     """Lieu d'une check-list : « Boutique de Yantreizh (50 000 P) » → (« Yantreizh », « Boutique, 50 000 P »)."""
-    m = re.fullmatch(r'(.+?)(?: \((.+)\))?', text.strip())
-    place, extra = m.group(1), m.group(2)
+    place, extra = split_paren(text.strip())
     shop = re.fullmatch(r"Boutique (?:de |d'|du )(.+)", place)
     if shop:
         place = shop.group(1)
         extra = 'Boutique' + (f', {extra}' if extra else '')
-    if place.startswith('Maison de Combat'):
-        place, extra = 'Batisques', 'Maison de Combat' + (f', {extra}' if extra else '')
+    if place.startswith(MAISON_DE_COMBAT):
+        place, extra = 'Batisques', MAISON_DE_COMBAT + (f', {extra}' if extra else '')
     place = place.replace(' Sud', '')
     return place, extra
 
@@ -586,7 +624,7 @@ def trainer_rows(c, version, rom, places_fr, checklist):
         for gym in (f'Arène de {name}', f"Arène d'{name}"):
             if gym in checklist:  # rangé avec son badge (Arène de Clémenti-Ville : 5e badge)
                 return gym, None
-        return name, 'Arène'
+        return name, ARENE
 
     out = []
     for n, t in sorted(trainers.items()):
@@ -614,9 +652,9 @@ def build(c, version, checklist, cur):
         return 10_000 if rank is None else rank
 
     def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, sort=0, team=None):
-        rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                         species=species, count=count, team=team,
-                         sort=(order(zone, section in ('Trainers', 'Items')), zone, sort)))
+        rows.append({'section': section, 'zone': zone, 'detail': det, 'done': done, 'label': label, 'item': item, 'tm': tm,
+                         'species': species, 'count': count, 'team': team,
+                         'sort': (order(zone, section in ('Trainers', 'Items')), zone, sort)})
 
     S, D, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     for i, (zone, det, label, cond) in enumerate(cur['story']):
@@ -638,10 +676,10 @@ def build(c, version, checklist, cur):
         elif kind == 'HIDDEN ITEM':
             text, extra, k = desc.removeprefix('Found '), 'caché', 1
         else:
-            m = re.fullmatch(r'Received (.+?) from .*', desc)
-            if not m:
+            parts = split_on(desc.removeprefix('Received '), ' from ', empty_end=True) if desc.startswith('Received ') else None
+            if not parts:
                 continue  # échanges d'objets (« Exchanged… »)
-            text, extra, k = m.group(1), 'cadeau', 2
+            text, extra, k = parts[0], 'cadeau', 2
         parts, choice = item_parts(c, text)
         det = ', '.join(p for p in (subplace(sub), extra) if p) or None
         zone = c.place(loc)
@@ -703,9 +741,11 @@ def emit(games, out):
              '{',
              '']
     for name, doc, rows in games:
-        lines.append(f'    /// <summary>Étapes de {doc} (le Pokédex national est ajouté à part : les 721).</summary>')
-        lines.append(f'    public static readonly CompletionRow[] {name} =')
-        lines.append('    [')
+        lines.extend([
+            f'    /// <summary>Étapes de {doc} (le Pokédex national est ajouté à part : les 721).</summary>',
+            f'    public static readonly CompletionRow[] {name} =',
+            '    [',
+        ])
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
@@ -748,14 +788,14 @@ if __name__ == '__main__':
             c = Ctx(flags, works, items_en, items_fr, places_en, places_fr, version)
             trainers = trainer_rows(c, version, roms[key], places_fr, order[key])
             if key == 'xy':
-                cur = dict(story=xy_story(c, version), encounters=xy_encounters(c, version), mega=XY_MEGA,
-                           quests=maison(c, 'Maison de Combat') + chateau(roms['xy']) + super_training(stages),
-                           machines=machines,
-                           trainers=trainers)
+                cur = {'story': xy_story(c, version), 'encounters': xy_encounters(c, version), 'mega': XY_MEGA,
+                           'quests': maison(c, MAISON_DE_COMBAT) + chateau(roms['xy']) + super_training(stages),
+                           'machines': machines,
+                           'trainers': trainers}
             else:
-                cur = dict(story=oras_story(c, version), encounters=oras_encounters(c, version), mega=ORAS_MEGA,
-                           quests=maison(c, 'Maison de Combat') + super_training(stages) + contests(c),
-                           machines=machines, trainers=trainers)
+                cur = {'story': oras_story(c, version), 'encounters': oras_encounters(c, version), 'mega': ORAS_MEGA,
+                           'quests': maison(c, MAISON_DE_COMBAT) + super_training(stages) + contests(c),
+                           'machines': machines, 'trainers': trainers}
             games.append((name, doc, build(c, version, order[key], cur)))
     if UNKNOWN:
         raise SystemExit('À traduire (ITEM_FIXES, PLACE_EN, SUBPLACES) : ' + ', '.join(sorted(UNKNOWN)))

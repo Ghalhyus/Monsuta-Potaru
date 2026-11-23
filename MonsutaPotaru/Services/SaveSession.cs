@@ -151,10 +151,12 @@ public sealed class SaveSession
     public string? IdentityKey => Minecraft?.IdentityKey ?? (Save is { } sav ? SaveIdentity.Of(sav).Key : null);
 
     /// <summary>Empreintes de tous les Pokémon de la sauvegarde (refus d'une vieille copie au chargement).</summary>
-    public IEnumerable<string> Fingerprints() =>
-        Minecraft is { } world ? world.All.Select(p => p.Fingerprint)
-        : Save is { } sav ? StoredSaveService.ReadAllPokemon(sav).Select(p => PokemonFingerprint.Of(p.Pokemon))
-        : [];
+    public IEnumerable<string> Fingerprints()
+    {
+        if (Minecraft is { } world)
+            return world.All.Select(p => p.Fingerprint);
+        return Save is { } sav ? StoredSaveService.ReadAllPokemon(sav).Select(p => PokemonFingerprint.Of(p.Pokemon)) : [];
+    }
 
     // ---------- Dépôts ----------
 
@@ -276,8 +278,12 @@ public sealed class SaveSession
     /// Raison pour laquelle ce Pokémon ne peut pas aller dans la sauvegarde chargée (« Dépôt / Retrait » le grise), ou
     /// null s'il le peut ; rien n'est écrit. Mêmes vérifications que <see cref="TryWithdraw(int, PKM, int, int, out string)"/>.
     /// </summary>
-    public string? WithdrawalProblem(PKM pk) =>
-        Minecraft is not null ? GameToMinecraftRefusal : Prepare(pk, out var error) is null ? error : null;
+    public string? WithdrawalProblem(PKM pk)
+    {
+        if (Minecraft is not null)
+            return GameToMinecraftRefusal;
+        return Prepare(pk, out var error) is null ? error : null;
+    }
 
     /// <summary>
     /// <see cref="WithdrawalProblem(PKM)"/> pour un Pokémon du stockage interne, quel que soit son format (null sans

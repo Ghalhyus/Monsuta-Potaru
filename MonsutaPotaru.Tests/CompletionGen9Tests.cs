@@ -14,7 +14,7 @@ public sealed class CompletionGen9Tests
 {
     private static CompletionRow[] Table(string game) => (CompletionRow[])typeof(Gen9CompletionData).GetField(game)!.GetValue(null)!;
 
-    private static IEnumerable<string> Atoms(string condition) => condition.Split('|', '+');
+    private static string[] Atoms(string condition) => condition.Split('|', '+');
 
     /// <summary>Marque une clé faite (valeur 1) dans la première place libre d'une liste d'Écarlate / Violet.</summary>
     private static void MarkDone(SAV9SV sav, uint block, string key)

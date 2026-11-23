@@ -20,7 +20,7 @@ class Rom:
             self.data = fh.read()
         d = self.data
         self.code = d[0x0C:0x10].decode('ascii')  # IRBF : Noir, français
-        fnt_off, fnt_len, fat_off, fat_len = struct.unpack_from('<IIII', d, 0x40)
+        fnt_off, _, fat_off, fat_len = struct.unpack_from('<IIII', d, 0x40)
         self.fat = [struct.unpack_from('<II', d, fat_off + 8 * i) for i in range(fat_len // 8)]
         self.paths = {}
         self._dir(d, fnt_off, 0xF000, '')
@@ -73,7 +73,7 @@ def narc(data):
 
 def texts(data):
     """Lignes d'un fichier de textes de la 5e génération (première section), déchiffrées."""
-    sections, lines, _, _ = struct.unpack_from('<HHII', data, 0)
+    _, lines, _, _ = struct.unpack_from('<HHII', data, 0)
     sec = struct.unpack_from('<I', data, 12)[0]
     out = []
     for i in range(lines):
@@ -106,12 +106,39 @@ def texts(data):
 # ---------------------------------------------------------------------------------------------------------------------
 # Scripts
 
+NAME = re.compile(r'\w+')
+SPACES = re.compile(r'\s*')
+
+
+def macros(text):
+    r"""Macros d'un fichier d'assembleur : [(nom, corps)], le corps sans les blancs qui précèdent « .endm ». Comme
+    re.finditer(r'\.macro (\w+)([^\n]*)\n((?:(?!\.endm).*\n)*?)\s*\.endm', text), sans retour en arrière."""
+    out, pos = [], 0
+    while (start := text.find('.macro ', pos)) >= 0:
+        pos = start + 1  # pas de macro complète ici : on cherche la suivante
+        name = NAME.match(text, start + len('.macro '))
+        header_end = text.find('\n', start)
+        if not name or header_end < 0:
+            continue
+        body = line = header_end + 1
+        while True:
+            word = SPACES.match(text, line).end()  # blancs (sauts de ligne compris) avant le mot suivant
+            if text.startswith('.endm', word):
+                out.append((name.group(), text[body:line]))
+                pos = word + len('.endm')
+                break
+            line = text.find('\n', word) + 1  # les lignes blanches passées font partie du corps
+            if line == 0:
+                break
+    return out
+
+
 def commands(inc_path):
     """Commandes des scripts d'après les macros de pokebw2 : numéro → (nom, [(taille, saut ?)…])."""
-    text = open(inc_path, encoding='utf-8').read()
+    with open(inc_path, encoding='utf-8') as f:
+        text = f.read()
     table = {}
-    for m in re.finditer(r'\.macro (\w+)([^\n]*)\n((?:(?!\.endm).*\n)*?)\s*\.endm', text):
-        name, body = m.group(1), m.group(3)
+    for name, body in macros(text):
         cmd = re.search(r'FieldCommand (\d+)', body)
         if not cmd:
             continue

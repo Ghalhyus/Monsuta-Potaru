@@ -77,8 +77,9 @@ public sealed record BattleSheet(string Name, string SpeciesName, string IconUrl
         var (number, hidden, written) = BattleNames.ParseMove(id);
         var data = number > 0 && number < BattleDexData.Moves.Length ? BattleDexData.Moves[number] : default;
         var type = new BattleSheetType(BattleNames.MoveType(id), BattleNames.MoveTypeKey(id));
-        var category = hidden is null ? data.Category
-            : PhysicalTypes.Contains(hidden) ? BattleMoveCategory.Physical : BattleMoveCategory.Special;
+        var category = data.Category;
+        if (hidden is not null)
+            category = PhysicalTypes.Contains(hidden) ? BattleMoveCategory.Physical : BattleMoveCategory.Special;
         return new BattleSheetMove(BattleNames.Move(id), type, pp is [var left, ..] ? left : null, pp is [_, var total, ..] ? total : null,
             category, written > 0 ? written : data.Power, data.Accuracy, data.Text ?? ""); // capacité inconnue : pas de texte
     }

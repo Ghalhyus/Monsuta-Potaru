@@ -271,7 +271,7 @@ public sealed class CompletionPagesTests : PageTestContext
         var cut = Render<CompletionList>();
         await cut.Click("+ Ajouter une sauvegarde");
         // Le groupe « Minecraft », après les générations
-        var minecraft = cut.FindAll(".livingdex-generation-toggle").Last();
+        var minecraft = cut.FindAll(".livingdex-generation-toggle")[^1];
         Assert.Equal("▸Minecraft (1 modpack)", minecraft.TextContent.Trim());
         await minecraft.ClickAsync(new());
         await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
@@ -395,7 +395,7 @@ public sealed class CompletionPagesTests : PageTestContext
     {
         var cut = Render<CompletionList>();
         await cut.Click("+ Ajouter une sauvegarde");
-        await cut.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        await cut.FindAll(".livingdex-generation-toggle")[^1].ClickAsync(new());
         await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
         cut.WaitForText("Aucun monde All the Mons disponible : stocke le dossier de ton monde dans");
     }

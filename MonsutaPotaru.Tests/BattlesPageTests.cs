@@ -72,7 +72,7 @@ public sealed class BattlesPageTests : PageTestContext
         // Menu principal : pas de bouton SAC (pas de sac en combat de câble), ABANDONNER avant POKéMON (à sa gauche) ;
         // une Pokéball par Pokémon de chaque équipe, six places par rangée
         Assert.False(sacha.HasButton("SAC"));
-        Assert.Equal(new[] { "ATTAQUE", "ABANDONNER", "POKéMON" }, sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
+        Assert.Equal(["ATTAQUE", "ABANDONNER", "POKéMON"], sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
         Assert.NotNull(sacha.Find(".battle-fight img")); // l'icône du Pokémon au combat
         var size = sacha.FindAll(".battle-balls.mine .battle-ball.ok").Count;
         Assert.InRange(size, 1, 6);
@@ -106,19 +106,19 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.True(shift.HasAttribute("disabled"));
         Assert.Contains("AU COMBAT", shift.TextContent);
         Assert.Matches(@"^\d+ s$", sacha.Find(".battle-sheet.selection > .battle-timer").TextContent);
-        Assert.Equal(new[] { "RÉSUMÉ", "CAPACITÉS", "↵" }, sacha.FindAll(".battle-sheet-foot button").Select(b => b.TextContent.Trim()));
+        Assert.Equal(["RÉSUMÉ", "CAPACITÉS", "↵"], sacha.FindAll(".battle-sheet-foot button").Select(b => b.TextContent.Trim()));
         Assert.NotEmpty(sacha.FindAll(".battle-bottom.equipe"));
 
         // Résumé : types, niveau, talent et sa description, objet, PV et les cinq statistiques
         await sacha.Click("RÉSUMÉ");
         Assert.Equal("Chenipan", sacha.Find(".battle-sheet.resume .battle-sheet-name").TextContent);
-        Assert.Equal(new[] { "Insecte" }, sacha.FindAll(".battle-sheet-types .type-bug").Select(t => t.TextContent));
+        Assert.Equal(["Insecte"], sacha.FindAll(".battle-sheet-types .type-bug").Select(t => t.TextContent));
         Assert.Equal("N.4", sacha.Find(".battle-sheet-label.niveau").TextContent);
         Assert.Contains("Écran Poudre", sacha.Find(".battle-sheet-left").TextContent);
         Assert.False(string.IsNullOrWhiteSpace(sacha.Find(".battle-sheet-left .battle-sheet-text").TextContent));
         Assert.Contains("Aucun objet tenu", sacha.Find(".battle-sheet-item").TextContent);
         Assert.Empty(sacha.FindAll(".battle-sheet-item img"));
-        Assert.Equal(new[] { "PV", "ATTAQUE", "DÉFENSE", "ATQ. SPÉ.", "DÉF. SPÉ.", "VITESSE" },
+        Assert.Equal(["PV", "ATTAQUE", "DÉFENSE", "ATQ. SPÉ.", "DÉF. SPÉ.", "VITESSE"],
             sacha.FindAll(".battle-sheet-stats .battle-stat > :first-child").Select(s => s.TextContent));
         Assert.All(sacha.FindAll(".battle-sheet-stats .battle-stat > :last-child"), value => Assert.Matches(@"^\d+(/\d+)?$", value.TextContent));
 
@@ -131,14 +131,14 @@ public sealed class BattlesPageTests : PageTestContext
         // Capacités : quatre emplacements (Charge et Sécrétion, deux vides), PP de chacune ; un clic ouvre le détail
         await sacha.Click("CAPACITÉS");
         Assert.Equal(4, sacha.FindAll(".battle-sheet.capacites .battle-sheet-move").Count);
-        Assert.Equal(new[] { "Charge", "Sécrétion" }, sacha.FindAll("button.battle-sheet-move .battle-sheet-move-name").Select(m => m.TextContent));
+        Assert.Equal(["Charge", "Sécrétion"], sacha.FindAll("button.battle-sheet-move .battle-sheet-move-name").Select(m => m.TextContent));
         Assert.Contains("PP 35/35", sacha.Find("button.battle-sheet-move").TextContent);
         await sacha.Find("button.battle-sheet-move").ClickAsync(new());
-        Assert.Equal(new[] { "Physique", "35", "95" }, sacha.FindAll(".battle-sheet.detail .battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
+        Assert.Equal(["Physique", "35", "95"], sacha.FindAll(".battle-sheet.detail .battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
         Assert.False(string.IsNullOrWhiteSpace(sacha.Find(".battle-sheet-detail .battle-sheet-text").TextContent));
         await sacha.Find("button[aria-label='Capacité suivante']").ClickAsync(new());
         Assert.Equal("Sécrétion", sacha.Find(".battle-sheet-detail .battle-sheet-move-name").TextContent);
-        Assert.Equal(new[] { "Statut", "—", "95" }, sacha.FindAll(".battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
+        Assert.Equal(["Statut", "—", "95"], sacha.FindAll(".battle-sheet-facts .battle-stat > :last-child").Select(s => s.TextContent));
         await sacha.Find("button[aria-label='Capacité précédente']").ClickAsync(new());
         Assert.Equal("Charge", sacha.Find(".battle-sheet-detail .battle-sheet-move-name").TextContent);
 
@@ -172,7 +172,7 @@ public sealed class BattlesPageTests : PageTestContext
         Assert.NotEmpty(sacha.FindAll(".battle.hybride"));
         Assert.Empty(sacha.FindAll(".battle.cote"));
         Assert.Equal(BattleLayout.Hybrid, (await preferences.SortsAsync("sacha")).Battle);
-        Assert.Equal(new[] { "ATTAQUE", "POKéMON", "ABANDONNER" }, sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
+        Assert.Equal(["ATTAQUE", "POKéMON", "ABANDONNER"], sacha.FindAll(".battle-menu button").Select(b => b.TextContent.Trim()));
         Assert.Contains("Ta sauvegarde", sacha.Find(".block-body > p").TextContent);
         Assert.Equal("Hybride", sacha.Find(".battle-zone > .battle-layout:first-child button.active").TextContent);
 

@@ -76,13 +76,13 @@ public sealed class ChessHubTests : IDisposable
         Assert.False(session.TeamChoice("ondine").OtherChose);
 
         // Ondine revient sur son choix tant que Sacha n'a pas choisi
-        Assert.Equal("Tu n'as pas encore choisi d'équipe.", _hub.ClearTeam(session, "sacha"));
-        Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.ClearTeam(session, "pierre"));
+        Assert.Equal("Tu n'as pas encore choisi d'équipe.", ChessHub.ClearTeam(session, "sacha"));
+        Assert.Equal("Cette partie n'attend plus d'équipe.", ChessHub.ClearTeam(session, "pierre"));
         Assert.Equal("Cette partie n'attend plus d'équipe.", _hub.KeepTeam(session, "pierre"));
         Assert.Contains("vous n'avez plus la même", _hub.KeepTeam(session, "ondine")); // pas la même : rien à garder
         var changed = 0;
         session.Changed += () => changed++;
-        Assert.Null(_hub.ClearTeam(session, "ondine"));
+        Assert.Null(ChessHub.ClearTeam(session, "ondine"));
         Assert.Equal(1, changed);
         Assert.False(session.TeamChoice("sacha").OtherChose);
         Assert.False(session.TeamChoice("sacha").OtherChanging); // pas de même équipe : rien à annoncer
@@ -90,7 +90,7 @@ public sealed class ChessHubTests : IDisposable
         Assert.Null(_hub.ChooseTeam(session, "ondine", "feu"));
         Assert.Null(_hub.ChooseTeam(session, "sacha", "electrique"));
         Assert.Equal(ChessStage.Playing, session.Stage);
-        Assert.Contains("la partie a commencé, ton équipe ne change plus", _hub.ClearTeam(session, "ondine"));
+        Assert.Contains("la partie a commencé, ton équipe ne change plus", ChessHub.ClearTeam(session, "ondine"));
         Assert.Equal("feu", session.TeamOf("ondine")!.Id);
         Assert.Equal(ChessColor.White, session.ColorOf("sacha"));
         Assert.Equal("Pikachu", session.At(Sq("e2"))!.Mon.Name);
@@ -119,14 +119,14 @@ public sealed class ChessHubTests : IDisposable
         Assert.Null(_hub.KeepTeam(session, "sacha"));
         Assert.Equal((true, false), (session.TeamChoice("sacha").IKeep, session.TeamChoice("sacha").OtherKeeps));
         Assert.True(session.TeamChoice("ondine").OtherKeeps);
-        Assert.Null(_hub.ClearTeam(session, "ondine"));
+        Assert.Null(ChessHub.ClearTeam(session, "ondine"));
         var sacha = session.TeamChoice("sacha");
         Assert.Equal(("feu", null, false, true), (sacha.Mine!.Id, sacha.Same, sacha.IKeep, sacha.OtherChanging));
         Assert.False(session.TeamChoice("ondine").OtherChanging); // c'est elle qui change
         Assert.True(session.TeamChoice("ondine").OtherChose);
 
         // Sacha change aussi : les deux rechoisissent, plus rien à annoncer
-        Assert.Null(_hub.ClearTeam(session, "sacha"));
+        Assert.Null(ChessHub.ClearTeam(session, "sacha"));
         Assert.False(session.TeamChoice("sacha").OtherChanging);
         Assert.False(session.TeamChoice("ondine").OtherChanging);
         Assert.Equal((false, false), (session.TeamChoice("sacha").OtherChose, session.TeamChoice("ondine").OtherChose));

@@ -82,8 +82,15 @@ public sealed class CobblemonPokemon(NbtCompound nbt)
     /// Numéro de l'espèce pour le living dex All the Mons : le national, ou celui que le modpack donne à ses propres
     /// espèces (Piglich 9901, Creepyon 9902) ; 0 pour une espèce inconnue.
     /// </summary>
-    public ushort DexNumber => Species != 0 ? Species
-        : CustomSpecies.TryGetValue(Key(SpeciesId.Contains(':') ? SpeciesId[(SpeciesId.IndexOf(':') + 1)..] : SpeciesId), out var n) ? n : (ushort)0;
+    public ushort DexNumber
+    {
+        get
+        {
+            if (Species != 0)
+                return Species;
+            return CustomSpecies.TryGetValue(Key(WithoutNamespace(SpeciesId)), out var n) ? n : (ushort)0;
+        }
+    }
 
     /// <summary>Espèces propres à All the Mons (mod « allthemons »), avec le numéro que le mod leur donne.</summary>
     public static readonly IReadOnlyDictionary<string, ushort> CustomSpecies = new Dictionary<string, ushort> { ["piglich"] = 9901, ["creepyon"] = 9902 };
@@ -159,7 +166,7 @@ public sealed class CobblemonPokemon(NbtCompound nbt)
     public int Ability => Math.Max(0, Lookup(AbilityIds, Nbt.Compound("Ability")?.String("AbilityName") ?? ""));
 
     /// <summary>Capacités : numéro PKHeX (0 si inconnue) et identifiant de Cobblemon.</summary>
-    public IReadOnlyList<(ushort Move, string Id)> Moves =>
+    public IReadOnlyList<(ushort Move, string Id)> ReadMoves() =>
         (Nbt.List("MoveSet")?.Items ?? []).OfType<NbtCompound>()
             .Select(m => m.String("MoveName") ?? "")
             .Where(id => id != "")
@@ -174,13 +181,10 @@ public sealed class CobblemonPokemon(NbtCompound nbt)
     public int HeldItem => HeldItemId is { } id ? Math.Max(0, Lookup(ItemIds, id)) : 0;
 
     /// <summary>IV de base (PV, Attaque, Défense, Atq. Spé., Déf. Spé., Vitesse), de 0 à 31.</summary>
-    public byte[] Ivs
+    public byte[] ReadIvs()
     {
-        get
-        {
-            var ivs = Nbt.Compound("IVs")?.Compound("Base");
-            return StatKeys.Select(k => (byte)Math.Clamp(ivs?.Integer(k) ?? 0, 0, 31)).ToArray();
-        }
+        var ivs = Nbt.Compound("IVs")?.Compound("Base");
+        return StatKeys.Select(k => (byte)Math.Clamp(ivs?.Integer(k) ?? 0, 0, 31)).ToArray();
     }
 
     /// <summary>Ball de capture, au nom anglais de PKHeX quand il le connaît.</summary>
@@ -220,13 +224,16 @@ public sealed class CobblemonPokemon(NbtCompound nbt)
 
     /// <summary>Numéro dans la liste, par identifiant (préfixe « cobblemon: » ignoré) ; -1 si absent.</summary>
     private static int Lookup(Dictionary<string, int> ids, string id) =>
-        ids.TryGetValue(Key(id.Contains(':') ? id[(id.IndexOf(':') + 1)..] : id), out var index) ? index : -1;
+        ids.TryGetValue(Key(WithoutNamespace(id)), out var index) ? index : -1;
+
+    /// <summary>Identifiant sans son espace de noms (« cobblemon:ember » → « ember »).</summary>
+    private static string WithoutNamespace(string id) => id.Contains(':') ? id[(id.IndexOf(':') + 1)..] : id;
 
     /// <summary>Premier numéro de chaque nom (PKHeX répète certains noms d'objets d'une génération à l'autre).</summary>
-    private static Dictionary<string, int> Index(IReadOnlyList<string> names)
+    private static Dictionary<string, int> Index(string[] names)
     {
         var ids = new Dictionary<string, int>();
-        for (int i = 1; i < names.Count; i++)
+        for (int i = 1; i < names.Length; i++)
             if (Key(names[i]) is { Length: > 0 } key)
                 ids.TryAdd(key, i);
         return ids;
@@ -239,11 +246,8 @@ public sealed class CobblemonPokemon(NbtCompound nbt)
     internal static string Key(string name)
     {
         var text = new StringBuilder(name.Length);
-        foreach (var c in name.Replace("♀", "f").Replace("♂", "m").Normalize(NormalizationForm.FormD))
-        {
-            if (char.IsAsciiLetterOrDigit(c))
-                text.Append(char.ToLowerInvariant(c));
-        }
+        foreach (var c in name.Replace("♀", "f").Replace("♂", "m").Normalize(NormalizationForm.FormD).Where(char.IsAsciiLetterOrDigit))
+            text.Append(char.ToLowerInvariant(c));
         return text.ToString();
     }
 

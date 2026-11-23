@@ -18,6 +18,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from completion_gen3_extract import extract  # noqa: E402
 
+# Textes répétés (lieux, libellés)
+CARMIN_SUR_MER = 'Carmin sur Mer'
+CELADOPOLE = 'Céladopole'
+CRAMOIS_ILE = "Cramois'Île"
+ILE_1 = 'Île 1'
+ILE_5 = 'Île 5'
+ILE_6 = 'Île 6'
+ILE_7 = 'Île 7'
+NENUCRIQUE = 'Nénucrique'
+ROC_NOMBRI = 'Roc Nombri'
+ROUTE_4 = 'Route 4'
+ROUTE_VICTOIRE = 'Route Victoire'
+TOUR_POKEMON = 'Tour Pokémon'
+ZONE_DE_COMBAT = 'Zone de Combat'
+
 # Classes de dresseurs comptées ailleurs : champions d'arène (badges), Conseil 4 et Maître (Ligue).
 STORY_CLASSES = {'TRAINER_CLASS_LEADER', 'TRAINER_CLASS_ELITE_FOUR', 'TRAINER_CLASS_CHAMPION'}
 # Un même combat sous plusieurs identifiants, selon le Pokémon de départ ou le personnage choisi : une seule étape.
@@ -85,6 +100,45 @@ def adventure_rank(zone, checklist, numbered=True):
     return None
 
 
+def split_on(text, *separators, empty_end=False):
+    """Morceaux de « A<sép. 1>B<sép. 2>C », coupé à la première occurrence de chaque séparateur : morceaux non vides (le
+    dernier peut l'être avec empty_end), sur une seule ligne ; None si le texte n'a pas cette forme. Comme
+    re.fullmatch(r'(.+?)<sép. 1>(.+?)<sép. 2>(.+)') (ou (.*) à la fin), sans retour en arrière."""
+    if '\n' in text:
+        return None
+    parts, start = [], 0
+    for sep in separators:
+        end = text.find(sep, start + 1)
+        if end < 0:
+            return None
+        parts.append(text[start:end])
+        start = end + len(sep)
+    if start == len(text) and not empty_end:
+        return None
+    return parts + [text[start:]]
+
+
+def split_paren(text):
+    r"""« Lieu (précision) » → (« Lieu », « précision ») ; (texte, None) sans parenthèse finale ; None pour un texte vide
+    ou sur plusieurs lignes. Comme re.fullmatch(r'(.+?)(?: \((.+)\))?'), sans retour en arrière."""
+    if not text or '\n' in text:
+        return None
+    cut = text.find(' (', 1) if text.endswith(')') else -1
+    if 0 < cut <= len(text) - 4:  # précision non vide
+        return text[:cut], text[cut + 2:-1]
+    return text, None
+
+
+def strip_paren(text):
+    r"""Le texte sans sa parenthèse finale (depuis la première « ( » de la dernière ligne) ni les blancs qui la précèdent.
+    Comme re.sub(r'\s*\(.*\)$', '', text), sans retour en arrière."""
+    body = text[:-1] if text.endswith('\n') else text  # $ passe le dernier saut de ligne
+    start = body.find('(', body.rfind('\n') + 1)
+    if start < 0 or not body.endswith(')'):
+        return text
+    return body[:start].rstrip() + text[len(body):]
+
+
 def anchored_rank(zone, checklist, anchors):
     """Rang du lieu ; s'il manque à la check-list, celui de son voisin désigné (et du voisin de celui-ci…) ; sinon, pour
     une route ou un chenal, celui du numéro le plus proche."""
@@ -102,20 +156,20 @@ def anchored_rank(zone, checklist, anchors):
 # de liste. Une route ou un chenal sans voisin se range près de son numéro.
 ANCHORS = {
     # Hoenn
-    'Ferry': 'Nénucrique', 'Rosyères': 'Route 113', 'Chemin Ardent': 'Route 112', 'Sentier Sinuroc': 'Mont Chimnée',
+    'Ferry': NENUCRIQUE, 'Rosyères': 'Route 113', 'Chemin Ardent': 'Route 112', 'Sentier Sinuroc': 'Mont Chimnée',
     'Vergazon': 'Tunnel Mérazon', 'Parc Safari': 'Route 121', 'Grotte Tréfonds': 'Chenal 125',
-    'Pacifiville': 'Chenal 131', 'Grotte Atelier': 'Zone de Combat', 'Roc Nombri': 'Zone de Combat',
-    'Zone de Combat': 'Plateau Indigo',
+    'Pacifiville': 'Chenal 131', 'Grotte Atelier': ZONE_DE_COMBAT, ROC_NOMBRI: ZONE_DE_COMBAT,
+    ZONE_DE_COMBAT: 'Plateau Indigo',
     # Kanto et Îles Sevii (Rouge Feu / Vert Feuille)
-    'Route 1': 'Jadielle', 'Forêt de Jade': 'Jadielle', 'Route 4': 'Mont Sélénite', 'Route 6': 'Carmin sur Mer',
-    'Route 11': 'Carmin sur Mer', 'Route 7': 'Céladopole', 'Route 16': 'Céladopole', 'Route 17': 'Céladopole',
-    'Lavanville': 'Tour Pokémon', 'Route 8': 'Tour Pokémon', 'Route 9': 'Route 10', 'Centrale': 'Route 10',
-    'Route 14': 'Parmanie', 'Route 15': 'Parmanie', 'Route 18': 'Parmanie', 'Chenal 19': 'Parmanie', 'Chenal 20': 'Parmanie', 'Chenal 21': "Cramois'Île",
-    'Route 23': 'Route Victoire', 'Caverne Azurée': 'Plateau Indigo',
-    'Plage Trésor': 'Île 1', 'Pont du Lien': 'Île 1', 'Route Tison': 'Île 1', 'Cap Falaise': 'Île 2',
-    'Chemin Île 3': 'Île 3', 'Grotte Perdue': 'Île 5', "Pré de l'Île 5": 'Île 5', 'Agualcanal': 'Île 6',
-    'Chemin Vert': 'Île 6', 'Forbuissons': 'Île 6', 'Île du Lointain': 'Île 6', 'Canyon Sesor': 'Île 7',
-    'Entrée Canyon': 'Île 7', 'Tour Dresseurs (extérieur)': 'Île 7', 'Ruines Tanoby': 'Île 7', 'Île 7': 'Île 6',
+    'Route 1': 'Jadielle', 'Forêt de Jade': 'Jadielle', ROUTE_4: 'Mont Sélénite', 'Route 6': CARMIN_SUR_MER,
+    'Route 11': CARMIN_SUR_MER, 'Route 7': CELADOPOLE, 'Route 16': CELADOPOLE, 'Route 17': CELADOPOLE,
+    'Lavanville': TOUR_POKEMON, 'Route 8': TOUR_POKEMON, 'Route 9': 'Route 10', 'Centrale': 'Route 10',
+    'Route 14': 'Parmanie', 'Route 15': 'Parmanie', 'Route 18': 'Parmanie', 'Chenal 19': 'Parmanie', 'Chenal 20': 'Parmanie', 'Chenal 21': CRAMOIS_ILE,
+    'Route 23': ROUTE_VICTOIRE, 'Caverne Azurée': 'Plateau Indigo',
+    'Plage Trésor': ILE_1, 'Pont du Lien': ILE_1, 'Route Tison': ILE_1, 'Cap Falaise': 'Île 2',
+    'Chemin Île 3': 'Île 3', 'Grotte Perdue': ILE_5, "Pré de l'Île 5": ILE_5, 'Agualcanal': ILE_6,
+    'Chemin Vert': ILE_6, 'Forbuissons': ILE_6, 'Île du Lointain': ILE_6, 'Canyon Sesor': ILE_7,
+    'Entrée Canyon': ILE_7, 'Tour Dresseurs (extérieur)': ILE_7, 'Ruines Tanoby': ILE_7, ILE_7: ILE_6,
 }
 
 
@@ -214,14 +268,14 @@ def build(d, game, places, checklist):
         if 'DAILY' not in x['flag']:
             item(x, 2, 'cadeau')
 
-    def V(name, value):
+    def var_at_least(name, value):
         """Variable de script au moins à <value> (numéro sans le 0x4000, comme PKHeX)."""
         if name not in k:
             raise SystemExit(f'Variable inconnue dans {game} : {name}')
         return f'W:{k[name] - 0x4000}:{value}'
 
     # Cadeaux sans drapeau juste après (le lecteur ne les voit pas) : leur trace, cherchée dans le script à la main
-    for n, (map_name, item_name, cond, det, *label) in enumerate(EXTRA_GIFTS[game](d, F, V)):
+    for n, (map_name, item_name, cond, det, *label) in enumerate(EXTRA_GIFTS[game](d, F, var_at_least)):
         value = k[item_name]
         det = det or ', '.join(p for p in (detail(map_name), 'cadeau') if p)
         add(I, zone_of(map_name), det, cond, label[0] if label else None, item=0 if value in tm_of else value,
@@ -294,7 +348,7 @@ def hoenn_story(game):
          f('FLAG_SOOTOPOLIS_ARCHIE_MAXIE_LEAVE' if e else 'FLAG_LEGENDARY_BATTLE_COMPLETED')),
         badge(8, 'Marc' if e else 'Juan', 'Atalanopolis', game),
         ('Mont Mémoria', None, "Recevoir l'Orbe des anciens du Mont Mémoria", f('FLAG_RECEIVED_RED_OR_BLUE_ORB')),
-        ('Route Victoire', None, 'Battre Timmy', f('FLAG_DEFEATED_WALLY_VICTORY_ROAD')),
+        (ROUTE_VICTOIRE, None, 'Battre Timmy', f('FLAG_DEFEATED_WALLY_VICTORY_ROAD')),
     ]
     for who, flag in (('Damien', 'SIDNEY' if e else 'SYDNEY'), ('Spectra', 'PHOEBE'), ('Glacia', 'GLACIA'), ('Aragon', 'DRAKE')):
         # Le jeu efface ces drapeaux pour les revanches : la Ligue gagnée une fois suffit.
@@ -303,7 +357,7 @@ def hoenn_story(game):
           ('Bourg-en-Vol', None, 'Recevoir le Pokédex National', f('FLAG_SYS_NATIONAL_DEX'))]
     if e:
         s += [('Site Météore', None, 'Battre Pierre Rochard', f('FLAG_DEFEATED_METEOR_FALLS_STEVEN')),
-              ('Zone de Combat', None, 'Recevoir le Passe Zone', f('FLAG_SYS_FRONTIER_PASS'))]
+              (ZONE_DE_COMBAT, None, 'Recevoir le Passe Zone', f('FLAG_SYS_FRONTIER_PASS'))]
     return s
 
 
@@ -341,18 +395,18 @@ def hoenn_encounters(game):
           ('Cimetronelle', 'maison, échange', 'SPECIES_PLUSLE', f('FLAG_FORTREE_NPC_TRADE_COMPLETED'), None),
           ('Pacifiville', 'maison, échange', 'SPECIES_HORSEA', f('FLAG_PACIFIDLOG_NPC_TRADE_COMPLETED'), None)]
     if e:
-        u += [('Zone de Combat', None, 'SPECIES_SUDOWOODO', f('FLAG_DEFEATED_SUDOWOODO'), None),
-              ('Zone de Combat', 'maison, échange', 'SPECIES_MEOWTH', f('FLAG_BATTLE_FRONTIER_TRADE_DONE'), None),
+        u += [(ZONE_DE_COMBAT, None, 'SPECIES_SUDOWOODO', f('FLAG_DEFEATED_SUDOWOODO'), None),
+              (ZONE_DE_COMBAT, 'maison, échange', 'SPECIES_MEOWTH', f('FLAG_BATTLE_FRONTIER_TRADE_DONE'), None),
               ('Île Lointaine', 'Vieille Carte', 'SPECIES_MEW', a('FLAG_DEFEATED_MEW', 'FLAG_CAUGHT_MEW'), None),
-              ('Roc Nombri', 'Ticket Mystique', 'SPECIES_LUGIA', a('FLAG_DEFEATED_LUGIA', 'FLAG_CAUGHT_LUGIA'), None),
-              ('Roc Nombri', 'Ticket Mystique', 'SPECIES_HO_OH', a('FLAG_DEFEATED_HO_OH', 'FLAG_CAUGHT_HO_OH'), None),
+              (ROC_NOMBRI, 'Ticket Mystique', 'SPECIES_LUGIA', a('FLAG_DEFEATED_LUGIA', 'FLAG_CAUGHT_LUGIA'), None),
+              (ROC_NOMBRI, 'Ticket Mystique', 'SPECIES_HO_OH', a('FLAG_DEFEATED_HO_OH', 'FLAG_CAUGHT_HO_OH'), None),
               ('Île Aurore', 'Ticket Aurora', 'SPECIES_DEOXYS', f('FLAG_DEFEATED_DEOXYS'), None)]
     return u
 
 
 def hoenn_quests(game):
     e = game == 'pokeemerald'
-    q = [('Nénucrique', 'Musée', f'Exposer le tableau {cat} (concours de rang Master)', f(f'FLAG_{flag}_PAINTING_MADE'))
+    q = [(NENUCRIQUE, 'Musée', f'Exposer le tableau {cat} (concours de rang Master)', f(f'FLAG_{flag}_PAINTING_MADE'))
          for cat, flag in (('Sang-Froid', 'COOL'), ('Beauté', 'BEAUTY'), ('Grâce', 'CUTE'), ('Intelligence', 'SMART'), ('Robustesse', 'TOUGH'))]
     for berry, flag in (('Kiwan', 'SPELON'), ('Palma', 'PAMTRE'), ('Myrte', 'WATMEL'), ('Stekpa', 'DURIN'), ('Durin', 'BELUE')):
         q.append(('Route 123', 'femme du Maître des Baies', f'Recevoir la Baie {berry}', f(f'FLAG_RECEIVED_{flag}_BERRY')))
@@ -361,9 +415,9 @@ def hoenn_quests(game):
                                ('PALACE', 'Palace de Combat', 'Esprit'), ('ARENA', 'Dojo de Combat', 'Cran'),
                                ('FACTORY', 'Usine de Combat', 'Savoir'), ('PIKE', 'Reptile de Combat', 'Chance'),
                                ('PYRAMID', 'Pyramide de Combat', 'Bravoure')):
-            q.append(('Zone de Combat', name, f"Symbole {sym} d'Argent", f(f'FLAG_SYS_{fac}_SILVER')))
-            q.append(('Zone de Combat', name, f"Symbole {sym} d'Or", f(f'FLAG_SYS_{fac}_GOLD')))
-        for move, flag, zone in (('Blabla Dodo', 'SLEEP_TALK', 'Cimetronelle'), ('Clonage', 'SUBSTITUTE', 'Nénucrique'),
+            q.append((ZONE_DE_COMBAT, name, f"Symbole {sym} d'Argent", f(f'FLAG_SYS_{fac}_SILVER')))
+            q.append((ZONE_DE_COMBAT, name, f"Symbole {sym} d'Or", f(f'FLAG_SYS_{fac}_GOLD')))
+        for move, flag, zone in (('Blabla Dodo', 'SLEEP_TALK', 'Cimetronelle'), ('Clonage', 'SUBSTITUTE', NENUCRIQUE),
                                  ('Copie', 'MIMIC', 'Vermilava'), ('Damoclès', 'DOUBLE_EDGE', 'Atalanopolis'),
                                  ('Dynamopoing', 'DYNAMICPUNCH', 'Algatia'), ('Explosion', 'EXPLOSION', 'Pacifiville'),
                                  ('Métronome', 'METRONOME', 'Autéquia'), ('Roulade', 'ROLLOUT', 'Lavandia'),
@@ -379,18 +433,18 @@ def frlg_story():
         ('Bourg Palette', 'Labo du Prof. Chen', 'Recevoir le Pokédex', f('FLAG_SYS_POKEDEX_GET')),
         badge(1, 'Pierre', 'Argenta', g), badge(2, 'Ondine', 'Azuria', g),
         ('Route 25', None, 'Aider Léo', f('FLAG_HELPED_BILL_IN_SEA_COTTAGE')),
-        badge(3, 'Major Bob', 'Carmin sur Mer', g),
+        badge(3, 'Major Bob', CARMIN_SUR_MER, g),
         ('Repaire Rocket', None, 'Vaincre Giovanni au Repaire Rocket', f('FLAG_HIDE_HIDEOUT_GIOVANNI')),
-        badge(4, 'Érika', 'Céladopole', g),
-        ('Tour Pokémon', None, 'Délivrer M. Fuji', f('FLAG_RESCUED_MR_FUJI')),
+        badge(4, 'Érika', CELADOPOLE, g),
+        (TOUR_POKEMON, None, 'Délivrer M. Fuji', f('FLAG_RESCUED_MR_FUJI')),
         ('Sylphe SARL', None, 'Libérer la Sylphe SARL', f('FLAG_GOT_MASTER_BALL_FROM_SILPH')),
-        badge(5, 'Koga', 'Parmanie', g), badge(6, 'Morgane', 'Safrania', g), badge(7, 'Auguste', "Cramois'Île", g),
+        badge(5, 'Koga', 'Parmanie', g), badge(6, 'Morgane', 'Safrania', g), badge(7, 'Auguste', CRAMOIS_ILE, g),
         badge(8, 'Giovanni', 'Jadielle', g),
         ('Ligue Pokémon', None, 'Vaincre la Ligue et entrer au Panthéon', f('FLAG_SYS_GAME_CLEAR')),
         ('Île 3', 'Bois Baies', 'Sauver Lostelle', f('FLAG_RESCUED_LOSTELLE')),
         ('Mont Braise', None, 'Récupérer le Rubis', f('FLAG_GOT_RUBY')),
-        ('Île 5', 'Entrepôt', "Vaincre la Team Rocket de l'Entrepôt", f('FLAG_DEFEATED_ROCKETS_IN_WAREHOUSE')),
-        ('Île 1', None, 'Rendre le Saphir à Ciléo', f('FLAG_RECOVERED_SAPPHIRE')),
+        (ILE_5, 'Entrepôt', "Vaincre la Team Rocket de l'Entrepôt", f('FLAG_DEFEATED_ROCKETS_IN_WAREHOUSE')),
+        (ILE_1, None, 'Rendre le Saphir à Ciléo', f('FLAG_RECOVERED_SAPPHIRE')),
         ('Bourg Palette', None, 'Recevoir le Pokédex National', f('FLAG_SYS_NATIONAL_DEX')),
     ]
 
@@ -406,38 +460,38 @@ def frlg_encounters():
          ('Centrale', None, 'SPECIES_ELECTRODE', f('FLAG_FOUGHT_POWER_PLANT_ELECTRODE_2'), None),
          # Un seul chien légendaire erre, celui qui suit le Pokémon de départ : compté par le Pokédex.
          ('Route 1', 'errant dans Kanto', 'SPECIES_ENTEI', raw('D:243|D:244|D:245'), 'Chien légendaire errant (selon ton starter)'),
-         ('Route 4', 'Centre Pokémon, acheté', 'SPECIES_MAGIKARP', f('FLAG_BOUGHT_MAGIKARP'), None),
-         ('Céladopole', 'Manoir, cadeau', 'SPECIES_EEVEE', f('FLAG_GOT_EEVEE'), None),
+         (ROUTE_4, 'Centre Pokémon, acheté', 'SPECIES_MAGIKARP', f('FLAG_BOUGHT_MAGIKARP'), None),
+         (CELADOPOLE, 'Manoir, cadeau', 'SPECIES_EEVEE', f('FLAG_GOT_EEVEE'), None),
          ('Safrania', 'Dojo, au choix', 'SPECIES_HITMONLEE', f('FLAG_GOT_HITMON_FROM_DOJO'), 'Kicklee ou Tygnon'),
          ('Sylphe SARL', 'cadeau', 'SPECIES_LAPRAS', f('FLAG_GOT_LAPRAS_FROM_SILPH'), None),
-         ("Cramois'Île", 'Labo Pokémon, fossile', 'SPECIES_OMANYTE', a('FLAG_REVIVED_DOME', 'FLAG_REVIVED_HELIX'), 'Amonita ou Kabuto'),
-         ("Cramois'Île", 'Labo Pokémon, Vieil Ambre', 'SPECIES_AERODACTYL', f('FLAG_REVIVED_AMBER'), None),
-         ('Île 5', "Labyrinthe d'O, œuf", 'SPECIES_TOGEPI', f('FLAG_GOT_TOGEPI_EGG'), None),
-         ('Roc Nombri', 'Ticket Mystique', 'SPECIES_LUGIA', f('FLAG_FOUGHT_LUGIA'), None),
-         ('Roc Nombri', 'Ticket Mystique', 'SPECIES_HO_OH', f('FLAG_FOUGHT_HO_OH'), None),
+         (CRAMOIS_ILE, 'Labo Pokémon, fossile', 'SPECIES_OMANYTE', a('FLAG_REVIVED_DOME', 'FLAG_REVIVED_HELIX'), 'Amonita ou Kabuto'),
+         (CRAMOIS_ILE, 'Labo Pokémon, Vieil Ambre', 'SPECIES_AERODACTYL', f('FLAG_REVIVED_AMBER'), None),
+         (ILE_5, "Labyrinthe d'O, œuf", 'SPECIES_TOGEPI', f('FLAG_GOT_TOGEPI_EGG'), None),
+         (ROC_NOMBRI, 'Ticket Mystique', 'SPECIES_LUGIA', f('FLAG_FOUGHT_LUGIA'), None),
+         (ROC_NOMBRI, 'Ticket Mystique', 'SPECIES_HO_OH', f('FLAG_FOUGHT_HO_OH'), None),
          ('Île Aurore', 'Ticket Aurora', 'SPECIES_DEOXYS', f('FLAG_FOUGHT_DEOXYS'), None)]
     for zone, det, sp, flag in (('Route 2', 'maison, échange', 'SPECIES_MR_MIME', 'MIMIEN'), ('Azuria', 'maison, échange', 'SPECIES_JYNX', 'ZYNX'),
                                 ('Route 5', 'souterrain, échange', 'SPECIES_NIDORAN_F', 'MS_NIDO'),
-                                ('Carmin sur Mer', 'maison, échange', 'SPECIES_FARFETCHD', 'CH_DING'),
+                                (CARMIN_SUR_MER, 'maison, échange', 'SPECIES_FARFETCHD', 'CH_DING'),
                                 ('Route 11', 'poste de garde, échange', 'SPECIES_NIDORINA', 'NINA'),
                                 ('Route 18', 'poste de garde, échange', 'SPECIES_LICKITUNG', 'MARC'),
-                                ("Cramois'Île", 'Labo Pokémon, échange', 'SPECIES_ELECTRODE', 'ESPHERE'),
-                                ("Cramois'Île", 'Labo Pokémon, échange', 'SPECIES_TANGELA', 'TANGENY'),
-                                ("Cramois'Île", 'Labo Pokémon, échange', 'SPECIES_SEEL', 'SEELOR')):
+                                (CRAMOIS_ILE, 'Labo Pokémon, échange', 'SPECIES_ELECTRODE', 'ESPHERE'),
+                                (CRAMOIS_ILE, 'Labo Pokémon, échange', 'SPECIES_TANGELA', 'TANGENY'),
+                                (CRAMOIS_ILE, 'Labo Pokémon, échange', 'SPECIES_SEEL', 'SEELOR')):
         u.append((zone, det, sp, f(f'FLAG_DID_{flag}_TRADE'), None))
     return u
 
 
 def frlg_quests():
     q = []
-    for move, flag, zone in (('Ultimapoing', 'MEGA_PUNCH', 'Route 4'), ('Ultimawashi', 'MEGA_KICK', 'Route 4'),
+    for move, flag, zone in (('Ultimapoing', 'MEGA_PUNCH', ROUTE_4), ('Ultimawashi', 'MEGA_KICK', ROUTE_4),
                              ('Frappe Atlas', 'SEISMIC_TOSS', 'Argenta'), ('Dévorêve', 'DREAM_EATER', 'Jadielle'),
-                             ('Éboulement', 'ROCK_SLIDE', 'Grotte'), ('Riposte', 'COUNTER', 'Céladopole'),
+                             ('Éboulement', 'ROCK_SLIDE', 'Grotte'), ('Riposte', 'COUNTER', CELADOPOLE),
                              ('Copie', 'MIMIC', 'Safrania'), ('Cage-Éclair', 'THUNDER_WAVE', 'Sylphe SARL'),
-                             ('Clonage', 'SUBSTITUTE', 'Parmanie'), ('E-Coque', 'SOFT_BOILED', 'Céladopole'),
-                             ('Métronome', 'METRONOME', "Cramois'Île"), ('Damoclès', 'DOUBLE_EDGE', 'Route Victoire'),
-                             ('Explosion', 'EXPLOSION', 'Île 1'), ('Plaquage', 'BODY_SLAM', 'Île 4'),
-                             ('Danse-Lames', 'SWORDS_DANCE', 'Île 7')):
+                             ('Clonage', 'SUBSTITUTE', 'Parmanie'), ('E-Coque', 'SOFT_BOILED', CELADOPOLE),
+                             ('Métronome', 'METRONOME', CRAMOIS_ILE), ('Damoclès', 'DOUBLE_EDGE', ROUTE_VICTOIRE),
+                             ('Explosion', 'EXPLOSION', ILE_1), ('Plaquage', 'BODY_SLAM', 'Île 4'),
+                             ('Danse-Lames', 'SWORDS_DANCE', ILE_7)):
         q.append((zone, 'Maître des capacités', f'Apprendre {move}', f(f'FLAG_TUTOR_{flag}')))
     q.append(('Cap Falaise', 'Maître des capacités', "Apprendre l'attaque ultime à son Pokémon de départ",
               a('FLAG_TUTOR_FRENZY_PLANT', 'FLAG_TUTOR_BLAST_BURN', 'FLAG_TUTOR_HYDRO_CANNON')))
@@ -455,7 +509,7 @@ def item_named(d, *names):
     raise SystemExit(f'Objet inconnu : {names}')
 
 
-def trick_house(d, V):
+def trick_house(d, var_at_least):
     """Maison des Pièges (Route 110) : la récompense de chaque épreuve (« CompletedPuzzleN »), donnée quand le compteur
     d'épreuves réussies passe à N (il ne redescend pas). La 8e récompense, une tente, est une décoration."""
     var = next(n for n in ('VAR_TRICK_HOUSE_LEVEL', 'VAR_TRICK_HOUSE_ROOMS_COMPLETED') if n in d['k'])
@@ -465,33 +519,33 @@ def trick_house(d, V):
         give = re.search(r'giveitem\s+(ITEM_\w+)', text) if m else None
         if give:
             out.append((int(m.group(1)), give.group(1)))
-    return [('Route110_TrickHouseEnd', name, V(var, n), f'Maison des Pièges, épreuve {n}') for n, name in sorted(out)]
+    return [('Route110_TrickHouseEnd', name, var_at_least(var, n), f'Maison des Pièges, épreuve {n}') for n, name in sorted(out)]
 
 
-def hoenn_gifts(d, F, V):
+def hoenn_gifts(d, flag, var_at_least):
     k = d['k']
     # Cherch'Objet : donné juste après le combat contre le rival de la Route 110 (ses drapeaux de dresseur)
     rival = [t for t in d['trainers'] if t['map'] == 'Route110' and re.search(r'_(BRENDAN|MAY)_', t['id'])]
     return [
-        ('GraniteCave_StevensRoom', item_named(d, 'ITEM_TM47'), F('FLAG_DELIVERED_STEVEN_LETTER'), None),
-        ('Route111', item_named(d, 'ITEM_TM43'), F('FLAG_RECEIVED_SECRET_POWER'), None),  # data/scripts/secret_power_tm.inc
+        ('GraniteCave_StevensRoom', item_named(d, 'ITEM_TM47'), flag('FLAG_DELIVERED_STEVEN_LETTER'), None),
+        ('Route111', item_named(d, 'ITEM_TM43'), flag('FLAG_RECEIVED_SECRET_POWER'), None),  # data/scripts/secret_power_tm.inc
         ('Route110', 'ITEM_ITEMFINDER', '|'.join(f'E:{d["trainer_start"] + k[t["id"]]}' for t in rival), None),
         # Un seul vélo à la fois (échangeable ensuite) : une étape pour les deux
-        ('MauvilleCity_BikeShop', 'ITEM_MACH_BIKE', F('FLAG_RECEIVED_BIKE'), None, 'Vélo Course ou Vélo Cross'),
-        ('Route113_GlassWorkshop', 'ITEM_SOOT_SACK', V('VAR_GLASS_WORKSHOP_STATE', 1), None),
-    ] + trick_house(d, V)
+        ('MauvilleCity_BikeShop', 'ITEM_MACH_BIKE', flag('FLAG_RECEIVED_BIKE'), None, 'Vélo Course ou Vélo Cross'),
+        ('Route113_GlassWorkshop', 'ITEM_SOOT_SACK', var_at_least('VAR_GLASS_WORKSHOP_STATE', 1), None),
+    ] + trick_house(d, var_at_least)
 
 
-def frlg_gifts(d, F, V):
+def frlg_gifts(d, flag, var_at_least):
     return [
-        ('FiveIsland_MemorialPillar', 'ITEM_TM42', F('FLAG_GOT_TM42_AT_MEMORIAL_PILLAR'), None),
+        ('FiveIsland_MemorialPillar', 'ITEM_TM42', flag('FLAG_GOT_TM42_AT_MEMORIAL_PILLAR'), None),
         # Le drapeau est levé avant le cadeau (checkitemspace, setflag, giveitem_msg)
-        ('VermilionCity_PokemonFanClub', 'ITEM_BIKE_VOUCHER', F('FLAG_GOT_BIKE_VOUCHER'), None),
-        ('CeruleanCity_BikeShop', 'ITEM_BICYCLE', F('FLAG_GOT_BICYCLE'), None),
-        ('CeruleanCity', 'ITEM_FAME_CHECKER', F('FLAG_GOT_FAME_CHECKER'), None),
-        ('ViridianCity', 'ITEM_TEACHY_TV', V('VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN', 2), None),
+        ('VermilionCity_PokemonFanClub', 'ITEM_BIKE_VOUCHER', flag('FLAG_GOT_BIKE_VOUCHER'), None),
+        ('CeruleanCity_BikeShop', 'ITEM_BICYCLE', flag('FLAG_GOT_BICYCLE'), None),
+        ('CeruleanCity', 'ITEM_FAME_CHECKER', flag('FLAG_GOT_FAME_CHECKER'), None),
+        ('ViridianCity', 'ITEM_TEACHY_TV', var_at_least('VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN', 2), None),
         # Carte de Kanto : la sœur du rival la donne, ou Ciléo si elle a été refusée (sac plein) ; même variable
-        ('PalletTown_RivalsHouse', 'ITEM_TOWN_MAP', V('VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE', 2), None),
+        ('PalletTown_RivalsHouse', 'ITEM_TOWN_MAP', var_at_least('VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE', 2), None),
     ]
 
 

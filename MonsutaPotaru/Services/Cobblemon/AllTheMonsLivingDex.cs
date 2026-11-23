@@ -37,7 +37,7 @@ public static class AllTheMonsLivingDex
         _ => NationalSlots.Value,
     };
 
-    private const ushort Staryu = 120, Mothim = 414, Lilligant = 549, Scatterbug = 664, Spewpa = 665, Vivillon = 666, Floette = 670,
+    private const ushort Staryu = 120, Mothim = 414, Scatterbug = 664, Spewpa = 665, Vivillon = 666, Floette = 670,
         Furfrou = 676, Pumpkaboo = 710, Gourgeist = 711;
 
     /// <summary>Les deux espèces du modpack, avec le numéro que leur donne le mod (après les 1 025 du national).</summary>
@@ -90,9 +90,13 @@ public static class AllTheMonsLivingDex
                     continue; // Méga-Rayquaza, sans gemme : déjà dans le global (Draco-Ascension)
                 var name = names[form];
                 var dash = name.IndexOf("-Mega", StringComparison.Ordinal);
-                var baseKey = dash > 0 ? name[..dash] : species == Floette ? "Eternal" : null;
+                string? baseKey = null;
+                if (dash > 0)
+                    baseKey = name[..dash];
+                else if (species == Floette)
+                    baseKey = "Eternal";
                 yield return new GlobalSlot(species, form, EntityContext.Gen9a, name, MegaName(species, name, baseKey),
-                    HeldItem: (ushort)stone, BaseFormKey: baseKey);
+                    HeldItem: stone, BaseFormKey: baseKey);
             }
         }
     }
@@ -188,6 +192,6 @@ public static class AllTheMonsLivingDex
     /// <summary>Pokémon d'un monde vu par ce living dex (forme reconnue par son nom, voir <see cref="CobblemonPokemon.FormKey"/>).</summary>
     public static GlobalLivingDex.Copy Copy(int id, CobblemonPokemon mon) =>
         new(id, mon.DexNumber, mon.Form, CobblemonPokemon.FormContext, mon.Gender, mon.HeldItem, mon.Sweet, mon.CanGigantamax,
-            mon.Species == LivingDexGames.Rayquaza && mon.Moves.Any(m => m.Move == LivingDexGames.DragonAscent),
+            mon.Species == LivingDexGames.Rayquaza && mon.ReadMoves().Any(m => m.Move == LivingDexGames.DragonAscent),
             Key: mon.FormKey, Base: mon.IsBaseForm && mon.FormKey == CobblemonPokemon.FormKeyOf(mon.Species, "normal")); // pas Zarbi « ? »
 }

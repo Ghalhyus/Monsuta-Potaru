@@ -110,7 +110,7 @@ public sealed class AllTheMonsCompletionTests : IDisposable
         Assert.Equal(1794850253616L, ((Dictionary<string, object?>)value["completed"]!)["09E7D93E692CB782"]);
         Assert.Equal(0.5, value["scale"]);
         Assert.Equal(1L, value["tiny"]);
-        Assert.Equal(true, value["flag"]);
+        Assert.True((bool?)value["flag"]);
         Assert.Empty((List<object?>)value["list"]!);
         Assert.Equal([1L, 2L, -3L], (List<object?>)value["ints"]!);
         Assert.Equal(["a", "b"], (List<object?>)value["names"]!);

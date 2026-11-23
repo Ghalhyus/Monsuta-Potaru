@@ -29,8 +29,8 @@ import struct
 TRAINER_FLAGS = 0x6CC  # drapeau du dresseur 0 (TRID_NULL de FlagsEditorEX), le même dans les quatre jeux
 
 GAMES = {
-    'xy': dict(zones='a/0/1/2', trdata='a/0/3/8', trpoke='a/0/4/0', text='a/0/7/5', classes=20, names=21, oras=False),
-    'oras': dict(zones='a/0/1/3', trdata='a/0/3/6', trpoke='a/0/3/8', text='a/0/7/4', classes=21, names=22, oras=True),
+    'xy': {'zones': 'a/0/1/2', 'trdata': 'a/0/3/8', 'trpoke': 'a/0/4/0', 'text': 'a/0/7/5', 'classes': 20, 'names': 21, 'oras': False},
+    'oras': {'zones': 'a/0/1/3', 'trdata': 'a/0/3/6', 'trpoke': 'a/0/3/8', 'text': 'a/0/7/4', 'classes': 21, 'names': 22, 'oras': True},
 }
 
 SET_FLAG = 0x13413496
@@ -293,7 +293,7 @@ def read_trainers(path, kind):
         size = 8 + (2 if fmt & 2 else 0) + (8 if fmt & 1 else 0)
         team = [(struct.unpack_from('<H', p, k + 4)[0], struct.unpack_from('<H', p, k + 2)[0])
                 for k in range(0, len(p) - size + 1, size)]
-        trainers[n] = dict(cls=classes[cls], name=names[n], team=team, places=[])
+        trainers[n] = {'cls': classes[cls], 'name': names[n], 'team': team, 'places': []}
     gyms = {}
     for zone, raw in enumerate(garc(rom.read(g['zones']))):
         z = lz11(raw)
@@ -304,7 +304,11 @@ def read_trainers(path, kind):
         furniture, npcs = entities[4], entities[5]
         for k in range(npcs):
             s = struct.unpack_from('<H', entities, 12 + 20 * furniture + 48 * k + 10)[0]
-            n = s - 3000 if 3000 < s < 4000 else s - 5000 if 5000 < s < 6000 else 0
+            n = 0
+            if 3000 < s < 4000:
+                n = s - 3000
+            elif 5000 < s < 6000:
+                n = s - 5000
             if n in trainers:
                 trainers[n]['places'].append((zone, place, 'carte'))
         flagged, fought = zone_trainers(*amx(script))

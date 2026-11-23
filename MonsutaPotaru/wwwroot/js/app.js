@@ -98,7 +98,7 @@ window.downloadFileFromStream = async (fileName, streamRef) => {
 // (CobblemonSave.ZipFromFolder) : chemins, nombre, tailles.
 window.watchWorldFolder = (input, component) => {
     const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-    const wanted = new RegExp(`^(level\\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{2}/${uuid}\\.dat(\\.old)?|stats/${uuid}\\.json|advancements/${uuid}\\.json|ftbquests/${uuid}\\.snbt|ftbteams/party/${uuid}\\.snbt)$`, "i");
+    const wanted = new RegExp(String.raw`^(level\.dat|pokemon/(pcstore|playerpartystore)/[0-9a-f]{2}/${uuid}\.dat(\.old)?|stats/${uuid}\.json|advancements/${uuid}\.json|ftbquests/${uuid}\.snbt|ftbteams/party/${uuid}\.snbt)$`, "i");
     const maxFiles = 32, maxFileBytes = 4 * 1024 * 1024, maxTotalBytes = 8 * 1024 * 1024 - 65536;
     let pending = null;
 

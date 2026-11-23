@@ -159,8 +159,8 @@ public sealed class CompletionGen4Tests : IDisposable
         // Perle : 3 badges (Charbon, Forêt, Pavé), Pokédex et Pokémontre reçus, Mars battu aux Éoliennes, bâtiment Galaxie
         // de Vestigion libéré ; pas encore la Clé Stockage
         var view = (await _completions.GetAsync("sacha", (await _completions.CreateAsync("sacha", pearl.SaveId, LivingDexGame.Pearl)).Id!.Value))!;
-        Assert.Equal([true, true, true, false], new[] { "Badge Charbon (Pierrick)", "Badge Forêt (Flo)", "Badge Pavé (Mélina)", "Badge Palustre (Lovis)" }
-            .Select(l => view.Steps.Single(s => s.Label == l).Done));
+        string[] badges = ["Badge Charbon (Pierrick)", "Badge Forêt (Flo)", "Badge Pavé (Mélina)", "Badge Palustre (Lovis)"];
+        Assert.Equal([true, true, true, false], badges.Select(l => view.Steps.Single(s => s.Label == l).Done));
         Assert.True(view.Steps.Single(s => s.Label == "Battre Mars aux Éoliennes").Done);
         Assert.True(view.Steps.Single(s => s.Label == "Chasser la Team Galaxie du bâtiment de Vestigion").Done);
         Assert.False(view.Steps.Single(s => s.Label == "Ouvrir l'entrepôt Galaxie (Clé Stockage)").Done);
@@ -211,8 +211,9 @@ public sealed class CompletionGen4Tests : IDisposable
         // 5 parcours, 10 + 13 + 12 + 10 trophées et objets des quatre salles, 27 Cartes Mémo
         var rows = Pokeathlon(LivingDexGame.SoulSilver);
         Assert.Equal(77, rows.Count);
-        Assert.Equal([5, 10, 13, 12, 10, 27], new[] { "parcours", "Salle de la Coopération", "Salle de la Confiance",
-            "Salle du Potentiel", "Salle de l'Amitié", "Cartes Mémo" }.Select(d => rows.Count(r => r.Detail == d)));
+        string[] details = ["parcours", "Salle de la Coopération", "Salle de la Confiance", "Salle du Potentiel", "Salle de l'Amitié",
+            "Cartes Mémo"];
+        Assert.Equal([5, 10, 13, 12, 10, 27], details.Select(d => rows.Count(r => r.Detail == d)));
         Assert.All(rows, r => Assert.Equal((CompletionSection.Quests, "Dôme Pokéathlon"), (r.Section, r.Zone)));
         Assert.Equal(rows.Count, rows.Select(r => r.Label).Distinct().Count());
         Assert.Equal(rows.Count, rows.Select(r => r.Done).Distinct().Count());

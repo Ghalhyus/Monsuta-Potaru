@@ -34,7 +34,60 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from completion_gen3 import split_on, split_paren, strip_paren  # noqa: E402
 from completion_gen7_rom import GAMES, read_trainers  # noqa: E402
+
+# Textes répétés (lieux, libellés)
+APRES_LA_LIGUE = 'Après la Ligue'
+ARENE = 'Arène'
+AUTEL_DE_LA_LUNE = 'Autel de la Lune'
+AUTEL_DU_SOLEIL = 'Autel du Soleil'
+BASE_THER = 'Base Æther'
+BLUE_LABO_DU_PROF_CHEN = 'Blue, labo du Prof. Chen'
+BOURG_PALETTE = 'Bourg Palette'
+BRADLEY_PRIX = 'Bradley Prix'
+CARMIN_SUR_MER = 'Carmin sur Mer'
+CATEGORIE = 'Catégorie'
+CAVERNE_AZUREE = 'Caverne Azurée'
+CELADOPOLE = 'Céladopole'
+CENTRE_COMMERCIAL = 'Centre Commercial'
+CHATEAU_ROCKET = 'Château Rocket'
+COLLINE_CLAPOTIS = 'Colline Clapotis'
+CRAMOIS_ILE = "Cramois'Île"
+ECHANGE = 'échange'
+ECOLE_DE_DRESSEURS = 'École de Dresseurs'
+FAUX_OBJET = 'faux objet'
+FOUND_PREFIX = 'Found '
+FOYER_THER = 'Foyer Æther'
+GRAND_CANYON_DE_PONI = 'Grand Canyon de Poni'
+HO_OHALE = "Ho'ohale"
+INTERIEUR = 'intérieur'
+LAC_DU_HALO_LUNAIRE = 'Lac du Halo Lunaire'
+LIGUE_POKEMON = 'Ligue Pokémon'
+LILI_I = "Lili'i"
+MALIE = 'Malié'
+MANOIR_CHELOU = 'Manoir Chelou'
+MONT_LANAKILA = 'Mont Lanakila'
+MOON_FLUTE = 'Moon Flute'
+PARC_DE_MALIE = 'Parc de Malié'
+PARC_VOLCANIQUE = 'Parc Volcanique'
+PLATEAU_INDIGO = 'Plateau Indigo'
+RANCH_OHANA = 'Ranch Ohana'
+ROUTE_1 = 'Route 1'
+ROUTE_12 = 'Route 12'
+ROUTE_15 = 'Route 15'
+ROUTE_16 = 'Route 16'
+ROUTE_2 = 'Route 2'
+ROUTE_5 = 'Route 5'
+ROUTE_8 = 'Route 8'
+RUE_DU_DOME_ROYAL = 'Rue du Dôme Royal'
+SENTIER_DE_MAHALO = 'Sentier de Mahalo'
+STARTER_OU_PECTORIUS_APRES_NECROZMA = 'starter, ou Pectorius après Necrozma'
+STARTER_OU_TILI_APRES_LA_LIGUE = 'starter, ou Tili après la Ligue'
+SUN_FLUTE = 'Sun Flute'
+SYLPHE_SARL = 'Sylphe SARL'
+VIEILLE_ROUTE = 'Vieille Route'
+VILLAGE_FLOTTANT = 'Village Flottant'
 
 MAX_ITEM = {'sm': 959, 'usum': 959, 'gg': 1057}
 # Cristaux Z rangés dans le sac (le jeu donne au Pokémon une copie : le numéro « tenu », 776 et suivants)
@@ -45,7 +98,7 @@ PLACE_EN = {
     'Verdant Cave': 'Verdant Cavern', "Hau'oli City (Shopping)": "Hau'oli City", "Hau'oli City (Marina)": "Hau'oli City",
     'Hano Resort': 'Hano Grand Resort', 'Hano Resort Lobby': 'Hano Grand Resort',
     'Konikoni City Lighthouse': 'Konikoni City', 'Aether Foundation B2F': 'Aether Paradise',
-    'Aether Foundation 1F': 'Aether Paradise', 'Aether House': 'Route 15', 'Malie City (Outer Cape)': 'Malie City',
+    'Aether Foundation 1F': 'Aether Paradise', 'Aether House': ROUTE_15, 'Malie City (Outer Cape)': 'Malie City',
     'Secluded Shore': 'Route 13', 'Lake of Sunne / Moone': 'Lake of the Sunne', 'Heahea Beach': 'Heahea Beach',
     "Team Rocket's Castle": 'Team Rocket’s Castle', 'Ultra Plant': 'Ultra Plant', 'Digglett\'sTunnel': "Diglett's Tunnel",
     'Ten Carat Hill': 'Ten Carat Hill', 'Lush Jungel': 'Lush Jungle', 'Ula\'Ula Meadow': "Ula'ula Meadow",
@@ -150,7 +203,7 @@ class Ctx:
         base = loc.replace('’', "'")
         base = PLACE_EN.get(base, base).replace('’', "'")
         if base not in self.place_fr:
-            base2 = re.sub(r'\s*\(.*\)$', '', base)
+            base2 = strip_paren(base)
             base2 = PLACE_EN.get(base2, base2).replace('’', "'")
             if base2 not in self.place_fr:
                 UNKNOWN.add(f'lieu {loc}')
@@ -166,33 +219,35 @@ def floor(token):
     m = re.fullmatch(r'(\d+)F', token)
     if m:
         n = int(m.group(1)) - 1
-        return 'rez-de-chaussée' if n == 0 else '1er étage' if n == 1 else f'{n}e étage'
+        if n == 0:
+            return 'rez-de-chaussée'
+        return '1er étage' if n == 1 else f'{n}e étage'
     return None
 
 
 # Sous-lieux de FlagsEditorEX : précision française (None : rien à ajouter)
 SUBPLACES = {
     "Hau'oli Outskirts": None, 'Trial Site': "zone de l'Épreuve", "Totem's Den": 'repaire du Dominant', 'Cave': 'grotte',
-    'Farthest Hollow': 'Caldeira Toutofon', 'Outside': 'extérieur', 'Inside': 'intérieur', 'Gym': 'Arène',
+    'Farthest Hollow': 'Caldeira Toutofon', 'Outside': 'extérieur', 'Inside': INTERIEUR, 'Gym': ARENE,
     'Museum': 'musée', 'House': 'maison', 'Gate': 'portail', 'PokéCenter': 'Centre Pokémon', 'Lab': 'laboratoire',
     'Water': "sur l'eau", 'Harbor': 'port', 'Port': 'port', 'Fan Club': 'Club des Fans', 'Dojo': 'Dojo',
     'Condominiums Rooftop': 'toit de la Résidence', "Mr. Psychic's House": 'maison de M. Psy', 'Bike Maniac House':
-    'maison du fan de vélos', 'Safari Zones Warden\'s House': 'maison du Gardien', 'Department Store 3F': 'Centre Commercial',
+    'maison du fan de vélos', 'Safari Zones Warden\'s House': 'maison du Gardien', 'Department Store 3F': CENTRE_COMMERCIAL,
     'Underground': 'sous-sol', 'Room': 'salle', 'Rooftop': 'toit', 'Basement': 'sous-sol', 'Summit': 'sommet',
     'Grass': None, 'Hotel': 'hôtel', 'Pokémon Center': 'Centre Pokémon', 'Entrance': 'entrée', 'Back': 'fond',
-    'Interior': 'intérieur', 'Plateau': 'plateau', 'Beach': 'plage', 'Lighthouse': 'phare', 'Ship': 'bateau',
+    'Interior': INTERIEUR, 'Plateau': 'plateau', 'Beach': 'plage', 'Lighthouse': 'phare', 'Ship': 'bateau',
     'Shopping District': 'zone commerciale', 'Beachfront': 'plage', 'Marina': 'port', 'Lobby': 'hall',
     'Main Building': 'bâtiment principal', 'Conservation Area': 'zone de préservation', 'Mountainside': 'flanc',
     'Hokulani Observatory': 'Observatoire', 'Abandoned Site': 'Site désaffecté', 'Courtyard': 'cour',
-    'Shady House': 'Manoir Chelou', 'Ruins': 'ruines', 'Canyon': 'canyon', 'Ultra Space': 'Ultra-Dimension',
+    'Shady House': MANOIR_CHELOU, 'Ruins': 'ruines', 'Canyon': 'canyon', 'Ultra Space': 'Ultra-Dimension',
     'Front': 'devant', 'Top': 'sommet', 'Islet': 'îlot', 'Fossil Restoration Center': 'Laboratoire des Fossiles',
     'Heahea City': None, 'Altar of the Sunne / Moone': 'autel', 'Tapu Village': None, 'Poké Mart': 'Boutique',
     'Police Station': 'commissariat', 'Hapu\'s Room': 'chambre de Paulie', "Olivia's Room": "chambre d'Alyxia",
-    'Home': 'maison du joueur', "Porch in Hala's House": 'maison de Pectorius', 'Inner': 'intérieur',
-    'Dimensional Research Lab': 'C.R.I.', 'Aether Base': 'Base Æther', 'Ruins of Hope': None,
+    'Home': 'maison du joueur', "Porch in Hala's House": 'maison de Pectorius', 'Inner': INTERIEUR,
+    'Dimensional Research Lab': 'C.R.I.', 'Aether Base': BASE_THER, 'Ruins of Hope': None,
     'Docks': 'quais', 'Lab Area': 'laboratoire', 'Crater': 'cratère', 'Kitchen': 'cuisine', 'Outer Cape': 'Cap Passiloin',
     'Plank Bridge': 'pont suspendu', 'Roof': 'toit', 'Steelix Ship': 'bateau Steelix', 'Tide Song Hotel': 'Hôtel des Embruns',
-    "Trainer's School": 'École de Dresseurs', 'Underground Path': 'souterrain',
+    "Trainer's School": ECOLE_DE_DRESSEURS, 'Underground Path': 'souterrain',
 }
 
 
@@ -226,7 +281,7 @@ def subplace(sub):
 def item_parts(c, text):
     """« Ultra Ball (x3) » → [(numéro, 3)] ; « TM83 (Infestation) » → [(numéro de la CT83, 1)]."""
     text = text.strip()
-    m = re.fullmatch(r'(.+?)(?: \(x(\d+)\))?', text)
+    m = re.fullmatch(r'(.+?)(?: \(x(\d+)\))?$', text)
     name, count = m.group(1), int(m.group(2) or 1)
     tm = re.fullmatch(r'TM(\d+) \(.*\)', name)
     return c.item(f'TM{int(tm.group(1)):02d}' if tm else name), count
@@ -243,103 +298,103 @@ def tm_number(c, item):
 def sm_story(c, version):
     sun = version == 'SN'
     return [
-        ("Lili'i", None, 'Choisir son premier Pokémon', 'D:722|D:725|D:728'),
-        ("Lili'i", None, 'Recevoir le Pokédex', c.f('SYS_FLAG_ZUKAN_GET')),
-        ("Lili'i", None, 'Recevoir le Bracelet Z (festival)', c.k('Z-Ring')),
+        (LILI_I, None, 'Choisir son premier Pokémon', 'D:722|D:725|D:728'),
+        (LILI_I, None, 'Recevoir le Pokédex', c.f('SYS_FLAG_ZUKAN_GET')),
+        (LILI_I, None, 'Recevoir le Bracelet Z (festival)', c.k('Z-Ring')),
         ('Grotte Verdoyante', None, "Épreuve d'Althéo", c.k('Normalium Z')),
-        ("Lili'i", None, 'Grande Épreuve de Mele-Mele (Pectorius)', c.k('Fightinium Z') + '|PS:1'),
-        ("Lili'i", None, "Recevoir l'Appel-Monture (Tauros)", c.f('SYS_FLAG_KENTAROSU_RIDE_OPEN')),
-        ("Ho'ohale", None, 'Recevoir la Boîte Zygarde (Dexio et Sina)', c.k('Zygarde Cube')),
-        ('Ranch Ohana', None, 'Poké Monture Mastouffe', c.f('SYS_FLAG_MUURANDO_RIDE_OPEN')),
-        ('Colline Clapotis', None, 'Poké Monture Lokhlass', c.f('SYS_FLAG_RAPURASU_RIDE_OPEN')),
-        ('Colline Clapotis', None, 'Épreuve de Néphie', c.k('Waterium Z')),
-        ('Colline Clapotis', None, 'Recevoir la Canne', c.k('Fishing Rod')),
-        ('Parc Volcanique', None, 'Épreuve de Kiawe', c.k('Firium Z')),
-        ('Parc Volcanique', None, 'Poké Monture Dracaufeu', c.f('SYS_FLAG_RIZAADON_RIDE_OPEN')),
+        (LILI_I, None, 'Grande Épreuve de Mele-Mele (Pectorius)', c.k('Fightinium Z') + '|PS:1'),
+        (LILI_I, None, "Recevoir l'Appel-Monture (Tauros)", c.f('SYS_FLAG_KENTAROSU_RIDE_OPEN')),
+        (HO_OHALE, None, 'Recevoir la Boîte Zygarde (Dexio et Sina)', c.k('Zygarde Cube')),
+        (RANCH_OHANA, None, 'Poké Monture Mastouffe', c.f('SYS_FLAG_MUURANDO_RIDE_OPEN')),
+        (COLLINE_CLAPOTIS, None, 'Poké Monture Lokhlass', c.f('SYS_FLAG_RAPURASU_RIDE_OPEN')),
+        (COLLINE_CLAPOTIS, None, 'Épreuve de Néphie', c.k('Waterium Z')),
+        (COLLINE_CLAPOTIS, None, 'Recevoir la Canne', c.k('Fishing Rod')),
+        (PARC_VOLCANIQUE, None, 'Épreuve de Kiawe', c.k('Firium Z')),
+        (PARC_VOLCANIQUE, None, 'Poké Monture Dracaufeu', c.f('SYS_FLAG_RIZAADON_RIDE_OPEN')),
         ('Jungle Sombrefeuille', None, 'Épreuve de Barbara', c.k('Grassium Z')),
         ("Ruines de l'Éveil", None, "Grande Épreuve d'Akala (Alyxia)", c.k('Rockium Z') + '|PS:2'),
         ('Observatoire', None, 'Épreuve de Chrys', c.k('Electrium Z')),
-        ('Route 12', None, 'Poké Monture Bourrinos', c.f('SYS_FLAG_ROBA2_RIDE_OPEN')),
-        ('Bradley Prix', None, 'Épreuve de Margie', c.k('Ghostium Z')),
-        ('Route 15', None, 'Poké Monture Sharpedo', c.f('SYS_FLAG_SAMEHADAA_RIDE_OPEN')),
-        ('Manoir Chelou', None, 'Battre Guzma au Manoir Chelou', c.k('Buginium Z')),
-        ('Malié', None, "Grande Épreuve d'Ula-Ula (Danh)", c.k('Darkinium Z') + '|PS:3'),
+        (ROUTE_12, None, 'Poké Monture Bourrinos', c.f('SYS_FLAG_ROBA2_RIDE_OPEN')),
+        (BRADLEY_PRIX, None, 'Épreuve de Margie', c.k('Ghostium Z')),
+        (ROUTE_15, None, 'Poké Monture Sharpedo', c.f('SYS_FLAG_SAMEHADAA_RIDE_OPEN')),
+        (MANOIR_CHELOU, None, 'Battre Guzma au Manoir Chelou', c.k('Buginium Z')),
+        (MALIE, None, "Grande Épreuve d'Ula-Ula (Danh)", c.k('Darkinium Z') + '|PS:3'),
         ('Paradis Æther', None, 'Battre Elsa-Mina et recevoir la Flûte du Soleil' if sun
-         else 'Battre Elsa-Mina et recevoir la Flûte de la Lune', c.k('Sun Flute' if sun else 'Moon Flute')),
-        ('Vieille Route', None, 'Poké Monture Mackogneur', c.f('SYS_FLAG_KAIRIKII_RIDE_OPEN')),
+         else 'Battre Elsa-Mina et recevoir la Flûte de la Lune', c.k(SUN_FLUTE if sun else MOON_FLUTE)),
+        (VIEILLE_ROUTE, None, 'Poké Monture Mackogneur', c.f('SYS_FLAG_KAIRIKII_RIDE_OPEN')),
         ('Île Noadkoko', None, 'Recevoir la Flûte de la Lune' if sun else 'Recevoir la Flûte du Soleil',
-         c.k('Moon Flute' if sun else 'Sun Flute')),
-        ('Grand Canyon de Poni', None, 'Grande Épreuve de Poni (Paulie)', c.k('Groundium Z') + '|PS:4'),
-        ('Grand Canyon de Poni', None, 'Épreuve du Grand Canyon (Ékaïser Dominant)', c.k('Dragonium Z')),
-        ('Autel du Soleil' if sun else 'Autel de la Lune', None, 'Capturer Solgaleo' if sun else 'Capturer Lunala',
+         c.k(MOON_FLUTE if sun else SUN_FLUTE)),
+        (GRAND_CANYON_DE_PONI, None, 'Grande Épreuve de Poni (Paulie)', c.k('Groundium Z') + '|PS:4'),
+        (GRAND_CANYON_DE_PONI, None, 'Épreuve du Grand Canyon (Ékaïser Dominant)', c.k('Dragonium Z')),
+        (AUTEL_DU_SOLEIL if sun else AUTEL_DE_LA_LUNE, None, 'Capturer Solgaleo' if sun else 'Capturer Lunala',
          'D:791' if sun else 'D:792'),
-        ('Ligue Pokémon', None, "Devenir Maître de la Ligue Pokémon d'Alola", c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, "Devenir Maître de la Ligue Pokémon d'Alola", c.f('SYS_FLAG_GAME_CLEAR')),
     ]
 
 
 def usum_story(c, version):
     us = version == 'US'
     return [
-        ('Route 1', None, 'Choisir son premier Pokémon', 'D:722|D:725|D:728'),
-        ("Lili'i", None, 'Recevoir le Pokédex', c.f('SYS_FLAG_ZUKAN_GET')),
-        ("Lili'i", None, 'Recevoir le Super Bracelet Z (festival)', c.k('Z-Power Ring')),
+        (ROUTE_1, None, 'Choisir son premier Pokémon', 'D:722|D:725|D:728'),
+        (LILI_I, None, 'Recevoir le Pokédex', c.f('SYS_FLAG_ZUKAN_GET')),
+        (LILI_I, None, 'Recevoir le Super Bracelet Z (festival)', c.k('Z-Power Ring')),
         ('Grotte Verdoyante', None, "Épreuve d'Althéo", c.k('Normalium Z')),
-        ("Lili'i", None, 'Grande Épreuve de Mele-Mele (Pectorius)', c.k('Fightinium Z') + '|PS:1'),
-        ("Lili'i", None, "Recevoir l'Appel-Monture (Tauros)", c.f('SYS_FLAG_KENTAROSU_RIDE_OPEN')),
+        (LILI_I, None, 'Grande Épreuve de Mele-Mele (Pectorius)', c.k('Fightinium Z') + '|PS:1'),
+        (LILI_I, None, "Recevoir l'Appel-Monture (Tauros)", c.f('SYS_FLAG_KENTAROSU_RIDE_OPEN')),
         ('Plage Big Wave', None, 'Apprendre le Surf Démanta', c.f('FE_SURF_TUTORIAL_CLEAR')),
-        ('Ranch Ohana', None, 'Poké Monture Mastouffe', c.f('SYS_FLAG_MUURANDO_RIDE_OPEN')),
-        ('Colline Clapotis', None, 'Poké Monture Lokhlass', c.f('SYS_FLAG_RAPURASU_RIDE_OPEN')),
-        ('Colline Clapotis', None, 'Épreuve de Néphie', c.k('Waterium Z')),
-        ('Colline Clapotis', None, 'Recevoir la Canne', c.k('Fishing Rod')),
-        ('Parc Volcanique', None, 'Épreuve de Kiawe', c.k('Firium Z')),
-        ('Parc Volcanique', None, 'Poké Monture Dracaufeu', c.f('SYS_FLAG_RIZAADON_RIDE_OPEN')),
+        (RANCH_OHANA, None, 'Poké Monture Mastouffe', c.f('SYS_FLAG_MUURANDO_RIDE_OPEN')),
+        (COLLINE_CLAPOTIS, None, 'Poké Monture Lokhlass', c.f('SYS_FLAG_RAPURASU_RIDE_OPEN')),
+        (COLLINE_CLAPOTIS, None, 'Épreuve de Néphie', c.k('Waterium Z')),
+        (COLLINE_CLAPOTIS, None, 'Recevoir la Canne', c.k('Fishing Rod')),
+        (PARC_VOLCANIQUE, None, 'Épreuve de Kiawe', c.k('Firium Z')),
+        (PARC_VOLCANIQUE, None, 'Poké Monture Dracaufeu', c.f('SYS_FLAG_RIZAADON_RIDE_OPEN')),
         ('Jungle Sombrefeuille', None, 'Épreuve de Barbara', c.k('Grassium Z')),
         ("Ruines de l'Éveil", None, "Grande Épreuve d'Akala (Alyxia)", c.k('Rockium Z') + '|PS:2'),
         ('Mont Hokulani', None, 'Épreuve de Chrys', c.k('Electrium Z')),
-        ('Route 12', None, 'Poké Monture Bourrinos', c.f('SYS_FLAG_ROBA2_RIDE_OPEN')),
-        ('Bradley Prix', None, 'Épreuve de Margie', c.k('Ghostium Z')),
-        ('Route 15', None, 'Poké Monture Sharpedo', c.f('SYS_FLAG_SAMEHADAA_RIDE_OPEN')),
-        ('Manoir Chelou', None, 'Battre Guzma au Manoir Chelou', c.k('Buginium Z')),
-        ('Malié', None, "Grande Épreuve d'Ula-Ula (Danh)", c.k('Darkinium Z') + '|PS:3'),
+        (ROUTE_12, None, 'Poké Monture Bourrinos', c.f('SYS_FLAG_ROBA2_RIDE_OPEN')),
+        (BRADLEY_PRIX, None, 'Épreuve de Margie', c.k('Ghostium Z')),
+        (ROUTE_15, None, 'Poké Monture Sharpedo', c.f('SYS_FLAG_SAMEHADAA_RIDE_OPEN')),
+        (MANOIR_CHELOU, None, 'Battre Guzma au Manoir Chelou', c.k('Buginium Z')),
+        (MALIE, None, "Grande Épreuve d'Ula-Ula (Danh)", c.k('Darkinium Z') + '|PS:3'),
         ('Paradis Æther', None, 'Battre Elsa-Mina et recevoir la Flûte de la Lune' if us
-         else 'Battre Elsa-Mina et recevoir la Flûte du Soleil', c.k('Moon Flute' if us else 'Sun Flute')),
-        ('Vieille Route', None, 'Poké Monture Mackogneur', c.f('SYS_FLAG_KAIRIKII_RIDE_OPEN')),
-        ('Grand Canyon de Poni', None, 'Épreuve du Grand Canyon (Ékaïser Dominant)', c.k('Dragonium Z')),
-        ('Autel du Soleil' if us else 'Autel de la Lune', None, 'Capturer Solgaleo' if us else 'Capturer Lunala',
+         else 'Battre Elsa-Mina et recevoir la Flûte du Soleil', c.k(MOON_FLUTE if us else SUN_FLUTE)),
+        (VIEILLE_ROUTE, None, 'Poké Monture Mackogneur', c.f('SYS_FLAG_KAIRIKII_RIDE_OPEN')),
+        (GRAND_CANYON_DE_PONI, None, 'Épreuve du Grand Canyon (Ékaïser Dominant)', c.k('Dragonium Z')),
+        (AUTEL_DU_SOLEIL if us else AUTEL_DE_LA_LUNE, None, 'Capturer Solgaleo' if us else 'Capturer Lunala',
          'D:791' if us else 'D:792'),
         ('Alola', None, 'Compléter la Fleur 7 Couleurs', c.k('Rainbow Flower')),
-        ('Village Flottant', None, "Épreuve d'Oléa (Rubombelle Dominant)", c.k('Fairium Z')),
+        (VILLAGE_FLOTTANT, None, "Épreuve d'Oléa (Rubombelle Dominant)", c.k('Fairium Z')),
         ('Île Noadkoko', None, 'Grande Épreuve de Poni (Paulie)', c.k('Groundium Z') + '|PS:4'),
-        ('Mont Lanakila', None, 'Capturer Necrozma', c.f('SYS_FLAG_CAPTURE_NECROZMA')),
-        ('Ligue Pokémon', None, "Devenir le premier Maître de la Ligue Pokémon d'Alola", c.f('SYS_FLAG_GAME_CLEAR')),
+        (MONT_LANAKILA, None, 'Capturer Necrozma', c.f('SYS_FLAG_CAPTURE_NECROZMA')),
+        (LIGUE_POKEMON, None, "Devenir le premier Maître de la Ligue Pokémon d'Alola", c.f('SYS_FLAG_GAME_CLEAR')),
     ]
 
 
 def badge(c, flag, name, leader, city):
-    return (city, 'Arène', f'Badge {name} ({leader})', c.f(f'FSYS_GYM_CLEAR_{flag}'))
+    return (city, ARENE, f'Badge {name} ({leader})', c.f(f'FSYS_GYM_CLEAR_{flag}'))
 
 
 def gg_story(c, version):
     pikachu = version == 'GP'
     return [
-        ('Bourg Palette', None, 'Recevoir son partenaire (' + ('Pikachu' if pikachu else 'Évoli') + ')',
+        (BOURG_PALETTE, None, 'Recevoir son partenaire (' + ('Pikachu' if pikachu else 'Évoli') + ')',
          'D:25' if pikachu else 'D:133'),
         badge(c, 'ROCK', 'Roche', 'Pierre', 'Argenta'),
         badge(c, 'WATAER', 'Cascade', 'Ondine', 'Azuria'),
         ("L'Océane", None, 'Technique Secrète Tranchage', c.f('FSYS_HIDEN_OPEN_IAIGIRI')),
-        badge(c, 'VOLT', 'Foudre', 'Major Bob', 'Carmin sur Mer'),
-        ('Route 2', None, 'Technique Secrète Lumière', c.f('FSYS_HIDEN_OPEN_HURASSYU')),
+        badge(c, 'VOLT', 'Foudre', 'Major Bob', CARMIN_SUR_MER),
+        (ROUTE_2, None, 'Technique Secrète Lumière', c.f('FSYS_HIDEN_OPEN_HURASSYU')),
         ('Repaire Rocket', None, 'Battre Giovanni et recevoir le Scope Sylphe', c.k('Silph Scope')),
-        ('Céladopole', None, 'Technique Secrète Envol', c.f('FSYS_HIDEN_OPEN_SORAWOTOBU')),
-        badge(c, 'GRASS', 'Prisme', 'Erika', 'Céladopole'),
+        (CELADOPOLE, None, 'Technique Secrète Envol', c.f('FSYS_HIDEN_OPEN_SORAWOTOBU')),
+        badge(c, 'GRASS', 'Prisme', 'Erika', CELADOPOLE),
         ('Tour Pokémon', None, 'Délivrer M. Fuji et recevoir la Poké Flûte', c.k('Poké Flute')),
         ('Parmanie', None, 'Technique Secrète Navigation', c.f('FSYS_HIDEN_OPEN_NAMINORI')),
         ('Parmanie', None, 'Technique Secrète Main Forte', c.f('FSYS_HIDEN_OPEN_KAIRIKI')),
         badge(c, 'POISON', 'Âme', 'Koga', 'Parmanie'),
         badge(c, 'ESPER', 'Marais', 'Morgane', 'Safrania'),
-        badge(c, 'FIRE', 'Volcan', 'Auguste', "Cramois'Île"),
+        badge(c, 'FIRE', 'Volcan', 'Auguste', CRAMOIS_ILE),
         badge(c, 'GROUND', 'Terre', 'Giovanni', 'Jadielle'),
-        ('Plateau Indigo', None, 'Devenir Maître de la Ligue Pokémon', c.f('FSYS_GAME_CLEAR')),
+        (PLATEAU_INDIGO, None, 'Devenir Maître de la Ligue Pokémon', c.f('FSYS_GAME_CLEAR')),
     ]
 
 
@@ -347,17 +402,17 @@ def gg_story(c, version):
 SM_Z = [
     ('Konikoni', 'Électacle appris à Pikachu', 'Pikanium Z', None),
     ('Observatoire', 'Molène', 'Steelium Z', None),
-    ('Parc de Malié', 'starter, ou Tili après la Ligue', 'Decidium Z', None),
-    ('Parc de Malié', 'starter, ou Tili après la Ligue', 'Incinium Z', None),
-    ('Parc de Malié', 'starter, ou Tili après la Ligue', 'Primarium Z', None),
+    (PARC_DE_MALIE, STARTER_OU_TILI_APRES_LA_LIGUE, 'Decidium Z', None),
+    (PARC_DE_MALIE, STARTER_OU_TILI_APRES_LA_LIGUE, 'Incinium Z', None),
+    (PARC_DE_MALIE, STARTER_OU_TILI_APRES_LA_LIGUE, 'Primarium Z', None),
     ('Désert Haina', None, 'Psychium Z', None),
-    ('Village Flottant', "montrer un Raichu d'Alola", 'Aloraichium Z', None),
-    ('Grand Canyon de Poni', 'Apocyne', 'Poisonium Z', None),
-    ('Grand Canyon de Poni', 'Oléa', 'Fairium Z', None),
-    ('Mont Lanakila', None, 'Icium Z', None),
+    (VILLAGE_FLOTTANT, "montrer un Raichu d'Alola", 'Aloraichium Z', None),
+    (GRAND_CANYON_DE_PONI, 'Apocyne', 'Poisonium Z', None),
+    (GRAND_CANYON_DE_PONI, 'Oléa', 'Fairium Z', None),
+    (MONT_LANAKILA, None, 'Icium Z', None),
     ('Ruines du Conflit', 'après Tokorico', 'Tapunium Z', None),
     ('Colline Dicarat', 'Poussée Mackogneur', 'Flyinium Z', None),
-    ('Rue du Dôme Royal', 'Bradley Prix, experts Évoli', 'Eevium Z', None),
+    (RUE_DU_DOME_ROYAL, 'Bradley Prix, experts Évoli', 'Eevium Z', None),
     ('Alola', 'distribution', 'Snorlium Z', None),
     ('Alola', 'distribution', 'Marshadium Z', None),
     ('Alola', 'distribution', 'Mewnium Z', None),
@@ -365,46 +420,46 @@ SM_Z = [
 ]
 USUM_Z = [
     ('Colline Dicarat', 'Charge Tauros', 'Flyinium Z', None),
-    ('Village Flottant', "montrer un Raichu d'Alola", 'Aloraichium Z', None),
-    ("Lili'i", 'starter, ou Pectorius après Necrozma', 'Decidium Z', None),
-    ("Lili'i", 'starter, ou Pectorius après Necrozma', 'Incinium Z', None),
-    ("Lili'i", 'starter, ou Pectorius après Necrozma', 'Primarium Z', None),
-    ('Mont Lanakila', None, 'Icium Z', None),
+    (VILLAGE_FLOTTANT, "montrer un Raichu d'Alola", 'Aloraichium Z', None),
+    (LILI_I, STARTER_OU_PECTORIUS_APRES_NECROZMA, 'Decidium Z', None),
+    (LILI_I, STARTER_OU_PECTORIUS_APRES_NECROZMA, 'Incinium Z', None),
+    (LILI_I, STARTER_OU_PECTORIUS_APRES_NECROZMA, 'Primarium Z', None),
+    (MONT_LANAKILA, None, 'Icium Z', None),
     ('Grotte de la Plaine', None, 'Kommonium Z', None),
-    ('Rue du Dôme Royal', 'Bradley Prix', 'Eevium Z', None),
-    ('Malié', 'Tili', 'Lycanium Z', None),
+    (RUE_DU_DOME_ROYAL, BRADLEY_PRIX, 'Eevium Z', None),
+    (MALIE, 'Tili', 'Lycanium Z', None),
     ('Mont Hokulani', 'Molène', 'Steelium Z', None),
-    ('Bradley Prix', 'nuit, après Danh', 'Mimikium Z', None),
+    (BRADLEY_PRIX, 'nuit, après Danh', 'Mimikium Z', None),
     ('Plaine des Pikachu', 'Pikachu Casquette', 'Pikashunium Z', None),
     ('Club Hano-Hano', 'Monsieur Chu', 'Pikanium Z', None),
     ('Désert Haina', None, 'Psychium Z', None),
-    ("Ho'ohale", 'Hôtel des Embruns, montrer Ronflex', 'Snorlium Z', None),
-    ("Ho'ohale", 'Hôtel des Embruns, montrer Mew', 'Mewnium Z', None),
-    ("Ho'ohale", 'Hôtel des Embruns, montrer Marshadow', 'Marshadium Z', None),
+    (HO_OHALE, 'Hôtel des Embruns, montrer Ronflex', 'Snorlium Z', None),
+    (HO_OHALE, 'Hôtel des Embruns, montrer Mew', 'Mewnium Z', None),
+    (HO_OHALE, 'Hôtel des Embruns, montrer Marshadow', 'Marshadium Z', None),
     ('Ruines du Conflit', 'un Toko vaincu ou capturé', 'Tapunium Z', None),
-    ('Vieille Route', 'Apocyne', 'Poisonium Z', None),
-    ('Mont Lanakila', 'Necrozma', 'Ultranecrozium Z', None),
-    ('Sentier de Mahalo', 'Solgaleo', 'Solganium Z', 'US'),
-    ('Autel de la Lune', 'Cosmog du monde inversé', 'Lunalium Z', 'US'),
-    ('Sentier de Mahalo', 'Lunala', 'Lunalium Z', 'UM'),
-    ('Autel du Soleil', 'Cosmog du monde inversé', 'Solganium Z', 'UM'),
+    (VIEILLE_ROUTE, 'Apocyne', 'Poisonium Z', None),
+    (MONT_LANAKILA, 'Necrozma', 'Ultranecrozium Z', None),
+    (SENTIER_DE_MAHALO, 'Solgaleo', 'Solganium Z', 'US'),
+    (AUTEL_DE_LA_LUNE, 'Cosmog du monde inversé', 'Lunalium Z', 'US'),
+    (SENTIER_DE_MAHALO, 'Lunala', 'Lunalium Z', 'UM'),
+    (AUTEL_DU_SOLEIL, 'Cosmog du monde inversé', 'Solganium Z', 'UM'),
 ]
 GG_MEGA = [
-    ('Bourg Palette', 'Blue, labo du Prof. Chen', 'Venusaurite'),
-    ('Bourg Palette', 'Blue, labo du Prof. Chen', 'Charizardite X'),
-    ('Bourg Palette', 'Blue, labo du Prof. Chen', 'Charizardite Y'),
-    ('Bourg Palette', 'Blue, labo du Prof. Chen', 'Blastoisinite'),
-    ('Plateau Indigo', 'vente', 'Beedrillite'),
-    ('Plateau Indigo', 'vente', 'Pidgeotite'),
-    ('Plateau Indigo', 'vente', 'Alakazite'),
-    ('Plateau Indigo', 'vente', 'Slowbronite'),
-    ('Plateau Indigo', 'vente', 'Gengarite'),
-    ('Plateau Indigo', 'vente', 'Kangaskhanite'),
-    ('Plateau Indigo', 'vente', 'Pinsirite'),
-    ('Plateau Indigo', 'vente', 'Gyaradosite'),
-    ('Plateau Indigo', 'vente', 'Aerodactylite'),
-    ('Caverne Azurée', 'après Green', 'Mewtwonite X'),
-    ('Caverne Azurée', 'après Green', 'Mewtwonite Y'),
+    (BOURG_PALETTE, BLUE_LABO_DU_PROF_CHEN, 'Venusaurite'),
+    (BOURG_PALETTE, BLUE_LABO_DU_PROF_CHEN, 'Charizardite X'),
+    (BOURG_PALETTE, BLUE_LABO_DU_PROF_CHEN, 'Charizardite Y'),
+    (BOURG_PALETTE, BLUE_LABO_DU_PROF_CHEN, 'Blastoisinite'),
+    (PLATEAU_INDIGO, 'vente', 'Beedrillite'),
+    (PLATEAU_INDIGO, 'vente', 'Pidgeotite'),
+    (PLATEAU_INDIGO, 'vente', 'Alakazite'),
+    (PLATEAU_INDIGO, 'vente', 'Slowbronite'),
+    (PLATEAU_INDIGO, 'vente', 'Gengarite'),
+    (PLATEAU_INDIGO, 'vente', 'Kangaskhanite'),
+    (PLATEAU_INDIGO, 'vente', 'Pinsirite'),
+    (PLATEAU_INDIGO, 'vente', 'Gyaradosite'),
+    (PLATEAU_INDIGO, 'vente', 'Aerodactylite'),
+    (CAVERNE_AZUREE, 'après Green', 'Mewtwonite X'),
+    (CAVERNE_AZUREE, 'après Green', 'Mewtwonite Y'),
 ]
 
 
@@ -419,41 +474,41 @@ MYSTERY_GIFT = {801, 802, 807}
 def sm_encounters(c, version):
     sun = version == 'SN'
     u = [
-        ('Ranch Ohana', 'Œuf, Garderie', 133, c.f('FE_SUB059_END'), 'Œuf d\'Évoli'),
-        ('Route 8', 'fossile', 408 if sun else 410, 'D:408' if sun else 'D:410', None),
-        ('Route 8', 'fossile', 564 if sun else 566, 'D:564' if sun else 'D:566', None),
-        ('Village Flottant', 'cadeau', 142, c.f('FE_SUB017_END'), None),
-        ('Route 15', 'Foyer Æther, cadeau', 137, c.f('FE_SUB078_END'), None),
+        (RANCH_OHANA, 'Œuf, Garderie', 133, c.f('FE_SUB059_END'), 'Œuf d\'Évoli'),
+        (ROUTE_8, 'fossile', 408 if sun else 410, 'D:408' if sun else 'D:410', None),
+        (ROUTE_8, 'fossile', 564 if sun else 566, 'D:564' if sun else 'D:566', None),
+        (VILLAGE_FLOTTANT, 'cadeau', 142, c.f('FE_SUB017_END'), None),
+        (ROUTE_15, 'Foyer Æther, cadeau', 137, c.f('FE_SUB078_END'), None),
     ]
     # Échanges : (drapeau, lieu, reçu, donné)
-    for flag, zone, got, give in (('FE_FIELD_TRADE_01', 'Route 2', 66, 21), ('FE_FIELD_TRADE_02', 'Route 5', 761, 506),
-                                  ('FE_FIELD_TRADE_03', 'Konikoni', 61, 41), ('FE_FIELD_TRADE_04', 'Malié', 440, 674),
+    for flag, zone, got, give in (('FE_FIELD_TRADE_01', ROUTE_2, 66, 21), ('FE_FIELD_TRADE_02', ROUTE_5, 761, 506),
+                                  ('FE_FIELD_TRADE_03', 'Konikoni', 61, 41), ('FE_FIELD_TRADE_04', MALIE, 440, 674),
                                   ('FE_FIELD_TRADE_05', 'Village Toko', 75, 93),
-                                  ('FE_FIELD_TRADE_06', 'Village Flottant', 762, 210),
+                                  ('FE_FIELD_TRADE_06', VILLAGE_FLOTTANT, 762, 210),
                                   ('FE_FIELD_TRADE_07', 'Chemin du Défi', 663, 760)):
-        u.append((zone, 'échange', got, c.f(flag), ('give', give)))
+        u.append((zone, ECHANGE, got, c.f(flag), ('give', give)))
     return u
 
 
-def usum_encounters(c, version):
+def usum_encounters(c):
     u = [
-        ('Ranch Ohana', 'Œuf, Garderie', 133, c.f('FE_SUB059_END'), 'Œuf d\'Évoli'),
-        ('Village Flottant', 'cadeau', 142, c.f('FE_SUB017_END'), None),
-        ('Route 15', 'Foyer Æther, cadeau', 137, c.f('FE_SUB078_END'), None),
-        ("Ho'ohale", 'Surf Club, records des 4 plages', 25, c.f('FE_SUB313_END'), 'Pikachu Surfeur'),
-        ('Ekaeka', 'Centre Commercial', 760, c.f('FE_SUB342_END'), None),
+        (RANCH_OHANA, 'Œuf, Garderie', 133, c.f('FE_SUB059_END'), 'Œuf d\'Évoli'),
+        (VILLAGE_FLOTTANT, 'cadeau', 142, c.f('FE_SUB017_END'), None),
+        (ROUTE_15, 'Foyer Æther, cadeau', 137, c.f('FE_SUB078_END'), None),
+        (HO_OHALE, 'Surf Club, records des 4 plages', 25, c.f('FE_SUB313_END'), 'Pikachu Surfeur'),
+        ('Ekaeka', CENTRE_COMMERCIAL, 760, c.f('FE_SUB342_END'), None),
         ('Route 14', 'îlot', 592, c.f('FE_SUB402_END'), None),
-        ('Château Rocket', 'faux objet', 101, c.f('FV_F0801D0207_MARUMAIN'), None),
-        ('Château Rocket', 'faux objet', 101, c.f('FV_F0801D0217_MARUMAIN'), None),
-        ('Château Rocket', 'faux objet', 101, c.f('FV_F0801D0106_MARUMAIN'), None),
+        (CHATEAU_ROCKET, FAUX_OBJET, 101, c.f('FV_F0801D0207_MARUMAIN'), None),
+        (CHATEAU_ROCKET, FAUX_OBJET, 101, c.f('FV_F0801D0217_MARUMAIN'), None),
+        (CHATEAU_ROCKET, FAUX_OBJET, 101, c.f('FV_F0801D0106_MARUMAIN'), None),
     ]
-    for flag, zone, got, give in (('FE_FIELD_TRADE_01', 'Route 2', 701, 21), ('FE_FIELD_TRADE_02', 'Route 5', 714, 506),
-                                  ('FE_FIELD_TRADE_03', 'Rue du Dôme Royal', 339, 72),
-                                  ('FE_FIELD_TRADE_04', 'Route 8', 24, 732),
+    for flag, zone, got, give in (('FE_FIELD_TRADE_01', ROUTE_2, 701, 21), ('FE_FIELD_TRADE_02', ROUTE_5, 714, 506),
+                                  ('FE_FIELD_TRADE_03', RUE_DU_DOME_ROYAL, 339, 72),
+                                  ('FE_FIELD_TRADE_04', ROUTE_8, 24, 732),
                                   ('FE_FIELD_TRADE_05', 'Village Toko', 708, 708),
-                                  ('FE_FIELD_TRADE_06', 'Village Flottant', 422, 210),
+                                  ('FE_FIELD_TRADE_06', VILLAGE_FLOTTANT, 422, 210),
                                   ('FE_FIELD_TRADE_07', 'Chemin du Défi', 128, 760)):
-        u.append((zone, 'échange', got, c.f(flag), ('give', give)))
+        u.append((zone, ECHANGE, got, c.f(flag), ('give', give)))
     return u
 
 
@@ -463,33 +518,33 @@ def gg_encounters(c, version):
         ('Route 4', 'Centre Pokémon, 500 ₽', 129, c.f('FE_SUB_02_CLEAR'), None),
         ('Azuria', 'cadeau', 1, c.f('FE_SUB_37_CLEAR'), None),
         ('Route 24', 'cadeau', 4, c.f('FE_SUB_38_CLEAR'), None),
-        ('Carmin sur Mer', 'cadeau', 7, c.f('FE_SUB_39_CLEAR'), None),
+        (CARMIN_SUR_MER, 'cadeau', 7, c.f('FE_SUB_39_CLEAR'), None),
         ('Safrania', 'Dojo', 106, c.f('FE_SUB_23_CLEAR'), 'Kicklee ou Tygnon'),
-        ('Sylphe SARL', 'cadeau', 131, c.f('FE_SUB_08_CLEAR'), None),
+        (SYLPHE_SARL, 'cadeau', 131, c.f('FE_SUB_08_CLEAR'), None),
         ('Safrania', 'cadeau', 137, c.f('FE_SUB_60_CLEAR'), None),
-        ("Cramois'Île", 'fossile', 138, 'D:138|D:140', 'Amonita ou Kabuto'),
-        ("Cramois'Île", 'Vieil Ambre', 142, 'D:142', None),
-        ('Route 12', None, 143, c.f('FE_CAPTURE_KABIGON_ROAD012'), None),
-        ('Route 16', None, 143, c.f('FE_CAPTURE_KABIGON_ROAD016'), None),
+        (CRAMOIS_ILE, 'fossile', 138, 'D:138|D:140', 'Amonita ou Kabuto'),
+        (CRAMOIS_ILE, 'Vieil Ambre', 142, 'D:142', None),
+        (ROUTE_12, None, 143, c.f('FE_CAPTURE_KABIGON_ROAD012'), None),
+        (ROUTE_16, None, 143, c.f('FE_CAPTURE_KABIGON_ROAD016'), None),
     ]
     for n in range(1, 5):
-        u.append(('Centrale abandonnée', 'faux objet', 101, c.f(f'r010r0101_marumain_0{n}'), None))
+        u.append(('Centrale abandonnée', FAUX_OBJET, 101, c.f(f'r010r0101_marumain_0{n}'), None))
     u += [
         ('Îles Écume', None, 144, c.f('FE_SUB_49_CLEAR'), None),
         ('Centrale abandonnée', None, 145, c.f('FE_SUB_48_CLEAR'), None),
         ('Route Victoire', None, 146, c.f('FE_SUB_47_CLEAR'), None),
-        ('Caverne Azurée', None, 150, c.f('FE_SUB_50_CLEAR'), None),
+        (CAVERNE_AZUREE, None, 150, c.f('FE_SUB_50_CLEAR'), None),
         ('Kanto', 'Pokémon GO (GO Park)', 808, 'D:808', None),
         ('Kanto', 'Pokémon GO (GO Park)', 809, 'D:809', None),
     ]
     # Échanges contre une forme d'Alola (8 par version) : drapeaux FE_FIELD_TRADE_FIRST_01 à 08, ordre supposé (celui du
     # voyage), aucune description dans FlagsEditorEX
-    trades = [('Azuria', 19, 19), ('Carmin sur Mer', 74, 74), ('Lavanville', 50, 50),
-              ('Céladopole', 27, 27) if pikachu else ('Céladopole', 37, 37), ('Safrania', 26, 26), ('Parmanie', 105, 105),
-              ("Cramois'Île", 88, 88) if pikachu else ("Cramois'Île", 52, 52), ('Plateau Indigo', 103, 103)]
+    trades = [('Azuria', 19, 19), (CARMIN_SUR_MER, 74, 74), ('Lavanville', 50, 50),
+              (CELADOPOLE, 27, 27) if pikachu else (CELADOPOLE, 37, 37), ('Safrania', 26, 26), ('Parmanie', 105, 105),
+              (CRAMOIS_ILE, 88, 88) if pikachu else (CRAMOIS_ILE, 52, 52), (PLATEAU_INDIGO, 103, 103)]
     for n, (zone, got, give) in enumerate(trades, 1):
         name = c.species_name(got)
-        u.append((zone, 'échange', got, c.f(f'FE_FIELD_TRADE_FIRST_{n:02d}'), ('alola', f"{name} d'Alola (contre {name})")))
+        u.append((zone, ECHANGE, got, c.f(f'FE_FIELD_TRADE_FIRST_{n:02d}'), ('alola', f"{name} d'Alola (contre {name})")))
     return u
 
 
@@ -512,20 +567,20 @@ def for_version(row, version):
 
 # Lieux des check-lists → (lieu de la table, précision)
 ZONE_FIX = {
-    'Base Æther': ('Route 16', 'Base Æther'), 'Foyer Æther': ('Route 15', 'Foyer Æther'),
-    'Base Æther (Route 16)': ('Route 16', 'Base Æther'), 'Foyer Æther (Route 15)': ('Route 15', 'Foyer Æther'),
+    BASE_THER: (ROUTE_16, BASE_THER), FOYER_THER: (ROUTE_15, FOYER_THER),
+    'Base Æther (Route 16)': (ROUTE_16, BASE_THER), 'Foyer Æther (Route 15)': (ROUTE_15, FOYER_THER),
     'Lac du Halo Solaire / Lunaire': ('Lac du Halo Solaire', None), 'Laboratoire d\'Euphorbe': ('Abords d\'Ekaeka', 'labo'),
-    'Lac du Halo Lunaire/Solaire': ('Lac du Halo Lunaire', None),
-    'Vieille Route / Paradis Æther': ('Vieille Route', None), 'Centre Commercial d\'Ekaeka': ('Ekaeka', 'Centre Commercial'),
-    'Sentier de Mahalo': ('Sentier de Mahalo', None), 'Grand Canyon': ('Grand Canyon de Poni', None),
+    'Lac du Halo Lunaire/Solaire': (LAC_DU_HALO_LUNAIRE, None),
+    'Vieille Route / Paradis Æther': (VIEILLE_ROUTE, None), 'Centre Commercial d\'Ekaeka': ('Ekaeka', CENTRE_COMMERCIAL),
+    SENTIER_DE_MAHALO: (SENTIER_DE_MAHALO, None), 'Grand Canyon': (GRAND_CANYON_DE_PONI, None),
     'Jardin d\'Ula-Ula': ('Jardin d\'Ula-Ula', None),
-    'École des Dresseurs': ('Route 1', 'École de Dresseurs'), 'École de Dresseurs': ('Route 1', 'École de Dresseurs'),
-    'Lac du Halo Lunaire / Lac du Halo Solaire': ('Lac du Halo Lunaire', None),
-    'Embarcadère de Malié': ('Malié', 'embarcadère'), 'Kokohio – Manoir Chelou': ('Manoir Chelou', None),
-    'Grotte Taupiqueur': ('Grotte Taupiqueur', None), 'Souterrain': ('Route 5', 'Souterrain'),
-    'Dojo de Safrania': ('Safrania', 'Dojo'), 'Arène': ('Arène', None), 'Ligue Pokémon': ('Plateau Indigo', None),
-    'Sylphe SARL étage 10': ('Sylphe SARL', '10e étage'), 'Sylphe SARL étage 3': ('Sylphe SARL', '3e étage'),
-    'Sylphe SARL RdC': ('Sylphe SARL', 'rez-de-chaussée'), 'Caldeira Toutofon (Colline Dicarat)': ('Caldeira Toutofon', None),
+    'École des Dresseurs': (ROUTE_1, ECOLE_DE_DRESSEURS), ECOLE_DE_DRESSEURS: (ROUTE_1, ECOLE_DE_DRESSEURS),
+    'Lac du Halo Lunaire / Lac du Halo Solaire': (LAC_DU_HALO_LUNAIRE, None),
+    'Embarcadère de Malié': (MALIE, 'embarcadère'), 'Kokohio – Manoir Chelou': (MANOIR_CHELOU, None),
+    'Grotte Taupiqueur': ('Grotte Taupiqueur', None), 'Souterrain': (ROUTE_5, 'Souterrain'),
+    'Dojo de Safrania': ('Safrania', 'Dojo'), ARENE: (ARENE, None), LIGUE_POKEMON: (PLATEAU_INDIGO, None),
+    'Sylphe SARL étage 10': (SYLPHE_SARL, '10e étage'), 'Sylphe SARL étage 3': (SYLPHE_SARL, '3e étage'),
+    'Sylphe SARL RdC': (SYLPHE_SARL, 'rez-de-chaussée'), 'Caldeira Toutofon (Colline Dicarat)': ('Caldeira Toutofon', None),
 }
 
 
@@ -534,11 +589,10 @@ def clean_zone(text, key):
     text = text.strip()
     if text in ('—', ''):
         return ('Kanto' if key == 'gg' else 'Alola'), 'distribution'
-    fixes = ZONE_FIX if key == 'gg' else {k: v for k, v in ZONE_FIX.items() if k != 'Ligue Pokémon'}
+    fixes = ZONE_FIX if key == 'gg' else {k: v for k, v in ZONE_FIX.items() if k != LIGUE_POKEMON}
     if text in fixes:
         return fixes[text]
-    m = re.fullmatch(r'(.+?)(?: \((.+)\))?', text)
-    place, extra = m.group(1), m.group(2)
+    place, extra = split_paren(text)
     if ', ' in place:  # « Malié, Bibliothèque »
         place, more = place.split(', ', 1)
         extra = ', '.join(p for p in (more, extra) if p)
@@ -560,7 +614,7 @@ def shop_place(text, key):
         return place, extra
     m = re.fullmatch(r"Arène (?:de |d')(.+)", text)
     if m:
-        return m.group(1), 'Arène'
+        return m.group(1), ARENE
     return clean_zone(text, key)
 
 
@@ -601,8 +655,8 @@ def build(c, version, order, cur):
             rank = 10_000
         else:
             rank = order.index(zone)
-        rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                         species=species, count=count, give=give, form=form, team=team, sort=(rank, zone, sort)))
+        rows.append({'section': section, 'zone': zone, 'detail': det, 'done': done, 'label': label, 'item': item, 'tm': tm,
+                         'species': species, 'count': count, 'give': give, 'form': form, 'team': team, 'sort': (rank, zone, sort)})
 
     S, D, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     story_items = set()
@@ -620,14 +674,14 @@ def build(c, version, order, cur):
         if desc.startswith('[') or '(recurring)' in desc or 'Daily' in desc or 'random' in desc:
             continue  # inutilisés, objets cachés qui reviennent, cadeaux quotidiens
         if kind == 'FIELD ITEM':
-            text, extra, k = desc.replace(' item ball disappeared', '').removeprefix('Found '), None, 0
+            text, extra, k = desc.replace(' item ball disappeared', '').removeprefix(FOUND_PREFIX), None, 0
         elif kind == 'HIDDEN ITEM':
-            text, extra, k = desc.removeprefix('Found ').removeprefix('Found '), 'caché', 1  # « Found Found » (Soleil / Lune)
+            text, extra, k = desc.removeprefix(FOUND_PREFIX).removeprefix(FOUND_PREFIX), 'caché', 1  # « Found Found » (Soleil / Lune)
         else:
-            m = re.fullmatch(r'(.+?) from .*', desc)
-            if not m or ' Set' in m.group(1) or ' / ' in m.group(1):
+            parts = split_on(desc, ' from ', empty_end=True)
+            if not parts or ' Set' in parts[0] or ' / ' in parts[0]:
                 continue  # tenues (Let's Go), cadeaux sans objet
-            text, extra, k = m.group(1), 'cadeau', 2
+            text, extra, k = parts[0], 'cadeau', 2
         value, count = item_parts(c, text)
         tm = tm_number(c, value)
         seen.add(value)
@@ -679,16 +733,16 @@ def checklist_encounters(c, rows, version, skip, flags):
     sinon le Pokédex). <skip> : espèces déjà dans l'histoire ; <flags> : numéro national → condition."""
     u = []
     for row in rows:
-        if row['Catégorie'] not in ('Légendaire', 'Ultra-Chimère') or not for_version(row, version):
+        if row[CATEGORIE] not in ('Légendaire', 'Ultra-Chimère') or not for_version(row, version):
             continue
         name = re.sub(r'^(?:Obtenir|Capturer) ', '', row['Objectif'])
-        name = re.sub(r'\s*\(.*\)$', '', name)
+        name = strip_paren(name)
         species = c.species(name)
         if species in skip or any(e[2] == species for e in u):
             continue
         zone, extra = clean_zone(row['Lieu'], c.key)
         if species == 789:  # Cosmog : le lac de la version (Soleil / Lune), celui du monde inversé (Ultra)
-            zone = 'Lac du Halo Solaire' if version in ('SN', 'UM') else 'Lac du Halo Lunaire'
+            zone = 'Lac du Halo Solaire' if version in ('SN', 'UM') else LAC_DU_HALO_LUNAIRE
             extra = 'monde inversé' if c.key == 'usum' else None
         u.append((zone, extra, species, flags.get(species, f'D:{species}'), None))
     return u
@@ -704,15 +758,15 @@ def capture_flags(c):
     return out
 
 
-def island_scan(c, rows, version):
+def island_scan(c, rows):
     """Scanner des Îles : chaque Pokémon capturé (le Pokédex : rien d'autre ne le garde)."""
     q = []
     for row in rows:
-        if row['Catégorie'] != 'Scanner des Îles':
+        if row[CATEGORIE] != 'Scanner des Îles':
             continue
         m = re.fullmatch(r'Capturer (.+?) via le Scanner des Îles', row['Objectif'])
         species = c.species(m.group(1))
-        zone = re.sub(r'\s*\(.*\)$', '', row['Lieu'])
+        zone = strip_paren(row['Lieu'])
         zone, extra = clean_zone(zone, c.key)
         day = row['Détails / Récompense'].split(',')[0].lower()
         q.append(('Scanner des Îles', ', '.join(p for p in (zone, extra, day) if p), f'Capturer {m.group(1)}',
@@ -732,7 +786,7 @@ def battle_tree():
     return q
 
 
-SM_CORES = [('Vieille Route', 'chambre de Paulie'), ("Lili'i", 'maison de Pectorius'), ('Route 17', 'commissariat'),
+SM_CORES = [(VIEILLE_ROUTE, 'chambre de Paulie'), (LILI_I, 'maison de Pectorius'), ('Route 17', 'commissariat'),
             ('Abords d\'Ekaeka', 'maison du joueur'), ('Konikoni', "chambre d'Alyxia")]
 
 
@@ -750,18 +804,18 @@ def zygarde(c, cells):
 def masters(c, rows):
     """Experts de Let's Go : titre débloqué (titre n : Pokémon n du Pokédex de Let's Go, Meltan et Melmetal en 152 et 153)."""
     q = []
-    for n, row in enumerate((r for r in rows if r['Catégorie'] == 'Expert'), 1):
+    for n, row in enumerate((r for r in rows if r[CATEGORIE] == 'Expert'), 1):
         zone, extra = clean_zone(row['Lieu'], 'gg')
         q.append(('Experts Pokémon', ', '.join(p for p in (zone, extra) if p), row['Objectif'].strip(), f'TF:{n}'))
     if len(q) != 153:
         raise SystemExit(f'Experts : {len(q)} au lieu de 153')
     q += [
         ('Experts Pokémon', 'Céladopole, Bureau Game Freak', 'Obtenir le titre de Grand Maître', 'TF:154'),
-        ('Après la Ligue', 'Plateau Indigo, entrée', 'Battre Red (titre de Maître de Combat)',
+        (APRES_LA_LIGUE, 'Plateau Indigo, entrée', 'Battre Red (titre de Maître de Combat)',
          c.f('FE_EV0905_BTL_RED') + '|TF:155'),
-        ('Après la Ligue', 'Repaire Rocket', 'Battre Amos', c.f('FE_SUB_44_CLEAR')),
-        ('Après la Ligue', 'Caverne Azurée', 'Battre Green', c.f('FE_SUB_45_CLEAR')),
-        ('Après la Ligue', 'Route 17', 'Combat final contre Jessie et James', c.f('FE_SUB_57_CLEAR')),
+        (APRES_LA_LIGUE, 'Repaire Rocket', 'Battre Amos', c.f('FE_SUB_44_CLEAR')),
+        (APRES_LA_LIGUE, CAVERNE_AZUREE, 'Battre Green', c.f('FE_SUB_45_CLEAR')),
+        (APRES_LA_LIGUE, 'Route 17', 'Combat final contre Jessie et James', c.f('FE_SUB_57_CLEAR')),
     ]
     return q
 
@@ -770,9 +824,9 @@ def checklist_machines(rows):
     """CT de la check-list : numéro → lieu."""
     out = {}
     for row in rows:
-        if row['Catégorie'] != 'CT':
+        if row[CATEGORIE] != 'CT':
             continue
-        m = re.fullmatch(r'CT0*(\d+)', row['ID'])
+        m = re.fullmatch(r'CT(\d+)', row['ID'])  # int() enlève les zéros de tête
         out[int(m.group(1))] = row['Lieu']
     return out
 
@@ -793,9 +847,11 @@ def emit(games, out):
              '{',
              '']
     for name, doc, dex, rows in games:
-        lines.append(f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : {dex}).</summary>')
-        lines.append(f'    public static readonly CompletionRow[] {name} =')
-        lines.append('    [')
+        lines.extend([
+            f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : {dex}).</summary>',
+            f'    public static readonly CompletionRow[] {name} =',
+            '    [',
+        ])
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
@@ -880,20 +936,20 @@ if __name__ == '__main__':
             if key == 'sm':
                 gifts = {789: c.f('FE_SUB140_END'), 772: c.f('FE_SUB202_END'), 801: c.f('SYS_FLAG_MAGIANA_CLEAR')}
                 enc = checklist_encounters(c, rows, version, {791, 792} | MYSTERY_GIFT, gifts) + sm_encounters(c, version)
-                cur = dict(story=sm_story(c, version), encounters=enc, z=SM_Z, machines=machines,
-                           quests=battle_tree() + zygarde(c, cells['sm']) + island_scan(c, rows, version))
+                cur = {'story': sm_story(c, version), 'encounters': enc, 'z': SM_Z, 'machines': machines,
+                           'quests': battle_tree() + zygarde(c, cells['sm']) + island_scan(c, rows)}
                 dex = 'les 802'
             elif key == 'usum':
                 gifts = capture_flags(c)
                 gifts.update({789: c.f('FE_SUB140_END'), 772: c.f('FE_VICKE_NULL_GET'),
                               801: c.f('SYS_FLAG_MAGIANA_CLEAR'), 803: c.f('FE_CAPTURE_UBVENOM')})
-                enc = checklist_encounters(c, rows, version, {791, 792, 800} | MYSTERY_GIFT, gifts) + usum_encounters(c, version)
-                cur = dict(story=usum_story(c, version), encounters=enc, z=USUM_Z, machines=machines,
-                           quests=battle_tree() + zygarde(c, cells['usum']) + island_scan(c, rows, version))
+                enc = checklist_encounters(c, rows, version, {791, 792, 800} | MYSTERY_GIFT, gifts) + usum_encounters(c)
+                cur = {'story': usum_story(c, version), 'encounters': enc, 'z': USUM_Z, 'machines': machines,
+                           'quests': battle_tree() + zygarde(c, cells['usum']) + island_scan(c, rows)}
                 dex = 'les 807'
             else:
-                cur = dict(story=gg_story(c, version), encounters=gg_encounters(c, version), z=[], mega=GG_MEGA,
-                           machines=machines, quests=masters(c, rows))
+                cur = {'story': gg_story(c, version), 'encounters': gg_encounters(c, version), 'z': [], 'mega': GG_MEGA,
+                           'machines': machines, 'quests': masters(c, rows)}
                 dex = 'les 151 de Kanto, Meltan et Melmetal'
             if name in roms:
                 cur['trainers'] = trainer_rows(root, *roms[name], order[key])

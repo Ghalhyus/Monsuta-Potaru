@@ -20,7 +20,7 @@ public sealed record PokemonFilterTraits(ushort Species, bool IsEgg, string Nick
         var row = new BankPokemon { Species = pk.Species };
         PokemonTraits.Fill(row, pk);
         return new PokemonFilterTraits(pk.Species, pk.IsEgg, pk.IsEgg ? "Œuf" : view.Nickname, pk.IsEgg ? "" : view.SpeciesName,
-            (byte)pk.CurrentLevel, pk.Gender, pk.IsShiny && !pk.IsEgg, row.Type1, row.Type2, row.Nature ?? 0, row.Ability,
+            pk.CurrentLevel, pk.Gender, pk.IsShiny && !pk.IsEgg, row.Type1, row.Type2, row.Nature ?? 0, row.Ability,
             row.IvHp, row.IvAtk, row.IvDef, row.IvSpA, row.IvSpD, row.IvSpe, row.FormKind, row.MegaReady);
     }
 

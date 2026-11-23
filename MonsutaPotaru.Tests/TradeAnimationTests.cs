@@ -106,7 +106,7 @@ public sealed class TradeAnimationTests : PageTestContext
         cut.WaitForAssertion(() => Assert.Single(module.VerifyInvoke("play").Arguments.Skip(1)));
         Assert.Equal("Remettre le son", cut.Find(".trade-show-controls button").GetAttribute("aria-label"));
         await cut.Find(".trade-show-controls button").ClickAsync(new());
-        Assert.Equal(false, module.VerifyInvoke("setMuted").Arguments[1]);
+        Assert.False((bool?)module.VerifyInvoke("setMuted").Arguments[1]);
         Assert.Equal("Couper le son", cut.Find(".trade-show-controls button").GetAttribute("aria-label"));
 
         await cut.InvokeAsync(cut.Instance.Ended); // fin du déroulé (echange.js)

@@ -164,7 +164,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
         // Une ligne « Pion », deux images
-        var pawn = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li").Last();
+        var pawn = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li")[^1];
         Assert.Equal(2, pawn.QuerySelectorAll(".chess-mon-images img").Length);
         Assert.Equal("Nidoran♂ / Nidoran♀", pawn.QuerySelector(".chess-mon-name")!.TextContent);
         await ondine.FindAll(".chess-team")[3].QuerySelector("button")!.ClickAsync(new()); // Poison
@@ -205,7 +205,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.True(ondine.HasButton("Passer"));
         sacha.WaitForText("Au tour de ondine");
         // Sur le plateau, la prise de Tarsal en f2 n'a pas les coins dorés (« il rejouera ») : un seul tour bonus
-        ondine.WaitForAssertion(() => Assert.Equal(false, LastMarkedMove(Sq("f2"))?.GetType().GetProperty("super")!.GetValue(LastMarkedMove(Sq("f2")))));
+        ondine.WaitForAssertion(() => Assert.False((bool?)LastMarkedMove(Sq("f2"))?.GetType().GetProperty("super")!.GetValue(LastMarkedMove(Sq("f2")))));
 
         // Pendant son tour bonus, Démolosse mange encore un Tarsal (super efficace) : il ne rejoue pas une deuxième fois
         await Click(ondine, "f2");
@@ -404,10 +404,10 @@ public sealed class ChessPageTests : PageTestContext
 
         // Sacha les remet pendant la partie : le plateau suit, le compte le garde
         await sacha.Find("#chess-idle").ChangeAsync(new() { Value = false });
-        Assert.Equal(true, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
         await ondine.Find("#chess-idle").ChangeAsync(new() { Value = true });
-        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.False((await preferences.SortsAsync("ondine")).ChessIdle);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
     }
@@ -564,7 +564,7 @@ public sealed class ChessPageTests : PageTestContext
         // L'invité a la case des animations au repos, pour cette partie seulement (pas de compte où la garder)
         Assert.False(guest.Find("#chess-idle").HasAttribute("checked"));
         await guest.Find("#chess-idle").ChangeAsync(new() { Value = true });
-        Assert.Equal(false, JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
+        Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
         Assert.DoesNotContain("gardé dans ton compte", guest.Text());
         Assert.True((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessIdle);

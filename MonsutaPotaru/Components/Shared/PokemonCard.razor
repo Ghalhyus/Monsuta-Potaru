@@ -23,15 +23,12 @@
                 <div class="text-muted small">
                     @Pokemon.SpeciesName · N.@Pokemon.Level · @Pokemon.Format
                 </div>
-                @if (!Pokemon.HasLegality)
-                {
-                    @* Pokémon de Minecraft : PKHeX ne sait pas en juger *@
-                }
-                else if (Pokemon.IsLegal)
+                @* Pokémon de Minecraft : PKHeX ne sait pas en juger, pas de badge *@
+                @if (Pokemon.HasLegality && Pokemon.IsLegal)
                 {
                     <span class="badge bg-success">Légal</span>
                 }
-                else
+                else if (Pokemon.HasLegality)
                 {
                     <span class="badge bg-danger" title="Selon l'analyse de légalité de PKHeX">Illégal</span>
                 }

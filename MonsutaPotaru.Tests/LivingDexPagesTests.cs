@@ -324,7 +324,7 @@ public sealed class LivingDexPagesTests : PageTestContext
         await cut.Click("+ Créer un living dex");
 
         // Le groupe « Minecraft », après les générations ; pas parmi les chromatiques
-        var minecraft = cut.FindAll(".livingdex-generation-toggle").Last();
+        var minecraft = cut.FindAll(".livingdex-generation-toggle")[^1];
         Assert.Equal("▸Minecraft (1 modpack)", minecraft.TextContent.Trim());
         await minecraft.ClickAsync(new());
         var radio = cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!;
@@ -346,7 +346,7 @@ public sealed class LivingDexPagesTests : PageTestContext
         // Plus de monde libre : le jeu est grisé, rien à choisir
         var list = Render<LivingDexes>();
         await list.Click("+ Créer un living dex");
-        await list.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        await list.FindAll(".livingdex-generation-toggle")[^1].ClickAsync(new());
         Assert.Contains("(déjà créé)", list.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).TextContent);
         await list.Click("Chromatique");
         Assert.DoesNotContain(list.FindAll(".livingdex-generation-toggle"), t => t.TextContent.Contains("Minecraft"));
@@ -357,7 +357,7 @@ public sealed class LivingDexPagesTests : PageTestContext
     {
         var cut = Render<LivingDexes>();
         await cut.Click("+ Créer un living dex");
-        await cut.FindAll(".livingdex-generation-toggle").Last().ClickAsync(new());
+        await cut.FindAll(".livingdex-generation-toggle")[^1].ClickAsync(new());
         await cut.FindAll(".livingdex-game").Single(l => l.TextContent.Contains("All the Mons")).QuerySelector("input")!.ChangeAsync(new() { Value = true });
         cut.WaitForText("Aucun monde All the Mons disponible : stockes-en un dans");
     }

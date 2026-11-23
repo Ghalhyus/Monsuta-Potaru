@@ -67,7 +67,7 @@ public static class Snbt
 
         private Dictionary<string, object?> Compound(int depth)
         {
-            _pos++; // {
+            _pos++; // accolade ouvrante
             var result = new Dictionary<string, object?>(StringComparer.Ordinal);
             while (true)
             {

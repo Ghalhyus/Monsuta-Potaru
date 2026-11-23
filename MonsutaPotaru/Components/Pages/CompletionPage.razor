@@ -334,7 +334,7 @@ else if (view is not null)
             userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         view = await Completions.GetAsync(userId, Id);
         notFound = view is null;
-        section = CompletionSections.FromSlug(SectionFromQuery, Sections);
+        section = CompletionSections.FromSlug(SectionFromQuery, Sections());
         openChapters = [.. (OpenFromQuery ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(n => int.TryParse(n, out var i) ? i : -1).Where(i => i >= 0)];
         // Le réglage est celui du joueur connecté, même chez un autre joueur : sa façon de lire une page.
@@ -347,13 +347,13 @@ else if (view is not null)
     }
 
     /// <summary>Sections de cette complétion, dans l'ordre de la page.</summary>
-    private List<CompletionSection> Sections => view?.Progress.Sections.Select(s => s.Section).ToList() ?? [];
+    private List<CompletionSection> Sections() => view?.Progress.Sections.Select(s => s.Section).ToList() ?? [];
 
     /// <summary>Section choisie, gardée dans l'adresse (la première, « Histoire » dans un jeu, n'y est pas écrite).</summary>
     private void SetSection(CompletionSection value) =>
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
-            ["section"] = Sections.Count > 0 && value == Sections[0] ? null : CompletionSections.Slug(value),
+            ["section"] = Sections() is [var first, ..] && value == first ? null : CompletionSections.Slug(value),
             ["ouverts"] = null, // les chapitres ouverts sont ceux d'une section
         }), replace: true);
 

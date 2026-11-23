@@ -41,8 +41,8 @@ import struct
 from completion_gen6_rom import RomFS, amx, garc, lz11, texts
 
 GAMES = {
-    'sm': dict(trdata='a/1/0/5', trpoke='a/1/0/6', names=105, classes=106, flags=0x81C, scripts='a/1/3/9'),
-    'usum': dict(trdata='a/1/0/6', trpoke='a/1/0/7', names=110, classes=111, flags=0xBDC, scripts='a/1/4/3'),
+    'sm': {'trdata': 'a/1/0/5', 'trpoke': 'a/1/0/6', 'names': 105, 'classes': 106, 'flags': 0x81C, 'scripts': 'a/1/3/9'},
+    'usum': {'trdata': 'a/1/0/6', 'trpoke': 'a/1/0/7', 'names': 110, 'classes': 111, 'flags': 0xBDC, 'scripts': 'a/1/4/3'},
 }
 SCRIPT_BASE = 1000  # numéro de script d'un dresseur des routes = 1000 + numéro
 ET_RECORD = 84
@@ -162,7 +162,7 @@ def read_trainers(path, kind):
         d, p = data[n], parties[n]  # pas compressés (la classe 17 commence par l'octet 0x11 de LZ11)
         team = [(struct.unpack_from('<H', p, k + 16)[0], struct.unpack_from('<H', p, k + 14)[0])
                 for k in range(0, len(p) - 31, 32)]
-        trainers[n] = dict(cls=classes[d[0]], name=names[n] if n < len(names) else '', team=team, places=[], script=None)
+        trainers[n] = {'cls': classes[d[0]], 'name': names[n] if n < len(names) else '', 'team': team, 'places': [], 'script': None}
 
     table = garc(rom.read(g['scripts']))[0]
     ranges = [r for r in sorted(struct.unpack_from('<5H', table, 10 * k) for k in range(len(table) // 10)) if r[0]]
@@ -250,6 +250,6 @@ def read_trainers(path, kind):
         group = min(known) if known else members[0]
         for n in members:
             if trainers[n]['script'] is None:
-                trainers[n]['script'] = dict(places=set(), group=group)
+                trainers[n]['script'] = {'places': set(), 'group': group}
             trainers[n]['script']['places'] |= places
     return trainers

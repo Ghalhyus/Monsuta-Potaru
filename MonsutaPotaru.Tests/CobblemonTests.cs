@@ -43,6 +43,9 @@ public sealed class CobblemonTests : IDisposable
 
     internal static NbtValue Text(string s) => new(NbtType.String, s);
 
+    /// <summary>Identifiant de pension (« TetheringId ») d'un Pokémon de test.</summary>
+    private static int[] TetheringId() => [1, 2, 3, 4];
+
     /// <summary>
     /// Le vrai monde (pokemon, level.dat, stats), avec ces Pokémon en plus dans la première boîte du PC (cases 0, 1...).
     /// </summary>
@@ -211,8 +214,8 @@ public sealed class CobblemonTests : IDisposable
         Assert.Null(fennekin.Nickname);
         Assert.Equal((byte)PKHeX.Core.Nature.Quirky, fennekin.Nature);
         Assert.Equal((int)PKHeX.Core.Ability.Blaze, fennekin.Ability);
-        Assert.Equal([(ushort)Move.Ember, (ushort)Move.Scratch, (ushort)Move.TailWhip], fennekin.Moves.Select(m => m.Move));
-        Assert.Equal(new byte[] { 26, 24, 11, 21, 20, 23 }, fennekin.Ivs);
+        Assert.Equal([(ushort)Move.Ember, (ushort)Move.Scratch, (ushort)Move.TailWhip], fennekin.ReadMoves().Select(m => m.Move));
+        Assert.Equal(new byte[] { 26, 24, 11, 21, 20, 23 }, fennekin.ReadIvs());
         Assert.Null(fennekin.HeldItemId);
         Assert.Equal("3c671c09-4aa5-4db8-b2be-6fd169dadfe4", fennekin.Uuid);
         Assert.Equal("cobblemon:3c671c09-4aa5-4db8-b2be-6fd169dadfe4", fennekin.Fingerprint);
@@ -243,7 +246,7 @@ public sealed class CobblemonTests : IDisposable
             n["Nickname"] = Text("Neige");
             n["MintedNature"] = Text("cobblemon:timid");
             n["HeldItem"] = new NbtCompound { ["id"] = Text("cobblemon:leftovers"), ["count"] = new NbtValue(NbtType.Int, 1) };
-            n["TetheringId"] = new NbtArray(NbtType.IntArray, new[] { 1, 2, 3, 4 });
+            n["TetheringId"] = new NbtArray(NbtType.IntArray, TetheringId());
         });
         Assert.Equal((ushort)Species.Vulpix, vulpix.Species);
         Assert.Equal(1, vulpix.Form); // Alola
@@ -458,7 +461,7 @@ public sealed class CobblemonTests : IDisposable
     public void Session_DepositsAndWithdraws_InMinecraft()
     {
         var session = new SaveSession();
-        Assert.True(session.TryLoad(World(Mon("eevee", 1), Mon("pikachu", 2, n => n["TetheringId"] = new NbtArray(NbtType.IntArray, new[] { 1, 2, 3, 4 }))),
+        Assert.True(session.TryLoad(World(Mon("eevee", 1), Mon("pikachu", 2, n => n["TetheringId"] = new NbtArray(NbtType.IntArray, TetheringId()))),
             "pokemon.zip", out var error), error);
         Assert.NotNull(session.Minecraft);
         Assert.Null(session.Save);

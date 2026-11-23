@@ -558,8 +558,10 @@ public sealed class StoredSaveService(
     private static CobblemonSave? ReadWorld(byte[] data, out StoreResult refusal)
     {
         var world = CobblemonSave.TryRead(data, out var error);
-        refusal = new(StoreStatus.Invalid,
-            world is null ? error : !world.HasLevel ? CobblemonSave.NoLevelMessage : CobblemonSave.NoStatsMessage);
+        var message = error;
+        if (world is not null)
+            message = world.HasLevel ? CobblemonSave.NoStatsMessage : CobblemonSave.NoLevelMessage;
+        refusal = new(StoreStatus.Invalid, message);
         return world is { HasLevel: true, PlayTimeSeconds: not null } ? world : null;
     }
 

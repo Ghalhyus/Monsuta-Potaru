@@ -113,8 +113,8 @@ public static class SiteSorts
     public static string Slug(LivingDexSort by) => LivingDexChoices.First(c => c.By == by).Slug;
     public static string Slug(CompletionSort by) => CompletionChoices.First(c => c.By == by).Slug;
     public static string Slug(RibbonSort by) => RibbonChoices.First(c => c.By == by).Slug;
-
     public static string Slug(BattleLayout layout) => BattleLayoutChoices.First(c => c.Layout == layout).Slug;
+    public static string Slug(CompletionStepsView view) => CompletionViewChoices.First(c => c.View == view).Slug;
 
     /// <summary>Affichages des étapes d'une complétion : nom dans les préférences et le formulaire, libellé.</summary>
     public static readonly IReadOnlyList<(CompletionStepsView View, string Slug, string Label)> CompletionViewChoices =
@@ -122,8 +122,6 @@ public static class SiteSorts
         (CompletionStepsView.List, "liste", "Liste"),
         (CompletionStepsView.Grid, "grille", "Grille"),
     ];
-
-    public static string Slug(CompletionStepsView view) => CompletionViewChoices.First(c => c.View == view).Slug;
 
     /// <summary>Affichage lu dans les préférences ou le formulaire ; absent ou inconnu (trafiqué) : la liste.</summary>
     public static CompletionStepsView CompletionViewFrom(string? slug) =>
@@ -378,13 +376,17 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
     public async Task<AccountResult> SetChessIdleAsync(string userId, bool animated)
     {
         var result = await SetSortsAsync(userId, await SortsAsync(userId) with { ChessIdle = animated });
-        return result.Ok ? new(true, animated ? "Pokémon des échecs animés au repos." : "Pokémon des échecs figés au repos.") : result;
+        if (!result.Ok)
+            return result;
+        return new(true, animated ? "Pokémon des échecs animés au repos." : "Pokémon des échecs figés au repos.");
     }
 
     /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>
     public async Task<AccountResult> SetBattleEnlargedAsync(string userId, bool enlarged)
     {
         var result = await SetSortsAsync(userId, await SortsAsync(userId) with { BattleEnlarged = enlarged });
-        return result.Ok ? new(true, enlarged ? "Écrans de combat agrandis." : "Écrans de combat à leur taille normale.") : result;
+        if (!result.Ok)
+            return result;
+        return new(true, enlarged ? "Écrans de combat agrandis." : "Écrans de combat à leur taille normale.");
     }
 }

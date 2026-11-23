@@ -18,7 +18,8 @@ internal static class CompletionRibbons
     /// </summary>
     public static IEnumerable<CompletionRow> Hoenn(bool emerald)
     {
-        string[] halls = emerald ? ["Nénucrique", "Nénucrique", "Nénucrique", "Nénucrique"] : ["Vergazon", "Autéquia", "Poivressel", "Nénucrique"];
+        const string Nenucrique = "Nénucrique";
+        string[] halls = emerald ? [Nenucrique, Nenucrique, Nenucrique, Nenucrique] : ["Vergazon", "Autéquia", "Poivressel", Nenucrique];
         var contests = Ribbons.ContestParts.Where(p => p.Key.StartsWith("G3", StringComparison.Ordinal)).ToList();
         foreach (var (part, i) in contests.Select((p, i) => (p, i)).OrderBy(x => x.i % 4))
             yield return Row(halls[i % 4], Contest, part.Key, part.Name);

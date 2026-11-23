@@ -32,7 +32,25 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from completion_gen3 import anchored_rank  # noqa: E402
+from completion_gen3 import anchored_rank, split_on  # noqa: E402
+
+# Textes répétés (lieux, libellés)
+ABIME_ZERO = 'Abîme Zéro'
+ARENE = 'Arène'
+CATEGORIE = 'Catégorie'
+DESERT_ROTISSABLE = 'Désert Rôtissable'
+EVENT_FLAGS = 'Event Flags'
+INSTITUT_MYRTILLE = 'Institut Myrtille'
+LAC_ASROL = 'Lac Asrol'
+LANDE_DE_LA_QUIETUDE = 'Lande de la Quiétude'
+LIGUE_POKEMON = 'Ligue Pokémon'
+MONT_NAPPE = 'Mont Nappé'
+MONT_STRUEUX = 'Mont Strueux'
+PLAINE_DES_GLYCINES = 'Plaine des Glycines'
+ZONE_EST_NO_3 = 'Zone Est nº 3'
+ZONE_OUEST_NO_1 = 'Zone Ouest nº 1'
+ZONE_SUD_NO_3 = 'Zone Sud nº 3'
+ZONE_ZERO = 'Zone Zéro'
 
 MAX_ITEM = 2557
 
@@ -66,7 +84,7 @@ class Ctx:
         self.sections = load_flags(os.path.join(root, 'flags_gen9sv_en.txt'))
         # Nom interne → condition : drapeau (bloc booléen « X: »), variable (bloc numérique « XV:…:1 »), dresseur (« TR: »)
         self.cond, self.work, self.trainer = {}, {}, {}
-        for flag, kind, loc, sub, desc, name in self.sections['Event Flags']:
+        for flag, kind, loc, sub, desc, name in self.sections[EVENT_FLAGS]:
             if name:
                 self.cond.setdefault(name, f'X:{flag & 0xFFFFFFFF:08X}')
         for flag, kind, loc, sub, desc, name in self.sections['Event Work']:
@@ -152,7 +170,7 @@ def split_place(c, loc, sub):
     sub = sub.strip()
     if not sub:
         return c.place(loc), None
-    m = re.fullmatch(r'(.+?)(?: (\(cave\)))?', sub)
+    m = re.fullmatch(r'(.+?)(?: (\(cave\)))?$', sub)
     if m.group(1) in c.place_fr and m.group(1) not in SUBPLACES:
         return c.place(m.group(1)), 'grotte' if m.group(2) else None
     if sub in SUBPLACES:
@@ -164,7 +182,7 @@ def split_place(c, loc, sub):
 
 def item_parts(c, text):
     """« Ultra Ball (x3) » → (numéro, 3)."""
-    m = re.fullmatch(r'(.+?)(?: ?\(x ?(\d+)\))?', text.strip())
+    m = re.fullmatch(r'(.+?)(?: ?\(x ?(\d+)\))?$', text.strip())
     return c.item(m.group(1).strip()), int(m.group(2) or 1)
 
 
@@ -183,64 +201,64 @@ def story(c, version):
         ('Cuchalaga', 'plage', "Recevoir l'appli Pokédex (combat contre Menzi)", c.f('FSYS_YMAP_TOPMENU_UNLOCK_00')),
         ('Mesaledo', None, f'Pouvoir chevaucher {legend}', c.f('FSYS_RIDE_ENABLE')),
         # La Voie du Maître : les huit Arènes (rang d'obtention de chaque badge)
-        ('Sevaro', 'Arène', 'Badge Insecte (Éra)', c.badge('WEVT_GYM_MUSHI_CLEAR')),
+        ('Sevaro', ARENE, 'Badge Insecte (Éra)', c.badge('WEVT_GYM_MUSHI_CLEAR')),
         # Un parfum de légende : les Pokémon Dominants, et le pouvoir que chacun donne à la monture
-        ('Zone Sud nº 3', 'Roche-Falaise', 'Battre le Dominant Craparoi', c.badge('WEVT_NUSHI_IWA_CLEAR')),
-        ('Zone Sud nº 3', None, f'{legend} : pouvoir Accélération', c.f('FSYS_RIDE_DASH_ENABLE')),
-        ('Cuencia', 'Arène', 'Badge Plante (Colza)', c.badge('WEVT_GYM_KUSA_CLEAR')),
-        ('Zone Ouest nº 1', 'Vaste-Ciel', 'Battre le Dominant Lestombaile', c.badge('WEVT_NUSHI_HIKOU_CLEAR')),
-        ('Zone Ouest nº 1', None, f'{legend} : pouvoir Nage', c.f('FSYS_RIDE_SWIM_ENABLE')),
+        (ZONE_SUD_NO_3, 'Roche-Falaise', 'Battre le Dominant Craparoi', c.badge('WEVT_NUSHI_IWA_CLEAR')),
+        (ZONE_SUD_NO_3, None, f'{legend} : pouvoir Accélération', c.f('FSYS_RIDE_DASH_ENABLE')),
+        ('Cuencia', ARENE, 'Badge Plante (Colza)', c.badge('WEVT_GYM_KUSA_CLEAR')),
+        (ZONE_OUEST_NO_1, 'Vaste-Ciel', 'Battre le Dominant Lestombaile', c.badge('WEVT_NUSHI_HIKOU_CLEAR')),
+        (ZONE_OUEST_NO_1, None, f'{legend} : pouvoir Nage', c.f('FSYS_RIDE_SWIM_ENABLE')),
         # Objectif Stardust : les cinq groupes de la Team Star
         ('Repaire du Groupe Segin', None, 'Battre Brome (Groupe Segin, Ténèbres)', c.badge('WEVT_DAN_AKU_CLEAR')),
-        ('Levalendura', 'Arène', 'Badge Électrik (Mashynn)', c.badge('WEVT_GYM_DENKI_CLEAR')),
+        ('Levalendura', ARENE, 'Badge Électrik (Mashynn)', c.badge('WEVT_GYM_DENKI_CLEAR')),
         ('Repaire du Groupe Schedar', None, 'Battre Meloco (Groupe Schedar, Feu)', c.badge('WEVT_DAN_HONOO_CLEAR')),
         # FlagsEditorEX inverse les lieux de ces deux variables : HAGANE (Acier) est Ferdeter, JIMEN (Sol) le Désert
-        ('Zone Est nº 3', 'Acier-Tranchée', 'Battre le Dominant Ferdeter', c.badge('WEVT_NUSHI_HAGANE_CLEAR')),
-        ('Zone Est nº 3', None, f'{legend} : pouvoir Saut', c.f('FSYS_RIDE_HIJUMP_ENABLE')),
-        ('Jarramanca', 'Arène', 'Badge Eau (Kombu)', c.badge('WEVT_GYM_MIZU_CLEAR')),
+        (ZONE_EST_NO_3, 'Acier-Tranchée', 'Battre le Dominant Ferdeter', c.badge('WEVT_NUSHI_HAGANE_CLEAR')),
+        (ZONE_EST_NO_3, None, f'{legend} : pouvoir Saut', c.f('FSYS_RIDE_HIJUMP_ENABLE')),
+        ('Jarramanca', ARENE, 'Badge Eau (Kombu)', c.badge('WEVT_GYM_MIZU_CLEAR')),
         ('Repaire du Groupe Tsih', None, 'Battre Erio (Groupe Tsih, Poison)', c.badge('WEVT_DAN_DOKU_CLEAR')),
-        ('Mezclamora', 'Arène', 'Badge Normal (Okuba)', c.badge('WEVT_GYM_NORMAL_CLEAR')),
-        ('Frigao', 'Arène', 'Badge Spectre (Laïm)', c.badge('WEVT_GYM_GHOST_CLEAR')),
-        ('Désert Rôtissable', 'Tremble-Terre',
+        ('Mezclamora', ARENE, 'Badge Normal (Okuba)', c.badge('WEVT_GYM_NORMAL_CLEAR')),
+        ('Frigao', ARENE, 'Badge Spectre (Laïm)', c.badge('WEVT_GYM_GHOST_CLEAR')),
+        (DESERT_ROTISSABLE, 'Tremble-Terre',
          'Battre le Dominant Fort-Ivoire' if scarlet else 'Battre le Dominant Roue-de-Fer', c.badge('WEVT_NUSHI_JIMEN_CLEAR')),
-        ('Désert Rôtissable', None, f'{legend} : pouvoir Planer', c.f('FSYS_RIDE_GLIDE_ENABLE')),
-        ('Alforneira', 'Arène', 'Badge Psy (Tully)', c.badge('WEVT_GYM_ESPER_CLEAR')),
-        ('Mont Nappé', 'Arène', 'Badge Glace (Grusha)', c.badge('WEVT_GYM_KOORI_CLEAR')),
+        (DESERT_ROTISSABLE, None, f'{legend} : pouvoir Planer', c.f('FSYS_RIDE_GLIDE_ENABLE')),
+        ('Alforneira', ARENE, 'Badge Psy (Tully)', c.badge('WEVT_GYM_ESPER_CLEAR')),
+        (MONT_NAPPE, ARENE, 'Badge Glace (Grusha)', c.badge('WEVT_GYM_KOORI_CLEAR')),
         ('Repaire du Groupe Ruchbah', None, 'Battre Ortiga (Groupe Ruchbah, Fée)', c.badge('WEVT_DAN_FAIRY_CLEAR')),
-        ('Lac Asrol', None, 'Battre le Dominant Oyacata, puis Nigirigon', c.badge('WEVT_NUSHI_DRAGON_CLEAR')),
-        ('Lac Asrol', None, f'{legend} : pouvoir Escalade', c.f('FSYS_RIDE_CLIMB_ENABLE')),
+        (LAC_ASROL, None, 'Battre le Dominant Oyacata, puis Nigirigon', c.badge('WEVT_NUSHI_DRAGON_CLEAR')),
+        (LAC_ASROL, None, f'{legend} : pouvoir Escalade', c.f('FSYS_RIDE_CLIMB_ENABLE')),
         ('Repaire du Groupe Caph', None, 'Battre Nèflie (Groupe Caph, Combat)', c.badge('WEVT_DAN_KAKUTOU_CLEAR')),
         # La Ligue : l'entretien de Cayenn, puis les combats (lancés par script : leur trace n'est pas sûre, l'histoire
         # finie les fait d'office)
-        ('Ligue Pokémon', None, "Réussir l'entretien de l'épreuve de maîtrise", c.f('FEVT_CHAMP_PASS_1ST_INTERVIEW')),
-        ('Ligue Pokémon', None, 'Battre Cayenn (Conseil 4, Sol)', f"{c.tr('e4_jimen_01')}|{clear}"),
-        ('Ligue Pokémon', None, 'Battre Popi (Conseil 4, Acier)', f"{c.tr('e4_hagane_01')}|{clear}"),
-        ('Ligue Pokémon', None, 'Battre Okuba (Conseil 4, Vol)', f"{c.tr('e4_hikou_01')}|{clear}"),
-        ('Ligue Pokémon', None, 'Battre Hassa (Conseil 4, Dragon)', f"{c.tr('e4_dragon_01')}|{clear}"),
-        ('Ligue Pokémon', None, 'Devenir Maître : battre Alisma, Maîtresse en Chef', f"{c.tr('chairperson_01')}|{clear}"),
+        (LIGUE_POKEMON, None, "Réussir l'entretien de l'épreuve de maîtrise", c.f('FEVT_CHAMP_PASS_1ST_INTERVIEW')),
+        (LIGUE_POKEMON, None, 'Battre Cayenn (Conseil 4, Sol)', f"{c.tr('e4_jimen_01')}|{clear}"),
+        (LIGUE_POKEMON, None, 'Battre Popi (Conseil 4, Acier)', f"{c.tr('e4_hagane_01')}|{clear}"),
+        (LIGUE_POKEMON, None, 'Battre Okuba (Conseil 4, Vol)', f"{c.tr('e4_hikou_01')}|{clear}"),
+        (LIGUE_POKEMON, None, 'Battre Hassa (Conseil 4, Dragon)', f"{c.tr('e4_dragon_01')}|{clear}"),
+        (LIGUE_POKEMON, None, 'Devenir Maître : battre Alisma, Maîtresse en Chef', f"{c.tr('chairperson_01')}|{clear}"),
         (academy, None, 'Battre Cassiopée (Pania), cheffe de la Team Star', f"{c.tr('botan_01')}|{clear}"),
-        ('Zone Zéro', None, "Désactiver les verrous des Postes d'Observation", f"{c.f('FEVT_ATLANTIS_BASE_A3_EVENT_END')}|{clear}"),
-        ('Zone Zéro', 'Laboratoire Zéro',
+        (ZONE_ZERO, None, "Désactiver les verrous des Postes d'Observation", f"{c.f('FEVT_ATLANTIS_BASE_A3_EVENT_END')}|{clear}"),
+        (ZONE_ZERO, 'Laboratoire Zéro',
          "Finir l'histoire : battre Olim (IA) et le Koraidon du Laboratoire" if scarlet
          else "Finir l'histoire : battre Turum (IA) et le Miraidon du Laboratoire", clear),
         # Le Masque Turquoise
         ('Jaderaude', None, 'Arriver à Septentria (Le Masque Turquoise)', c.f('FSYS_YMAP_SU1MAP_CHANGE')),
         ('Jaderaude', None, 'Recevoir le Pokédex de Septentria', c.f('FSYS_DLC1_POKEDEX_ADD')),
-        ('Lande de la Quiétude', None, 'Battre Félicanis', c.badge('WEVT_S1_INU_CLEAR_NUM')),
-        ('Plaine des Glycines', None, 'Battre Fortusimia', c.badge('WEVT_S1_SARU_CLEAR_NUM')),
-        ('Mont Strueux', None, 'Battre Favianos', c.badge('WEVT_S1_KIZI_CLEAR_NUM')),
+        (LANDE_DE_LA_QUIETUDE, None, 'Battre Félicanis', c.badge('WEVT_S1_INU_CLEAR_NUM')),
+        (PLAINE_DES_GLYCINES, None, 'Battre Fortusimia', c.badge('WEVT_S1_SARU_CLEAR_NUM')),
+        (MONT_STRUEUX, None, 'Battre Favianos', c.badge('WEVT_S1_KIZI_CLEAR_NUM')),
         ('Antre Interdit', None, 'Capturer Ogerpon', 'D:1017'),
         ('Jaderaude', None, "Finir l'histoire du Masque Turquoise", su1),
         # Le Disque Indigo
-        ('Institut Myrtille', None, "Arriver à l'Institut Myrtille (Le Disque Indigo)", c.f('FSYS_YMAP_S2_MAPCHANGE_ENABLE')),
-        ('Institut Myrtille', None, 'Recevoir le Pokédex de Myrtille', c.f('FSYS_DLC2_POKEDEX_ADD')),
-        ('Institut Myrtille', None, 'Battre Taro (Conseil 4 de la Ligue Myrtille, Fée)', f"{c.tr('fairy4_02_02')}|{su2}"),
-        ('Institut Myrtille', None, 'Battre Rubépin (Conseil 4 de la Ligue Myrtille, Feu)', f"{c.tr('hono4_02_01')}|{su2}"),
-        ('Institut Myrtille', None, 'Battre Irido (Conseil 4 de la Ligue Myrtille, Dragon)', f"{c.tr('dragon4_02_01')}|{su2}"),
-        ('Institut Myrtille', None, 'Battre Nérine (Conseil 4 de la Ligue Myrtille, Acier)', f"{c.tr('hagane4_02_01')}|{su2}"),
-        ('Institut Myrtille', None, 'Battre Kassis, Maître de la Ligue Myrtille', f"{c.tr('brother_02_01')}|{su2}"),
-        ('Abîme Zéro', None, 'Capturer Terapagos', 'D:1024'),
-        ('Abîme Zéro', None, "Finir l'histoire du Disque Indigo", su2),
+        (INSTITUT_MYRTILLE, None, "Arriver à l'Institut Myrtille (Le Disque Indigo)", c.f('FSYS_YMAP_S2_MAPCHANGE_ENABLE')),
+        (INSTITUT_MYRTILLE, None, 'Recevoir le Pokédex de Myrtille', c.f('FSYS_DLC2_POKEDEX_ADD')),
+        (INSTITUT_MYRTILLE, None, 'Battre Taro (Conseil 4 de la Ligue Myrtille, Fée)', f"{c.tr('fairy4_02_02')}|{su2}"),
+        (INSTITUT_MYRTILLE, None, 'Battre Rubépin (Conseil 4 de la Ligue Myrtille, Feu)', f"{c.tr('hono4_02_01')}|{su2}"),
+        (INSTITUT_MYRTILLE, None, 'Battre Irido (Conseil 4 de la Ligue Myrtille, Dragon)', f"{c.tr('dragon4_02_01')}|{su2}"),
+        (INSTITUT_MYRTILLE, None, 'Battre Nérine (Conseil 4 de la Ligue Myrtille, Acier)', f"{c.tr('hagane4_02_01')}|{su2}"),
+        (INSTITUT_MYRTILLE, None, 'Battre Kassis, Maître de la Ligue Myrtille', f"{c.tr('brother_02_01')}|{su2}"),
+        (ABIME_ZERO, None, 'Capturer Terapagos', 'D:1024'),
+        (ABIME_ZERO, None, "Finir l'histoire du Disque Indigo", su2),
         ('Terra-Dôme', 'Nérine', f'{legend} : pouvoir Vol', c.f('FSYS_RIDE_FLIGHT_ENABLE')),
         ('Parc Adorami', 'épilogue « La nuit des kibi »', 'Capturer Pêchaminus', 'D:1025'),
     ]
@@ -266,7 +284,7 @@ def pokedex(rows):
     """Espèces de la catégorie « Pokédex » (présentes dans le jeu), dans l'ordre national."""
     out = []
     for row in rows:
-        if row['Catégorie'] == 'Pokédex':
+        if row[CATEGORIE] == 'Pokédex':
             out.append(int(re.match(r'#(\d+)', row['Objectif']).group(1)))
     return sorted(set(out))
 
@@ -275,7 +293,7 @@ def machines(rows):
     """CT de la check-list : numéro → lieu (texte de la check-list)."""
     out = {}
     for row in rows:
-        if row['Catégorie'] == 'CT':
+        if row[CATEGORIE] == 'CT':
             out[int(re.match(r'CT(\d+)', row['Objectif'].strip()).group(1))] = row['Lieu'].strip()
     return out
 
@@ -301,21 +319,22 @@ def field_items(c):
 def gifts(c):
     """Cadeaux d'objets (représentants de la Ligue, Clan des Monstres) ; les CT offertes comptent par leur recette."""
     out = []
-    for flag, kind, loc, sub, desc, name in c.sections['Event Flags']:
+    for flag, kind, loc, sub, desc, name in c.sections[EVENT_FLAGS]:
         if kind != 'ITEM GIFT':
             continue
-        m = re.fullmatch(r'Received (.+?) from (.+?) for defeating (.+)', desc)
-        if not m:
+        parts = split_on(desc.removeprefix('Received '), ' from ', ' for defeating ') if desc.startswith('Received ') else None
+        if not parts:
             UNKNOWN.add(f'cadeau {desc}')
             continue
-        if m.group(1).startswith('TM'):
+        what, giver, why = parts
+        if what.startswith('TM'):
             continue
-        item, count = item_parts(c, m.group(1))
-        if m.group(2) == 'Muramasa':
-            n = re.match(r'(\d+)', m.group(3)).group(1)
+        item, count = item_parts(c, what)
+        if giver == 'Muramasa':
+            n = re.match(r'(\d+)', why).group(1)
             place, detail = 'Jaderaude', f'Muramasa, {n} membre{"s" if n != "1" else ""} du Clan des Monstres battu{"s" if n != "1" else ""}'
         else:
-            n = re.search(r'(\d+) trainers', m.group(3)).group(1)
+            n = re.search(r'(?<!\d)(\d+) trainers', why).group(1)
             place, detail = c.place(loc), f'représentant de la Ligue, {n} dresseurs battus'
         out.append((place, detail, c.f(name), item, count))
     return out
@@ -346,7 +365,7 @@ CLASSES = {
 GYMS = {'mushi': ('Sevaro', 'WEVT_GYM_MUSHI_CLEAR'), 'kusa': ('Cuencia', 'WEVT_GYM_KUSA_CLEAR'),
         'denki': ('Levalendura', 'WEVT_GYM_DENKI_CLEAR'), 'mizu': ('Jarramanca', 'WEVT_GYM_MIZU_CLEAR'),
         'normal': ('Mezclamora', 'WEVT_GYM_NORMAL_CLEAR'), 'ghost': ('Frigao', 'WEVT_GYM_GHOST_CLEAR'),
-        'esper': ('Alforneira', 'WEVT_GYM_ESPER_CLEAR'), 'koori': ('Mont Nappé', 'WEVT_GYM_KOORI_CLEAR')}
+        'esper': ('Alforneira', 'WEVT_GYM_ESPER_CLEAR'), 'koori': (MONT_NAPPE, 'WEVT_GYM_KOORI_CLEAR')}
 
 
 def trainer_label(desc, name):
@@ -371,7 +390,10 @@ def area_places(c):
         m = re.match(r'(?:itemball_(?:rare_)?(su1_)?area(\d+)|su2_area(\d+))_', name)
         if not m:
             continue
-        key = ('dlc2', int(m.group(3))) if m.group(3) else ('dlc1' if m.group(1) else 'paldea', int(m.group(2)))
+        if m.group(3):
+            key = ('dlc2', int(m.group(3)))
+        else:
+            key = ('dlc1' if m.group(1) else 'paldea', int(m.group(2)))
         place, _ = split_place(c, loc, sub)
         votes.setdefault(key, {}).setdefault(place, 0)
         votes[key][place] += 1
@@ -387,7 +409,7 @@ def trainers(c):
         gym = re.fullmatch(r'gym_([a-z]+)_\d+', name)
         if gym and desc:  # dresseurs d'Arène : à battre avant le champion (son badge les fait d'office)
             town, badge = GYMS[gym.group(1)]
-            out.append((town, 'Arène', f'{cond}|{c.badge(badge)}', trainer_label(desc, name)))
+            out.append((town, ARENE, f'{cond}|{c.badge(badge)}', trainer_label(desc, name)))
             continue
         if kind != 'TRAINER BATTLE':
             continue  # scénario, revanches (« _strong »), dresseurs sans description
@@ -411,24 +433,24 @@ def trainers(c):
 def encounters(c, rows, version):
     scarlet = version == 'SL'
     u = [
-        ('Zone Zéro', 'après l\'histoire', 1007 if scarlet else 1008, c.f('FEVT_SUB_018_CAPTURED'),
+        (ZONE_ZERO, 'après l\'histoire', 1007 if scarlet else 1008, c.f('FEVT_SUB_018_CAPTURED'),
          'Koraidon (deuxième)' if scarlet else 'Miraidon (deuxième)'),
         # Les Pokémon Dominants, capturables après leur combat
-        ('Zone Sud nº 3', 'Dominant', 950, c.f('NUSHI_IWA_AFTER_PERMANENT'), None),
-        ('Zone Ouest nº 1', 'Dominant', 962, c.f('NUSHI_HIKO_AFTER_PERMANENT'), None),
-        ('Zone Est nº 3', 'Dominant', 968, c.f('NUSHI_HAGANE_AFTER_PERMANENT'), None),
-        ('Désert Rôtissable', 'Dominant', 984 if scarlet else 990, c.f('NUSHI_JIMEN_AFTER_PERMANENT'), None),
-        ('Lac Asrol', 'Dominant', 978, c.f('NUSHI_DRAGON_AFTER_PERMANENT'), None),
+        (ZONE_SUD_NO_3, 'Dominant', 950, c.f('NUSHI_IWA_AFTER_PERMANENT'), None),
+        (ZONE_OUEST_NO_1, 'Dominant', 962, c.f('NUSHI_HIKO_AFTER_PERMANENT'), None),
+        (ZONE_EST_NO_3, 'Dominant', 968, c.f('NUSHI_HAGANE_AFTER_PERMANENT'), None),
+        (DESERT_ROTISSABLE, 'Dominant', 984 if scarlet else 990, c.f('NUSHI_JIMEN_AFTER_PERMANENT'), None),
+        (LAC_ASROL, 'Dominant', 978, c.f('NUSHI_DRAGON_AFTER_PERMANENT'), None),
         # Le Masque Turquoise : les Adorables
-        ('Lande de la Quiétude', None, 1014, c.f('FEVT_S1_SUB_011_CAPTURED'), None),
-        ('Plaine des Glycines', None, 1015, c.f('FEVT_S1_SUB_012_CAPTURED'), None),
-        ('Mont Strueux', None, 1016, c.f('FEVT_S1_SUB_016_CAPTURED'), None),
+        (LANDE_DE_LA_QUIETUDE, None, 1014, c.f('FEVT_S1_SUB_011_CAPTURED'), None),
+        (PLAINE_DES_GLYCINES, None, 1015, c.f('FEVT_S1_SUB_012_CAPTURED'), None),
+        (MONT_STRUEUX, None, 1016, c.f('FEVT_S1_SUB_016_CAPTURED'), None),
     ]
     # Légendaires de la check-list (pas ceux de l'histoire : Koraidon, Miraidon, Ogerpon, Terapagos, Pêchaminus ; pas
     # ceux du dessus) : par le Pokédex. Les Fléaux : à leur sanctuaire (leurs pieux : quêtes)
     done = {1007, 1008, 1017, 1024, 1025, 1014, 1015, 1016}
     for row in rows:
-        if row['Catégorie'] != 'Légendaire / fixe' or not for_version(row, version):
+        if row[CATEGORIE] != 'Légendaire / fixe' or not for_version(row, version):
             continue
         text = row['Objectif'].strip()
         m = re.match(r"(?:Faire évoluer )?(.+?)(?: \(2e exemplaire\))?(?: \(?niv\..*| en .+| via .+|$)", text)
@@ -455,9 +477,9 @@ def encounters(c, rows, version):
 
 # Lieux des légendaires de la check-list (texte libre) : un lieu d'ORDER cité (le dernier membre d'un « A – B » qui en
 # cite un), le reste du texte en précision ; les Fléaux à leur sanctuaire
-LEGEND_FIXES = {'phare de Cuchalaga': 'Cuchalaga', 'Cascade Furie': 'Zone Nord nº 2', 'Roc Onaissance': 'Zone Ouest nº 1',
-                'Sanctuaire du Sol Corrompu': 'Forêt Toastée', 'Étang des Glycines': 'Plaine des Glycines',
-                "grotte d'Alforneira": "Grotte d'Alforneira", 'base du Groupe Segin': 'Zone Ouest nº 1',
+LEGEND_FIXES = {'phare de Cuchalaga': 'Cuchalaga', 'Cascade Furie': 'Zone Nord nº 2', 'Roc Onaissance': ZONE_OUEST_NO_1,
+                'Sanctuaire du Sol Corrompu': 'Forêt Toastée', 'Étang des Glycines': PLAINE_DES_GLYCINES,
+                "grotte d'Alforneira": "Grotte d'Alforneira", 'base du Groupe Segin': ZONE_OUEST_NO_1,
                 "l'île la plus au nord-est de Paldea": "Mer de l'Est de Paldea"}
 
 
@@ -502,7 +524,7 @@ def quests(c):
             q.append(('Pieux des Fléaux', None, f'Pieu de {legend} n° {n}', c.f(f'FEVT_SUB_{sub}_KUI_{n:02d}_RELEASE')))
     leaders = [('mushi', 'Sevaro', 'Éra'), ('kusa', 'Cuencia', 'Colza'), ('denki', 'Levalendura', 'Mashynn'),
                ('mizu', 'Jarramanca', 'Kombu'), ('normal', 'Mezclamora', 'Okuba'), ('ghost', 'Frigao', 'Laïm'),
-               ('esper', 'Alforneira', 'Tully'), ('koori', 'Mont Nappé', 'Grusha')]
+               ('esper', 'Alforneira', 'Tully'), ('koori', MONT_NAPPE, 'Grusha')]
     for gym, town, leader in leaders:
         q.append(("Revanches d'Arène", town, f"Revanche contre {leader} (visite d'inspection)", c.tr(f'gym_{gym}_leader_02')))
     for squad, boss in (('aku', 'Brome'), ('hono', 'Meloco'), ('doku', 'Erio'), ('fairy', 'Ortiga'), ('kakutou', 'Nèflie')):
@@ -511,7 +533,7 @@ def quests(c):
     for n in range(3, 7):
         q.append(('Raids Téracristal', None, f'Débloquer les raids {n}★', c.f(f'FSYS_RAID_DIFFICTLTY{n}_RELEASE')))
     for flag, course in (('NORMAL', 'normal'), ('HARD', 'difficile'), ('VERY_HARD', 'très difficile')):
-        q.append(('Glisse du Mont Nappé', 'Mont Nappé', f'Réussir le parcours {course}', c.f(f'FEVT_SUB_GYM_KOORI_{flag}_CLER')))
+        q.append(('Glisse du Mont Nappé', MONT_NAPPE, f'Réussir le parcours {course}', c.f(f'FEVT_SUB_GYM_KOORI_{flag}_CLER')))
     q.append(('Mordudor', None, 'Réunir 999 pièces et faire évoluer Mordudor en Gromago', 'D:1000'))
     for flag, label in (('OniballoonSave_isCleardEasy', 'mode facile'), ('OniballoonSave_isCleardNormal', 'mode normal'),
                         ('OniballoonSave_isCleardHard', 'mode difficile')):
@@ -524,10 +546,10 @@ def quests(c):
                         ('FSYS_DLC2_POKEDEX_SYOUJOU_EVENT', 'Diplôme du Pokédex de Myrtille')):
         q.append(('Diplômes du Pokédex', None, label, c.f(flag)))
     # Coachs spéciaux du Club de la Ligue (Disque Indigo) : chaque invité venu au club
-    for flag, kind, loc, sub, desc, name in c.sections['Event Flags']:
+    for flag, kind, loc, sub, desc, name in c.sections[EVENT_FLAGS]:
         m = re.fullmatch(r'KUnlockedSpecialCoach([A-Z]\w*)', desc)
         if m:
-            q.append(('Club de la Ligue', 'Institut Myrtille', f'Coach spécial : {COACHES[m.group(1)]}', c.f(name)))
+            q.append(('Club de la Ligue', INSTITUT_MYRTILLE, f'Coach spécial : {COACHES[m.group(1)]}', c.f(name)))
     return q
 
 
@@ -538,7 +560,7 @@ COACHES = {'Penny': 'Pania', 'Poppy': 'Popi', 'Rika': 'Cayenn', 'Geeta': 'Alisma
 
 # ---------------------------------------------------------------------------------------------------------------------
 
-def build(c, version, rows, order, cur):
+def build(c, order, cur):
     out = []
 
     def add(section, zone, det, done, label=None, item=0, tm=0, species=0, count=0, give=0, sort=0):
@@ -549,8 +571,8 @@ def build(c, version, rows, order, cur):
             if rank is None:
                 MISSING_PLACES.add(zone)
                 rank = 10_000
-        out.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                        species=species, count=count, give=give, sort=(rank, zone, sort)))
+        out.append({'section': section, 'zone': zone, 'detail': det, 'done': done, 'label': label, 'item': item, 'tm': tm,
+                        'species': species, 'count': count, 'give': give, 'sort': (rank, zone, sort)})
 
     S, T, I, U, Q = 'Story', 'Trainers', 'Items', 'Encounters', 'Quests'
     for i, (zone, det, label, cond) in enumerate(cur['story']):
@@ -605,9 +627,11 @@ def emit(games, dex, out):
         lines.append('        ' + ', '.join(str(n) for n in dex[i:i + 20]) + ',')
     lines += ['    ];', '']
     for name, doc, rows in games:
-        lines.append(f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : <see cref="Pokedex"/>).</summary>')
-        lines.append(f'    public static readonly CompletionRow[] {name} =')
-        lines.append('    [')
+        lines.extend([
+            f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : <see cref="Pokedex"/>).</summary>',
+            f'    public static readonly CompletionRow[] {name} =',
+            '    [',
+        ])
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
@@ -626,27 +650,27 @@ def emit(games, dex, out):
 # la Myrtille ; un lieu absent arrête le générateur (sauf s'il a un voisin dans ANCHORS)
 ORDER = [
     'Cuchalaga', 'Caverne de la Crique', 'Route de Cuchalaga', 'Zone Sud nº 1', 'Plato Real', 'Mesaledo',
-    'Académie Orange', 'Académie Raisin', 'Zone Sud nº 2', 'Sevaro', 'Zone Sud nº 4', 'Zone Sud nº 3', 'Cuencia',
-    'Zone Ouest nº 1', 'Repaire du Groupe Segin', 'Zone Est nº 1', 'Levalendura', 'Zone Est nº 2',
-    'Repaire du Groupe Schedar', 'Zone Est nº 3', 'Pinchoria', 'Zone Ouest nº 2', 'Désert Rôtissable', 'Jarramanca',
+    'Académie Orange', 'Académie Raisin', 'Zone Sud nº 2', 'Sevaro', 'Zone Sud nº 4', ZONE_SUD_NO_3, 'Cuencia',
+    ZONE_OUEST_NO_1, 'Repaire du Groupe Segin', 'Zone Est nº 1', 'Levalendura', 'Zone Est nº 2',
+    'Repaire du Groupe Schedar', ZONE_EST_NO_3, 'Pinchoria', 'Zone Ouest nº 2', DESERT_ROTISSABLE, 'Jarramanca',
     'Porto Marinada', 'Zone Ouest nº 3', 'Bosquet Tagué', 'Repaire du Groupe Tsih', 'Mezclamora', 'Tunnel Mezcla-Pincho',
-    'Mont Nappé', 'Frigao', 'Zone Sud nº 5', 'Zone Sud nº 6', 'Alforneira', "Grotte d'Alforneira", 'Zone Nord nº 3',
-    'Repaire du Groupe Ruchbah', 'Lac Asrol', 'Forêt Toastée', 'Zone Nord nº 1', 'Zone Nord nº 2',
+    MONT_NAPPE, 'Frigao', 'Zone Sud nº 5', 'Zone Sud nº 6', 'Alforneira', "Grotte d'Alforneira", 'Zone Nord nº 3',
+    'Repaire du Groupe Ruchbah', LAC_ASROL, 'Forêt Toastée', 'Zone Nord nº 1', 'Zone Nord nº 2',
     'Repaire du Groupe Caph', 'Mer du Sud de Paldea', "Mer de l'Ouest de Paldea", "Mer de l'Est de Paldea",
-    'Mer du Nord de Paldea', 'Ligue Pokémon', 'Cratère de Paldea', 'Zone Zéro',
+    'Mer du Nord de Paldea', LIGUE_POKEMON, 'Cratère de Paldea', ZONE_ZERO,
     # Le Masque Turquoise
     'Jaderaude', 'Route de Septentria', 'Coteau Pommes', 'Sentier de la Liesse', 'Rives du Confluent', 'Parc Adorami',
-    'Septemplion', 'Plaine des Glycines', 'Lande de la Quiétude', 'Mont Strueux', 'Gueule du Monstre',
+    'Septemplion', PLAINE_DES_GLYCINES, LANDE_DE_LA_QUIETUDE, MONT_STRUEUX, 'Gueule du Monstre',
     'Grotte Douche Froide', 'Lac Cristallin', 'Forêt Ternelle', 'Gorge de la Corne', 'Val Infernal',
     'Terres Vierges de Septentria', 'Antre Interdit',
     # Le Disque Indigo
-    'Institut Myrtille', 'Terra-Dôme', 'Poste Central', 'Zone Savane', 'Poste Savane', 'Zone Côtière', 'Poste Côtier',
+    INSTITUT_MYRTILLE, 'Terra-Dôme', 'Poste Central', 'Zone Savane', 'Poste Savane', 'Zone Côtière', 'Poste Côtier',
     'Zone Canyon', 'Poste Canyon', 'Zone Polaire', 'Poste Polaire', 'Caverne Électrolithe', 'Dédale des Torches',
-    'Abîme Zéro', 'Machine à CT',
+    ABIME_ZERO, 'Machine à CT',
 ]
 # Lieux absents d'ORDER : rangés avec un voisin (sanctuaires des Fléaux : rencontres, rangées dans l'ordre de la table)
-ANCHORS = {'Sanctuaire du Bois Mourant': 'Ligue Pokémon', 'Sanctuaire du Sol Corrompu': 'Ligue Pokémon',
-           'Sanctuaire du Feu Ravageur': 'Ligue Pokémon', 'Sanctuaire du Froid Cruel': 'Ligue Pokémon'}
+ANCHORS = {'Sanctuaire du Bois Mourant': LIGUE_POKEMON, 'Sanctuaire du Sol Corrompu': LIGUE_POKEMON,
+           'Sanctuaire du Feu Ravageur': LIGUE_POKEMON, 'Sanctuaire du Froid Cruel': LIGUE_POKEMON}
 
 
 if __name__ == '__main__':
@@ -657,9 +681,9 @@ if __name__ == '__main__':
     items, gift_items, trainer_rows, tms = field_items(c), gifts(c), trainers(c), machines(rows)
     games = []
     for name, version, doc in (('Scarlet', 'SL', 'Pokémon Écarlate'), ('Violet', 'VL', 'Pokémon Violet')):
-        cur = dict(story=story(c, version), trainers=trainer_rows, items=items, gifts=gift_items, machines=tms,
-                   encounters=encounters(c, rows, version), quests=quests(c))
-        games.append((name, doc, build(c, version, rows, ORDER, cur)))
+        cur = {'story': story(c, version), 'trainers': trainer_rows, 'items': items, 'gifts': gift_items, 'machines': tms,
+                   'encounters': encounters(c, rows, version), 'quests': quests(c)}
+        games.append((name, doc, build(c, ORDER, cur)))
     if UNKNOWN:
         raise SystemExit('À traduire : ' + ', '.join(sorted(UNKNOWN)))
     if MISSING_PLACES:

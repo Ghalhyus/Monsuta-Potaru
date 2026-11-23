@@ -45,7 +45,13 @@ else
     var preparing = s.Stage is ChessStage.Requested or ChessStage.TeamChoice;
     @* Avant la partie : titre et bouton dans l'en-tête du bloc ; pendant la partie : dans la colonne à côté du plateau *@
     var waitingPublic = s.IsPublic && s.Stage == ChessStage.Requested;
-    <Block Title="@(!preparing ? null : waitingPublic ? "Partie publique" : $"Partie contre {other.Pseudo}")" Class="chess-block" Actions="@(preparing ? CancelActions : null)">
+    string? title = (preparing, waitingPublic) switch
+    {
+        (false, _) => null,
+        (_, true) => "Partie publique",
+        _ => $"Partie contre {other.Pseudo}",
+    };
+    <Block Title="@title" Class="chess-block" Actions="@(preparing ? CancelActions : null)">
         <ChildContent>
             @if (preparing)
             {
@@ -786,7 +792,7 @@ else
         if (session is null)
             return;
         busy = true;
-        if (Hub.ClearTeam(session, userId) is { } error)
+        if (ChessHub.ClearTeam(session, userId) is { } error)
         {
             message = error;
             messageIsError = true;
@@ -893,11 +899,14 @@ else
         swapChoices = options.Swaps.Count > 0 ? options.Swaps : null;
         var unit = session.At(square);
         var legend = MatchupLegend();
-        info = unit is null ? null
-            : options.Any || !CanAct ? $"{Describe(unit)}{legend}" // aperçu : pas de cases, il ne bouge pas encore
-            : unit.Piece == ChessPiece.Pawn && ChessGame.RankOf(square) is 0 or 7
-                ? $"{unit.Mon.Name} attend au bout du plateau qu'un Pokémon de ton équipe soit K.O. pour lui laisser sa place.{legend}"
-                : $"{unit.Mon.Name} ne peut pas bouger.{legend}";
+        if (unit is null)
+            info = null;
+        else if (options.Any || !CanAct)
+            info = $"{Describe(unit)}{legend}"; // aperçu : pas de cases, il ne bouge pas encore
+        else if (unit.Piece == ChessPiece.Pawn && ChessGame.RankOf(square) is 0 or 7)
+            info = $"{unit.Mon.Name} attend au bout du plateau qu'un Pokémon de ton équipe soit K.O. pour lui laisser sa place.{legend}";
+        else
+            info = $"{unit.Mon.Name} ne peut pas bouger.{legend}";
         if (info is not null && !CanAct)
             info = $"Aperçu (au tour de {session.Other(userId).Pseudo}) : {info}";
         await Highlight();
@@ -1104,7 +1113,12 @@ else
         if (snapshot.Stage == ChessStage.Done && !animating && played >= snapshot.StepCount)
         {
             var mine = session.ColorOf(userId);
-            var result = snapshot.Winner is null ? "Match nul" : snapshot.Winner == mine ? "Victoire !" : "Défaite…";
+            var result = snapshot.Winner switch
+            {
+                null => "Match nul",
+                var winner when winner == mine => "Victoire !",
+                _ => "Défaite…",
+            };
             var why = snapshot.End switch
             {
                 ChessEnd.Checkmate => "échec et mat",
@@ -1301,16 +1315,17 @@ else
     {
         var (attacker, victim) = (attackers.Of(attackerPiece).Type, victims.Of(victimPiece).Type);
         var (who, whom) = (attackers.NamesInSentence(attackerPiece), victims.NamesInSentence(victimPiece));
-        return !ChessGame.CanEat(attacker, victim)
-            ? ("blocked", "✗", $"{who} ne peut pas manger {whom}.")
-            : PokeTypes.Effectiveness(attacker, victim) > 1
-                ? ("super", "×2", $"{who} mange {whom} et rejoue : c'est super efficace !")
-                : ("eats", "✓", $"{who} mange {whom}.");
+        if (!ChessGame.CanEat(attacker, victim))
+            return ("blocked", "✗", $"{who} ne peut pas manger {whom}.");
+        return PokeTypes.Effectiveness(attacker, victim) > 1
+            ? ("super", "×2", $"{who} mange {whom} et rejoue : c'est super efficace !")
+            : ("eats", "✓", $"{who} mange {whom}.");
     }
 
     public async ValueTask DisposeAsync()
     {
-        clock?.Dispose();
+        if (clock is not null)
+            await clock.DisposeAsync();
         Hub.RequestsChanged -= OnRequestsChanged;
         DeclineGuestOffers();
         if (session is not null)

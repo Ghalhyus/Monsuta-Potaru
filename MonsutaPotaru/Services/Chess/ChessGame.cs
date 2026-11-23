@@ -67,7 +67,16 @@ public sealed record ChessStep(
     /// Nombre de cases parcourues sur le plateau (durée de la marche) ; un échange de place : aucune (les marches vers et
     /// depuis les K.O. sont comptées par <see cref="ChessTiming.Playback"/>).
     /// </summary>
-    public int Squares => Move.IsPass || Move.IsSwap ? 0 : Math.Max(ChessGame.Distance(Move.From, Move.To), RookId is null ? 0 : 2);
+    public int Squares
+    {
+        get
+        {
+            if (Move.IsPass || Move.IsSwap)
+                return 0;
+            var castle = RookId is null ? 0 : 2;
+            return Math.Max(ChessGame.Distance(Move.From, Move.To), castle);
+        }
+    }
 }
 
 /// <summary>
@@ -669,11 +678,13 @@ public sealed class ChessGame
         var name = mover.Mon.Name;
         if (move.IsSwap)
             return $"{name} laisse sa place à {revived!.Mon.Name}, qui revient en {Name(move.To)}.";
-        var text = castle
-            ? $"Roque : {name} et sa tour changent de côté."
-            : victim is not null
-                ? $"{name} mange {victim.Mon.Name} en {Name(move.To)}."
-                : $"{name} va en {Name(move.To)}.";
+        string text;
+        if (castle)
+            text = $"Roque : {name} et sa tour changent de côté.";
+        else if (victim is not null)
+            text = $"{name} mange {victim.Mon.Name} en {Name(move.To)}.";
+        else
+            text = $"{name} va en {Name(move.To)}.";
         if (revived is not null)
             text += $" Au bout du plateau, {name} laisse sa place à {revived.Mon.Name}.";
         return text;

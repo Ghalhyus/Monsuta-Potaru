@@ -365,7 +365,7 @@
                                                             <span>@sheet.Name</span><span class="battle-gender @sheet.Gender">@Gender(sheet.Gender)</span>
                                                         </span>
                                                         <img src="@sheet.IconUrl" alt="@sheet.SpeciesName" data-remplacement="images/pokemon/inconnu.png" />
-                                                        <span class="battle-shift-word">@(sheet.Active ? "AU COMBAT" : sheet.Fainted ? "K.O." : "CHANGER")</span>
+                                                        <span class="battle-shift-word">@ShiftWord(sheet)</span>
                                                     </button>
                                                     @SheetTimer()
                                                     <div class="battle-sheet-foot">
@@ -1011,6 +1011,22 @@ else
         </div>
     };
 
+    /// <summary>Mot du bouton d'un Pokémon de l'équipe : au combat, K.O. ou à envoyer.</summary>
+    private static string ShiftWord(BattleSheet sheet)
+    {
+        if (sheet.Active)
+            return "AU COMBAT";
+        return sheet.Fainted ? "K.O." : "CHANGER";
+    }
+
+    /// <summary>État de la Ball n° <paramref name="i"/> : en état de se battre, K.O. ou place libre.</summary>
+    private static string BallState(int i, int left, int team)
+    {
+        if (i < left)
+            return "ok";
+        return i < team ? "ko" : "vide";
+    }
+
     /// <summary>
     /// Les six Pokéballs d'une équipe, comme en jeu : une Ball par Pokémon en état de se battre, une Ball grise par
     /// Pokémon K.O., un rond vide par place libre.
@@ -1021,7 +1037,7 @@ else
              aria-label="@($"{(mine ? "Ton équipe" : "Équipe adverse")} : {left} Pokémon sur {team} en état de se battre")">
             @for (var i = 0; i < 6; i++)
             {
-                <span class="battle-ball @(i < left ? "ok" : i < team ? "ko" : "vide")"></span>
+                <span class="battle-ball @BallState(i, left, team)"></span>
             }
         </div>
     };

@@ -11,37 +11,37 @@ public enum NbtType : byte
 }
 
 /// <summary>Une valeur NBT : nombre, texte, tableau, liste ou ensemble nommé (<see cref="NbtCompound"/>).</summary>
-public abstract class NbtTag
+public interface NbtTag
 {
-    public abstract NbtType Type { get; }
+    NbtType Type { get; }
 
     /// <summary>Copie indépendante (un Pokémon déposé ne doit plus bouger avec la sauvegarde).</summary>
-    public abstract NbtTag Clone();
+    NbtTag Clone();
 }
 
 /// <summary>Nombre ou texte : <see cref="Value"/> est un byte (signé), short, int, long, float, double ou string.</summary>
 public sealed class NbtValue(NbtType type, object value) : NbtTag
 {
-    public override NbtType Type => type;
+    public NbtType Type => type;
     public object Value { get; } = value;
-    public override NbtTag Clone() => new NbtValue(type, Value);
+    public NbtTag Clone() => new NbtValue(type, Value);
 }
 
 /// <summary>Tableau d'octets, d'entiers ou d'entiers longs.</summary>
 public sealed class NbtArray(NbtType type, Array values) : NbtTag
 {
-    public override NbtType Type => type;
+    public NbtType Type => type;
     public Array Values { get; } = values;
-    public override NbtTag Clone() => new NbtArray(type, (Array)Values.Clone());
+    public NbtTag Clone() => new NbtArray(type, (Array)Values.Clone());
 }
 
 /// <summary>Liste de valeurs du même type (<see cref="ElementType"/>, End pour une liste vide).</summary>
 public sealed class NbtList(NbtType elementType, List<NbtTag> items) : NbtTag
 {
-    public override NbtType Type => NbtType.List;
+    public NbtType Type => NbtType.List;
     public NbtType ElementType { get; } = elementType;
     public List<NbtTag> Items { get; } = items;
-    public override NbtTag Clone() => new NbtList(ElementType, Items.Select(i => i.Clone()).ToList());
+    public NbtTag Clone() => new NbtList(ElementType, Items.Select(i => i.Clone()).ToList());
 }
 
 /// <summary>Ensemble de valeurs nommées, dans l'ordre du fichier (gardé à la réécriture).</summary>
@@ -49,7 +49,7 @@ public sealed class NbtCompound : NbtTag
 {
     private readonly List<KeyValuePair<string, NbtTag>> _entries = [];
 
-    public override NbtType Type => NbtType.Compound;
+    public NbtType Type => NbtType.Compound;
     public IEnumerable<KeyValuePair<string, NbtTag>> Entries => _entries;
     public IEnumerable<string> Keys => _entries.Select(e => e.Key);
 
@@ -86,7 +86,7 @@ public sealed class NbtCompound : NbtTag
 
     public bool Flag(string name) => Integer(name) is { } v && v != 0;
 
-    public override NbtTag Clone()
+    public NbtTag Clone()
     {
         var copy = new NbtCompound();
         foreach (var (key, tag) in _entries)
@@ -221,9 +221,18 @@ public static class Nbt
                 w.Int(a.Values.Length);
                 switch (a.Values)
                 {
-                    case sbyte[] bytes: foreach (var b in bytes) w.Byte((byte)b); break;
-                    case int[] ints: foreach (var i in ints) w.Int(i); break;
-                    case long[] longs: foreach (var l in longs) w.Long(l); break;
+                    case sbyte[] bytes:
+                        foreach (var b in bytes)
+                            w.Byte((byte)b);
+                        break;
+                    case int[] ints:
+                        foreach (var i in ints)
+                            w.Int(i);
+                        break;
+                    case long[] longs:
+                        foreach (var l in longs)
+                            w.Long(l);
+                        break;
                 }
                 break;
             case NbtList list:

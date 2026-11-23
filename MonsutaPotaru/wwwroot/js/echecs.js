@@ -44,7 +44,7 @@ const GLYPHS = {
 /** Générateur pseudo-aléatoire à graine (le grain des cases est le même à chaque affichage). */
 function seeded(seed) {
     return () => {
-        seed = (seed + 0x6d2b79f5) | 0;
+        seed = (seed + 0x6d2b79f5) >>> 0; // reste sur 32 bits
         let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -52,6 +52,63 @@ function seeded(seed) {
 }
 
 const shade = ([r, g, b], d) => [r + d, g + d, b + d].map(v => Math.max(0, Math.min(255, v)));
+
+/** Lance step(item, index) sur chaque élément, chacun après la fin du précédent ; s'arrête au premier refus. */
+const inTurn = (items, step) => items.reduce((done, item, i) => done.then(() => step(item, i)), Promise.resolve());
+
+/** Planches d'un Pokémon dans les textures de ce jeu de Phaser : une image par case de l'animation. */
+function addTextures(s, sheet) {
+    for (const anim of new Set(Object.values(sheet))) {
+        if (s.textures.exists(anim.key)) continue;
+        const texture = s.textures.addImage(anim.key, anim.image);
+        for (let r = 0; r < anim.rows; r++) {
+            for (let c = 0; c < anim.columns; c++) texture.add(r * anim.columns + c, 0, c * anim.fw, r * anim.fh, anim.fw, anim.fh);
+        }
+    }
+}
+
+/** Ombre sous les pieds d'un Pokémon. */
+function shadowTexture(s) {
+    if (!s.textures.exists("ombre-echecs")) {
+        const t = s.textures.createCanvas("ombre-echecs", 16, 5), c = t.getContext();
+        c.fillStyle = "rgba(0,0,0,0.32)";
+        c.fillRect(3, 0, 10, 5);
+        c.fillRect(1, 1, 14, 3);
+        t.refresh();
+    }
+    return "ombre-echecs";
+}
+
+/** Sprites absents (images pas récupérées) : un rond de la couleur du camp. */
+function placeholder(s, mine) {
+    const key = mine ? "pion-moi" : "pion-autre";
+    if (!s.textures.exists(key)) {
+        const t = s.textures.createCanvas(key, 18, 18), c = t.getContext();
+        c.fillStyle = mine ? "#f4f1ea" : "#2a2633";
+        c.fillRect(4, 1, 10, 16);
+        c.fillRect(1, 4, 16, 10);
+        c.fillRect(2, 2, 14, 14);
+        t.refresh();
+    }
+    return key;
+}
+
+/** Change l'animation d'un Pokémon (repos, marche, sommeil…), reprise à sa première image. */
+function setState(a, state) {
+    if (a.state === state) return;
+    Object.assign(a, { state, frame: 0, frameTime: 0 });
+}
+
+/** Animation en cours d'un Pokémon ; celle du repos à défaut. */
+function animOf(a) {
+    return a.anims?.[{ idle: "Idle", walk: "Walk", sleep: "Sleep", attack: "Attack", hurt: "Hurt" }[a.state]] ?? a.anims?.Idle;
+}
+
+/** Durée d'une animation jouée une fois (attaque ou blessure), en ms. */
+function durationOf(a, state) {
+    const anim = a.anims?.[state === "attack" ? "Attack" : "Hurt"];
+    return anim ? anim.durations.reduce((t, d) => t + d, 0) : 400;
+}
 
 /**
  * Plateau dans <container> ; <component> (Chess.razor) est prévenu des clics. Options : flip (les noirs en bas : je joue
@@ -115,11 +172,11 @@ export async function create(container, component, options) {
         const row = container.parentElement;
         if (!row) return container.clientWidth;
         const style = getComputedStyle(row);
-        let width = row.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+        let width = row.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
         if (style.flexDirection === "row") {
             const others = [...row.children].filter(e => e !== container);
             for (const e of others) width -= e.getBoundingClientRect().width;
-            width -= (parseFloat(style.columnGap) || 0) * others.length;
+            width -= (Number.parseFloat(style.columnGap) || 0) * others.length;
         }
         return width;
     };
@@ -129,7 +186,7 @@ export async function create(container, component, options) {
         let below = MARGIN;
         for (let e = container.parentElement; e && e !== document.body; e = e.parentElement) {
             const style = getComputedStyle(e);
-            below += (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) + (parseFloat(style.marginBottom) || 0);
+            below += (Number.parseFloat(style.paddingBottom) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0) + (Number.parseFloat(style.marginBottom) || 0);
         }
         const top = container.getBoundingClientRect().top + window.scrollY;
         const height = Math.max(HEIGHT, (window.innerHeight - top - below) * ratio);
@@ -241,7 +298,9 @@ export async function create(container, component, options) {
                     const inSlots = y >= BORDER && y < BORDER + 8 * SQ;
                     const sx = (x - x0) % SQ, sy = (y - BORDER) % SQ;
                     const slot = inSlots && sx >= 3 && sx < SQ - 3 && sy >= 3 && sy < SQ - 3;
-                    put(x, y, edge ? PANEL_EDGE : slot ? shade(PANEL_SLOT, random() < 0.08 ? 4 : 0) : PANEL_BG);
+                    let color = slot ? shade(PANEL_SLOT, random() < 0.08 ? 4 : 0) : PANEL_BG;
+                    if (edge) color = PANEL_EDGE;
+                    put(x, y, color);
                 }
             }
         }
@@ -252,7 +311,9 @@ export async function create(container, component, options) {
                 const lx = x - BOARD_X;
                 const course = Math.floor(y / 5);
                 const brick = (lx + (course % 2) * 7) % 14;
-                let color = y % 5 === 4 || brick === 13 ? MORTAR : y % 5 === 0 || brick === 0 ? STONE_LIGHT : STONE;
+                let color = STONE;
+                if (y % 5 === 4 || brick === 13) color = MORTAR;
+                else if (y % 5 === 0 || brick === 0) color = STONE_LIGHT;
                 if (color === STONE && random() < 0.18) color = shade(STONE, random() < 0.5 ? -9 : 7);
                 if (lx === 0 || y === 0 || lx === FRAME - 1 || y === FRAME - 1) color = PANEL_EDGE;
                 put(x, y, color);
@@ -296,41 +357,6 @@ export async function create(container, component, options) {
         ctx.putImageData(image, 0, 0);
         texture.refresh();
         s.add.image(0, 0, "echiquier").setOrigin(0, 0).setDepth(0);
-    }
-
-    /** Planches d'un Pokémon dans les textures de ce jeu de Phaser : une image par case de l'animation. */
-    function addTextures(s, sheet) {
-        for (const anim of new Set(Object.values(sheet))) {
-            if (s.textures.exists(anim.key)) continue;
-            const texture = s.textures.addImage(anim.key, anim.image);
-            for (let r = 0; r < anim.rows; r++)
-                for (let c = 0; c < anim.columns; c++) texture.add(r * anim.columns + c, 0, c * anim.fw, r * anim.fh, anim.fw, anim.fh);
-        }
-    }
-
-    function shadowTexture(s) {
-        if (!s.textures.exists("ombre-echecs")) {
-            const t = s.textures.createCanvas("ombre-echecs", 16, 5), c = t.getContext();
-            c.fillStyle = "rgba(0,0,0,0.32)";
-            c.fillRect(3, 0, 10, 5);
-            c.fillRect(1, 1, 14, 3);
-            t.refresh();
-        }
-        return "ombre-echecs";
-    }
-
-    /** Sprites absents (images pas récupérées) : un rond de la couleur du camp. */
-    function placeholder(s, mine) {
-        const key = mine ? "pion-moi" : "pion-autre";
-        if (!s.textures.exists(key)) {
-            const t = s.textures.createCanvas(key, 18, 18), c = t.getContext();
-            c.fillStyle = mine ? "#f4f1ea" : "#2a2633";
-            c.fillRect(4, 1, 10, 16);
-            c.fillRect(1, 4, 16, 10);
-            c.fillRect(2, 2, 14, 14);
-            t.refresh();
-        }
-        return key;
     }
 
     // ---------- Marques : dernier coup, roi en échec, pièce choisie, cases permises, pièces qui résistent ----------
@@ -409,20 +435,6 @@ export async function create(container, component, options) {
         }
     }
 
-    function setState(a, state) {
-        if (a.state === state) return;
-        Object.assign(a, { state, frame: 0, frameTime: 0 });
-    }
-
-    function animOf(a) {
-        return a.anims?.[{ idle: "Idle", walk: "Walk", sleep: "Sleep", attack: "Attack", hurt: "Hurt" }[a.state]] ?? a.anims?.Idle;
-    }
-
-    function durationOf(a, state) {
-        const anim = a.anims?.[state === "attack" ? "Attack" : "Hurt"];
-        return anim ? anim.durations.reduce((t, d) => t + d, 0) : 400;
-    }
-
     /** Pièce sur la case sélectionnée (marks.selected), d'après la dernière position connue ; null sans sélection. */
     function selectedId() {
         if (!Number.isInteger(marks.selected)) return null;
@@ -461,17 +473,17 @@ export async function create(container, component, options) {
     /** Marche par ces points (un segment après l'autre), à la vitesse de la marche d'une case. */
     async function walk(a, points) {
         a.visible = true;
-        for (const point of points) {
+        await inTurn(points, point => {
             const dx = point.x - a.x, dy = point.y - a.y;
             const length = Math.hypot(dx, dy);
-            if (length < 0.5) continue;
+            if (length < 0.5) return undefined;
             a.dir = directionOf(dx, dy);
             a.once = false;
             setState(a, "walk");
-            await new Promise(resolve => scene.tweens.add({
+            return new Promise(resolve => scene.tweens.add({
                 targets: a, x: point.x, y: point.y, duration: length / SQ * walkMs, ease: "Linear", onComplete: resolve,
             }));
-        }
+        });
         setState(a, "idle");
     }
 
@@ -512,7 +524,9 @@ export async function create(container, component, options) {
         const row = cellOf(square).row, slotRow = index % KO_ROWS;
         const line = k => BORDER + k * SQ + FOOT; // ligne entre les rangées k - 1 et k (à hauteur des pieds)
         const y1 = line(slotRow >= row ? row + 1 : row);
-        const y2 = slotRow > row ? line(slotRow) : slotRow < row ? line(slotRow + 1) : y1;
+        let y2 = y1;
+        if (slotRow > row) y2 = line(slotRow);
+        else if (slotRow < row) y2 = line(slotRow + 1);
         const gapX = mine ? BOARD_X + FRAME + GAP / 2 : PANEL + GAP / 2;
         return [{ x: start.x, y: y1 }, { x: gapX, y: y1 }, { x: gapX, y: y2 }, { x: slot.x, y: y2 }, slot];
     }
@@ -553,7 +567,7 @@ export async function create(container, component, options) {
             if (step.capturedId !== null && step.capturedId !== undefined) {
                 const victim = actors.get(step.capturedId);
                 const target = footOf(step.capturedSquare);
-                const before = path.length > 1 ? path[path.length - 2] : { x: mover.x, y: mover.y };
+                const before = path.length > 1 ? path.at(-2) : { x: mover.x, y: mover.y };
                 const dx = target.x - before.x, dy = target.y - before.y, length = Math.hypot(dx, dy) || 1;
                 const stop = length > APPROACH ? { x: target.x - dx / length * APPROACH, y: target.y - dy / length * APPROACH } : before;
                 await go(walk(mover, [...path.slice(0, -1), stop]));

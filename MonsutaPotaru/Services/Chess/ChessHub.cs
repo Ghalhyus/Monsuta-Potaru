@@ -275,7 +275,9 @@ public sealed class ChessHub : IDisposable
     /// <summary>Préfixe des identifiants d'invités sans compte (jamais celui d'un compte : ceux-ci sont des GUID).</summary>
     public const string GuestIdPrefix = "invite-";
 
-    private readonly object gate = new();
+    private const string AlreadyPlaying = "Tu as déjà une partie en cours.";
+
+    private readonly Lock gate = new();
     private readonly List<ChessSession> sessions = [];
     private readonly Timer? timer;
     private readonly TimeProvider time;
@@ -353,7 +355,7 @@ public sealed class ChessHub : IDisposable
         lock (gate)
         {
             if (Busy(host.UserId))
-                return (null, "Tu as déjà une partie en cours.");
+                return (null, AlreadyPlaying);
             if (sessions.Any(s => !s.IsOver && s.Stage != ChessStage.Requested && s.Involves(guest.UserId)))
                 return (null, $"{guest.Pseudo} est déjà en train de jouer : réessaie plus tard.");
             session = new ChessSession(host, guest, moveSeconds, Now);
@@ -382,7 +384,7 @@ public sealed class ChessHub : IDisposable
             if (offer is null)
             {
                 if (Busy(userId))
-                    return (null, "Tu as déjà une partie en cours.");
+                    return (null, AlreadyPlaying);
                 if (sessions.Any(s => !s.IsOver && s.Stage != ChessStage.Requested && s.Involves(other.UserId)))
                     return (null, $"{other.Pseudo} est déjà en train de jouer : réessaie plus tard.");
                 session = new ChessSession(previous.Guest, previous.Host, previous.MoveSeconds, Now)
@@ -423,7 +425,7 @@ public sealed class ChessHub : IDisposable
         lock (gate)
         {
             if (Busy(host.UserId))
-                return (null, "Tu as déjà une partie en cours.");
+                return (null, AlreadyPlaying);
             string code;
             do
                 code = RandomNumberGenerator.GetString(CodeAlphabet, CodeLength);
@@ -452,7 +454,7 @@ public sealed class ChessHub : IDisposable
             if (found.Host.UserId == player.UserId)
                 return (null, "C'est ta propre partie : donne ce code à ton adversaire.");
             if (Busy(player.UserId))
-                return (null, "Tu as déjà une partie en cours.");
+                return (null, AlreadyPlaying);
             lock (found.Gate)
             {
                 found.Guest = player;
@@ -473,7 +475,7 @@ public sealed class ChessHub : IDisposable
             if (session.Stage != ChessStage.Requested || session.Invitee.UserId != userId)
                 return "Cette invitation n'est plus valable.";
             if (Busy(userId))
-                return "Tu as déjà une partie en cours.";
+                return AlreadyPlaying;
             session.Stage = ChessStage.TeamChoice;
             session.Accepted = true;
             session.Notice = null;
@@ -551,7 +553,7 @@ public sealed class ChessHub : IDisposable
     /// différentes : la partie commence), ou quand les deux ont pris la même (l'autre l'apprend, et peut changer aussi).
     /// Message d'erreur, ou null.
     /// </summary>
-    public string? ClearTeam(ChessSession session, string userId)
+    public static string? ClearTeam(ChessSession session, string userId)
     {
         lock (session.Gate)
         {

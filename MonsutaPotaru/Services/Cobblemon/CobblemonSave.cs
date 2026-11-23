@@ -96,10 +96,12 @@ public sealed partial class CobblemonSave
     public int SlotCount(int page) => page == 0 ? _partySlots.Length : BoxSize;
 
     /// <summary>« Équipe », le nom donné à la boîte dans le jeu, ou « Boîte 3 ».</summary>
-    public string PageName(int page) =>
-        page == 0 ? "Équipe"
-        : _pc.Compound($"Box{page - 1}")?.String("BoxName") is { Length: > 0 } name ? name
-        : $"Boîte {page}";
+    public string PageName(int page)
+    {
+        if (page == 0)
+            return "Équipe";
+        return _pc.Compound($"Box{page - 1}")?.String("BoxName") is { Length: > 0 } name ? name : $"Boîte {page}";
+    }
 
     public CobblemonPokemon? Get(int page, int slot) =>
         page == 0 ? _partySlots[slot] : _boxes[page - 1][slot];
@@ -403,9 +405,11 @@ public sealed partial class CobblemonSave
         {
             foreach (var (name, data) in files.OrderBy(f => f.Key, StringComparer.Ordinal))
             {
-                var content = name == _partyPath || name == _partyPath + ".old" ? party
-                    : name == _pcPath || name == _pcPath + ".old" ? pc
-                    : data;
+                var content = data;
+                if (name == _partyPath || name == _partyPath + ".old")
+                    content = party;
+                else if (name == _pcPath || name == _pcPath + ".old")
+                    content = pc;
                 using var stream = archive.CreateEntry(name, CompressionLevel.Optimal).Open();
                 stream.Write(content);
             }
@@ -414,6 +418,9 @@ public sealed partial class CobblemonSave
     }
 
     // ---------- Dossier choisi dans le navigateur ----------
+
+    /// <summary>Lecture de l'en-tête JSON d'un dossier envoyé : peu profond, une liste d'objets.</summary>
+    private static readonly JsonSerializerOptions FolderHeaderJson = new() { MaxDepth = 4 };
 
     /// <summary>
     /// Les fichiers envoyés par le navigateur depuis le dossier du monde (<c>wwwroot/js/app.js</c>, <c>worldFolder</c>),
@@ -434,7 +441,7 @@ public sealed partial class CobblemonSave
         List<FolderEntry>? header;
         try
         {
-            header = JsonSerializer.Deserialize<List<FolderEntry>>(payload.AsSpan(8, headerLength), new JsonSerializerOptions { MaxDepth = 4 });
+            header = JsonSerializer.Deserialize<List<FolderEntry>>(payload.AsSpan(8, headerLength), FolderHeaderJson);
         }
         catch (JsonException)
         {
@@ -478,9 +485,8 @@ public sealed partial class CobblemonSave
     public static string FolderFileName(string? folder)
     {
         var name = new StringBuilder();
-        foreach (var c in (folder ?? "").Normalize(NormalizationForm.FormC))
-            if (char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' or '.')
-                name.Append(c);
+        foreach (var c in (folder ?? "").Normalize(NormalizationForm.FormC).Where(c => char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
+            name.Append(c);
         var clean = name.ToString().Trim(' ', '.');
         if (clean.Length > 60)
             clean = clean[..60].Trim(' ', '.');

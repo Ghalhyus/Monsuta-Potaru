@@ -81,23 +81,6 @@ public sealed class StatisticsService(IDbContextFactory<ApplicationDbContext> db
         return (Summarize(progress.Where(p => !p.Game.Shiny).ToList()), Summarize(progress.Where(p => p.Game.Shiny).ToList()));
     }
 
-    /// <summary>Moyennes d'un groupe de living dex, chacun dans les modes qu'il a.</summary>
-    public static LivingDexStats Summarize(IReadOnlyList<LivingDexCompletion> dexes) => new(
-        Average(dexes.Select(d => d.Modes[^1]).ToList()),
-        Average(InMode(dexes, LivingDexMode.Regional)),
-        Average(InMode(dexes, LivingDexMode.National)),
-        Average(InMode(dexes, LivingDexMode.Complete)));
-
-    private static List<LivingDexModeProgress> InMode(IReadOnlyList<LivingDexCompletion> dexes, LivingDexMode mode) =>
-        [.. dexes.SelectMany(d => d.Modes).Where(m => m.Mode == mode)];
-
-    /// <summary>
-    /// Moyenne des pourcentages (chaque living dex pèse autant), calculée en fractions exactes pour qu'un arrondi ne
-    /// donne jamais 100 % à des living dex incomplets, ni 49,9 % à une moyenne de 50 % tout rond.
-    /// </summary>
-    public static LivingDexAverage Average(IReadOnlyList<LivingDexModeProgress> modes) =>
-        Mean([.. modes.Select(m => (Fraction(m.Owned, m.Total), m.Complete))]);
-
     /// <summary>Rubans des Pokémon suivis : gagnés en tout, et la moyenne de leurs complétions.</summary>
     public async Task<RibbonStats> RibbonsAsync(string userId)
     {
@@ -105,17 +88,24 @@ public sealed class StatisticsService(IDbContextFactory<ApplicationDbContext> db
         return Summarize(trackers);
     }
 
-    /// <summary>Total et moyennes d'une liste de Pokémon suivis.</summary>
-    public static RibbonStats Summarize(IReadOnlyList<RibbonSummary> trackers) => new(
-        trackers.Sum(t => t.Owned),
-        Mean([.. trackers.Select(t => (Fraction(t.Owned, t.Total), t.Owned >= t.Total && t.Total > 0))]));
-
     /// <summary>Complétions du joueur : moyenne générale et moyenne de chaque section.</summary>
     public async Task<CompletionStats> CompletionsAsync(string userId)
     {
         var list = await completions.ListAsync(userId);
         return Summarize([.. list.Select(c => c.Progress)]);
     }
+
+    /// <summary>Moyennes d'un groupe de living dex, chacun dans les modes qu'il a.</summary>
+    public static LivingDexStats Summarize(IReadOnlyList<LivingDexCompletion> dexes) => new(
+        Average(dexes.Select(d => d.Modes[^1]).ToList()),
+        Average(InMode(dexes, LivingDexMode.Regional)),
+        Average(InMode(dexes, LivingDexMode.National)),
+        Average(InMode(dexes, LivingDexMode.Complete)));
+
+    /// <summary>Total et moyennes d'une liste de Pokémon suivis.</summary>
+    public static RibbonStats Summarize(IReadOnlyList<RibbonSummary> trackers) => new(
+        trackers.Sum(t => t.Owned),
+        Mean([.. trackers.Select(t => (Fraction(t.Owned, t.Total), t.Owned >= t.Total && t.Total > 0))]));
 
     /// <summary>
     /// Moyennes d'une liste de complétions : le pourcentage global de chacune (la moyenne exacte de ses sections), puis
@@ -132,6 +122,16 @@ public sealed class StatisticsService(IDbContextFactory<ApplicationDbContext> db
                 var inSection = progress.SelectMany(p => p.Sections).Where(s => s.Section == section).ToList();
                 return (section, Mean([.. inSection.Select(s => (Fraction(s.Done, s.Total), s.Done == s.Total))]));
             })]);
+
+    private static List<LivingDexModeProgress> InMode(IReadOnlyList<LivingDexCompletion> dexes, LivingDexMode mode) =>
+        [.. dexes.SelectMany(d => d.Modes).Where(m => m.Mode == mode)];
+
+    /// <summary>
+    /// Moyenne des pourcentages (chaque living dex pèse autant), calculée en fractions exactes pour qu'un arrondi ne
+    /// donne jamais 100 % à des living dex incomplets, ni 49,9 % à une moyenne de 50 % tout rond.
+    /// </summary>
+    public static LivingDexAverage Average(IReadOnlyList<LivingDexModeProgress> modes) =>
+        Mean([.. modes.Select(m => (Fraction(m.Owned, m.Total), m.Complete))]);
 
     private static (BigInteger Numerator, BigInteger Denominator) Fraction(int done, int total) =>
         total > 0 ? (done, total) : (0, 1);

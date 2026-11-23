@@ -28,7 +28,7 @@ public sealed class CompletionGen8Tests : IDisposable
 
     private static CompletionRow[] Table(string game) => (CompletionRow[])typeof(Gen8CompletionData).GetField(game)!.GetValue(null)!;
 
-    private static IEnumerable<string> Atoms(string condition) => condition.Split('|', '+');
+    private static string[] Atoms(string condition) => condition.Split('|', '+');
 
     /// <summary>Lève les blocs booléens (« X:clé ») d'une condition d'Épée / Bouclier ou d'Arceus.</summary>
     private static void SetBlocks(SCBlockAccessor accessor, string condition)

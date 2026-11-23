@@ -132,8 +132,9 @@ else
     {
         get
         {
-            var origin = source == BankSource ? CollectionFilter.Bank
-                : int.TryParse(source, out var id) ? CollectionFilter.Save(id) : CollectionFilter.All;
+            if (source == BankSource)
+                return CollectionFilter.Bank with { Criteria = criteria };
+            var origin = int.TryParse(source, out var id) ? CollectionFilter.Save(id) : CollectionFilter.All;
             return origin with { Criteria = criteria };
         }
     }

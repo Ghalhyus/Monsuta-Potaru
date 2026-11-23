@@ -69,9 +69,11 @@ public sealed class CompletionService(
     private static (List<CompletionStep> Steps, string? Notice) Steps(LivingDexGame game, byte[] data, string fileName)
     {
         if (AllTheMonsLivingDex.Is(game))
-            return CobblemonSave.IsZip(data) && CobblemonSave.TryRead(data, out _) is { } world
-                ? (AllTheMonsCompletion.Steps(world), world.HasProgress ? null : NoProgressNotice)
-                : ([], null);
+        {
+            if (!CobblemonSave.IsZip(data) || CobblemonSave.TryRead(data, out _) is not { } world)
+                return ([], null);
+            return (AllTheMonsCompletion.Steps(world), world.HasProgress ? null : NoProgressNotice);
+        }
         return (StoredSaveService.TryRead(data, fileName, out var sav) ? CompletionGames.Steps(sav, game) ?? [] : [], null);
     }
 

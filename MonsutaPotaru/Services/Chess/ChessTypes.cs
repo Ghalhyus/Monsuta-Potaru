@@ -74,6 +74,10 @@ public static class PokeTypes
     public static double Effectiveness(PokeType attacker, PokeType defender)
     {
         var (super, weak, none) = Chart[attacker];
-        return super.Contains(defender) ? 2 : weak.Contains(defender) ? 0.5 : none.Contains(defender) ? 0 : 1;
+        if (super.Contains(defender))
+            return 2;
+        if (weak.Contains(defender))
+            return 0.5;
+        return none.Contains(defender) ? 0 : 1;
     }
 }

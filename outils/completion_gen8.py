@@ -31,7 +31,41 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from completion_gen3 import anchored_rank  # noqa: E402
+from completion_gen3 import anchored_rank, split_on, split_paren, strip_paren  # noqa: E402
+
+# Textes répétés (lieux, libellés)
+AIRE_DE_COMBAT = 'Aire de Combat'
+ARENE_DE_CHARBOURG = 'Arène de Charbourg'
+ARENE_DE_FRIMAPIC = 'Arène de Frimapic'
+ARENE_DE_SKIFFORD = 'Arène de Skifford'
+BAIE_DE_LUDESTER = 'Baie de Ludester'
+CATEGORIE = 'Catégorie'
+CHOISIR_SON_PREMIER_POKEMON = 'Choisir son premier Pokémon'
+CONTREFORT_COURONNE = 'Contrefort Couronné'
+COTE_LAZULI = 'Côte Lazuli'
+DOJO_DE_LA_MAITRISE = 'Dojo de la Maîtrise'
+GRAND_ANTRE_DYNAMAX = 'Grand Antre Dynamax'
+HAMEAU_GELE = 'Hameau Gelé'
+INTERIEUR = 'intérieur'
+LEGENDAIRE_FIXE = 'Légendaire / Fixe'
+LIGUE_POKEMON = 'Ligue Pokémon'
+MARAIS_CARMIN = 'Marais Carmin'
+PARC_ROSA_RUGOSA = 'Parc Rosa Rugosa'
+PLAINES_OBSIDIENNES = 'Plaines Obsidiennes'
+REPOS_DU_GEANT = 'Repos du Géant'
+RUSTI_CITE = 'Rusti-Cité'
+SENTIER_DE_LA_GARE = 'Sentier de la Gare'
+SIEGE_GROUPE_GALAXIE = 'Siège Groupe Galaxie'
+STADE_DE_CORRIFEY = 'Stade de Corrifey'
+STADE_DE_GREENBURY = 'Stade de Greenbury'
+STADE_DE_KICKENHAM = 'Stade de Kickenham'
+STADE_DE_MOTORBY = 'Stade de Motorby'
+STADE_DE_SKIFFORD = 'Stade de Skifford'
+TEMPLE_COURONNE = 'Temple Couronne'
+TEMPLE_DE_SINNOH = 'Temple de Sinnoh'
+TERRES_IMMACULEES = 'Terres Immaculées'
+TERRES_SAUVAGES = 'Terres Sauvages'
+TOUR_DE_COMBAT = 'Tour de Combat'
 
 MAX_ITEM = {'swsh': 1607, 'bdsp': 1822, 'la': 1828}
 
@@ -154,7 +188,7 @@ class Ctx:
         base = loc.replace('’', "'")
         base = PLACE_EN.get((self.key, base), PLACE_EN.get(base, base))
         if base not in self.place_fr:
-            base2 = re.sub(r'\s*\(.*\)$', '', base)
+            base2 = strip_paren(base)
             base2 = PLACE_EN.get((self.key, base2), PLACE_EN.get(base2, base2))
             if base2 not in self.place_fr:
                 UNKNOWN.add(f'lieu {loc} ({self.key})')
@@ -182,7 +216,9 @@ def floor(token):
     m = re.fullmatch(r'(\d+)F', token)
     if m:
         n = int(m.group(1)) - 1
-        return 'rez-de-chaussée' if n == 0 else '1er étage' if n == 1 else f'{n}e étage'
+        if n == 0:
+            return 'rez-de-chaussée'
+        return '1er étage' if n == 1 else f'{n}e étage'
     return None
 
 
@@ -191,9 +227,9 @@ SUBPLACES = {
     '1': None, '2': None, 'Area 1': 'zone 1', 'Area 2': 'zone 2', 'Area 3': 'zone 3', 'Area 4': 'zone 4', 'Area 5': 'zone 5',
     'Area 6': 'zone 6', 'Back 2': 'fond', 'Dried': 'asséché', 'East Room': 'salle est', 'West Room': 'salle ouest',
     'Exterior': 'extérieur', 'Tower Exterior': 'extérieur de la tour', 'Galactic Warehouse': 'entrepôt Galaxie',
-    'House': 'maison', 'Inside': 'intérieur', 'Interior 1': 'intérieur', 'Interior 2': 'intérieur', 'Lower tier': 'en bas',
+    'House': 'maison', 'Inside': INTERIEUR, 'Interior 1': INTERIEUR, 'Interior 2': INTERIEUR, 'Lower tier': 'en bas',
     'Upper Tier': 'en haut', 'Office': 'bureau', 'Outside': 'extérieur', 'Room': 'salle', 'Underpass': 'passage souterrain',
-    'Circhester Bay': 'Baie de Ludester', 'Outer Spikemuth': 'Abords de Smashings', 'Steamdrift Way': 'Sentier des Sources',
+    'Circhester Bay': BAIE_DE_LUDESTER, 'Outer Spikemuth': 'Abords de Smashings', 'Steamdrift Way': 'Sentier des Sources',
 }
 
 
@@ -215,7 +251,7 @@ def subplace(sub):
 def item_parts(c, text):
     """« Ultra Ball (x3) » → (numéro, 3) ; « TM27 (Low Sweep) » → (numéro de la CT27, 1)."""
     text = text.strip()
-    m = re.fullmatch(r'(.+?)(?: ?\(x ?(\d+)\))?', text)
+    m = re.fullmatch(r'(.+?)(?: ?\(x ?(\d+)\))?$', text)
     name, count = m.group(1).strip(), int(m.group(2) or 1)
     tm = re.fullmatch(r'(TM|TR)(\d+)(?: \(.*\))?', name)
     if tm:
@@ -240,52 +276,52 @@ def machine(c, item):
 def swsh_story(c, version):
     sword = version == 'SW'
     return [
-        ('Paddoxton', None, 'Choisir son premier Pokémon', 'D:810|D:813|D:816'),
+        ('Paddoxton', None, CHOISIR_SON_PREMIER_POKEMON, 'D:810|D:813|D:816'),
         ('Route 2', 'labo de Magnolia', 'Recevoir le Poignet Dynamax', c.k('Dynamax Band')),
         ('Brasswick', None, 'Recevoir le Kit de Camping', c.k('Camping Gear')),
         ('Motorby', None, 'Recevoir la Moticyclette', c.k('Rotom Bike')),
-        ('Stade de Greenbury', None, "Mission d'Arène : rassembler les Moumouton", c.f('FE_GC_KUSA_CLEAR')),
-        ('Stade de Greenbury', None, 'Badge Plante (Percy)', 'B:0'),
-        ('Stade de Skifford', None, "Mission d'Arène : le labyrinthe des cascades", c.f('FE_GC_MIZU_CLEAR')),
-        ('Stade de Skifford', None, 'Badge Eau (Donna)', 'B:1'),
-        ('Stade de Motorby', None, "Mission d'Arène : 5 points (captures et K.O.)", c.f('FE_GC_HONO_CLEAR')),
-        ('Stade de Motorby', None, 'Badge Feu (Kabu)', 'B:2'),
+        (STADE_DE_GREENBURY, None, "Mission d'Arène : rassembler les Moumouton", c.f('FE_GC_KUSA_CLEAR')),
+        (STADE_DE_GREENBURY, None, 'Badge Plante (Percy)', 'B:0'),
+        (STADE_DE_SKIFFORD, None, "Mission d'Arène : le labyrinthe des cascades", c.f('FE_GC_MIZU_CLEAR')),
+        (STADE_DE_SKIFFORD, None, 'Badge Eau (Donna)', 'B:1'),
+        (STADE_DE_MOTORBY, None, "Mission d'Arène : 5 points (captures et K.O.)", c.f('FE_GC_HONO_CLEAR')),
+        (STADE_DE_MOTORBY, None, 'Badge Feu (Kabu)', 'B:2'),
         ("Stade d'Old Chister", None, 'Badge Combat (Faïza)' if sword else 'Badge Spectre (Alistair)', 'B:3'),
-        ('Stade de Corrifey', None, "Mission d'Arène : le quiz", c.f('FE_GC_FAIRY_CLEAR')),
-        ('Stade de Corrifey', None, 'Badge Fée (Sally)', 'B:4'),
+        (STADE_DE_CORRIFEY, None, "Mission d'Arène : le quiz", c.f('FE_GC_FAIRY_CLEAR')),
+        (STADE_DE_CORRIFEY, None, 'Badge Fée (Sally)', 'B:4'),
         ('Stade de Ludester', None, 'Badge Roche (Chaz)' if sword else 'Badge Glace (Lona)', 'B:5'),
-        ('Baie de Ludester', None, 'Moticyclette aquatique', c.f('FSYS_FLAG_NAMINORI_OPEN')),
+        (BAIE_DE_LUDESTER, None, 'Moticyclette aquatique', c.f('FSYS_FLAG_NAMINORI_OPEN')),
         ('Smashings', None, 'Badge Ténèbres (Peterson)', 'B:6'),
-        ('Stade de Kickenham', None, "Mission d'Arène : combats Duo sous la météo", c.f('FE_GC_DORAGON_CLEAR')),
-        ('Stade de Kickenham', None, 'Badge Dragon (Roy)', 'B:7'),
+        (STADE_DE_KICKENHAM, None, "Mission d'Arène : combats Duo sous la météo", c.f('FE_GC_DORAGON_CLEAR')),
+        (STADE_DE_KICKENHAM, None, 'Badge Dragon (Roy)', 'B:7'),
         ('Sommet de la tour', None, 'Capturer Éthernatos', 'D:890'),
         ('Stade de Winscor', None, 'Devenir Maître de la Ligue (Match Ultime contre Tarak)', c.f('FSYS_GAME_CLEAR')),
         # « Kickenham » et pas « Stade de Kickenham » : la page regroupe par lieu (sinon avec le badge de Roy, avant Éthernatos)
         ('Kickenham', 'toit du stade', 'Capturer Zacian' if sword else 'Capturer Zamazenta', 'D:888' if sword else 'D:889'),
         # Isolarmure
         ('Plaine Salutation', None, "Arriver sur l'Isolarmure", c.f('FSYS_ARRIVE_WR0201')),
-        ('Dojo de la Maîtrise', None, 'Recevoir Wushours (Mustar)', 'D:891'),
+        (DOJO_DE_LA_MAITRISE, None, 'Recevoir Wushours (Mustar)', 'D:891'),
         ('Tour des Ténèbres', 'ou Tour de l\'Eau', 'Terminer une des Tours des Deux Poings (Shifours)', 'D:892'),
-        ('Dojo de la Maîtrise', None, "Finir l'histoire de l'Isolarmure (combat final contre Mustar)",
+        (DOJO_DE_LA_MAITRISE, None, "Finir l'histoire de l'Isolarmure (combat final contre Mustar)",
          c.f('FSYS_R1_GAME_CLEAR')),
         # Couronneige
-        ('Hameau Gelé', None, 'Arriver sur les Terres Couronneige', c.f('FSYS_ARRIVE_WR0301')),
-        ('Grand Antre Dynamax', None, 'Première Expédition Dynamax', c.f('FSYS_CHIKA_FIRST')),
-        ('Repos du Géant', None, 'Quête des Colosses légendaires (Regigigas)', 'D:486'),
-        ('Temple Couronne', None, 'Capturer Sylveroy', 'D:898'),
-        ('Hameau Gelé', None, 'Finir l\'histoire des Terres Couronneige (Dhilan)', c.f('FSYS_R2_GAME_CLEAR')),
+        (HAMEAU_GELE, None, 'Arriver sur les Terres Couronneige', c.f('FSYS_ARRIVE_WR0301')),
+        (GRAND_ANTRE_DYNAMAX, None, 'Première Expédition Dynamax', c.f('FSYS_CHIKA_FIRST')),
+        (REPOS_DU_GEANT, None, 'Quête des Colosses légendaires (Regigigas)', 'D:486'),
+        (TEMPLE_COURONNE, None, 'Capturer Sylveroy', 'D:898'),
+        (HAMEAU_GELE, None, 'Finir l\'histoire des Terres Couronneige (Dhilan)', c.f('FSYS_R2_GAME_CLEAR')),
     ]
 
 
 def bdsp_story(c, version):
     diamond = version == 'BD'
-    badges = [('Arène de Charbourg', 'Badge Charbon (Pierrick)'), ('Arène de Vestigion', 'Badge Forêt (Flo)'),
+    badges = [(ARENE_DE_CHARBOURG, 'Badge Charbon (Pierrick)'), ('Arène de Vestigion', 'Badge Forêt (Flo)'),
               ('Arène de Voilaroc', 'Badge Pavé (Mélina)'), ('Arène de Verchamps', 'Badge Palustre (Lovis)'),
               ("Arène d'Unionpolis", 'Badge Relique (Kiméra)'), ('Arène de Joliberges', 'Badge Mine (Charles)'),
-              ('Arène de Frimapic', 'Badge Glaçon (Gladys)'), ('Arène de Rivamar', 'Badge Phare (Tanguy)')]
+              (ARENE_DE_FRIMAPIC, 'Badge Glaçon (Gladys)'), ('Arène de Rivamar', 'Badge Phare (Tanguy)')]
     b = [(zone, None, label, f'SF:{124 + n}') for n, (zone, label) in enumerate(badges)]
     return [
-        ('Lac Vérité', None, 'Choisir son premier Pokémon', 'D:387|D:390|D:393'),
+        ('Lac Vérité', None, CHOISIR_SON_PREMIER_POKEMON, 'D:387|D:390|D:393'),
         ('Littorella', None, 'Recevoir le Pokédex', c.f('FE_ZUKAN_GET')),
         b[0],
         b[1],
@@ -298,34 +334,34 @@ def bdsp_story(c, version):
         ('QG Team Galaxie', None, 'Infiltrer le QG Galaxie (Clé Galaxie)', c.k('Galactic Key')),
         ('Colonnes Lances', None, 'Capturer Dialga' if diamond else 'Capturer Palkia', c.f('FE_D05R0114_SPPOKE_GET')),
         b[7],
-        ('Ligue Pokémon', None, 'Battre Aaron (Conseil 4)', c.f('FE_BIGFOUR1_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', None, 'Battre Terry (Conseil 4)', c.f('FE_BIGFOUR2_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', None, 'Battre Adrien (Conseil 4)', c.f('FE_BIGFOUR3_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', None, 'Battre Lucio (Conseil 4)', c.f('FE_BIGFOUR4_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
-        ('Ligue Pokémon', None, 'Devenir Maître de la Ligue (Cynthia)', c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre Aaron (Conseil 4)', c.f('FE_BIGFOUR1_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre Terry (Conseil 4)', c.f('FE_BIGFOUR2_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre Adrien (Conseil 4)', c.f('FE_BIGFOUR3_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Battre Lucio (Conseil 4)', c.f('FE_BIGFOUR4_WIN') + '|' + c.f('SYS_FLAG_GAME_CLEAR')),
+        (LIGUE_POKEMON, None, 'Devenir Maître de la Ligue (Cynthia)', c.f('SYS_FLAG_GAME_CLEAR')),
         ('Littorella', None, 'Obtenir le Pokédex National', 'N'),
-        ('Aire de Combat', None, "Arriver à l'Aire de Combat", c.f('OLD_FLAG_ARRIVE_C11')),
+        (AIRE_DE_COMBAT, None, "Arriver à l'Aire de Combat", c.f('OLD_FLAG_ARRIVE_C11')),
     ]
 
 
-def la_story(c, version):
+def la_story(c):
     return [
-        ('Rusti-Cité', None, 'Choisir son premier Pokémon', 'D:722|D:155|D:501'),
+        (RUSTI_CITE, None, CHOISIR_SON_PREMIER_POKEMON, 'D:722|D:155|D:501'),
         ('Arène du Grand Arbre', None, 'Apaiser le Monarque Hachécateur', c.f('FSYS_NS_01_CLEARED')),
-        ('Plaines Obsidiennes', None, 'Monture Cerbyllin', c.f('FSYS_RIDE_OPEN_01')),
-        ('Marais Carmin', None, 'Monture Ursaking', c.f('FSYS_RIDE_OPEN_03')),
+        (PLAINES_OBSIDIENNES, None, 'Monture Cerbyllin', c.f('FSYS_RIDE_OPEN_01')),
+        (MARAIS_CARMIN, None, 'Monture Ursaking', c.f('FSYS_RIDE_OPEN_03')),
         ('Arène du Théâtre', None, 'Apaiser la Monarque Fragilady', c.f('FSYS_NS_02_CLEARED')),
-        ('Côte Lazuli', None, 'Monture Paragruel', c.f('FSYS_RIDE_OPEN_05')),
+        (COTE_LAZULI, None, 'Monture Paragruel', c.f('FSYS_RIDE_OPEN_05')),
         ('Arène de la Lave', None, 'Apaiser le Monarque Arcanin', c.f('FSYS_NS_03_CLEARED')),
-        ('Contrefort Couronné', None, 'Monture Farfurex', c.f('FSYS_RIDE_OPEN_07')),
+        (CONTREFORT_COURONNE, None, 'Monture Farfurex', c.f('FSYS_RIDE_OPEN_07')),
         ('Arène de la Lune', None, 'Apaiser le Monarque Électrode', c.f('FSYS_NS_04_CLEARED')),
         ("Arène de l'Iceberg", None, 'Apaiser le Monarque Séracrawl', c.f('FSYS_NS_05_CLEARED')),
-        ('Temple de Sinnoh', None, 'Capturer Dialga ou Palkia', 'D:483|D:484'),
-        ('Temple de Sinnoh', None, 'Apaiser Dialga Originel', c.f('FSYS_NS_D_CLEARED')),
-        ('Temple de Sinnoh', None, 'Apaiser Palkia Originel', c.f('FSYS_NS_P_CLEARED')),
-        ('Temple de Sinnoh', None, 'Capturer Dialga et Palkia', 'D:483+D:484'),
-        ('Siège Groupe Galaxie', None, 'Compléter le Pokédex de Hisui', c.f('FEVE_EV110100_END')),
-        ('Temple de Sinnoh', None, 'Capturer Arceus', 'D:493'),
+        (TEMPLE_DE_SINNOH, None, 'Capturer Dialga ou Palkia', 'D:483|D:484'),
+        (TEMPLE_DE_SINNOH, None, 'Apaiser Dialga Originel', c.f('FSYS_NS_D_CLEARED')),
+        (TEMPLE_DE_SINNOH, None, 'Apaiser Palkia Originel', c.f('FSYS_NS_P_CLEARED')),
+        (TEMPLE_DE_SINNOH, None, 'Capturer Dialga et Palkia', 'D:483+D:484'),
+        (SIEGE_GROUPE_GALAXIE, None, 'Compléter le Pokédex de Hisui', c.f('FEVE_EV110100_END')),
+        (TEMPLE_DE_SINNOH, None, 'Capturer Arceus', 'D:493'),
     ]
 
 
@@ -373,8 +409,8 @@ def clean_zone(text):
         if cut >= 0:
             text, more = text[:cut], text[cut + len(sep):]
             rest.insert(0, more if sep != ' puis ' else f'puis {more}')
-    m = re.fullmatch(r'(.+?)(?: \((.+)\))?', text)
-    place, extra = m.group(1).strip(), m.group(2)
+    place, extra = split_paren(text)
+    place = place.strip()
     if ' / ' in place:
         place, other = place.split(' / ', 1)
         rest.append(f'ou {other}')
@@ -385,9 +421,9 @@ def clean_zone(text):
 ZONE_FIX = {
     'Labo de Brasswick': 'Brasswick', 'Hôtel de Motorby': 'Motorby', 'Mine de Galar n°2': 'Mine de Galar nº 2',
     'Shehroz Tower': 'Kickenham',
-    'Dojo Maîtrise': 'Dojo de la Maîtrise', 'Terrain de Combat du Dojo': 'Dojo de la Maîtrise',
-    'Grand Antre Dynamax': 'Grand Antre Dynamax', 'Siège du Groupe Galaxie': 'Siège Groupe Galaxie',
-    'Littorella (labo)': 'Littorella', 'Arène de Charbourg': 'Arène de Charbourg',
+    'Dojo Maîtrise': DOJO_DE_LA_MAITRISE, 'Terrain de Combat du Dojo': DOJO_DE_LA_MAITRISE,
+    GRAND_ANTRE_DYNAMAX: GRAND_ANTRE_DYNAMAX, 'Siège du Groupe Galaxie': SIEGE_GROUPE_GALAXIE,
+    'Littorella (labo)': 'Littorella', ARENE_DE_CHARBOURG: ARENE_DE_CHARBOURG,
 }
 
 
@@ -395,7 +431,7 @@ def story_order(rows, extra=()):
     """Lieux des étapes « Histoire » de la check-list, dans l'ordre (premier mot de chaque lieu)."""
     out = []
     for row in rows:
-        if row['Catégorie'] != 'Histoire':
+        if row[CATEGORIE] != 'Histoire':
             continue
         place, _ = clean_zone(row['Lieu'])
         if place not in out:
@@ -419,8 +455,8 @@ def build(c, version, order, anchors, cur):
             if rank is None:
                 MISSING_PLACES.add(f'{zone} ({version})')
                 rank = 10_000
-        rows.append(dict(section=section, zone=zone, detail=det, done=done, label=label, item=item, tm=tm,
-                         species=species, count=count, give=give, form=form, sort=(rank, zone, sort)))
+        rows.append({'section': section, 'zone': zone, 'detail': det, 'done': done, 'label': label, 'item': item, 'tm': tm,
+                         'species': species, 'count': count, 'give': give, 'form': form, 'sort': (rank, zone, sort)})
 
     S, I, U, Q = 'Story', 'Items', 'Encounters', 'Quests'
     for i, (zone, det, label, cond) in enumerate(cur['story']):
@@ -476,26 +512,26 @@ def shop_place(text, key):
     text = text.strip()
     if ';' in text or text.startswith('Raids'):
         first = text.split(';')[0].strip()
-        if first.startswith('Raids') or first.startswith('Marchands'):
+        if first.startswith(('Raids', 'Marchands')):
             return REGION[key], text.replace(' ; ', ', ').replace('Raids', 'raids').replace('Marchands', 'marchands')
         place, extra = clean_zone(first)
         return place, ', '.join(p for p in (extra, 'ou ' + text.split(';', 1)[1].strip()) if p)
     m = re.fullmatch(r"Arène (?:de |d'|d’)(.+)", text)
     if m and key == 'swsh':
-        return f'Stade de {m.group(1)}' if not m.group(1)[0] in 'AEIOUÉ' else f"Stade d'{m.group(1)}", None
+        return f'Stade de {m.group(1)}' if m.group(1)[0] not in 'AEIOUÉ' else f"Stade d'{m.group(1)}", None
     if text.startswith('Boutique de la Tour de Combat'):
-        return 'Tour de Combat', 'boutique'
+        return TOUR_DE_COMBAT, 'boutique'
     return clean_zone(text)
 
 
-REGION = {'swsh': 'Terres Sauvages', 'bdsp': 'Sinnoh', 'la': 'Hisui'}
+REGION = {'swsh': TERRES_SAUVAGES, 'bdsp': 'Sinnoh', 'la': 'Hisui'}
 
 
-def checklist_machines(rows, key):
+def checklist_machines(rows):
     """CT (et DT) de la check-list : rang → (nom anglais de l'objet, lieu)."""
     out = {}
     for row in rows:
-        if row['Catégorie'] not in ('CT', 'DT'):
+        if row[CATEGORIE] not in ('CT', 'DT'):
             continue
         m = re.match(r'(CT|DT)(\d+)', row['Objectif'].strip())
         kind, n = m.group(1), int(m.group(2))
@@ -550,33 +586,32 @@ def swsh_encounters(c, rows, version):
     u = []
     gifts = [
         ('Route 5', 'Garderie, cadeau', 848, c.f('FE_SUB_005_CLEAR'), None),
-        ('Sentier de la Gare', 'sauvegarde de Let\'s Go, Pikachu', 25, c.f('FE_SUB_037_PIKACHU_CLEAR'), 'Pikachu Gigamax'),
-        ('Sentier de la Gare', 'sauvegarde de Let\'s Go, Évoli', 133, c.f('FE_SUB_037_EEVEE_CLEAR'), 'Évoli Gigamax'),
+        (SENTIER_DE_LA_GARE, 'sauvegarde de Let\'s Go, Pikachu', 25, c.f('FE_SUB_037_PIKACHU_CLEAR'), 'Pikachu Gigamax'),
+        (SENTIER_DE_LA_GARE, 'sauvegarde de Let\'s Go, Évoli', 133, c.f('FE_SUB_037_EEVEE_CLEAR'), 'Évoli Gigamax'),
         ('Route 6', 'fossiles', 880, 'D:880|D:881|D:882|D:883', 'Galvagon, Galvagla, Hydragon ou Hydragla'),
         # Les drapeaux « z_… » de FlagsEditorEX (« KReceivedGiftCharmander »…) font apparaître ou disparaître un objet de la
         # carte : celui de Salamèche est levé dans epee.sav (3 badges), bien avant le cadeau. Ces cadeaux passent par le
         # Pokédex (aucun de ces Pokémon ne se capture à l'état sauvage).
         ('Paddoxton', 'chambre de Tarak, cadeau', 4, 'D:4', None),
-        ('Tour de Combat', 'cadeau', 772, 'D:772', None),
-        ('Dojo de la Maîtrise', 'cadeau', 1, c.a('FE_R1_HUSHIGIDANE_GET', 'FE_R1_ZENIGAME_GET'), 'Bulbizarre ou Carapuce Gigamax'),
-        ('Hameau Gelé', 'cadeau', 789, 'D:789', None),
-        ('Grand Antre Dynamax', 'cadeau', 803, 'D:803', None),
+        (TOUR_DE_COMBAT, 'cadeau', 772, 'D:772', None),
+        (DOJO_DE_LA_MAITRISE, 'cadeau', 1, c.a('FE_R1_HUSHIGIDANE_GET', 'FE_R1_ZENIGAME_GET'), 'Bulbizarre ou Carapuce Gigamax'),
+        (HAMEAU_GELE, 'cadeau', 789, 'D:789', None),
+        (GRAND_ANTRE_DYNAMAX, 'cadeau', 803, 'D:803', None),
     ]
     u += gifts
     # Échanges : FSYS_NPC_TRADE_01 à 11 dans l'ordre des lignes de la check-list (E001 à E011 ; ordre supposé, aucune
     # description dans FlagsEditorEX) ; ceux de l'Isolarmure (position variable, sans drapeau) sont laissés de côté
-    trades = [r for r in rows if r['Catégorie'] == 'Échange interne']
+    trades = [r for r in rows if r[CATEGORIE] == 'Échange interne']
     for n, row in enumerate(trades[:11], 1):
         if not for_version(row, version):
             continue
-        m = re.fullmatch(r'Recevoir (.+?) contre (.+)', row['Objectif'].strip())
-        got, give = species_of(c, m.group(1)), species_of(c, m.group(2))
+        got, give = (species_of(c, s) for s in split_on(row['Objectif'].strip().removeprefix('Recevoir '), ' contre '))
         zone, extra = clean_zone(row['Lieu'])
         u.append((zone, ', '.join(p for p in (extra, 'échange') if p), got, c.f(f'FSYS_NPC_TRADE_{n:02d}'), ('give', give)))
     # Légendaires de la check-list (sauf ceux de l'histoire)
     story = {888, 889, 890, 891, 892, 898, 486}
     for row in rows:
-        if row['Catégorie'] != 'Légendaire / Fixe' or not for_version(row, version):
+        if row[CATEGORIE] != LEGENDAIRE_FIXE or not for_version(row, version):
             continue
         name = re.sub(r'^Capturer / obtenir ', '', row['Objectif'].strip())
         galar = 'de Galar' in name
@@ -593,13 +628,13 @@ def swsh_encounters(c, rows, version):
             continue
         label = f'{name} de Galar' if galar else None
         u.append((zone, extra, species, cond or f'D:{species}', label))
-    u.append(('Temple Couronne', None, 896, 'D:896|D:897', 'Blizzeval ou Spectreval'))
+    u.append((TEMPLE_COURONNE, None, 896, 'D:896|D:897', 'Blizzeval ou Spectreval'))
     return u
 
 
 def species_of(c, text):
     """« Miaouss (Kanto) », « Noadkoko d'Alola (Fouille) », « Tutafeh de Galar » → numéro national."""
-    text = re.sub(r' \(.*?\)', '', text).strip()
+    text = re.sub(r' \([^)\n]*\)', '', text).strip()
     text = re.sub(r" (?:de Galar|d'Alola|de Hisui)$", '', text)
     return c.species(text)
 
@@ -622,12 +657,12 @@ def bdsp_encounters(c, rows, version):
     caps = capture_flags(c)
     u = []
     for row in rows:
-        cat = row['Catégorie']
-        if cat not in ('Légendaire / Fixe', 'Pokémon offert', 'Pokémon fixe') or not for_version(row, version):
+        cat = row[CATEGORIE]
+        if cat not in (LEGENDAIRE_FIXE, 'Pokémon offert', 'Pokémon fixe') or not for_version(row, version):
             continue
         text = row['Objectif'].strip()
         zone, extra = clean_zone(row['Lieu'])
-        if cat == 'Légendaire / Fixe':
+        if cat == LEGENDAIRE_FIXE:
             name = re.sub(r'^Capturer / obtenir ', '', text)
             if name.startswith('Giratina forme Originelle'):
                 u.append((zone, extra, 487, c.f('FE_D10R0901POKE_01'), 'Giratina (Salle Distorsion)'))
@@ -660,11 +695,10 @@ def bdsp_encounters(c, rows, version):
                 species = c.species(name)
                 u.append((zone, extra, species, f'D:{species}', None))
     flags = ['FE_C03R0201_POKE_CHG', 'FE_C04R0301_POKE_CHG']
-    trades = [r for r in rows if r['Catégorie'] == 'Échange interne']
+    trades = [r for r in rows if r[CATEGORIE] == 'Échange interne']
     trade_flags = [name for _, entries in c.sections.items() for (_, kind, _, _, _, name) in entries if kind == 'IN-GAME TRADE']
     for n, row in enumerate(trades):
-        m = re.fullmatch(r'Recevoir (.+?) contre (.+)', row['Objectif'].strip())
-        got, give = species_of(c, m.group(1)), species_of(c, m.group(2))
+        got, give = (species_of(c, s) for s in split_on(row['Objectif'].strip().removeprefix('Recevoir '), ' contre '))
         zone, extra = clean_zone(row['Lieu'])
         cond = c.f(trade_flags[n]) if n < len(trade_flags) else f'D:{got}'
         u.append((zone, ', '.join(p for p in (extra, 'échange') if p), got, cond, ('give', give)))
@@ -678,7 +712,7 @@ def statues(root):
     names = lines_of(os.path.join(root, 'text_ug_item_fr.txt'))
     out = []
     for m in re.finditer(r'new\(\s*(\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)\)', src):
-        ug, item, sphere, pedestal, statue = (int(x) for x in m.groups())
+        ug, item, sphere, _, statue = (int(x) for x in m.groups())  # 4e : socle
         if statue > 0 and item <= 0 and sphere <= 0:
             out.append((ug, names[ug] if ug < len(names) else f'Statue {ug}'))
     return out
@@ -686,8 +720,8 @@ def statues(root):
 
 def bdsp_quests(c, root):
     q = [
-        ('Tour de Combat', None, 'Battre le Magnat de la Tour', c.f('FE_TOWER_MASTER_WINED')),
-        ('Tour de Combat', None, 'Atteindre le rang 10 de la classe Expert', 'BTM:10'),
+        (TOUR_DE_COMBAT, None, 'Battre le Magnat de la Tour', c.f('FE_TOWER_MASTER_WINED')),
+        (TOUR_DE_COMBAT, None, 'Atteindre le rang 10 de la classe Expert', 'BTM:10'),
     ]
     for flag, name in (('STYLE', 'Sang-Froid'), ('BEAUTIFUL', 'Beauté'), ('CUTE', 'Grâce'), ('CLEVER', 'Intelligence'),
                        ('STRONG', 'Robustesse')):
@@ -704,16 +738,16 @@ def bdsp_quests(c, root):
 # ---------------------------------------------------------------------------------------------------------------------
 # Légendes Arceus
 
-WISPS = [('Rusti-Cité', '8B18ADE5', 7), ('Plaines Obsidiennes', '8B18AC32', 20), ('Marais Carmin', '8B18AA7F', 20),
-         ('Côte Lazuli', '8B18A8CC', 20), ('Contrefort Couronné', '8B18A719', 20), ('Terres Immaculées', '8B18A566', 20)]
+WISPS = [(RUSTI_CITE, '8B18ADE5', 7), (PLAINES_OBSIDIENNES, '8B18AC32', 20), (MARAIS_CARMIN, '8B18AA7F', 20),
+         (COTE_LAZULI, '8B18A8CC', 20), (CONTREFORT_COURONNE, '8B18A719', 20), (TERRES_IMMACULEES, '8B18A566', 20)]
 EXPEDITION_RANK = '50FE632A'
-LA_REGIONS = ['Plaines Obsidiennes', 'Marais Carmin', 'Côte Lazuli', 'Contrefort Couronné', 'Terres Immaculées']
+LA_REGIONS = [PLAINES_OBSIDIENNES, MARAIS_CARMIN, COTE_LAZULI, CONTREFORT_COURONNE, TERRES_IMMACULEES]
 
 
-def la_encounters(c, rows, version):
+def la_encounters(c, rows):
     u = []
     for row in rows:
-        if row['Catégorie'] != 'Légendaire / Fabuleux':
+        if row[CATEGORIE] != 'Légendaire / Fabuleux':
             continue
         name = re.sub(r' \(niv\..*\)$', '', row['Objectif'].strip())
         species = c.species(name)
@@ -729,13 +763,13 @@ def la_encounters(c, rows, version):
         u.append((zone, extra, species, f'D:{species}', None))
     a, b, d = c.cond['FEVE_SUB199_GET_KUSA'], c.cond['FEVE_SUB199_GET_HONOO'], c.cond['FEVE_SUB199_GET_MIZU']
     u += [
-        ('Siège Groupe Galaxie', 'Lavande, après Arceus', 722, f'{a}+{b}|{a}+{d}|{b}+{d}', 'Les deux autres starters'),
+        (SIEGE_GROUPE_GALAXIE, 'Lavande, après Arceus', 722, f'{a}+{b}|{a}+{d}|{b}+{d}', 'Les deux autres starters'),
         ('Vallée Enneigée', 'Keoni, cadeau', 37, c.f('FEVE_POKE_SUB092_GET'), "Goupix d'Alola"),
     ]
     return u
 
 
-def la_quests(c, rows):
+def la_quests(rows):
     q = []
     for zone, key, count in WISPS:
         for n in range(1, count + 1):
@@ -748,7 +782,7 @@ def la_quests(c, rows):
         where = where.replace(' – ', ', ').replace('votre maison', 'ta maison') if where else None  # l'interface tutoie
         q.append(('Zarbi', where, f'Zarbi {letter}', f'LF:201:{n}'))
     for n in range(1, 11):
-        q.append(('Rangs du Groupe Galaxie', 'Siège Groupe Galaxie', 'Rang Stellaire' if n == 10 else f'Rang {n}★',
+        q.append(('Rangs du Groupe Galaxie', SIEGE_GROUPE_GALAXIE, 'Rang Stellaire' if n == 10 else f'Rang {n}★',
                   f'XV:{EXPEDITION_RANK}:{n}'))
     return q
 
@@ -771,9 +805,11 @@ def emit(games, out):
              '{',
              '']
     for name, doc, dex, rows in games:
-        lines.append(f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : {dex}).</summary>')
-        lines.append(f'    public static readonly CompletionRow[] {name} =')
-        lines.append('    [')
+        lines.extend([
+            f'    /// <summary>Étapes de {doc} (le Pokédex est ajouté à part : {dex}).</summary>',
+            f'    public static readonly CompletionRow[] {name} =',
+            '    [',
+        ])
         for r in rows:
             a_ = [f'CompletionSection.{r["section"]}', cs(r['zone']), cs(r['detail']), cs(r['done'])]
             n = [f'Label: {cs(r["label"])}'] if r['label'] else []
@@ -794,57 +830,57 @@ def emit(games, out):
 ANCHORS = {
     'swsh': {
         'Forêt de Sleepwood': 'Paddoxton', 'Route 1': 'Paddoxton', 'Gare de Brasswick': 'Brasswick',
-        'Stade de Motorby': 'Motorby', 'Gare de Motorby': 'Motorby', 'Abords de Motorby': 'Motorby',
+        STADE_DE_MOTORBY: 'Motorby', 'Gare de Motorby': 'Motorby', 'Abords de Motorby': 'Motorby',
         'Route 3': 'Mine de Galar', 'Route 4': 'Mine de Galar', 'Greenbury': 'Arène de Greenbury',
-        'Stade de Greenbury': 'Arène de Greenbury', 'Skifford': 'Arène de Skifford', 'Stade de Skifford': 'Arène de Skifford',
-        'Gare de Skifford': 'Arène de Skifford', 'Gare de Kickenham': 'Kickenham', 'Stade de Kickenham': 'Arène de Kickenham',
+        STADE_DE_GREENBURY: 'Arène de Greenbury', 'Skifford': ARENE_DE_SKIFFORD, STADE_DE_SKIFFORD: ARENE_DE_SKIFFORD,
+        'Gare de Skifford': ARENE_DE_SKIFFORD, 'Gare de Kickenham': 'Kickenham', STADE_DE_KICKENHAM: 'Arène de Kickenham',
         'Salle du réacteur': 'Kickenham', 'Sommet de la tour': 'Kickenham', "Stade d'Old Chister": "Arène d'Old Chister",
-        'Stade de Corrifey': 'Arène de Corrifey', 'Route 8': 'Route 7', 'Sentier des Sources': 'Route 8',
-        'Route 9': 'Baie de Ludester', 'Tunnel de la Route 9': 'Route 9', 'Abords de Smashings': 'Smashings',
+        STADE_DE_CORRIFEY: 'Arène de Corrifey', 'Route 8': 'Route 7', 'Sentier des Sources': 'Route 8',
+        'Route 9': BAIE_DE_LUDESTER, 'Tunnel de la Route 9': 'Route 9', 'Abords de Smashings': 'Smashings',
         'Stade de Ludester': 'Arène de Ludester', 'Arène de Smashings': 'Smashings', 'Route 10': 'Winscor',
         'Gare de White Hill': 'Route 10', 'Gare de Winscor': 'Winscor', 'Siège de la Ligue': 'Winscor',
-        'Tour de Combat': 'Winscor', 'Sentier de la Gare': 'Gare des Terres Sauvages',
-        'Plaine Verdoyante': 'Terres Sauvages', 'Bois de Clairjour': 'Terres Sauvages', 'Tour en ruines': 'Terres Sauvages',
-        'Lac Coupenotte Est': 'Terres Sauvages', 'Lac Coupenotte Ouest': 'Terres Sauvages', 'Œil du Lac': 'Terres Sauvages',
-        'Lac Milobellus Sud': 'Terres Sauvages', 'Siège du Géant': 'Terres Sauvages',
-        'Lac Milobellus Nord': 'Terres Sauvages', 'Berges de Motorby': 'Terres Sauvages',
-        'Prairie Entre-Ponts': 'Terres Sauvages', 'Plaine Rocheuse': 'Terres Sauvages', 'Fosse des Sables': 'Terres Sauvages',
-        'Miroir du Géant': 'Terres Sauvages', 'Plateau de Kickenham': 'Terres Sauvages', 'Coiffe du Géant': 'Terres Sauvages',
-        'Lac Ouragan': 'Terres Sauvages', 'Gare Terres Sauvages': 'Terres Sauvages', 'Terres Sauvages': 'Gare des Terres Sauvages',
+        TOUR_DE_COMBAT: 'Winscor', SENTIER_DE_LA_GARE: 'Gare des Terres Sauvages',
+        'Plaine Verdoyante': TERRES_SAUVAGES, 'Bois de Clairjour': TERRES_SAUVAGES, 'Tour en ruines': TERRES_SAUVAGES,
+        'Lac Coupenotte Est': TERRES_SAUVAGES, 'Lac Coupenotte Ouest': TERRES_SAUVAGES, 'Œil du Lac': TERRES_SAUVAGES,
+        'Lac Milobellus Sud': TERRES_SAUVAGES, 'Siège du Géant': TERRES_SAUVAGES,
+        'Lac Milobellus Nord': TERRES_SAUVAGES, 'Berges de Motorby': TERRES_SAUVAGES,
+        'Prairie Entre-Ponts': TERRES_SAUVAGES, 'Plaine Rocheuse': TERRES_SAUVAGES, 'Fosse des Sables': TERRES_SAUVAGES,
+        'Miroir du Géant': TERRES_SAUVAGES, 'Plateau de Kickenham': TERRES_SAUVAGES, 'Coiffe du Géant': TERRES_SAUVAGES,
+        'Lac Ouragan': TERRES_SAUVAGES, 'Gare Terres Sauvages': TERRES_SAUVAGES, TERRES_SAUVAGES: 'Gare des Terres Sauvages',
         'Plaine Salutation': 'Isolarmure', 'Forêt Flexion': 'Isolarmure', "Plage de l'Épreuve": 'Isolarmure',
         'Grotte du Pugilat': 'Isolarmure', "Route de l'Épreuve": 'Isolarmure', 'Caverne Pugnacité': 'Isolarmure',
         'Lagune Circulaire': 'Isolarmure', 'Plaine des Efforts': 'Isolarmure', 'Sables de Kudsac': 'Isolarmure',
         'Mer Eau-Hisse': 'Isolarmure', "Mer Align'Îlots": 'Isolarmure', "Mer Isol'Îlots": 'Isolarmure',
-        'Mer Calméole': 'Îlot Calméole', 'Dojo de la Maîtrise': 'Dojo Maîtrise', 'Tour des Ténèbres': 'Tours des Deux Poings',
+        'Mer Calméole': 'Îlot Calméole', DOJO_DE_LA_MAITRISE: 'Dojo Maîtrise', 'Tour des Ténèbres': 'Tours des Deux Poings',
         "Tour de l'Eau": 'Tours des Deux Poings', "Gare d'Isolarmure": 'Isolarmure', 'Lande Boldair': 'Isolarmure',
         "Voie des Étirements": 'Isolarmure',
         'Plateau Beau-Gant': 'Couronneige', 'Gare de Couronneige': 'Couronneige', 'Plaine Granfroy': 'Couronneige',
         'Cimetière Ancien': 'Couronneige', 'Galeries Monte-Pic': 'Couronneige', 'Sentier Blanche-Cime': 'Couronneige',
         'Empreinte du Géant': 'Couronneige', 'Cavernes Gronde-Mer': 'Couronneige', 'Mer Banquise': 'Couronneige',
-        'Lac Poké Ball': 'Couronneige', 'Grotte du Lac': 'Couronneige', 'Ruines Pic Roche': 'Repos du Géant',
-        'Ruines Iceberg': 'Repos du Géant', 'Ruines de Fer': 'Repos du Géant', 'Ruines du Choix': 'Repos du Géant',
-        'Pente Enneigée': 'Repos du Géant', 'Croisée Trois-Voies': 'Repos du Géant', 'Temple Couronne': 'Hameau Gelé',
-        'Galar': 'Grand Antre Dynamax', 'Centre Pokémon Sud de Motorby': 'Motorby', 'Marché de Skifford': 'Skifford',
-        "Toit d'Old Chister": "Arène d'Old Chister", 'Stade de Smashings': 'Smashings', 'Hameau Gelé': 'Couronneige',
-        'Repos du Géant': 'Couronneige', 'Grand Antre Dynamax': 'Couronneige', 'Butte du Dynarbre': 'Couronneige',
+        'Lac Poké Ball': 'Couronneige', 'Grotte du Lac': 'Couronneige', 'Ruines Pic Roche': REPOS_DU_GEANT,
+        'Ruines Iceberg': REPOS_DU_GEANT, 'Ruines de Fer': REPOS_DU_GEANT, 'Ruines du Choix': REPOS_DU_GEANT,
+        'Pente Enneigée': REPOS_DU_GEANT, 'Croisée Trois-Voies': REPOS_DU_GEANT, TEMPLE_COURONNE: HAMEAU_GELE,
+        'Galar': GRAND_ANTRE_DYNAMAX, 'Centre Pokémon Sud de Motorby': 'Motorby', 'Marché de Skifford': 'Skifford',
+        "Toit d'Old Chister": "Arène d'Old Chister", 'Stade de Smashings': 'Smashings', HAMEAU_GELE: 'Couronneige',
+        REPOS_DU_GEANT: 'Couronneige', GRAND_ANTRE_DYNAMAX: 'Couronneige', 'Butte du Dynarbre': 'Couronneige',
     },
     'bdsp': {
-        'Aire de Détente': 'Aire de Combat', 'Aire de Survie': 'Aire de Combat', 'Parc des Combats': 'Aire de Combat',
+        'Aire de Détente': AIRE_DE_COMBAT, 'Aire de Survie': AIRE_DE_COMBAT, 'Parc des Combats': AIRE_DE_COMBAT,
         'Chemin Rocheux': 'Floraville', 'Pré de Floraville': 'Floraville', 'Grands Souterrains': 'Vestigion',
-        'Grotte des Égarés': 'Route 207', 'Mont Couronné': 'Route 207', 'Grotte du Retour': 'Ligue Pokémon',
-        'Temple de Frimapic': 'Ligue Pokémon', 'Grotte du Ruinophile': 'Rive du Lac Courage', 'Lac Savoir': 'Arène de Frimapic',
-        'Rive du Lac Savoir': 'Arène de Frimapic', 'Manoir Pokémon': 'Route 212', 'Mine de Charbourg': 'Arène de Charbourg',
-        'Musée Minier de Charbourg': 'Arène de Charbourg', 'QG Team Galaxie': 'QG Galaxie', 'Rive du Lac Vérité': 'Lac Vérité',
-        'Ruines de Bonville': 'Bonville', 'Square Paisible': 'Unionpolis', 'Île Pleine Lune': 'Parc Rosa Rugosa',
-        'Île Nouvellune': 'Parc Rosa Rugosa', 'Paradis Fleuri': 'Parc Rosa Rugosa', 'Charbourg': 'Arène de Charbourg',
-        'Sinnoh': 'Ligue Pokémon',
+        'Grotte des Égarés': 'Route 207', 'Mont Couronné': 'Route 207', 'Grotte du Retour': LIGUE_POKEMON,
+        'Temple de Frimapic': LIGUE_POKEMON, 'Grotte du Ruinophile': 'Rive du Lac Courage', 'Lac Savoir': ARENE_DE_FRIMAPIC,
+        'Rive du Lac Savoir': ARENE_DE_FRIMAPIC, 'Manoir Pokémon': 'Route 212', 'Mine de Charbourg': ARENE_DE_CHARBOURG,
+        'Musée Minier de Charbourg': ARENE_DE_CHARBOURG, 'QG Team Galaxie': 'QG Galaxie', 'Rive du Lac Vérité': 'Lac Vérité',
+        'Ruines de Bonville': 'Bonville', 'Square Paisible': 'Unionpolis', 'Île Pleine Lune': PARC_ROSA_RUGOSA,
+        'Île Nouvellune': PARC_ROSA_RUGOSA, 'Paradis Fleuri': PARC_ROSA_RUGOSA, 'Charbourg': ARENE_DE_CHARBOURG,
+        'Sinnoh': LIGUE_POKEMON,
     },
     'la': {
-        'Champ Flora': 'Plaines Obsidiennes', 'Île Rosa Rugosa': 'Plaines Obsidiennes', 'Creux du Cap': 'Côte Lazuli',
-        'Main du Sable': 'Côte Lazuli', 'Grotte du Retour': 'Côte Lazuli', "Grotte de l'Île Crache-Feu": 'Côte Lazuli',
-        'Marais Carlate': 'Marais Carmin', 'Marais Carmin': 'Bivouac du Marais', 'Vallée Enneigée': 'Terres Immaculées',
-        'Contrefort Couronné': 'Grotte des Égarés', 'Lac Savoir': 'Terres Immaculées', 'Siège Groupe Galaxie': 'Rusti-Cité',
-        'Hisui': 'Temple de Sinnoh',
+        'Champ Flora': PLAINES_OBSIDIENNES, 'Île Rosa Rugosa': PLAINES_OBSIDIENNES, 'Creux du Cap': COTE_LAZULI,
+        'Main du Sable': COTE_LAZULI, 'Grotte du Retour': COTE_LAZULI, "Grotte de l'Île Crache-Feu": COTE_LAZULI,
+        'Marais Carlate': MARAIS_CARMIN, MARAIS_CARMIN: 'Bivouac du Marais', 'Vallée Enneigée': TERRES_IMMACULEES,
+        CONTREFORT_COURONNE: 'Grotte des Égarés', 'Lac Savoir': TERRES_IMMACULEES, SIEGE_GROUPE_GALAXIE: RUSTI_CITE,
+        'Hisui': TEMPLE_DE_SINNOH,
     },
 }
 
@@ -860,20 +896,20 @@ if __name__ == '__main__':
              (('BrilliantDiamond', 'BD', 'Pokémon Diamant Étincelant'), ('ShiningPearl', 'SP', 'Pokémon Perle Scintillante'))),
             ('la', 'suivi_completion_pokemon_legendes_arceus.csv', (('LegendsArceus', 'LA', 'Légendes Pokémon : Arceus'),))):
         rows = checklist(os.path.join(root, csv_file))
-        machines = checklist_machines(rows, key)
+        machines = checklist_machines(rows)
         for name, version, doc in versions:
             c = Ctx(root, key, version)
             if key == 'swsh':
-                cur = dict(story=swsh_story(c, version), items=field_items(c), machines=machines,
-                           encounters=swsh_encounters(c, rows, version), quests=diglett(c))
+                cur = {'story': swsh_story(c, version), 'items': field_items(c), 'machines': machines,
+                           'encounters': swsh_encounters(c, rows, version), 'quests': diglett(c)}
                 dex = 'les Pokémon des Pokédex de Galar, de l\'Isolarmure et de Couronneige'
             elif key == 'bdsp':
-                cur = dict(story=bdsp_story(c, version), items=field_items(c), machines=machines,
-                           encounters=bdsp_encounters(c, rows, version), quests=bdsp_quests(c, root))
+                cur = {'story': bdsp_story(c, version), 'items': field_items(c), 'machines': machines,
+                           'encounters': bdsp_encounters(c, rows, version), 'quests': bdsp_quests(c, root)}
                 dex = 'les 493'
             else:
-                cur = dict(story=la_story(c, version), items=[], machines={},
-                           encounters=la_encounters(c, rows, version), quests=la_quests(c, rows))
+                cur = {'story': la_story(c), 'items': [], 'machines': {},
+                           'encounters': la_encounters(c, rows), 'quests': la_quests(rows)}
                 dex = 'les 242 de Hisui, trois étapes chacun'
             order = story_order(rows, extra=[REGION[key]])
             games.append((name, doc, dex, build(c, version, order, ANCHORS[key], cur)))

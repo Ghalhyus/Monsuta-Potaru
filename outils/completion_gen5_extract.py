@@ -22,6 +22,9 @@ import struct
 
 from completion_gen5_rom import Rom, commands, disassemble, flow, texts
 
+# Textes répétés (lieux, libellés)
+EXT_JSON = '.json'
+
 # Premier drapeau des dresseurs et des objets cachés (FlagsEditorEX ; pokebw2 : generated/flags.txt)
 TRAINER_FLAGS = {'bw': 0x58C, 'b2w2': 0x5F0}
 HIDDEN_FLAGS = {'bw': 0x384, 'b2w2': 0xB04}
@@ -91,8 +94,8 @@ def field_items(fl):
             continue  # objet caché qui revient : pas une étape
         variants = []
         for part in name.split(' / '):
-            m = re.search(r'\s*\((B|W|B2|W2)\)$', part)
-            variants.append((part[:m.start()], m.group(1)) if m else (part, place_version and place_version.group(1)))
+            m = re.search(r'\((B|W|B2|W2)\)$', part)
+            variants.append((part[:m.start()].rstrip(), m.group(1)) if m else (part, place_version and place_version.group(1)))
         (ground if cat == 'FIELD ITEM' else hidden)[flag] = variants
     return ground, hidden
 
@@ -201,15 +204,17 @@ def fallback(found, items, fl, english):
     lieu de FlagsEditorEX, traduit par la liste des lieux de PKHeX (anglais → français)."""
     for flag, variants in items.items():
         if flag not in found:
-            where = re.sub(r'\s*\((B|W|B2|W2)\)$', '', fl[flag][1])
+            where = fl[flag][1]
+            if m := re.search(r'\((B|W|B2|W2)\)$', where):  # « White Forest (W) » → « White Forest »
+                where = where[:m.start()].rstrip() + where[m.end():]
             if where not in english:
                 raise SystemExit(f'Lieu inconnu : {where} (drapeau {flag:#x})')
-            found[flag] = dict(zone=None, place=english[where], items=variants)
+            found[flag] = {'zone': None, 'place': english[where], 'items': variants}
 
 
 def result(game, places, zones, trainers, ground, hidden, zone_flows, k, fl, npc_flags):
-    return dict(game=game, npc_flags=npc_flags, places=places, zones=zones, trainers=trainers, ground=ground, hidden=hidden,
-                gifts=gifts(zone_flows), flows=zone_flows, version_flags=version_flags(zone_flows), uses=flag_uses(zone_flows), k=k, fattard=fl)
+    return {'game': game, 'npc_flags': npc_flags, 'places': places, 'zones': zones, 'trainers': trainers, 'ground': ground, 'hidden': hidden,
+                'gifts': gifts(zone_flows), 'flows': zone_flows, 'version_flags': version_flags(zone_flows), 'uses': flag_uses(zone_flows), 'k': k, 'fattard': fl}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -238,16 +243,16 @@ def extract_b2w2(root, fattard_path, places_fr, english):
         if zname is None:
             continue
         low = zname[len('ZONE_'):].lower()
-        zpath = os.path.join(root, 'res', 'field', 'zones', low + '.json')
+        zpath = os.path.join(root, 'res', 'field', 'zones', low + EXT_JSON)
         if not os.path.exists(zpath):
             continue
         z = json.load(open(zpath, encoding='utf-8'))
         place = places_fr[k[z['place']]]
-        zones[zid] = dict(name=zname, place=place)
+        zones[zid] = {'name': zname, 'place': place}
         spath = os.path.join(root, 'res', 'field', 'scripts', z['scripts'][len('SCRIPTS_'):].lower() + '.s')
         if os.path.exists(spath):
             zone_flows[zid] = parse_s(open(spath, encoding='utf-8').read(), k)
-        epath = os.path.join(root, 'res', 'field', 'events', low + '.json')
+        epath = os.path.join(root, 'res', 'field', 'events', low + EXT_JSON)
         if not os.path.exists(epath):
             continue
         ev = json.load(open(epath, encoding='utf-8'))
@@ -258,15 +263,15 @@ def extract_b2w2(root, fattard_path, places_fr, english):
                 npc_flags.setdefault(flag, zid)
             if 3000 <= s < 6000 and 'TRAINER' in n['type']:
                 tid = s - 3000 if s < 5000 else s - 5000
-                trainers.append(dict(zone=zid, tid=tid, hide=flag, **party_b2w2(root, tnames[tid], k)))
+                trainers.append({'zone': zid, 'tid': tid, 'hide': flag, **party_b2w2(root, tnames[tid], k)})
             elif 7000 <= s < 8000 and flag in gitems:
-                ground[flag] = dict(zone=zid, place=zones[zid]['place'], items=gitems[flag])
+                ground[flag] = {'zone': zid, 'place': zones[zid]['place'], 'items': gitems[flag]}
         for b in ev.get('bg_events', []):
             s = b['script']
             if 8000 <= s < 9000:
                 flag = HIDDEN_FLAGS['b2w2'] + s - 8000
                 if flag in hitems:
-                    hidden[flag] = dict(zone=zid, place=zones[zid]['place'], items=hitems[flag])
+                    hidden[flag] = {'zone': zid, 'place': zones[zid]['place'], 'items': hitems[flag]}
     fallback(ground, gitems, fl, english)
     fallback(hidden, hitems, fl, english)
     return result('b2w2', places, zones, trainers, ground, hidden, zone_flows, k, fl, npc_flags)
@@ -293,7 +298,7 @@ def parse_s(text, k):
         if re.fullmatch(r'\w+:', line):
             out.append(('LABEL', [line[:-1]]))
             continue
-        m = re.fullmatch(r'([A-Z]\w*)(?:\s+(.*))?', line)
+        m = re.fullmatch(r'([A-Z]\w*)(?:\s+(\S.*)?)?', line)
         if not m:
             continue
         args = [value(a, k) for a in m.group(2).split(',')] if m.group(2) else []
@@ -302,9 +307,9 @@ def parse_s(text, k):
 
 
 def party_b2w2(root, name, k):
-    path = os.path.join(root, 'res', 'trainers', 'data', name[len('TRAINER_'):].lower() + '.json')
+    path = os.path.join(root, 'res', 'trainers', 'data', name[len('TRAINER_'):].lower() + EXT_JSON)
     t = json.load(open(path, encoding='utf-8'))
-    return dict(cls=t['class'], name=name, team=[(k[p['species']], p['level']) for p in t['party']])
+    return {'cls': t['class'], 'name': name, 'team': [(k[p['species']], p['level']) for p in t['party']]}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -327,7 +332,7 @@ def extract_bw(rom_path, inc_path, fattard_path, k, english):
     script_files = {}
     for zid in range(len(headers) // 48):
         h = struct.unpack_from('<24H', headers, zid * 48)
-        zones[zid] = dict(name=f'Z{zid}', place=names[h[13] & 0x3FF])
+        zones[zid] = {'name': f'Z{zid}', 'place': names[h[13] & 0x3FF]}
         if h[3] not in script_files:
             script_files[h[3]] = [x for pos, n, v in flow(disassemble(scripts[h[3]], table)) for x in (('LABEL', [pos]), (n, v))]
         zone_flows[zid] = script_files[h[3]]
@@ -340,7 +345,7 @@ def extract_bw(rom_path, inc_path, fattard_path, k, english):
             if 8000 <= s < 9000:
                 flag = HIDDEN_FLAGS['bw'] + s - 8000
                 if flag in hitems:
-                    hidden[flag] = dict(zone=zid, place=zones[zid]['place'], items=hitems[flag])
+                    hidden[flag] = {'zone': zid, 'place': zones[zid]['place'], 'items': hitems[flag]}
         base = 8 + n_bg * 20
         for i in range(n_npc):
             _, _, _, kind, flag, s = struct.unpack_from('<6H', e, base + i * 36)
@@ -348,12 +353,12 @@ def extract_bw(rom_path, inc_path, fattard_path, k, english):
                 npc_flags.setdefault(flag, zid)
             if 3000 <= s < 6000 and kind != 0:
                 tid = s - 3000 if s < 5000 else s - 5000
-                trainers.append(dict(zone=zid, tid=tid, hide=flag, **party_bw(trdata[tid], trpoke[tid], tid)))
+                trainers.append({'zone': zid, 'tid': tid, 'hide': flag, **party_bw(trdata[tid], trpoke[tid], tid)})
             elif 7000 <= s < 8000 and flag in gitems:
-                ground[flag] = dict(zone=zid, place=zones[zid]['place'], items=gitems[flag])
+                ground[flag] = {'zone': zid, 'place': zones[zid]['place'], 'items': gitems[flag]}
     # Des zones partagent un fichier de scripts : chaque fichier ne compte qu'une fois (la première zone)
     seen = set()
-    for zid in list(zone_flows):
+    for zid in zone_flows:  # remplacer une valeur ne change pas les clés
         h = struct.unpack_from('<24H', headers, zid * 48)
         if h[3] in seen:
             zone_flows[zid] = []
@@ -373,4 +378,4 @@ def party_bw(data, poke, tid):
     for i in range(count):
         _, _, level, species, _ = struct.unpack_from('<BBHHH', poke, i * size)
         team.append((species, level))
-    return dict(cls=cls, name=f'TRID_{tid}', team=team)
+    return {'cls': cls, 'name': f'TRID_{tid}', 'team': team}

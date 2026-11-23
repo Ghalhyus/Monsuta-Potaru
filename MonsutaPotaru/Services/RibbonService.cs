@@ -77,11 +77,13 @@ public sealed class RibbonService(IDbContextFactory<ApplicationDbContext> dbFact
                 || p.Extension == CobblemonPokemon.Extension))
             .Select(p => new { p.Id, p.IsEgg, p.Fingerprint, p.Nickname, p.Extension })
             .ToListAsync();
-        return rows.ToDictionary(p => p.Id, p =>
-            p.Extension == CobblemonPokemon.Extension ? MinecraftRefusal
-            : p.IsEgg ? EggRefusal
-            : string.IsNullOrEmpty(p.Fingerprint) ? UnidentifiedRefusal
-            : $"{p.Nickname} est déjà suivi.");
+        return rows.ToDictionary(p => p.Id, p => p switch
+        {
+            _ when p.Extension == CobblemonPokemon.Extension => MinecraftRefusal,
+            { IsEgg: true } => EggRefusal,
+            _ when string.IsNullOrEmpty(p.Fingerprint) => UnidentifiedRefusal,
+            _ => $"{p.Nickname} est déjà suivi.",
+        });
     }
 
     private const string EggRefusal = "Un œuf ne peut pas avoir de rubans : fais-le éclore d'abord.";

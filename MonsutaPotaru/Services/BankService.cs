@@ -294,10 +294,12 @@ public sealed class BankService(
     }
 
     /// <summary>Fiche d'un Pokémon du compte, quel que soit son format ; null s'il est illisible.</summary>
-    public static PokemonView? Describe(PokemonInfo info, BankPokemon entry) =>
-        ToCobblemon(entry) is { } mon ? info.Describe(mon, entry.OriginalTrainer)
-        : ToPkm(entry) is { } pk ? info.Describe(pk, entry.IsLegal)
-        : null;
+    public static PokemonView? Describe(PokemonInfo info, BankPokemon entry)
+    {
+        if (ToCobblemon(entry) is { } mon)
+            return info.Describe(mon, entry.OriginalTrainer);
+        return ToPkm(entry) is { } pk ? info.Describe(pk, entry.IsLegal) : null;
+    }
 
     /// <summary>Octets du Pokémon au format des boîtes, déchiffrés (ce que garde <see cref="BankPokemon.Data"/>).</summary>
     public static byte[] StoredData(PKM pk)
@@ -345,7 +347,7 @@ public sealed class BankService(
     public static BankPokemon CreateEntry(PokemonInfo info, CobblemonPokemon mon, string trainerName, string ownerId, DateTime now)
     {
         var view = info.Describe(mon, trainerName);
-        var ivs = mon.Ivs;
+        var ivs = mon.ReadIvs();
         var (type1, type2) = mon.Species == 0 ? ((byte)0, (byte)0) : PokemonTraits.Types(mon.Species, mon.Form);
         return new BankPokemon
         {

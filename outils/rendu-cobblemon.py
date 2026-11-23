@@ -47,6 +47,15 @@ IMAGES = [
 
 # ---------- PNG ----------
 
+def paeth(a, b, c):
+    """Prédicteur de Paeth (PNG) : celui des trois voisins (gauche, haut, haut-gauche) le plus proche de a + b - c."""
+    p = a + b - c
+    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    return b if pb <= pc else c
+
+
 def lire_png(data):
     """Pixels RGBA (liste de lignes de tuples) d'un PNG non entrelacé, 8 bits ou palette."""
     assert data[:8] == b"\x89PNG\r\n\x1a\n", "pas un PNG"
@@ -84,9 +93,7 @@ def lire_png(data):
             elif filtre == 3:
                 cur[x] = (cur[x] + (a + b) // 2) & 255
             elif filtre == 4:
-                p = a + b - c
-                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
-                cur[x] = (cur[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+                cur[x] = (cur[x] + paeth(a, b, c)) & 255
         lignes.append(bytes(cur))
         precedente = cur
     pixels = []
@@ -165,7 +172,7 @@ def transforme(point, pivot, matrice):
     return [q[i] + pivot[i] for i in range(3)]
 
 
-def faces_cube(cube, tw, th, miroir_os):
+def faces_cube(cube, miroir_os):
     """Quatre coins (en coordonnées Blockbench, x inversé) et rectangle de texture de chaque face d'un cube."""
     ox, oy, oz = cube["origin"]
     sx, sy, sz = cube["size"]
@@ -215,7 +222,7 @@ def triangles(geo, tw, th):
     sortie = []
     for os_ in geo["bones"]:
         for cube in os_.get("cubes", []):
-            for coins, (u0, v0, u1, v1), nom in faces_cube(cube, tw, th, os_.get("mirror", False)):
+            for coins, (u0, v0, u1, v1), nom in faces_cube(cube, os_.get("mirror", False)):
                 pts = [list(c) for c in coins]
                 if "rotation" in cube:
                     pivot = cube.get("pivot", [0, 0, 0])
