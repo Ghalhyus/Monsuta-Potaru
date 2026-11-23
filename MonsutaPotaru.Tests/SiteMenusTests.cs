@@ -23,7 +23,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["Banque d'objets", "Transfert d'inventaire"],
         ["Living dex", "Rubans", "Complétion (100 %)"],
         ["Rechercher un joueur", "Amis", "Échange", "GTS", "Combat"],
-        ["Échecs"],
+        ["Échecs", "Cache-cache"],
         ["Mes sauvegardes", "Synchronisation 3DS"],
     ];
 
@@ -33,7 +33,7 @@ public sealed class SiteMenusTests : PageTestContext
         ["inventaire", "inventaire/transfert"],
         ["livingdex", "rubans", "completion"],
         ["joueurs", "amis", "echanges", "gts", "combats"],
-        ["mini-jeux/echecs"],
+        ["mini-jeux/echecs", "mini-jeux/cache-cache"],
         ["sauvegardes", "sauvegardes/3ds"],
     ];
 
@@ -196,7 +196,7 @@ public sealed class SiteMenusTests : PageTestContext
 
         // Rubrique fermée : la pastille sur « Mini-jeux » et sur « Échecs » ; Ardoise aussi
         classic.WaitForAssertion(() => Assert.Equal(["1", "1"], classic.FindAll(".badge").Select(b => b.TextContent.Trim())));
-        Assert.Equal("Invitations aux échecs reçues", classic.Find(".badge").GetAttribute("title"));
+        Assert.Equal("Invitations aux mini-jeux reçues", classic.Find(".badge").GetAttribute("title"));
         ardoise.WaitForAssertion(() => Assert.Equal(["1", "1"], ardoise.FindAll(".ardoise-badge").Select(b => b.TextContent.Trim())));
 
         // Sur la page des échecs, rubrique ouverte : seulement sur « Échecs »
@@ -204,5 +204,25 @@ public sealed class SiteMenusTests : PageTestContext
 
         classic.InvokeAsync(() => hub.Leave(session!, "ondine"));
         classic.WaitForAssertion(() => Assert.Empty(classic.FindAll(".badge")));
+    }
+
+    [Fact]
+    public void HideSeekInvitation_AddsUpWithChess_OnMiniGames()
+    {
+        var classic = Classic("");
+        var chess = Services.GetRequiredService<ChessHub>();
+        chess.Request(new ChessParty("ondine", "Ondine"), new ChessParty("sacha", "Sacha"), 60);
+        var hub = Services.GetRequiredService<HideSeekHub>();
+        var (session, _) = hub.Create(new HideSeekParty("pierre", "Pierre"), new HideSeekSettings());
+        classic.InvokeAsync(() => hub.Invite(session!, "pierre", new HideSeekParty("sacha", "Sacha")));
+
+        // « Mini-jeux » compte les deux invitations, chaque jeu la sienne
+        classic.WaitForAssertion(() => Assert.Equal(["2", "1", "1"], classic.FindAll(".badge").Select(b => b.TextContent.Trim())));
+        Assert.Equal("Invitations au cache-cache reçues", classic.FindAll(".badge")[2].GetAttribute("title"));
+        var ardoise = Ardoise("");
+        Assert.Equal(["2", "1", "1"], ardoise.FindAll(".ardoise-badge").Select(b => b.TextContent.Trim()));
+
+        classic.InvokeAsync(() => hub.Leave(session!, "sacha")); // refusée
+        classic.WaitForAssertion(() => Assert.Equal(["1", "1"], classic.FindAll(".badge").Select(b => b.TextContent.Trim())));
     }
 }

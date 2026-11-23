@@ -46,6 +46,12 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   jeu (`shadowOf` vérifie `textures.exists`). Sans : la texture « manquante » de Phaser, un carré noir à la place des
   ombres (vu au redémarrage après un achat, et en revenant sur la page sans la recharger).
 
+## Repris par le cache-cache (2026-11-23)
+- `create` accepte `names: false` (pas de nom au survol) et `fill: true` (canvas sur toute la place qui reste, zoom
+  entier qui couvre sans bandes, `minZoom` ; voir `cache-cache.md`), et l'objet rendu a `focus(id)` (vue centrée, Pokémon arrêté face
+  à nous, cercle jaune `spotlightRing` qui pulse ; `null` l'efface). Un changement de `parc.js` se vérifie aussi dans le
+  cache-cache (`docs/claude/cache-cache.md`).
+
 ## Sprites
 - `PokemonSprites.DonjonFolder` (forme, Méga, chromatique, femelle). Formes de SpriteCollab (`images/donjon/formes.json`,
   écrit par `outils/images.py donjon` depuis son `tracker.json`) rapprochées des noms de PKHeX : nom compacté (« Mega X »

@@ -92,6 +92,9 @@ builder.Services.AddScoped<ChessService>(); // résultats des parties d'échecs 
 builder.Services.AddScoped<MiniGameService>(); // onglet Mini-jeux des statistiques (tous les mini-jeux, puis chacun)
 builder.Services.AddSingleton<ChessHub>(); // parties d'échecs en cours (Mini-jeux), partagées entre les deux joueurs
 builder.Services.AddHostedService<ChessRecorder>(); // résultats des parties d'échecs terminées (statistiques)
+builder.Services.AddScoped<HideSeekService>(); // cache-cache : Pokémon des collections à tirer, résultats (statistiques)
+builder.Services.AddSingleton<HideSeekHub>(); // parties de cache-cache en cours (Mini-jeux), partagées entre les joueurs
+builder.Services.AddHostedService<HideSeekRecorder>(); // résultats des parties de cache-cache terminées (statistiques)
 builder.Services.AddSyncRateLimits(); // essais de codes de liaison 3DS
 
 var app = builder.Build();

@@ -125,9 +125,9 @@
             <details open="@gamesOpen">
                 <summary class="nav-link">
                     <span class="bi bi-dice-nav-menu" aria-hidden="true"></span> Mini-jeux
-                    @if (chessRequests > 0 && !gamesOpen)
+                    @if (GameRequests > 0 && !gamesOpen)
                     {
-                        <span class="badge bg-danger ms-2" title="Invitations aux échecs reçues">@chessRequests</span>
+                        <span class="badge bg-danger ms-2" title="Invitations aux mini-jeux reçues">@GameRequests</span>
                     }
                 </summary>
                 <div class="nav-subitems">
@@ -136,6 +136,13 @@
                         @if (chessRequests > 0)
                         {
                             <span class="badge bg-danger ms-2" title="Invitations aux échecs reçues">@chessRequests</span>
+                        }
+                    </NavLink>
+                    <NavLink class="nav-link" href="mini-jeux/cache-cache">
+                        <span class="bi bi-search-nav-menu" aria-hidden="true"></span> Cache-cache
+                        @if (hideSeekRequests > 0)
+                        {
+                            <span class="badge bg-danger ms-2" title="Invitations au cache-cache reçues">@hideSeekRequests</span>
                         }
                     </NavLink>
                 </div>

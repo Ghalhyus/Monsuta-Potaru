@@ -19,6 +19,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     [Inject] private TradeHub Trades { get; set; } = default!;
     [Inject] private BattleHub Battles { get; set; } = default!;
     [Inject] private ChessHub Chess { get; set; } = default!;
+    [Inject] private HideSeekHub HideSeek { get; set; } = default!;
     [Inject] private GtsService Gts { get; set; } = default!;
     [Inject] private GtsEvents GtsEvents { get; set; } = default!;
 
@@ -33,6 +34,10 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
     protected int battleRequests; // demandes de combat reçues (en direct, BattleHub)
     protected int gtsInbox; // Pokémon dans la boîte de réception de la GTS (relus à chaque navigation, et en direct)
     protected int chessRequests; // invitations aux échecs reçues (en direct, ChessHub) : pastille de « Mini-jeux »
+    protected int hideSeekRequests; // invitations au cache-cache reçues (en direct, HideSeekHub) : pastille de « Mini-jeux »
+
+    /// <summary>Invitations aux mini-jeux reçues, tous jeux confondus (pastille de la rubrique fermée).</summary>
+    protected int GameRequests => chessRequests + hideSeekRequests;
 
     /// <summary>Toutes les demandes reçues, et la boîte de réception de la GTS : la pastille du menu « Multijoueurs ».</summary>
     protected int PlayerRequests => pendingRequests + tradeRequests + battleRequests + gtsInbox;
@@ -81,6 +86,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Trades.RequestsChanged += OnTradeRequestsChanged;
         Battles.RequestsChanged += OnBattleRequestsChanged;
         Chess.RequestsChanged += OnChessRequestsChanged;
+        HideSeek.RequestsChanged += OnHideSeekRequestsChanged;
         GtsEvents.InboxChanged += OnGtsInboxChanged;
 
         // Solde du porte-monnaie pour l'utilisateur connecté (rafraîchi par « Banque d'objets » après un retrait).
@@ -92,6 +98,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
             tradeRequests = Trades.Incoming(userId).Count;
             battleRequests = Battles.Incoming(userId).Count;
             chessRequests = Chess.Incoming(userId).Count;
+            hideSeekRequests = HideSeek.Incoming(userId).Count;
             gtsInbox = await Gts.InboxCountAsync(userId);
         }
     }
@@ -114,6 +121,17 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         InvokeAsync(() =>
         {
             chessRequests = Chess.Incoming(user).Count;
+            StateHasChanged();
+        });
+    }
+
+    private void OnHideSeekRequestsChanged(string user)
+    {
+        if (user != userId)
+            return;
+        InvokeAsync(() =>
+        {
+            hideSeekRequests = HideSeek.Incoming(user).Count;
             StateHasChanged();
         });
     }
@@ -177,6 +195,7 @@ public abstract class SiteMenuBase : ComponentBase, IDisposable
         Trades.RequestsChanged -= OnTradeRequestsChanged;
         Battles.RequestsChanged -= OnBattleRequestsChanged;
         Chess.RequestsChanged -= OnChessRequestsChanged;
+        HideSeek.RequestsChanged -= OnHideSeekRequestsChanged;
         GtsEvents.InboxChanged -= OnGtsInboxChanged;
     }
 }

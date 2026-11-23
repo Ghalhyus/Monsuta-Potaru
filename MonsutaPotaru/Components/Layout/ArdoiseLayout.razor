@@ -115,9 +115,9 @@
             <div class="ardoise-group @(gamesOpen ? "ouvert" : "")">
                 <button type="button" class="ardoise-link ardoise-group-title" aria-expanded="@(gamesOpen ? "true" : "false")" title="Mini-jeux">
                     <span class="bi bi-dice-nav-menu" aria-hidden="true"></span><span class="ardoise-label">Mini-jeux</span>
-                    @if (chessRequests > 0)
+                    @if (GameRequests > 0)
                     {
-                        <span class="ardoise-badge ardoise-group-badge" title="Invitations aux échecs reçues">@chessRequests</span>
+                        <span class="ardoise-badge ardoise-group-badge" title="Invitations aux mini-jeux reçues">@GameRequests</span>
                     }
                 </button>
                 <div class="ardoise-subitems">
@@ -127,6 +127,13 @@
                         @if (chessRequests > 0)
                         {
                             <span class="ardoise-badge" title="Invitations aux échecs reçues">@chessRequests</span>
+                        }
+                    </NavLink>
+                    <NavLink class="ardoise-link" href="mini-jeux/cache-cache">
+                        <span class="ardoise-label">Cache-cache</span>
+                        @if (hideSeekRequests > 0)
+                        {
+                            <span class="ardoise-badge" title="Invitations au cache-cache reçues">@hideSeekRequests</span>
                         }
                     </NavLink>
                 </div>

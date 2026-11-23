@@ -66,8 +66,11 @@ README : « Statistiques ». Page `Components/Pages/Statistics.razor` (deux adre
   équipes, sortie de `Chess.razor`).
 - **Tuiles** (`.stat-tiles`, toute la page) : 12rem chacune, en flex, **à la ligne seulement quand la place manque**
   (demandé ensuite ; avant : une grille de 40rem au plus, trois par ligne).
-- Code : `Services/MiniGames.cs` (`MiniGamePlay` : jeu, adversaire ou null pour un invité, date, résultat ;
-  `MiniGameStats.From`, `MostPlayed` ; `MiniGameService` : général + échecs en une lecture). `ChessService.PlaysAsync`
+- **Cache-cache** (ajouté le 2026-11-23, `docs/claude/cache-cache.md`) : bloc `.stat-hide-seek`, groupes **Parties**
+  (Adversaires différents : tous les joueurs de ses parties qui ont un compte) et **Recherche** (Pokémon trouvés). Pour
+  ce jeu à plusieurs, `MiniGamePlay` porte une **liste** d'adversaires (`Opponents`, vide pour un invité aux échecs).
+- Code : `Services/MiniGames.cs` (`MiniGamePlay` : jeu, adversaires qui ont un compte, date, résultat ;
+  `MiniGameStats.From`, `MostPlayed` ; `MiniGameService` : général, échecs et cache-cache). `ChessService.PlaysAsync`
   (ses parties vues de son côté), `ChessStats.From`. Un nouveau mini-jeu : ses parties en `MiniGamePlay` ajoutées dans
   `MiniGameService.StatsAsync`, et son bloc.
 - Prises : `ChessRecorder.RecordAsync` compte les `ChessStep` avec `CapturedId` par couleur (`WhiteCaptures`,
@@ -75,5 +78,5 @@ README : « Statistiques ». Page `Components/Pages/Statistics.razor` (deux adre
   snapshot mis à jour ; `MigrationsTests.Migrations_MatchTheModel_AndChessCapturesKeepsOldGames` vérifie
   `HasPendingModelChanges` (garde pour toute migration écrite à la main) et la partie déjà enregistrée.
 - Tests : `MiniGameStatsTests` (égalités, invités), `ChessHubTests.FinishedGames_AreRecordedAndCounted` (une prise
-  réelle), `StatisticsPageTests.MiniGames_GeneralAndChess` (quatorze tuiles, groupes, six Pokémon de l'équipe, notes, invité,
-  égalité d'équipes).
+  réelle), `StatisticsPageTests.MiniGames_GeneralChessAndHideSeek` (vingt tuiles, groupes, six Pokémon de l'équipe, notes,
+  invité, égalité d'équipes, cache-cache).

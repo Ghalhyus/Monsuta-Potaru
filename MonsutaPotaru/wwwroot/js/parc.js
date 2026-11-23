@@ -626,10 +626,13 @@ class Pokemon {
 }
 
 /**
- * Parc dans <container> ; <component> (Park.razor) est prévenu d'un clic sur un Pokémon. Options : canMove (le
- * propriétaire peut soulever ses Pokémon et les poser ailleurs ; rien n'est enregistré), map (début du nom des cartes de
- * son paysage : « parc-1 », « plage-1 »), size (taille du parc, de 1 à 4 : sa carte), fullscreen (élément mis en plein
- * écran, qui contient <container> et les fenêtres de la page, comme la fiche d'un Pokémon ; sans lui, <container>).
+ * Parc dans <container> ; <component> (Park.razor, HideSeek.razor) est prévenu d'un clic sur un Pokémon. Options :
+ * canMove (le propriétaire peut soulever ses Pokémon et les poser ailleurs ; rien n'est enregistré), map (début du nom des
+ * cartes de son paysage : « parc-1 », « plage-1 »), size (taille du parc, de 1 à 4 : sa carte), fullscreen (élément mis en
+ * plein écran, qui contient <container> et les fenêtres de la page, comme la fiche d'un Pokémon ; sans lui, <container>),
+ * names (faux : pas de nom au survol, au cache-cache), fill (vrai : le canvas prend toute la largeur et toute la hauteur
+ * qui reste dans la fenêtre, et le zoom, entier, couvre tout le canvas, sans bandes autour de la carte ; on fait glisser
+ * pour voir les bords : cache-cache).
  */
 /** Fin d'une animation jouée une fois : la suite prévue, sinon il se repose. */
 function playedOnce(p, dt) {
@@ -653,6 +656,8 @@ function paceOf(intent) {
 
 export async function create(container, component, options) {
     const canMove = options?.canMove === true;
+    const showNames = options?.names !== false; // nom au survol (pas au cache-cache : il faut reconnaître le Pokémon)
+    const fill = options?.fill === true; // toute la place, zoom qui couvre (cache-cache)
     const fullscreenTarget = options?.fullscreen ?? container; // plein écran : lui, pour que la fiche d'un Pokémon s'y affiche aussi
     const size = Math.max(1, Math.floor(Number(options?.size) || 1));
     const mapName = /^[a-z0-9-]+$/.test(options?.map ?? "") ? options.map : "parc-1";
@@ -671,6 +676,7 @@ export async function create(container, component, options) {
     let spriteScale = SPRITE_SIZE; // pixels de la carte par pixel de sprite
     let scene = null, camera = null, night = null, label = null, labelText = null, marker = null, ring = null;
     let held = null; // Pokémon soulevé : { p, from (sa place), dx, dy (écart au pointeur), pointer }
+    let spotlight = null, spotlightRing = null; // Pokémon montré (focus : la cible à la fin d'un tour de cache-cache)
     let habitatLayer = null; // types de cases affichés (mode debug), dessinés une fois dans une image
     let clock = 0; // secondes écoulées (remous)
     let skew = 0; // secondes ajoutées à l'horloge par simulate (essais) : la fin d'un malus arrive aussi en accéléré
@@ -714,8 +720,40 @@ export async function create(container, component, options) {
             const style = getComputedStyle(e);
             return sum + e.getBoundingClientRect().height + Number.parseFloat(style.marginTop) + Number.parseFloat(style.marginBottom);
         }, 0);
+    /** Zone que la vue peut montrer (pixels de la carte) : la zone « Parc » et VIEW_MARGIN cases autour, dans la carte. */
+    function viewArea() {
+        const x = Math.max(0, (ground.area.x - VIEW_MARGIN) * TILE), y = Math.max(0, (ground.area.y - VIEW_MARGIN) * TILE);
+        const w = Math.min(ground.width, (ground.area.x + ground.area.w + VIEW_MARGIN) * TILE) - x;
+        const h = Math.min(ground.height, (ground.area.y + ground.area.h + VIEW_MARGIN) * TILE) - y;
+        return { x, y, w, h };
+    }
+    /**
+     * Marges et bordures du bas des éléments qui contiennent le parc (pixels CSS : le bas du contenu de la page) : en mode
+     * fill, le parc s'arrête au-dessus, la page ne défile pas.
+     */
+    const spaceBelow = () => {
+        let sum = 0;
+        for (let e = container.parentElement; e && e !== document.documentElement; e = e.parentElement) {
+            const style = getComputedStyle(e);
+            sum += Number.parseFloat(style.paddingBottom) + Number.parseFloat(style.marginBottom) + Number.parseFloat(style.borderBottomWidth);
+        }
+        return sum;
+    };
+    /** Plus petit zoom entier où cette zone couvre un canvas de cette taille (pixels d'écran) : pas de bandes. */
+    const coverZoom = (width, height) => {
+        const area = viewArea();
+        return Math.max(1, Math.ceil(width / area.w), Math.ceil(height / area.h));
+    };
     const measure = () => {
         const ratio = window.devicePixelRatio || 1;
+        if (fill) {
+            // Toute la largeur, et en hauteur ce qui reste sous le parc dans la fenêtre (en plein écran : tout l'écran)
+            const width = Math.round((container.clientWidth || viewW) * ratio);
+            const top = container.getBoundingClientRect().top + window.scrollY - transientAbove();
+            const height = isFullscreen() ? Math.round(container.clientHeight * ratio)
+                : Math.round(Math.max(240, window.innerHeight - top - spaceBelow()) * ratio);
+            return { ratio, zoom: coverZoom(width, height), width, height };
+        }
         if (isFullscreen()) {
             const height = Math.round(container.clientHeight * ratio);
             return { ratio, zoom: Math.max(1, Math.floor(height / viewH)), width: Math.round(container.clientWidth * ratio), height };
@@ -729,7 +767,15 @@ export async function create(container, component, options) {
         const zoom = Math.max(1, Math.round(240 * ratio / viewH), Math.min(Math.floor(visible / viewH), fitWidth));
         return { ratio, zoom, width: Math.round(width * ratio), height: zoom * viewH };
     };
-    let maxZoom = 1; // zoom par défaut, et le plus grand permis (on dézoome de là jusqu'à ×1)
+    let maxZoom = 1; // le plus grand zoom permis : le zoom par défaut (on dézoome de là jusqu'à ×1), ou deux crans de plus en mode fill
+    let minZoom = 1; // le plus petit : ×1, ou en mode fill le zoom qui couvre (plus petit, des bandes paraîtraient)
+    let baseZoom = 1; // zoom de départ, donné par measure
+    /** Règle les zooms permis d'après le zoom mesuré (une autre taille : on revient au zoom de départ). */
+    const setBaseZoom = zoom => {
+        baseZoom = zoom;
+        minZoom = fill ? zoom : 1;
+        maxZoom = fill ? zoom + 2 : zoom;
+    };
     const applyZoom = zoom => {
         k = zoom;
         spriteK = Math.max(Math.min(k, 2), Math.round(k * SPRITE_SIZE));
@@ -739,21 +785,19 @@ export async function create(container, component, options) {
         // Limites de la vue : la zone « Parc » et un peu de forêt autour (dans la carte), ou plus large et centrée quand la
         // vue l'est (la forêt continue jusqu'au bord de la carte)
         const vw = camera.width / k, vh = camera.height / k;
-        const bx = Math.max(0, (ground.area.x - VIEW_MARGIN) * TILE), by = Math.max(0, (ground.area.y - VIEW_MARGIN) * TILE);
-        const bw = Math.min(ground.width, (ground.area.x + ground.area.w + VIEW_MARGIN) * TILE) - bx;
-        const bh = Math.min(ground.height, (ground.area.y + ground.area.h + VIEW_MARGIN) * TILE) - by;
+        const { x: bx, y: by, w: bw, h: bh } = viewArea();
         const cw = Math.max(bw, vw), ch = Math.max(bh, vh);
         camera.setBounds(bx + (bw - cw) / 2, by + (bh - ch) / 2, cw, ch);
         for (const p of pokemon) for (const text of p.texts) text.setResolution(k);
         labelText.setResolution(k);
-        zoomOutButton.disabled = k <= 1;
+        zoomOutButton.disabled = k <= minZoom;
         zoomInButton.disabled = k >= maxZoom;
     };
     /** Centre de la vue, en pixels de la carte (camera.midPoint n'est mis à jour qu'au dessin). */
     const viewCenter = () => ({ x: camera.scrollX + camera.width / 2, y: camera.scrollY + camera.height / 2 });
     /** Change le zoom (un nombre entier, de ×1 au zoom par défaut) en gardant fixe le point (en pixels du canvas) visé. */
     function zoomTo(zoom, sx = camera.width / 2, sy = camera.height / 2) {
-        zoom = clamp(zoom, 1, maxZoom);
+        zoom = clamp(zoom, minZoom, maxZoom);
         if (zoom === k) return;
         const center = viewCenter();
         const wx = center.x + (sx - camera.width / 2) / k, wy = center.y + (sy - camera.height / 2) / k;
@@ -766,12 +810,12 @@ export async function create(container, component, options) {
         const center = viewCenter();
         game.scale.setZoom(1 / size.ratio); // canvas en pixels physiques, affiché en pixels CSS
         game.scale.resize(size.width, size.height);
-        if (size.zoom !== maxZoom) { maxZoom = size.zoom; applyZoom(maxZoom); } // autre taille (plein écran...) : zoom par défaut
-        else applyZoom(clamp(k, 1, maxZoom));
+        if (size.zoom !== baseZoom) { setBaseZoom(size.zoom); applyZoom(baseZoom); } // autre taille (plein écran...) : zoom par défaut
+        else applyZoom(clamp(k, minZoom, maxZoom));
         camera.centerOn(center.x, center.y);
     };
     const initial = measure();
-    maxZoom = initial.zoom;
+    setBaseZoom(initial.zoom);
     applyZoom(initial.zoom);
 
     // ---------- Boutons sur la carte : dézoomer, zoomer, plein écran ----------
@@ -890,6 +934,7 @@ export async function create(container, component, options) {
             .setDepth(6.1).setVisible(false);
         marker = s.add.graphics().setDepth(HELD_DEPTH - 0.1).setVisible(false); // case visée par un Pokémon soulevé
         ring = s.add.graphics().setDepth(6.2).setVisible(false); // appui en cours sur un Pokémon (PRESS_RING)
+        spotlightRing = s.add.graphics().setDepth(6.3).setVisible(false); // Pokémon montré (focus)
 
         camera.roundPixels = true;
         applyZoom(k); // zoom et limites de la vue
@@ -1608,8 +1653,21 @@ export async function create(container, component, options) {
         if (level > 0) night.setFillStyle(NIGHT.color, NIGHT.alpha * level);
         for (const p of pokemon) drawPokemon(p);
         drawMarker();
-        drawName(hovered);
+        drawName(showNames ? hovered : null);
         drawPressRing();
+        drawSpotlight();
+    }
+
+    /** Cercle jaune qui pulse autour du Pokémon montré (focus), redessiné à chaque image tant qu'il l'est. */
+    function drawSpotlight() {
+        const p = spotlight && pokemon.includes(spotlight) ? spotlight : null;
+        spotlightRing.setVisible(!!p);
+        if (!p) return;
+        const unit = (window.devicePixelRatio || 1) / k, h = p.anim.fh * spriteScale;
+        const r = Math.max(p.anim.fw * spriteScale * 0.45, 12) + Math.sin(clock * 6) * 1.5;
+        spotlightRing.clear()
+            .lineStyle(4 * unit, 0x000000, 0.45).strokeCircle(p.x, p.y - p.altitude - h * 0.3, r)
+            .lineStyle(2.5 * unit, 0xffd400, 1).strokeCircle(p.x, p.y - p.altitude - h * 0.3, r);
     }
 
     /** Appui en cours sur un Pokémon, sans avoir bougé : il sera soulevé à la fin de LONG_PRESS. */
@@ -1786,6 +1844,7 @@ export async function create(container, component, options) {
         if (held?.p === p) held = null;
         if (drag?.target === p) drag.target = null;
         if (hovered === p) hovered = null;
+        if (spotlight === p) spotlight = null;
         p.sprite.destroy(); p.shadow.destroy(); p.storm.destroy(); for (const text of p.texts) text.destroy();
     };
     let lists = 0; // numéro de la dernière liste reçue (setPokemon)
@@ -1884,6 +1943,20 @@ export async function create(container, component, options) {
             const prey = p && p.state !== "held" ? preyOf(p, true) : null;
             if (!prey) return false;
             charge(p, prey);
+            return true;
+        },
+        /**
+         * Montre un Pokémon (fin d'un tour de cache-cache) : la vue se centre sur lui, il s'arrête face à nous et un cercle
+         * jaune l'entoure ; null efface le cercle. Faux si ce Pokémon n'est pas dans le parc.
+         */
+        focus(id) {
+            spotlight = id === null || id === undefined ? null : pokemon.find(o => o.id === id) ?? null;
+            if (!spotlight) return id === null || id === undefined;
+            if (held?.p === spotlight) putDown(true);
+            Object.assign(spotlight, { vx: 0, vy: 0, target: null, path: [], intent: null, resume: null, prey: null, hit: null, afterPlay: null });
+            spotlight.dir = FRONT;
+            spotlight.rest(600);
+            camera.centerOn(spotlight.x, spotlight.y);
             return true;
         },
         /** Pour les essais : pose un Pokémon à un endroit (pixels de la carte), immobile un long moment. */

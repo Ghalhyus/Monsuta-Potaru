@@ -4,16 +4,17 @@ namespace MonsutaPotaru.Services;
 public static class MiniGames
 {
     public const string Chess = "Échecs";
+    public const string HideSeek = "Cache-cache";
 }
 
 /// <summary>Résultat d'une partie de mini-jeu pour un joueur.</summary>
 public enum MiniGameOutcome { Won, Lost, Draw }
 
 /// <summary>
-/// Une partie de mini-jeu vue par un joueur : le jeu, l'adversaire (null : invité sans compte, qu'on ne sait pas
-/// reconnaître d'une partie à l'autre), la date, le résultat.
+/// Une partie de mini-jeu vue par un joueur : le jeu, les adversaires qui ont un compte (pas les invités sans compte, qu'on
+/// ne sait pas reconnaître d'une partie à l'autre : un seul aux échecs, jusqu'à sept au cache-cache), la date, le résultat.
 /// </summary>
-public sealed record MiniGamePlay(string Game, string? OpponentId, DateTime At, MiniGameOutcome Outcome)
+public sealed record MiniGamePlay(string Game, IReadOnlyList<string> Opponents, DateTime At, MiniGameOutcome Outcome)
 {
     /// <summary>L'adversaire s'il a un compte ; null pour un invité des parties publiques (<see cref="ChessHub.GuestIdPrefix"/>).</summary>
     public static string? AccountOrNull(string id) =>
@@ -36,7 +37,7 @@ public sealed record MiniGameStats(int Won, int Lost, int Draws, int Players, st
             plays.Count(p => p.Outcome == MiniGameOutcome.Won),
             plays.Count(p => p.Outcome == MiniGameOutcome.Lost),
             plays.Count(p => p.Outcome == MiniGameOutcome.Draw),
-            plays.Where(p => p.OpponentId is not null).Select(p => p.OpponentId).Distinct().Count(),
+            plays.SelectMany(p => p.Opponents).Distinct().Count(),
             favorite?.Key, favorite?.Count ?? 0);
     }
 
@@ -50,14 +51,16 @@ public sealed record MiniGameStats(int Won, int Lost, int Draws, int Players, st
 }
 
 /// <summary>Onglet Mini-jeux des statistiques : le bloc « Générale » (tous les mini-jeux) et celui de chaque mini-jeu.</summary>
-public sealed record MiniGameOverview(MiniGameStats General, ChessStats Chess);
+public sealed record MiniGameOverview(MiniGameStats General, ChessStats Chess, HideSeekStats HideSeek);
 
 /// <summary>Statistiques des mini-jeux d'un joueur ; un nouveau mini-jeu ajoute ses parties à <see cref="MiniGameStats.From"/>.</summary>
-public sealed class MiniGameService(ChessService chess)
+public sealed class MiniGameService(ChessService chess, HideSeekService hideSeek)
 {
     public async Task<MiniGameOverview> StatsAsync(string userId)
     {
         var chessPlays = await chess.PlaysAsync(userId);
-        return new MiniGameOverview(MiniGameStats.From(chessPlays.Select(p => p.Play).ToList()), ChessStats.From(chessPlays));
+        var hideSeekPlays = await hideSeek.PlaysAsync(userId);
+        var all = chessPlays.Select(p => p.Play).Concat(hideSeekPlays.Select(p => p.Play)).ToList();
+        return new MiniGameOverview(MiniGameStats.From(all), ChessStats.From(chessPlays), HideSeekStats.From(hideSeekPlays));
     }
 }

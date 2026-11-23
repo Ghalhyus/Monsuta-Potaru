@@ -118,6 +118,15 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         Assert.Contains("Rejoindre une partie", chessHtml);
         Assert.Contains("value=\"ABCD 2345\"", chessHtml);
         Assert.DoesNotContain("Nouvelle partie", chessHtml);
+        // Cache-cache : de même (lien sur la connexion, code du lien rempli, pas de « Nouvelle partie » sans compte)
+        Assert.Contains("href=\"mini-jeux/cache-cache\"", await browser.GetStringAsync("/Account/Login"));
+        var hideSeek = await browser.GetAsync("/mini-jeux/cache-cache?code=abcd-2345");
+        Assert.Equal(HttpStatusCode.OK, hideSeek.StatusCode);
+        Assert.DoesNotContain("/Account/Login", hideSeek.RequestMessage!.RequestUri!.AbsolutePath);
+        var hideSeekHtml = WebUtility.HtmlDecode(await hideSeek.Content.ReadAsStringAsync());
+        Assert.Contains("Rejoindre une partie", hideSeekHtml);
+        Assert.Contains("value=\"ABCD 2345\"", hideSeekHtml);
+        Assert.DoesNotContain("Nouvelle partie", hideSeekHtml);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Account/AccessDenied")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Account/InvalidUser")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/Error")).StatusCode);

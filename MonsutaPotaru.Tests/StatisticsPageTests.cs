@@ -153,12 +153,13 @@ public sealed class StatisticsPageTests : PageTestContext
     }
 
     [Fact]
-    public void MiniGames_GeneralAndChess()
+    public void MiniGames_GeneralChessAndHideSeek()
     {
         var empty = Open("?onglet=mini-jeux");
-        empty.WaitForText("Aucune partie pour l'instant : essaie les Échecs.");
+        empty.WaitForText("Aucune partie pour l'instant : essaie les Échecs ou le Cache-cache.");
         Assert.Contains("invite un ami, ou crée une partie publique", empty.Text());
-        Assert.Equal(["0", "0", "0", "0", "0", "—", "0", "0", "0", "0", "0", "0", "0"],
+        Assert.Contains("crée une partie dans Cache-cache", empty.Text());
+        Assert.Equal(["0", "0", "0", "0", "0", "—", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"],
             empty.FindAll(".stat-value").Select(v => v.TextContent));
         Assert.Empty(empty.FindAll(".stat-team")); // pas d'équipe favorite
 
@@ -177,18 +178,29 @@ public sealed class StatisticsPageTests : PageTestContext
                 new ChessRecord { At = at.AddHours(-4), WhiteId = "sacha", BlackId = "pierre", WhiteTeam = "psy", BlackTeam = "feu",
                     End = "Timeout", WinnerId = "pierre" },
                 new ChessRecord { At = at, WhiteId = "ondine", BlackId = "pierre", WhiteTeam = "psy", BlackTeam = "feu", End = "Checkmate" }); // pas la sienne
+            // Cache-cache : une victoire (3 trouvés) contre Ondine et un invité, une nulle (1 trouvé) avec Pierre
+            Guid first = Guid.NewGuid(), second = Guid.NewGuid(), other = Guid.NewGuid();
+            db.HideSeekRecords.AddRange(
+                new HideSeekRecord { GameId = first, At = at.AddHours(-5), UserId = "sacha", Found = 3, Rounds = 5, Outcome = "Won" },
+                new HideSeekRecord { GameId = first, At = at.AddHours(-5), UserId = "ondine", Found = 1, Rounds = 5, Outcome = "Lost" },
+                new HideSeekRecord { GameId = first, At = at.AddHours(-5), UserId = ChessHub.GuestIdPrefix + "x", Found = 0, Rounds = 5, Outcome = "Lost" },
+                new HideSeekRecord { GameId = second, At = at.AddHours(-6), UserId = "sacha", Found = 1, Rounds = 2, Outcome = "Draw" },
+                new HideSeekRecord { GameId = second, At = at.AddHours(-6), UserId = "pierre", Found = 1, Rounds = 2, Outcome = "Draw" },
+                new HideSeekRecord { GameId = other, At = at, UserId = "ondine", Found = 2, Rounds = 2, Outcome = "Won" }); // pas la sienne
             db.SaveChanges();
         }
 
         var cut = Open("?onglet=mini-jeux");
 
-        cut.WaitForAssertion(() => Assert.Equal(14, cut.FindAll(".stat-value").Count));
-        // Générale : jouées, victoires, défaites, nulles, joueurs (comptes), favori ; Échecs : les mêmes, prises, perdues, équipe.
-        Assert.Equal(["4", "1", "2", "1", "2", "Échecs", "4", "1", "2", "1", "2", "5", "5", "Dracaufeu"],
+        cut.WaitForAssertion(() => Assert.Equal(20, cut.FindAll(".stat-value").Count));
+        // Générale : jouées, victoires, défaites, nulles, joueurs (comptes), favori ; Échecs : les mêmes, prises, perdues,
+        // équipe ; Cache-cache : les mêmes, Pokémon trouvés.
+        Assert.Equal(["6", "2", "2", "2", "2", "Échecs", "4", "1", "2", "1", "2", "5", "5", "Dracaufeu", "2", "1", "0", "1", "2", "4"],
             cut.FindAll(".stat-value").Select(v => v.TextContent));
         Assert.Equal(["4 parties", "2 parties"], cut.FindAll(".stat-note").Select(n => n.TextContent));
-        // Groupes : Parties, Favori ; Parties, Pièces, Équipe favorite avec ses six Pokémon (roi d'abord)
-        Assert.Equal(["Parties", "Favori", "Parties", "Pièces", "Équipe favorite"], cut.FindAll(".stat-group-title").Select(t => t.TextContent));
+        // Groupes : Parties, Favori ; Parties, Pièces, Équipe favorite avec ses six Pokémon (roi d'abord) ; Parties, Recherche
+        Assert.Equal(["Parties", "Favori", "Parties", "Pièces", "Équipe favorite", "Parties", "Recherche"],
+            cut.FindAll(".stat-group-title").Select(t => t.TextContent));
         Assert.Equal(["Jouées", "Gagnées", "Perdues", "Nulles", "Joueurs différents"],
             cut.FindAll(".stat-tiles")[0].QuerySelectorAll(".card .small.text-muted").Select(l => l.TextContent));
         var members = cut.FindAll(".stat-team li"); // la carte de l'équipe : nom, parties, puis ses Pokémon

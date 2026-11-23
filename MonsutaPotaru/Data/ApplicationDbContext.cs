@@ -25,6 +25,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
     public DbSet<BattleRecord> BattleRecords => Set<BattleRecord>();
     public DbSet<ChessRecord> ChessRecords => Set<ChessRecord>();
+    public DbSet<HideSeekRecord> HideSeekRecords => Set<HideSeekRecord>();
     public DbSet<GtsPokemon> GtsPokemon => Set<GtsPokemon>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -58,6 +59,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(c => c.WhiteId);
             e.HasIndex(c => c.BlackId);
+        });
+
+        builder.Entity<HideSeekRecord>(e =>
+        {
+            e.HasIndex(h => h.UserId);
+            e.HasIndex(h => h.GameId);
         });
 
         builder.Entity<GtsPokemon>(e =>

@@ -648,6 +648,41 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("GtsPokemon");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.HideSeekRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Found")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rounds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("HideSeekRecords");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.LivingDex", b =>
                 {
                     b.Property<int>("Id")

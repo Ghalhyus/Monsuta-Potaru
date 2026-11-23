@@ -51,6 +51,8 @@ public abstract class PageTestContext : BunitContext
         Services.AddScoped<ChessService>();
         Services.AddScoped<MiniGameService>();
         Services.AddSingleton(_ => new ChessHub(TimeProvider.System, ticking: false));
+        Services.AddScoped<HideSeekService>();
+        Services.AddSingleton(_ => new HideSeekHub(TimeProvider.System, ticking: false));
         Services.AddSingleton<AccountLimiter>();
         Services.AddSingleton(_ => new BattleHub(BattleTests.Showdown(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BattleHub>.Instance));

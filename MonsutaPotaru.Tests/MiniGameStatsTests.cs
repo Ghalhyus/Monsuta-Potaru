@@ -22,13 +22,15 @@ public sealed class MiniGameStatsTests
     {
         var stats = MiniGameStats.From(
         [
-            new("Échecs", "ondine", At, MiniGameOutcome.Won),
-            new("Échecs", "ondine", At, MiniGameOutcome.Lost),
-            new("Échecs", null, At, MiniGameOutcome.Draw), // invité
-            new("Échecs", null, At, MiniGameOutcome.Won),
-            new("Échecs", "pierre", At, MiniGameOutcome.Won),
+            new("Échecs", ["ondine"], At, MiniGameOutcome.Won),
+            new("Échecs", ["ondine"], At, MiniGameOutcome.Lost),
+            new("Échecs", [], At, MiniGameOutcome.Draw), // invité
+            new("Échecs", [], At, MiniGameOutcome.Won),
+            new("Échecs", ["pierre"], At, MiniGameOutcome.Won),
+            // Cache-cache : plusieurs adversaires à la fois
+            new("Cache-cache", ["ondine", "regis"], At, MiniGameOutcome.Draw),
         ]);
-        Assert.Equal((5, 3, 1, 1, 2, "Échecs", 5), (stats.Total, stats.Won, stats.Lost, stats.Draws, stats.Players, stats.Favorite, stats.FavoriteGames));
+        Assert.Equal((6, 3, 1, 2, 3, "Échecs", 5), (stats.Total, stats.Won, stats.Lost, stats.Draws, stats.Players, stats.Favorite, stats.FavoriteGames));
     }
 
     [Fact]

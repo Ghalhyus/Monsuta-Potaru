@@ -42,6 +42,7 @@ public static class Breadcrumbs
             "gts" => [new(Multiplayer, null), new("GTS", null)],
             "combats" => [new(Multiplayer, null), new("Combat", null)],
             "mini-jeux" when parts.Length > 1 && Lower(parts[1]) == "echecs" => [new(Games, null), new("Échecs", null)],
+            "mini-jeux" when parts.Length > 1 && Lower(parts[1]) == "cache-cache" => [new(Games, null), new("Cache-cache", null)],
             "sauvegardes" when parts.Length > 1 && Lower(parts[1]) == "3ds" => [new(Saves, null), new("Synchronisation 3DS", null)],
             "sauvegardes" => [new(Saves, null), new("Mes sauvegardes", null)],
             "administration" => [new("Administration", null)],

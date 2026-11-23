@@ -279,6 +279,36 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   « Statistiques » (onglet Mini-jeux, bloc « Échecs »). Pièces mangées par chaque camp (`WhiteCaptures`,
   `BlackCaptures`, migration `ChessCaptures` : 0 pour les parties d'avant).
 
+### Cache-cache (Mini-jeux)
+
+`/mini-jeux/cache-cache`, `Pages/HideSeek.razor`, rubrique « Mini-jeux » ; détails : `docs/claude/cache-cache.md`.
+
+- « Où est Charlie ? » avec des Pokémon, **de 2 à 8 joueurs** en direct (`Services/HideSeek/HideSeekHub.cs`, singleton en
+  mémoire). L'hôte crée une **salle d'attente** (15 minutes), y choisit les réglages, invite des amis ou donne le **code**
+  (8 caractères, lien `?code=`, comme les parties publiques des échecs : invités sans compte compris, essais limités par
+  adresse IP), puis lance la partie. Une partie à la fois par joueur.
+- **Réglages** (revérifiés par le serveur, `HideSeekSettings`) : 1 à 30 tours (5), 15 s à 5 min par tour (1 min), 20 à 80
+  Pokémon (40 ; la carte suit : 20 par taille de parc), décompte de 3 à 10 s (5), Pokémon de la collection de l'hôte, de **tous les joueurs** qui
+  ont un compte, ou **aléatoires** (hors collection) ; surnommés seulement (pas avec les aléatoires) ; un paysage de parc,
+  ou un **au hasard à chaque tour** (les 8, sans les avoir achetés).
+- **Tirage** (`HideSeekDraw`) : « Ma collection » entière (banque, sauvegardes, mondes Minecraft ; pas les œufs), telle
+  quelle (chromatiques, formes), seulement les espèces qui ont des sprites Donjon (celles qui peuvent aller au parc) et
+  qui peuvent vivre dans le paysage du tour (océan : type Eau). Dans un parc, **jamais deux Pokémon de même espèce et
+  forme** ; une cible ne revient pas d'un tour à l'autre et vient toujours du choix de l'hôte ; s'il n'a pas assez de
+  Pokémon différents pour remplir le parc, des Pokémon aléatoires complètent. Il faut au moins une cible par tour :
+  sinon « Lancer la partie » est grisé, avec le message.
+- **Un tour** : un décompte réglable (3 à 10 s, 5 par défaut) où la cible est annoncée dans un pop-up, par son image et
+  son nom (« Bob (Pikachu) » et son dresseur avec les surnoms), le parc caché derrière (chacun le charge) ; puis la
+  recherche, le parc **sur toute la fenêtre** (zoom net qui couvre, sans bandes ; on fait glisser), le rappel de la
+  cible, le temps et les scores dans un panneau par-dessus. Le premier qui clique dessus marque un point ; un
+  **mauvais clic bloque 3 s** ; le temps écoulé, personne ne marque. La cible est ensuite montrée 5 s (vue centrée, cercle
+  jaune). Les Pokémon se promènent comme au parc (`parc.js`, sans nom au survol ni humeurs).
+- **Fin** : le plus de Pokémon trouvés gagne ; plusieurs en tête : nulle. Un joueur qui part perd (les autres
+  continuent ; seul restant, il gagne) ; l'hôte qui part arrête la partie, sans résultat. **« Recommencer »** (l'hôte) :
+  nouvelle salle d'attente, mêmes réglages, les autres joueurs invités (proposition sur leur écran de fin).
+- **Résultats** : table `HideSeekRecords` (une ligne par joueur, `GameId` commun ; `HideSeekRecorder`, événement
+  `HideSeekHub.Finished`), sans clé étrangère ; bloc « Cache-cache » de l'onglet Mini-jeux des statistiques.
+
 ### Échanges
 
 `/echanges`, `Pages/Trades.razor` ; mécanique `Services/TradeService.cs`, déroulé en direct `Services/TradeHub.cs`
@@ -846,13 +876,14 @@ Détails : `docs/claude/statistiques.md`.
   complétions à 100 %. Même comptage que la vue générale (`CompletionService.ListAsync`).
 - Un visiteur voit les rubans et les complétions dès que la case « Statistiques » est cochée, même si ses pages Rubans
   (jamais publiques) ou Complétion sont cachées : les moyennes seulement, sans lien.
-- **Échange**, **Combat** (onglet Multijoueurs) et **Échecs** (onglet Mini-jeux) : tables `TradeRecords`,
-  `BattleRecords` et `ChessRecords`, sans clé étrangère (elles survivent à la suppression du compte du partenaire) ;
+- **Échange**, **Combat** (onglet Multijoueurs), **Échecs** et **Cache-cache** (onglet Mini-jeux) : tables `TradeRecords`,
+  `BattleRecords`, `ChessRecords` et `HideSeekRecords`, sans clé étrangère (elles survivent à la suppression du compte du partenaire) ;
   l'échange interne n'y est pas.
 - **Mini-jeux** (`Services/MiniGames.cs`, `MiniGameService`) : bloc **Générale** (tous les mini-jeux : parties jouées,
   victoires, défaites, nulles, joueurs différents, mini-jeu favori), puis un bloc par mini-jeu ; **Échecs**, en groupes
   Parties, Pièces (prises et perdues : roi et prise en passant compris, pas l'échange d'un pion au bout) et Équipe
-  favorite (avec ses six Pokémon, `Shared/ChessTeamList.razor`).
+  favorite (avec ses six Pokémon, `Shared/ChessTeamList.razor`) ; **Cache-cache**, Parties (adversaires : tous les
+  joueurs de la partie qui ont un compte) et Pokémon trouvés.
   Favori = le plus joué, à égalité le plus récemment joué. Les **invités sans compte** comptent dans les parties, pas dans
   les joueurs différents (on ne sait pas les reconnaître d'une partie à l'autre).
 
@@ -907,6 +938,10 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes (à l'aveugle, la même gardée ou changée), coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
+| `MonsutaPotaru/Components/Pages/HideSeek.razor` | « Mini-jeux » → « Cache-cache » (`/mini-jeux/cache-cache`, ouverte sans compte pour rejoindre une partie par son code) : invitations reçues, salle d'attente (code, lien, amis invités, réglages de l'hôte, Pokémon disponibles), parc de chaque tour (`parc.js` sans noms), cible, temps, clics, blocage, scores, écran de fin et « Recommencer » |
+| `MonsutaPotaru/Services/HideSeek/HideSeekDraw.cs` | Réglages du cache-cache ; tirage des tours (Pokémon uniques par espèce et forme, paysage respecté, cibles du choix de l'hôte, parc complété par des aléatoires) |
+| `MonsutaPotaru/Services/HideSeek/HideSeekHub.cs` | Parties de cache-cache en direct (singleton, en mémoire) : salle d'attente (8 joueurs, invitations, code), tours (préparation, recherche, cible montrée), clics vérifiés, blocage, départs, fin, « Recommencer » |
+| `MonsutaPotaru/Services/HideSeek/HideSeekRecorder.cs` | Résultats des parties terminées écrits en base ; `HideSeekService` : Pokémon des collections à tirer, statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
 | `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces faibles ou qui résistent : teintes et boucliers en pixel art, ou cadres vert / rouge en contraste élevé (`setContrast`), croix rouge des prises impossibles en contraste élevé, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
@@ -919,7 +954,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/TradePokemon.razor` | Pokémon choisi dans un échange (image, nom, place) |
 | `MonsutaPotaru/Components/Shared/TradeAnimation.razor` | Animation d'échange (échanges entre amis, échange interne, GTS) : la scène et les textes de chaque moment ; données dans `Services/TradeShow.cs` |
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
-| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs) |
+| `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs, cache-cache) |
 | `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce ; chromatiques pour les noirs d'une partie à même équipe) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
 | `MonsutaPotaru/Services/MiniGames.cs` | Statistiques des mini-jeux : une partie vue par un joueur, parties gagnées, perdues, nulles, joueurs différents (sans les invités), le plus joué ; `MiniGameService` pour l'onglet Mini-jeux |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
@@ -957,7 +992,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, dossier d'un monde Minecraft (tri des fichiers envoyés), largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
-| `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes ; `simulate` et `view` pour les essais |
+| `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes ; `simulate` et `view` pour les essais ; repris par le cache-cache (`names: false`, `fill: true`, `focus`) |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
 | `MonsutaPotaru/wwwroot/parc/volcan-1-1.json` … `volcan-1-4.json` | Cartes du volcan, une par taille, même format (plus le calque « Bulles » et les tuiles animées) |
@@ -1213,7 +1248,7 @@ Monsuta Potaru s'appuie sur le travail d'autres projets :
 | [All the Mons](https://www.curseforge.com/minecraft/modpacks/all-the-mons) (modpack 2.1.0, mod `allthemons` de LobsterJonn), [Complete Cobblemon Collection](https://www.curseforge.com/minecraft/mc-mods/complete-cobblemon-collection) (Xcavalier), [Cobblemon: Mega Showdown](https://www.curseforge.com/minecraft/mc-mods/cobblemon-mega-showdown) et zamega (Yajat Kaul, Navas) | Logo du modpack, jaquette du living dex All the Mons (`wwwroot/minecraft/all-the-mons.png`, fourni par l'utilisateur) ; espèces et formes du modpack (Piglich, Creepyon, Stari Patrickyu ; espèces rendues disponibles ; Méga) relevées dans les mods pour `AllTheMonsLivingDex` ; modèles et textures de Piglich, Creepyon (texture du Creeper de Minecraft) et Patrickyu rendus en images (`wwwroot/minecraft/pokemon/`) | All Rights Reserved (`allthemons`, Complete Cobblemon Collection), Mega Showdown License v2.1 ; Minecraft © Mojang ; usage de fan, non commercial |
 | Livre de quêtes d'All the Mons ([All the Mods Team](https://www.curseforge.com/minecraft/modpacks/all-the-mons), FTB Quests) et succès (advancements) de Minecraft et des mods du modpack | Identifiants et **titres seulement** (jamais les descriptions) des quêtes et des succès, relevés par `outils/completion_allthemons.py` dans `AllTheMonsCompletionData.cs` pour la complétion All the Mons | Quêtes : All Rights Reserved (All the Mods Team) ; succès : licences de chaque mod, Minecraft © Mojang ; usage de fan, non commercial |
 | [Bootstrap](https://getbootstrap.com) | Mise en page et composants de l'interface (`wwwroot/lib/bootstrap`) | MIT |
-| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus », dont dice-5-fill pour « Mini-jeux » ; sauf la Poké Ball de « Mes Pokémon » et le pion des « Échecs », dessins du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
+| [Bootstrap Icons](https://icons.getbootstrap.com) | Icônes des menus (dessins SVG dans `wwwroot/app.css`, « Icônes des menus », dont dice-5-fill pour « Mini-jeux » et search pour « Cache-cache » ; sauf la Poké Ball de « Mes Pokémon » et le pion des « Échecs », dessins du site) et des boutons du « Parc » (`ICONS` dans `wwwroot/js/parc.js` : dash-lg, plus-lg, fullscreen, fullscreen-exit) | MIT |
 | [ASP.NET Core, Blazor, Identity, Entity Framework Core](https://dotnet.microsoft.com) (Microsoft) | Site, comptes, accès à la base | MIT |
 | [SQLite](https://sqlite.org) | Base de données | Domaine public |
 | [xUnit](https://xunit.net), [coverlet](https://github.com/coverlet-coverage/coverlet) | Tests, couverture des tests (envoyée à SonarCloud) | Apache-2.0, MIT |
