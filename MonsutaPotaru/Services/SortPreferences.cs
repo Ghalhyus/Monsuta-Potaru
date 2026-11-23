@@ -212,9 +212,9 @@ public static class SiteSorts
 /// collection » et ceux des vues générales des living dex, des complétions et des rubans. Ils s'appliquent quand l'adresse ne précise pas de tri, sur les
 /// pages du joueur comme sur celles des autres joueurs qu'il consulte. S'y ajoute la disposition des écrans d'un combat
 /// (<see cref="Battle"/>) et son mode agrandi (<see cref="BattleEnlarged"/>), et l'affichage des étapes d'une complétion
-/// (<see cref="CompletionView"/>), et les Pokémon au repos des échecs (<see cref="ChessIdle"/>). Rangés en JSON dans
-/// <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
-/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille","echecsRepos":false}</c>.
+/// (<see cref="CompletionView"/>), et les Pokémon au repos des échecs (<see cref="ChessIdle"/>) et leur contraste élevé
+/// (<see cref="ChessContrast"/>). Rangés en JSON dans <see cref="ApplicationUser.SortPreferences"/>, avec les noms de l'adresse :
+/// <c>{"inventaire":{"ct":{"tri":"nom"}},"collection":{"tri":"nom","ordre":"desc"},"rubans":{"tri":"completion"},"combat":"cote","combatAgrandi":true,"completionVue":"grille","echecsRepos":false,"echecsContraste":true}</c>.
 /// </summary>
 public sealed record SortPreferences
 {
@@ -240,6 +240,12 @@ public sealed record SortPreferences
     /// </summary>
     public bool ChessIdle { get; init; } = true;
 
+    /// <summary>
+    /// Échecs en contraste élevé : les pièces adverses face à la pièce choisie entourées d'un cadre (vert : super efficace ;
+    /// rouge : elle ne peut pas les manger). Faux par défaut : filtre de couleur, petit bouclier et animation à la place.
+    /// </summary>
+    public bool ChessContrast { get; init; }
+
     public ItemSort InventoryFor(ItemCategory category) => Inventory.GetValueOrDefault(category);
 
     private static readonly JsonSerializerOptions Json = new()
@@ -259,6 +265,7 @@ public sealed record SortPreferences
         public bool? CombatAgrandi { get; set; }
         public string? CompletionVue { get; set; }
         public bool? EchecsRepos { get; set; }
+        public bool? EchecsContraste { get; set; }
     }
 
     private sealed class StoredSort
@@ -285,10 +292,11 @@ public sealed record SortPreferences
             CombatAgrandi = BattleEnlarged ? true : null,
             CompletionVue = CompletionView == CompletionStepsView.List ? null : SiteSorts.Slug(CompletionView),
             EchecsRepos = ChessIdle ? null : false,
+            EchecsContraste = ChessContrast ? true : null,
         };
         return stored.Inventaire is null && stored.Collection is null && stored.Livingdex is null && stored.Completion is null
             && stored.Rubans is null && stored.Combat is null && stored.CombatAgrandi is null && stored.CompletionVue is null
-            && stored.EchecsRepos is null
+            && stored.EchecsRepos is null && stored.EchecsContraste is null
             ? null
             : JsonSerializer.Serialize(stored, Json);
     }
@@ -325,13 +333,14 @@ public sealed record SortPreferences
             BattleEnlarged = stored.CombatAgrandi == true,
             CompletionView = SiteSorts.CompletionViewFrom(stored.CompletionVue),
             ChessIdle = stored.EchecsRepos != false,
+            ChessContrast = stored.EchecsContraste == true,
         };
     }
 }
 
 /// <summary>
 /// Lecture et enregistrement des préférences d'un compte : les tris par défaut, la disposition des écrans d'un combat,
-/// l'affichage des étapes d'une complétion et les Pokémon au repos des échecs.
+/// l'affichage des étapes d'une complétion, les Pokémon au repos des échecs et leur contraste élevé.
 /// </summary>
 public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
@@ -381,6 +390,22 @@ public sealed class PreferencesService(IDbContextFactory<ApplicationDbContext> d
         if (!result.Ok)
             return result;
         return new(true, animated ? "Pokémon des échecs animés au repos." : "Pokémon des échecs figés au repos.");
+    }
+
+    /// <summary>Contraste élevé des échecs (cadres) ou non (filtres, boucliers, animations), choisi sur la page d'une partie ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetChessContrastAsync(string userId, bool contrast)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { ChessContrast = contrast });
+        if (!result.Ok)
+            return result;
+        return new(true, contrast ? "Échecs en contraste élevé." : "Échecs sans contraste élevé.");
+    }
+
+    /// <summary>Les deux cases des échecs, enregistrées ensemble par le formulaire de « Préférences » ; le reste ne change pas.</summary>
+    public async Task<AccountResult> SetChessDisplayAsync(string userId, bool animated, bool contrast)
+    {
+        var result = await SetSortsAsync(userId, await SortsAsync(userId) with { ChessIdle = animated, ChessContrast = contrast });
+        return result.Ok ? new(true, "Réglages des échecs enregistrés.") : result;
     }
 
     /// <summary>Mode agrandi des écrans d'un combat, choisi sur la page du combat ; le reste ne change pas.</summary>

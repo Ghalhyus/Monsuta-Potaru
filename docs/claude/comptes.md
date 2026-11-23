@@ -124,6 +124,11 @@ README : « Comptes », « Administration », « Thèmes ».
   `repos` « Animer les Pokémon au repos » de sens inverse) ; « Revenir aux tris d'origine » le garde.
 - Écriture : `PreferencesService.SetChessIdleAsync`, appelée aussi par la case de la page d'une partie (rien pour un
   invité sans compte). Interface : `docs/claude/echecs.md`.
+- **Contraste élevé** (2026-11-23) : `"echecsContraste":true` (absent ou autre : teintes et boucliers),
+  `SortPreferences.ChessContrast` (faux par défaut : seul le choix est écrit). Case `contraste` (valeur `oui`) dans le
+  même formulaire « Échecs » : `SetChessDisplayAsync` enregistre les deux cases ensemble (message « Réglages des échecs
+  enregistrés. ») ; la case de la page d'une partie appelle `SetChessContrastAsync`. « Revenir aux tris d'origine » le
+  garde.
 
 ## Tests
 - `AccountServiceTests` monte Identity comme `Program.cs` (`AccountService.ConfigureIdentity`) sur la base de test.

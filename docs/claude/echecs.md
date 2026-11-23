@@ -5,7 +5,7 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 `ChessRecorder.cs` (+ `ChessService`, statistiques), plateau `wwwroot/js/echecs.js` (Phaser). Tests : `ChessGameTests`
 (règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
 (`docs/claude/statistiques.md`), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
-pièces », case « Désactiver les animations », cadres de la pièce choisie, même équipe).
+pièces », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe).
 
 ## Choix de l'utilisateur (2026-11-22)
 - Demande d'origine : un seul type par Pokémon ; super efficace = la pièce rejoue ; neutre = elle mange ; pas très
@@ -63,7 +63,8 @@ pièces », case « Désactiver les animations », cadres de la pièce choisie, 
   cadre ; vert même pendant le tour bonus (c'est le type qui compte, pas le tour bonus). Cadre de 2 px (`frame` dans
   `drawMarks`), sous les coins des prises.
 - **Croix rouge** : sur les pièces de `Blocked` (atteintes mais pas mangeables), à la place de la petite croix grise ; dès
-  la sélection ; dessinée dans un second `Graphics` (`crosses`, profondeur 50) **par-dessus** les sprites (profondeur 10 +
+  la sélection ; **en contraste élevé seulement** depuis le 2026-11-23 (demande de l'utilisateur : par défaut, la pièce
+  est déjà bleue avec son bouclier ; la légende n'en parle pas non plus, `MatchupLegend`) ; dessinée dans un second `Graphics` (`crosses`, profondeur 50) **par-dessus** les sprites (profondeur 10 +
   y), bord sombre de 4 px et cœur rouge de 2 px en diagonale.
 - **Aperçu pendant le tour adverse** (choix de l'utilisateur) : `CanPreview` (page) ; `ChessSession.Options` rend les
   options d'une pièce du joueur même hors de son tour : cadres (`Matchups`) et croix (`Blocked`, qui ne dépend pas du
@@ -75,6 +76,27 @@ pièces », case « Désactiver les animations », cadres de la pièce choisie, 
   (`MatchupLegend`).
 - Boutons « Pièces » et « Table de type des pièces » (ancien « Aide ») en `btn-primary` : la couleur principale du thème
   (bleu, orange avec Ardoise), choix de l'utilisateur ; « Abandonner » reste en contour.
+
+## Pièces faibles ou qui résistent : teintes, boucliers, animations (demandés le 2026-11-23)
+- Mode par défaut depuis le 2026-11-23 ; les cadres vert et rouge (ci-dessus) sont devenus le mode **« Contraste
+  élevé »** : case `#chess-contrast` sous « Désactiver les animations », gardée dans le compte
+  (`SortPreferences.ChessContrast`, `"echecsContraste":true`, voir `docs/claude/comptes.md`) ; invité sans compte : pour
+  la partie. Passée à `create` (`contrast`) puis changée par `setContrast` (redessine les marques). La légende
+  (`MatchupLegend`) suit le mode ; changer de mode remplace seulement la légende dans le texte (`ContrastChanged` : une
+  nouvelle sélection aurait annulé un échange de pion en cours).
+- Choix de l'utilisateur (captures fournies, couleurs relevées dessus) : pièce **qui résiste** (`marks.resist`, elle ne
+  peut pas la manger) = **teinte bleue**, petit bouclier bleu ; pièce **faible** (`marks.weak`, super efficace) =
+  **teinte rouge**, bouclier gris **cassé**, et pas de croix rouge. Contraste élevé : cadres et croix (ni teinte, ni
+  bouclier). Test : `ChessPageTests.RedCross_OnlyInHighContrast` (position posée par réflexion).
+- **Ni animation ni demi-tour** (2026-11-23) : la première version faisait jouer l'attaque (qui résiste) ou la blessure
+  (faible) en boucle, le Pokémon tourné vers la pièce choisie ; trop rapide pour l'utilisateur, puis une fois toutes les
+  3 s, puis retirée à sa demande, et le demi-tour aussi. Le Pokémon reste dans son état de repos, face à l'adversaire.
+- Teinte : copie de chaque planche recolorée une fois (`tinted`, texture `<clé>~weak` / `~resist`) d'après la
+  luminosité de chaque pixel, en trois paliers (`FILTERS`) : pas de `setTint` de Phaser (une multiplication noircit un
+  Pokémon de la couleur opposée, un Pokémon Feu sous du bleu). Boucliers : 9 × 10 pixels (`SHIELDS`, dessinés comme les
+  lettres), en bas à droite de la case, dans le `Graphics` des croix (par-dessus les sprites).
+- `tick` : `matchupKinds` (vide en contraste élevé et pendant un coup) donne la teinte de chaque pièce (`a.filter`),
+  rien d'autre. `current` est déclarée avant `new Phaser.Game` : `tick` la lit.
 
 ## Équipes Poison, Eau, Plante, Sol (ajoutées le 2026-11-22)
 - Composition et types donnés par l'utilisateur (`ChessTeams.All`) ; noms corrigés d'après PKHeX : **Roserade** (sans
@@ -96,7 +118,7 @@ pièces », case « Désactiver les animations », cadres de la pièce choisie, 
   hub puis de la session). Vaut `RequestLifetime` (expiration par `Tick`, message « le code a expiré ») ; une fois.
 - Choix de l'utilisateur : **lien à partager** (`?code=`, `[SupplyParameterFromQuery]`, code déjà rempli ; « Copier le
   code » / « Copier le lien » par `navigator.clipboard.writeText`, message de repli si la copie est refusée) et **lien
-  sur l'accueil et la connexion** (sans compte) ; l'invité **tape un prénom** (`ChessHub.GuestPseudo` : 2 à 20 caractères,
+  sur la connexion** (sans compte ; d'abord aussi un bouton sur l'accueil, retiré le 2026-11-23 à sa demande) ; l'invité **tape un prénom** (`ChessHub.GuestPseudo` : 2 à 20 caractères,
   lettres, chiffres, espaces, tirets, apostrophes, points ; « Léo (invité) ») ; parties **comptées pour l'hôte**
   (`ChessRecords.BlackId` = identifiant d'invité, pas de clé étrangère) ; un joueur **connecté** peut aussi saisir un
   code (sous son pseudo, comptée pour lui).
@@ -109,7 +131,7 @@ pièces », case « Désactiver les animations », cadres de la pièce choisie, 
   paramètres d'un composant racine interactif sont protégés dans la page (non modifiables par le navigateur).
 - Tests : `ChessHubTests` (code, saisie libre, une fois, expiration, joueur occupé, prénoms, résultat compté),
   `ChessPageTests` (invité sans compte de bout en bout, lien pour un joueur connecté, limite d'essais : `RenderAnonymous`),
-  `SiteTests` (page ouverte sans compte, code du lien rempli, liens de l'accueil et de la connexion).
+  `SiteTests` (page ouverte sans compte, code du lien rempli, lien de la connexion, plus de bouton sur l'accueil).
 - Piège de test : la page de l'hôte a un `NavigationLock` (quitter annule la partie) ; un `NavigateTo` vers le lien avec
   sa page ouverte est refusé (`confirm` faux dans bUnit). Créer alors la partie par le hub.
 

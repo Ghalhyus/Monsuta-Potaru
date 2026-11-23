@@ -258,6 +258,37 @@ public sealed class ChessPageTests : PageTestContext
         await DisposeComponentsAsync();
     }
 
+    [Fact]
+    public async Task RedCross_OnlyInHighContrast()
+    {
+        // Position posée : Gallame (roi Combat) en e4 atteint Malvalame (fou Spectre) en d5 mais ne peut pas le manger
+        var hub = Services.GetRequiredService<ChessHub>();
+        var session = hub.Request(new ChessParty("sacha", "sacha"), new ChessParty("ondine", "ondine"), 120).Session!;
+        Assert.Null(hub.Accept(session, "ondine"));
+        Assert.Null(hub.ChooseTeam(session, "sacha", "psy"));
+        Assert.Null(hub.ChooseTeam(session, "ondine", "feu"));
+        var position = ChessGame.FromPosition(ChessTeams.Find("psy")!, ChessTeams.Find("feu")!, ChessColor.White,
+            [(ChessColor.White, ChessPiece.King, Sq("e4")), (ChessColor.Black, ChessPiece.Bishop, Sq("d5")),
+             (ChessColor.Black, ChessPiece.King, Sq("h8"))]);
+        typeof(ChessSession).GetField("Game", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(session, position);
+        var sacha = Render<Chess>();
+        sacha.WaitForText("À toi de jouer.");
+
+        // Mode par défaut : Malvalame est bleu (bouclier), sans croix dans la légende ; la croix est dans les marques, le
+        // plateau ne la dessine qu'en contraste élevé
+        await Click(sacha, "e4");
+        Assert.Contains(Sq("d5"), LastMarks("blocked"));
+        Assert.Contains("en bleu, bouclier : il ne peut pas les manger", sacha.Find(".chess-info").TextContent);
+        Assert.DoesNotContain("croix rouge", sacha.Find(".chess-info").TextContent);
+        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        Assert.Contains("cadre rouge : il ne peut pas les manger ; croix rouge : à sa portée, mais son type l'empêche de les manger.",
+            sacha.Find(".chess-info").TextContent);
+        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        Assert.DoesNotContain("croix rouge", sacha.Find(".chess-info").TextContent);
+        await DisposeComponentsAsync();
+    }
+
     /// <summary>Case permise marquée sur le plateau vers <paramref name="square"/>, dans le dernier « highlight » qui en a.</summary>
     private object? LastMarkedMove(int square) => JSInterop.Invocations.Where(i => i.Identifier == "highlight")
         .Select(i => i.Arguments[0]!.GetType().GetProperty("moves")!.GetValue(i.Arguments[0]) as System.Collections.IEnumerable)
@@ -288,7 +319,16 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal([Sq("b8"), Sq("g8")], LastMarks("weak"));
         Assert.Equal([Sq("c8"), Sq("d8"), Sq("e8"), Sq("f8")], LastMarks("resist"));
         Assert.Empty(LastMarks("blocked"));
-        Assert.Contains("Sur le plateau, cadre vert : il leur est super efficace ; cadre rouge : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
+        Assert.Contains("Sur le plateau, en rouge, bouclier cassé : il leur est super efficace ; en bleu, bouclier : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
+
+        // Contraste élevé : des cadres (la légende suit tout de suite, la pièce reste choisie) ; puis retour au mode par défaut
+        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
+        Assert.Contains("Gallame ne peut pas bouger. Sur le plateau, cadre vert : il leur est super efficace ; cadre rouge : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
+        Assert.Equal([Sq("b8"), Sq("g8")], LastMarks("weak"));
+        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
+        Assert.Contains("en rouge, bouclier cassé", sacha.Find(".chess-info").TextContent);
 
         // 1. e4 Cc6 2. e5 : Démolosse (Ténèbres) en c6 regarde Tarsal (Psy, faible) ; pendant le tour de Sacha, Ondine
         // choisit son pion d7 (Salamèche, Feu) : Roigada (Eau) lui résiste, à sa portée ou non
@@ -378,8 +418,37 @@ public sealed class ChessPageTests : PageTestContext
     }
 
     /// <summary>Valeur « idle » passée par la page à echecs.js à la création de chaque plateau.</summary>
-    private bool?[] BoardsIdle() => [.. JSInterop.Invocations.Where(i => i.Identifier == "create")
-        .Select(i => i.Arguments[2]?.GetType().GetProperty("idle")?.GetValue(i.Arguments[2]) as bool?)];
+    private bool?[] BoardsIdle() => BoardsOption("idle");
+
+    /// <summary>Valeur d'une option (« idle », « contrast ») passée par la page à echecs.js à la création de chaque plateau.</summary>
+    private bool?[] BoardsOption(string name) => [.. JSInterop.Invocations.Where(i => i.Identifier == "create")
+        .Select(i => i.Arguments[2]?.GetType().GetProperty(name)?.GetValue(i.Arguments[2]) as bool?)];
+
+    [Fact]
+    public async Task HighContrast_FollowsTheAccount_AndIsSavedFromTheGame()
+    {
+        var preferences = Services.GetRequiredService<PreferencesService>();
+        Assert.True((await preferences.SetChessContrastAsync("sacha", true)).Ok); // Sacha l'a mis dans « Préférences »
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        await ChooseTeams(sacha, ondine);
+        sacha.WaitForText("À toi de jouer.");
+
+        // Chaque plateau naît avec le réglage de son joueur (case « Contraste élevé », décochée par défaut)
+        Assert.Equal("Contraste élevé", sacha.Find("label[for=chess-contrast]").TextContent);
+        Assert.True(sacha.Find("#chess-contrast").HasAttribute("checked"));
+        Assert.False(ondine.Find("#chess-contrast").HasAttribute("checked"));
+        sacha.WaitForAssertion(() => Assert.Equal(2, BoardsOption("contrast").Length));
+        Assert.Equal([false, true], BoardsOption("contrast").Order());
+
+        // Sacha l'enlève pendant la partie : le plateau suit, le compte le garde, les animations au repos ne changent pas
+        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
+        Assert.Equal((false, true), ((await preferences.SortsAsync("sacha")).ChessContrast, (await preferences.SortsAsync("sacha")).ChessIdle));
+        await ondine.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        Assert.True((await preferences.SortsAsync("ondine")).ChessContrast);
+        Assert.False((await preferences.SortsAsync("sacha")).ChessContrast);
+    }
 
     [Fact]
     public async Task IdleAnimations_FollowTheAccount_AndAreSavedFromTheGame()
@@ -553,9 +622,11 @@ public sealed class ChessPageTests : PageTestContext
         await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = $"{code[..4]}-{code[4..]}".ToLowerInvariant() });
         await guest.Click("Rejoindre");
 
-        // Choix des équipes, puis la partie : l'invité joue les noirs
+        // Choix des équipes, puis la partie : l'invité joue les noirs. Le message de la copie du lien disparaît dès que
+        // l'adversaire arrive (il décalait le plateau)
         guest.WaitForText("Partie contre sacha");
         sacha.WaitForText("Partie contre Léo (invité)");
+        Assert.DoesNotContain("Lien copié", sacha.Text());
         await guest.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
         guest.WaitForText("Tu joues les noirs · 1 min par coup");
@@ -568,6 +639,10 @@ public sealed class ChessPageTests : PageTestContext
         Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
         Assert.DoesNotContain("gardé dans ton compte", guest.Text());
         Assert.True((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessIdle);
+        await guest.Find("#chess-contrast").ChangeAsync(new() { Value = true }); // de même pour le contraste élevé
+        Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
+        Assert.DoesNotContain("gardé dans ton compte", guest.Text());
+        Assert.False((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessContrast);
 
         // L'invité abandonne : victoire pour Sacha
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);

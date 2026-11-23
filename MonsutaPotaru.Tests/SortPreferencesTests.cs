@@ -114,6 +114,41 @@ public sealed class SortPreferencesTests : IDisposable
     }
 
     [Fact]
+    public void Json_KeepsTheChessContrastChoice_OnlyWhenChosen()
+    {
+        Assert.False(SortPreferences.Default.ChessContrast); // filtres et boucliers par défaut
+        var contrast = new SortPreferences { ChessContrast = true };
+        Assert.Equal("""{"echecsContraste":true}""", contrast.ToJson());
+        Assert.True(SortPreferences.FromJson(contrast.ToJson()).ChessContrast);
+        Assert.Null(new SortPreferences { ChessContrast = false }.ToJson()); // réglage d'origine
+        Assert.Equal("""{"echecsRepos":false,"echecsContraste":true}""", (contrast with { ChessIdle = false }).ToJson());
+        Assert.False(SortPreferences.FromJson("""{"echecsContraste":false}""").ChessContrast);
+        Assert.False(SortPreferences.FromJson("""{"echecsContraste":"oui"}""").ChessContrast); // trafiquée : réglages d'origine
+    }
+
+    [Fact]
+    public async Task Service_SavesTheChessContrast_WithoutTouchingTheRest()
+    {
+        var service = new PreferencesService(_db.Factory);
+        Assert.True((await service.SetSortsAsync("sacha", Sample() with { ChessIdle = false })).Ok);
+        var contrast = await service.SetChessContrastAsync("sacha", true);
+        Assert.Equal((true, "Échecs en contraste élevé."), (contrast.Ok, contrast.Message));
+        var read = await service.SortsAsync("sacha");
+        Assert.Equal((true, false), (read.ChessContrast, read.ChessIdle));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), read.Collection);
+        Assert.Equal("Échecs sans contraste élevé.", (await service.SetChessContrastAsync("sacha", false)).Message);
+        Assert.False((await service.SortsAsync("sacha")).ChessContrast);
+        Assert.Equal("Ce compte n'existe plus.", (await service.SetChessContrastAsync("disparu", true)).Message);
+
+        // Le formulaire de « Préférences » enregistre les deux cases ensemble
+        var both = await service.SetChessDisplayAsync("sacha", true, true);
+        Assert.Equal((true, "Réglages des échecs enregistrés."), (both.Ok, both.Message));
+        Assert.Equal((true, true), ((await service.SortsAsync("sacha")).ChessIdle, (await service.SortsAsync("sacha")).ChessContrast));
+        Assert.Equal(new CollectionSort(CollectionSortBy.Dex, true), (await service.SortsAsync("sacha")).Collection);
+        Assert.False((await service.SetChessDisplayAsync("disparu", true, false)).Ok);
+    }
+
+    [Fact]
     public async Task Service_SavesTheChessIdleChoice_WithoutTouchingTheRest()
     {
         var service = new PreferencesService(_db.Factory);

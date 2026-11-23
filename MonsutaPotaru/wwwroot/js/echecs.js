@@ -6,7 +6,9 @@
 // s'arrête devant sa proie, attaque, la proie a mal puis rejoint les K.O. sur le côté (endormie) ; un pion au bout du
 // plateau et le Pokémon K.O. qui le remplace échangent leurs places en marchant. Animations au repos coupées (préférence du
 // joueur, setIdle) : les pièces du plateau restent sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O.
-// sur la première image de Sleep.
+// sur la première image de Sleep. Pièces adverses face à la pièce choisie : teintées (copies des planches recolorées) et
+// petit bouclier, sans autre changement (faible : rouge, bouclier cassé ; qui résiste : bleu, bouclier) ; en contraste
+// élevé (setContrast), des cadres.
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 import { loadSheets } from "./parc.js";
 
@@ -50,6 +52,26 @@ function seeded(seed) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
+
+// Pièces adverses face à la pièce choisie (hors contraste élevé) : teinte des sprites, du plus sombre au plus clair d'après
+// la luminosité de chaque pixel (trois paliers) ; ni animation ni demi-tour (retirés à la demande de l'utilisateur)
+const FILTERS = {
+    weak: [[92, 4, 12], [204, 66, 74], [255, 226, 226]], // rouge : elle leur est super efficace
+    resist: [[0, 58, 92], [46, 148, 196], [224, 248, 255]], // bleu : elle ne peut pas les manger
+};
+
+// Petits boucliers, 9 × 10 pixels, en bas à droite de la case : bleu (il résiste), gris cassé (il est faible).
+// O : contour clair, B : bord, F : fond, S : reflet, K : bord de la fêlure ; « . » : transparent (la fêlure est un vide)
+const SHIELDS = {
+    resist: {
+        colors: { O: 0xf4f8f8, B: 0x2be0ff, F: 0x45f7f0, S: 0xeefcfb },
+        rows: [".OOOOOOO.", "OBBBBBBBO", "OBFFFFSBO", "OBFFFSFBO", "OBFFSFFBO", "OBFSFFFBO", ".OBSFFBO.", ".OBFFFBO.", "..OBFBO..", "...OOO..."],
+    },
+    weak: {
+        colors: { O: 0xf4f4f4, B: 0xb7b7b7, F: 0x717171, K: 0x222222 },
+        rows: [".OOO.OOO.", "OBBB.KBBO", "OBFFK.FBO", "OBFFK.FBO", "OBFK.FFBO", "OBFK.FFBO", ".OBFK.BO.", ".OBF.KBO.", "..OB.BO..", "...O.O..."],
+    },
+};
 
 const shade = ([r, g, b], d) => [r + d, g + d, b + d].map(v => Math.max(0, Math.min(255, v)));
 
@@ -232,6 +254,23 @@ function drawCross(crosses, o) {
     }
 }
 
+/** Petit bouclier en bas à droite de la case (o : son coin haut gauche), pixel par pixel. */
+function drawShield(g, o, kind) {
+    const { colors, rows } = SHIELDS[kind];
+    const x0 = o.x + SQ - rows[0].length - 1, y0 = o.y + SQ - rows.length - 1;
+    rows.forEach((row, y) => [...row].forEach((c, x) => {
+        if (!colors[c]) return;
+        g.fillStyle(colors[c], 1);
+        g.fillRect(x0 + x, y0 + y, 1, 1);
+    }));
+}
+
+/** Couleur de la teinte pour une luminosité de 0 à 1 : entre les paliers sombre, moyen et clair. */
+function filterColor(stops, lum) {
+    const [from, to, t] = lum < 0.5 ? [stops[0], stops[1], lum * 2] : [stops[1], stops[2], lum * 2 - 1];
+    return from.map((v, i) => Math.round(v + (to[i] - v) * t));
+}
+
 /** Avance l'animation de delta ms ; jouée une fois, elle reste sur sa dernière image. */
 function advanceFrame(a, anim, delta) {
     a.frameTime += delta;
@@ -242,11 +281,11 @@ function advanceFrame(a, anim, delta) {
     }
 }
 
-/** Image, place et ombre du sprite d'un Pokémon. */
-function placeSprite(a, anim) {
+/** Image (key : la planche, ou sa copie teintée), place et ombre du sprite d'un Pokémon. */
+function placeSprite(a, anim, key) {
     if (anim) {
         const row = Math.min(a.state === "sleep" ? 0 : a.dir, anim.rows - 1);
-        a.sprite.setTexture(anim.key, row * anim.columns + a.frame % anim.columns);
+        a.sprite.setTexture(key, row * anim.columns + a.frame % anim.columns);
     }
     a.sprite.setPosition(Math.round(a.x), Math.round(a.y - SPRITE_UP - (a.anims ? 0 : 3)))
         .setDepth(10 + a.y / 1000).setAlpha(a.alpha).setVisible(a.visible);
@@ -257,11 +296,12 @@ function placeSprite(a, anim) {
  * Plateau dans <container> ; <component> (Chess.razor) est prévenu des clics. Options : flip (les noirs en bas : je joue
  * les noirs), units (toutes les pièces : id, mine, folder des sprites, name), position (Board : id et case ; WhiteKo,
  * BlackKo), timing (walk : durée de marche d'une case ; strike : attaque et K.O., en ms), idle (faux : pièces figées au
- * repos, sauf la sélectionnée).
+ * repos, sauf la sélectionnée), contrast (vrai : cadres vert et rouge au lieu des teintes, boucliers et animations).
  */
 export async function create(container, component, options) {
     const flip = options?.flip === true;
     let idleAnimated = options?.idle !== false;
+    let contrast = options?.contrast === true;
     const walkMs = Number(options?.timing?.walk) || 350;
     const units = new Map((options?.units ?? []).map(u => [u.id, u]));
     let position = options?.position ?? { board: [], whiteKo: [], blackKo: [] };
@@ -338,7 +378,13 @@ export async function create(container, component, options) {
     let size = fit();
 
     let overlay; // marques, redessinées à chaque changement
-    let crosses; // croix rouges, par-dessus les Pokémon
+    let crosses; // boucliers et croix rouges, par-dessus les Pokémon
+    /**
+     * Animation en cours : un coup trop long (onglet en arrière-plan, navigateur ralenti) est abandonné au bout de
+     * MAX_PLAY, tout le monde est remis à sa place, et l'ancienne animation s'arrête à sa prochaine étape (CANCELLED) au
+     * lieu de bouger les pièces du coup suivant. Déclarée avant le jeu de Phaser : tick() la lit.
+     */
+    let current = null;
     const actors = new Map(); // une pièce par numéro : sprite, ombre, position, animation
     let scene, ready;
     const started = new Promise(resolve => ready = resolve);
@@ -441,7 +487,7 @@ export async function create(container, component, options) {
         s.add.image(0, 0, "echiquier").setOrigin(0, 0).setDepth(0);
     }
 
-    // ---------- Marques : dernier coup, roi en échec, pièce choisie, cases permises, pièces qui résistent ----------
+    // ---------- Marques : dernier coup, roi en échec, pièce choisie, cases permises, pièces faibles ou qui résistent ----------
     function drawMarks() {
         if (!overlay) return;
         const g = overlay;
@@ -453,13 +499,20 @@ export async function create(container, component, options) {
         if (Number.isInteger(marks.check)) box(marks.check, 0xff3030, 0.4);
         if (Number.isInteger(hover)) frame(hover, 0xffffff, 0.45, 1);
         if (Number.isInteger(marks.selected)) frame(marks.selected, 0xffe14d, 1, 2);
-        // Pièces adverses face à la pièce choisie : vert, elle leur est super efficace ; rouge, elle ne peut pas les manger
-        for (const square of marks.weak ?? []) frame(square, 0x3cd65a, 1, 2);
-        for (const square of marks.resist ?? []) frame(square, 0xff3b3b, 1, 2);
+        // Pièces adverses face à la pièce choisie. Contraste élevé : cadre vert, elle leur est super efficace ; rouge, elle ne
+        // peut pas les manger. Sinon un petit bouclier, par-dessus le sprite (sa teinte et son animation : tick)
+        if (contrast) {
+            for (const square of marks.weak ?? []) frame(square, 0x3cd65a, 1, 2);
+            for (const square of marks.resist ?? []) frame(square, 0xff3b3b, 1, 2);
+        } else {
+            for (const square of marks.weak ?? []) drawShield(crosses, originOf(square), "weak");
+            for (const square of marks.resist ?? []) drawShield(crosses, originOf(square), "resist");
+        }
         // Cases permises : un point ; prise : quatre coins (dorés si super efficace : la pièce rejouera)
         for (const move of marks.moves ?? []) drawMoveMark(g, originOf(move.to), move);
-        // Pièce atteinte mais que son type empêche de manger : une grande croix rouge sur tout le Pokémon, par-dessus son sprite
-        for (const square of marks.blocked ?? []) drawCross(crosses, originOf(square));
+        // Pièce atteinte mais que son type empêche de manger : en contraste élevé, une grande croix rouge sur tout le Pokémon,
+        // par-dessus son sprite ; sinon rien de plus (elle est déjà bleue, avec son bouclier)
+        if (contrast) for (const square of marks.blocked ?? []) drawCross(crosses, originOf(square));
     }
 
     // ---------- Pièces ----------
@@ -488,9 +541,46 @@ export async function create(container, component, options) {
         return (position.board ?? []).find(b => b.square === marks.selected)?.id ?? null;
     }
 
+    /**
+     * Pièces adverses face à la pièce choisie, numéro → "weak" (elle leur est super efficace) ou "resist" (elle ne peut pas
+     * les manger) ; aucune en contraste élevé (des cadres) ni pendant un coup.
+     */
+    function matchupKinds() {
+        const kinds = new Map();
+        if (contrast || current) return kinds;
+        const at = new Map((position.board ?? []).map(b => [b.square, b.id]));
+        for (const kind of ["weak", "resist"]) {
+            for (const square of marks[kind] ?? []) if (at.has(square)) kinds.set(at.get(square), kind);
+        }
+        return kinds;
+    }
+
+    /** Planche teintée (copie recolorée d'après la luminosité de chaque pixel, transparence gardée), faite une fois. */
+    function tinted(anim, kind) {
+        const key = `${anim.key}~${kind}`;
+        if (scene.textures.exists(key)) return key;
+        const { width, height } = anim.image;
+        const texture = scene.textures.createCanvas(key, width, height);
+        const ctx = texture.getContext();
+        ctx.drawImage(anim.image, 0, 0);
+        const image = ctx.getImageData(0, 0, width, height), d = image.data;
+        for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] === 0) continue;
+            [d[i], d[i + 1], d[i + 2]] = filterColor(FILTERS[kind], (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255);
+        }
+        ctx.putImageData(image, 0, 0);
+        for (let r = 0; r < anim.rows; r++) {
+            for (let c = 0; c < anim.columns; c++) texture.add(r * anim.columns + c, 0, c * anim.fw, r * anim.fh, anim.fw, anim.fh);
+        }
+        texture.refresh();
+        return key;
+    }
+
     function tick(delta) {
-        const chosen = idleAnimated ? null : selectedId();
+        const chosen = selectedId();
+        const kinds = matchupKinds();
         for (const a of actors.values()) {
+            a.filter = kinds.get(a.id) ?? null; // teinte seule : il ne bouge ni ne se tourne
             const anim = animOf(a);
             const frozen = !idleAnimated && (a.state === "idle" || a.state === "sleep") && a.id !== chosen;
             if (anim && frozen) {
@@ -501,7 +591,7 @@ export async function create(container, component, options) {
             } else if (anim) {
                 advanceFrame(a, anim, delta);
             }
-            placeSprite(a, anim);
+            placeSprite(a, anim, anim && a.filter ? tinted(anim, a.filter) : anim?.key);
         }
     }
 
@@ -576,12 +666,6 @@ export async function create(container, component, options) {
         setState(a, "sleep");
     }
 
-    /**
-     * Animation en cours : un coup trop long (onglet en arrière-plan, navigateur ralenti) est abandonné au bout de
-     * MAX_PLAY, tout le monde est remis à sa place, et l'ancienne animation s'arrête à sa prochaine étape (CANCELLED) au
-     * lieu de bouger les pièces du coup suivant.
-     */
-    let current = null;
     const CANCELLED = Symbol("annulé");
 
     /**
@@ -667,12 +751,17 @@ export async function create(container, component, options) {
                 if (current === run && !disposed) { current = null; sync(step.after); } // fini, ou abandonné
             });
         },
-        /** Marques : selected, moves ({ to, capture, super }), blocked (croix), weak (vert), resist (rouge), last, check. */
+        /**
+         * Marques : selected, moves ({ to, capture, super }), blocked (croix, en contraste élevé), weak (vert, ou rouge et bouclier cassé),
+         * resist (rouge, ou bleu et bouclier), last, check.
+         */
         highlight(next) { marks = next ?? {}; drawMarks(); },
         /** Toutes les pièces à leur place, sans animation. */
         setPosition(p) { if (p) sync(p); },
         /** Animations au repos (Idle en boucle) ou pièces figées, sauf la sélectionnée. */
         setIdle(animated) { idleAnimated = animated !== false; },
+        /** Contraste élevé : cadres vert et rouge ; sinon teintes, boucliers et animations. */
+        setContrast(on) { contrast = on === true; drawMarks(); },
         dispose() {
             disposed = true;
             observer.disconnect();

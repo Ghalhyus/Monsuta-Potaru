@@ -102,7 +102,8 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         var browser = site.Browser();
         var home = await browser.GetAsync("/");
         Assert.Equal(HttpStatusCode.OK, home.StatusCode);
-        Assert.Contains("Rejoindre une partie d'échecs avec un code", WebUtility.HtmlDecode(await home.Content.ReadAsStringAsync()));
+        // Plus de bouton des échecs sur l'accueil (retiré le 2026-11-23) : le lien reste sur la page de connexion
+        Assert.DoesNotContain("Rejoindre une partie d'échecs avec un code", WebUtility.HtmlDecode(await home.Content.ReadAsStringAsync()));
         Assert.True(File.Exists(site.DatabasePath)); // la base temporaire, pas celle du poste
         Assert.True(home.Headers.Contains("Content-Security-Policy"));
         var page = await browser.GetAsync("/inventaire");
@@ -245,15 +246,21 @@ public sealed class SiteTests(SiteFactory site) : IClassFixture<SiteFactory>
         // propre formulaire (case décochée : rien d'envoyé ; « Revenir aux tris d'origine » n'y touche pas)
         Assert.False(Parser.ParseDocument(gridTampered).QuerySelector("input[name=figes]")?.HasAttribute("checked") ?? true);
         Assert.Equal("Désactiver les animations", Parser.ParseDocument(gridTampered).QuerySelector("label[for=echecs-repos]")?.TextContent);
-        var (_, still) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["figes"] = "oui" });
+        // « Contraste élevé » dans le même formulaire, décochée par défaut
+        Assert.False(Parser.ParseDocument(gridTampered).QuerySelector("input[name=contraste]")?.HasAttribute("checked") ?? true);
+        Assert.Equal("Contraste élevé", Parser.ParseDocument(gridTampered).QuerySelector("label[for=echecs-contraste]")?.TextContent);
+        var (_, still) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["figes"] = "oui", ["contraste"] = "oui" });
         var stillPage = Parser.ParseDocument(still);
-        Assert.Contains("Pokémon des échecs figés au repos.", stillPage.QuerySelector(".alert")?.TextContent ?? still);
+        Assert.Contains("Réglages des échecs enregistrés.", stillPage.QuerySelector(".alert")?.TextContent ?? still);
         Assert.True(stillPage.QuerySelector("input[name=figes]")?.HasAttribute("checked"));
+        Assert.True(stillPage.QuerySelector("input[name=contraste]")?.HasAttribute("checked"));
         var (_, stillKept) = await Submit(browser, "/Account/Manage/Preferences", "sorts", new Dictionary<string, string> { ["Action"] = "reset" });
         Assert.True(Parser.ParseDocument(stillKept).QuerySelector("input[name=figes]")?.HasAttribute("checked"));
-        var (_, animated) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["figes"] = "" });
-        Assert.Contains("Pokémon des échecs animés au repos.", Parser.ParseDocument(animated).QuerySelector(".alert")?.TextContent ?? animated);
+        Assert.True(Parser.ParseDocument(stillKept).QuerySelector("input[name=contraste]")?.HasAttribute("checked"));
+        var (_, animated) = await Submit(browser, "/Account/Manage/Preferences", "chess", new Dictionary<string, string> { ["figes"] = "", ["contraste"] = "" }); // cases décochées
+        Assert.Contains("Réglages des échecs enregistrés.", Parser.ParseDocument(animated).QuerySelector(".alert")?.TextContent ?? animated);
         Assert.False(Parser.ParseDocument(animated).QuerySelector("input[name=figes]")?.HasAttribute("checked") ?? true);
+        Assert.False(Parser.ParseDocument(animated).QuerySelector("input[name=contraste]")?.HasAttribute("checked") ?? true);
 
         // Adresse mail : mauvais mot de passe, puis la bonne
         var (_, wrongEmail) = await Submit(browser, "/Account/Manage/Email", "change-email", new Dictionary<string, string>

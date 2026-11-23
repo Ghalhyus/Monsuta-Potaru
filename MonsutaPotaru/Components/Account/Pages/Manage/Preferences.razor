@@ -124,19 +124,26 @@
     </form>
 </Block>
 
-@* Pokémon des échecs animés au repos ou figés : leur propre formulaire. Le même choix se fait pendant une partie (case
-   « Désactiver les animations » de la page « Échecs » : cochée, ils sont figés). *@
+@* Pokémon des échecs animés au repos ou figés, contraste élevé : leur propre formulaire. Les mêmes choix se font pendant
+   une partie (cases « Désactiver les animations », cochée : ils sont figés, et « Contraste élevé » de la page « Échecs »). *@
 <Block Title="Échecs">
     <p>
         Choisis si les Pokémon des échecs bougent au repos, sur le plateau et chez les K.O. Figés, ils ne s'animent que pour
         marcher, attaquer ou encaisser un coup, et celui que tu sélectionnes s'anime pour te montrer ton choix.<br/>
-        Tu peux aussi changer ce réglage pendant une partie.
+        En contraste élevé, quand tu choisis un Pokémon, ceux de l'adversaire sont entourés d'un cadre vert (il leur est
+        super efficace) ou rouge (il ne peut pas les manger), au lieu d'être teintés en rouge ou en bleu avec un petit
+        bouclier.<br/>
+        Tu peux aussi changer ces réglages pendant une partie.
     </p>
     <form method="post" @formname="chess" @onsubmit="OnChessSubmitAsync">
         <AntiforgeryToken />
         <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" id="echecs-repos" name="figes" value="oui" checked="@(!saved.ChessIdle)" />
             <label class="form-check-label small" for="echecs-repos">Désactiver les animations</label>
+        </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="echecs-contraste" name="contraste" value="oui" checked="@saved.ChessContrast" />
+            <label class="form-check-label small" for="echecs-contraste">Contraste élevé</label>
         </div>
         <div class="d-flex flex-wrap gap-2 mt-3">
             <button type="submit" class="btn btn-primary">Enregistrer</button>
@@ -211,6 +218,7 @@
             ? SortPreferences.Default with
             {
                 Battle = saved.Battle, BattleEnlarged = saved.BattleEnlarged, CompletionView = saved.CompletionView, ChessIdle = saved.ChessIdle,
+                ChessContrast = saved.ChessContrast,
             }
             : new SortPreferences
         {
@@ -218,6 +226,7 @@
             BattleEnlarged = saved.BattleEnlarged,
             CompletionView = saved.CompletionView,
             ChessIdle = saved.ChessIdle,
+            ChessContrast = saved.ChessContrast,
             Inventory = SiteSorts.InventoryTabs.ToDictionary(t => t.Key, t => SiteSorts.ItemFromQuery(Posted(t.Value)) ?? default),
             Collection = SiteSorts.CollectionFromQuery(Posted(CollectionKey)) ?? default,
             LivingDex = SiteSorts.LivingDexFromQuery(Posted(LivingDexKey)) ?? default,
@@ -264,12 +273,17 @@
         RedirectManager.RedirectToCurrentPageWithStatus(result.Message, HttpContext);
     }
 
-    /// <summary>« Désactiver les animations » des échecs : la case cochée (Pokémon figés au repos) envoie « oui », décochée rien du tout.</summary>
+    /// <summary>
+    /// Cases des échecs, « Désactiver les animations » (Pokémon figés au repos) et « Contraste élevé » : cochée, une case
+    /// envoie « oui », décochée rien du tout.
+    /// </summary>
     private async Task OnChessSubmitAsync()
     {
         if (user is null)
             return; // compte supprimé : page redirigée
-        var result = await PreferenceStore.SetChessIdleAsync(user.Id, HttpContext.Request.Form["figes"].FirstOrDefault() != "oui");
+        var form = HttpContext.Request.Form;
+        var result = await PreferenceStore.SetChessDisplayAsync(user.Id, form["figes"].FirstOrDefault() != "oui",
+            form["contraste"].FirstOrDefault() == "oui");
         if (!result.Ok)
         {
             message = AccountService.AsError(result.Message);

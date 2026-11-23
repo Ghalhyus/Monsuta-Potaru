@@ -17,8 +17,10 @@
    équipe sans voir celle de l'autre (la même : chacun la garde ou en change) ; l'hôte joue les blancs. Le plateau est dessiné
    et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
    relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Les Pokémon au repos
-   peuvent rester figés (préférence du compte, case « Désactiver les animations ») : seule la pièce choisie s'anime. Quitter la page
-   pendant la partie demande confirmation, puis fait perdre. *@
+   peuvent rester figés (préférence du compte, case « Désactiver les animations ») : seule la pièce choisie s'anime. Face à
+   la pièce choisie, les pièces adverses faibles sont teintées en rouge (bouclier cassé) et celles qui
+   résistent en bleu (bouclier) ; case « Contraste élevé » (préférence du compte) : des cadres vert et
+   rouge à la place. Quitter la page pendant la partie demande confirmation, puis fait perdre. *@
 <NavigationLock ConfirmExternalNavigation="InGame" OnBeforeInternalNavigation="BeforeLeaving" />
 
 @if (BoardShown)
@@ -177,6 +179,10 @@ else
                                 <input class="form-check-input" type="checkbox" id="chess-idle" checked="@(!idleAnimated)" @onchange="IdleChanged" />
                                 <label class="form-check-label" for="chess-idle">Désactiver les animations</label>
                             </div>
+                            <div class="form-check small mb-2 chess-contrast">
+                                <input class="form-check-input" type="checkbox" id="chess-contrast" checked="@contrast" @onchange="ContrastChanged" />
+                                <label class="form-check-label" for="chess-contrast">Contraste élevé</label>
+                            </div>
                             <div class="chess-status @(StatusClass())" aria-live="polite">
                                 <span class="chess-status-text">@StatusText()</span>
                                 @if (SecondsLeft is { } left && s.Stage == ChessStage.Playing && !animating)
@@ -238,8 +244,8 @@ else
                                     {
                                         <button type="button" class="btn btn-primary chess-rematch" disabled="@(busy || animating)" @onclick="Rematch">Recommencer avec @other.Pseudo</button>
                                     }
-                                    <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
                                     <button type="button" class="btn @(s.Accepted ? "btn-outline-primary" : "btn-primary")" @onclick="NewGame">Nouvelle partie</button>
+                                    <a class="btn btn-outline-secondary" href="">Retour à l'accueil</a>
                                 </div>
                             }
                         </div>
@@ -421,6 +427,7 @@ else
     private IJSObjectReference? board;
     private bool boardStarting;
     private bool idleAnimated = true; // Pokémon animés au repos (préférence du compte ; sans compte : pour la page)
+    private bool contrast; // contraste élevé : cadres au lieu des filtres et boucliers (préférence du compte ; sans compte : pour la page)
     private DotNetObjectReference<Chess>? selfRef;
     private int played; // coups déjà montrés sur le plateau
     private bool animating;
@@ -472,7 +479,9 @@ else
         Hub.RequestsChanged += OnRequestsChanged;
         if (!signedIn)
             return;
-        idleAnimated = (await PreferenceStore.SortsAsync(userId)).ChessIdle;
+        var preferences = await PreferenceStore.SortsAsync(userId);
+        idleAnimated = preferences.ChessIdle;
+        contrast = preferences.ChessContrast;
         if (Hub.Active(userId) is { } active) // page rechargée pendant une partie : on la reprend où elle en est
             Join(active);
         friends = (await FriendStore.ListAsync(userId)).Friends.ToList();
@@ -531,6 +540,7 @@ else
             units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.DonjonFolder, name = u.Mon.Name }),
             position = start.Position,
             idle = idleAnimated,
+            contrast,
             timing = new
             {
                 walk = ChessTiming.WalkPerSquare.TotalMilliseconds,
@@ -602,8 +612,8 @@ else
         if (session is null)
             return;
         snapshot = session.Snapshot(userId);
-        if (snapshot.Stage != ChessStage.Requested && message?.StartsWith("Invitation envoyée", StringComparison.Ordinal) == true)
-            message = null; // l'ami a répondu
+        if (snapshot.Stage != ChessStage.Requested && IsWaitingMessage(message))
+            message = null; // l'ami a répondu, ou l'adversaire a saisi le code : le bandeau décalerait le plateau
         if (snapshot.Stage == ChessStage.Done && snapshot.Notice is { } notice && lastText != notice && session.Steps(played).Count == 0)
             lastText = notice; // abandon, temps écoulé, page quittée
         if (snapshot.Stage != ChessStage.Playing && selected is not null)
@@ -616,6 +626,12 @@ else
             return; // OnAfterRenderAsync crée le plateau
         await PlayAsync();
     });
+
+    /// <summary>Messages de l'attente d'un adversaire (invitation envoyée, code ou lien copié ou à recopier) : effacés quand elle finit.</summary>
+    private static bool IsWaitingMessage(string? text) =>
+        text is not null && WaitingMessages.Any(start => text.StartsWith(start, StringComparison.Ordinal));
+
+    private static readonly string[] WaitingMessages = ["Invitation envoyée", "Code copié", "Lien copié", "Copie impossible"];
 
     private void OnRequestsChanged(string user)
     {
@@ -932,15 +948,18 @@ else
         await Highlight();
     }
 
-    /// <summary>Ce que disent les marques de la pièce choisie (cadres vert et rouge, croix), seulement celles qui sont là.</summary>
+    /// <summary>
+    /// Ce que disent les marques de la pièce choisie, seulement celles qui sont là : cadres vert et rouge en contraste élevé,
+    /// sinon Pokémon teintés en rouge (bouclier cassé) ou en bleu (bouclier) ; croix, en contraste élevé seulement.
+    /// </summary>
     private string MatchupLegend()
     {
         var parts = new List<string>();
         if (options.Matchups.Any(m => m.Effect > 1))
-            parts.Add("cadre vert : il leur est super efficace");
+            parts.Add(contrast ? "cadre vert : il leur est super efficace" : "en rouge, bouclier cassé : il leur est super efficace");
         if (options.Matchups.Any(m => m.Effect < 1))
-            parts.Add("cadre rouge : il ne peut pas les manger");
-        if (options.Blocked.Count > 0)
+            parts.Add(contrast ? "cadre rouge : il ne peut pas les manger" : "en bleu, bouclier : il ne peut pas les manger");
+        if (contrast && options.Blocked.Count > 0)
             parts.Add("croix rouge : à sa portée, mais son type l'empêche de les manger");
         return parts.Count == 0 ? "" : $" Sur le plateau, {string.Join(" ; ", parts)}.";
     }
@@ -998,6 +1017,31 @@ else
             info = "Ton choix vaut pour cette partie, mais il n'a pas pu être gardé dans ton compte.";
     }
 
+    /// <summary>
+    /// Case « Contraste élevé » (cochée : cadres vert et rouge ; décochée : filtres, boucliers et animations) : le plateau et
+    /// la légende suivent tout de suite ; enregistrée dans le compte (sans compte : gardée pour la page seulement).
+    /// </summary>
+    private async Task ContrastChanged(ChangeEventArgs e)
+    {
+        var before = MatchupLegend();
+        contrast = e.Value is true || (e.Value is string text && bool.TryParse(text, out var on) && on);
+        if (before.Length > 0 && info is not null)
+            info = info.Replace(before, MatchupLegend()); // légende de la pièce choisie dans le nouveau mode, le reste ne bouge pas
+        if (board is not null)
+        {
+            try
+            {
+                await board.InvokeVoidAsync("setContrast", contrast);
+            }
+            catch (JSDisconnectedException)
+            {
+                return; // onglet fermé
+            }
+        }
+        if (signedIn && !(await PreferenceStore.SetChessContrastAsync(userId, contrast)).Ok)
+            info = "Ton choix vaut pour cette partie, mais il n'a pas pu être gardé dans ton compte.";
+    }
+
     private async Task Forfeit()
     {
         if (session is null || !await JS.InvokeAsync<bool>("confirm", "Abandonner la partie ? Tu perdras."))
@@ -1006,8 +1050,9 @@ else
     }
 
     /// <summary>
-    /// Marques du plateau : pièce choisie, cases permises (super efficace à part), pièces adverses faibles (cadre vert) ou
-    /// qui résistent (cadre rouge), pièces atteintes que son type ne peut pas manger (croix rouge), dernier coup, roi en échec.
+    /// Marques du plateau : pièce choisie, cases permises (super efficace à part), pièces adverses faibles (cadre vert, ou
+    /// rouge et bouclier cassé) ou qui résistent (cadre rouge, ou bleu et bouclier), pièces atteintes que son type ne peut
+    /// pas manger (croix rouge, en contraste élevé), dernier coup, roi en échec.
     /// </summary>
     private async Task Highlight()
     {
