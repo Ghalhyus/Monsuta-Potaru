@@ -46,6 +46,32 @@ public static partial class PokemonSprites
     public static bool HasDonjonSprites(ushort species) => DonjonExists($"{species:0000}");
 
     /// <summary>
+    /// Cette forme a ses propres sprites Donjon Mystère, chromatiques ou non (sans retomber sur ceux de l'espèce, comme
+    /// <see cref="DonjonFolder"/> le ferait) : brouillons d'équipes d'échecs, qui préviennent quand le plateau montrerait
+    /// une autre forme.
+    /// </summary>
+    public static bool HasDonjonForm(ushort species, byte form, EntityContext context, bool shiny)
+    {
+        var dex = $"{species:0000}";
+        string? folder = dex;
+        if (form != 0)
+            folder = FormName(species, form, context) is { } name && DonjonForm(dex, name) is { } key ? $"{dex}/{key}" : null;
+        if (folder is null)
+            return false;
+        return DonjonExists(shiny ? $"{(form == 0 ? $"{dex}/0000" : folder)}/0001" : folder);
+    }
+
+    /// <summary>
+    /// Cette forme a sa propre image fixe (sans retomber sur celle de l'espèce, comme <see cref="Url(ushort, byte, EntityContext, bool, int, bool, bool)"/>).
+    /// </summary>
+    public static bool HasImage(ushort species, byte form, EntityContext context, bool shiny)
+    {
+        var url = Url(species, form, context, female: false, heldItem: 0, shiny);
+        var folder = shiny ? "chromatique/" : "";
+        return _files.Contains(url["images/pokemon/".Length..]) && (form == 0 || url != $"images/pokemon/{folder}{species}.png");
+    }
+
+    /// <summary>
     /// Dossier des sprites Donjon Mystère d'un Pokémon (SpriteCollab : « images/donjon/0026/0001/ » Raichu d'Alola,
     /// « .../0001/0001/ » sa version chromatique, « 0025/0000/0000/0002/ » Pikachu femelle) : celui de sa forme, ou de sa
     /// Méga-Évolution s'il tient sa gemme (comme son image dans la collection), sinon celui de l'espèce ; chromatique et

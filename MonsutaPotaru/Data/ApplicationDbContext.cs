@@ -25,6 +25,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
     public DbSet<BattleRecord> BattleRecords => Set<BattleRecord>();
     public DbSet<ChessRecord> ChessRecords => Set<ChessRecord>();
+    public DbSet<ChessTeamDraft> ChessTeamDrafts => Set<ChessTeamDraft>(); // administration → « Brouillons d'échecs »
     public DbSet<HideSeekRecord> HideSeekRecords => Set<HideSeekRecord>();
     public DbSet<GtsPokemon> GtsPokemon => Set<GtsPokemon>();
 

@@ -49,6 +49,7 @@ public abstract class PageTestContext : BunitContext
         Services.AddSingleton<GtsEvents>();
         Services.AddScoped<BattleService>();
         Services.AddScoped<ChessService>();
+        Services.AddScoped<ChessDraftService>();
         Services.AddScoped<MiniGameService>();
         Services.AddSingleton(_ => new ChessHub(TimeProvider.System, ticking: false));
         Services.AddScoped<HideSeekService>();

@@ -56,10 +56,13 @@ public sealed record ChessLine(ChessPiece Piece, IReadOnlyList<ChessMon> Members
 /// gardé en base ; le nom vient du roi (« Équipe Nidoking », demandé par l'utilisateur le 2026-11-22 : avant, le type du
 /// thème, « Équipe Poison »).
 /// </summary>
-public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members)
+/// <param name="Draft">
+/// Brouillon de l'administration (« brouillon 3 », ajouté au nom), jamais joué ; null pour une équipe du jeu.
+/// </param>
+public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members, string? Draft = null)
 {
-    /// <summary>« Équipe Nidoking » : le nom de son roi.</summary>
-    public string Name => $"Équipe {Of(ChessPiece.King).Name}";
+    /// <summary>« Équipe Nidoking » : le nom de son roi (« Équipe Nidoking (brouillon 3) » pour un brouillon).</summary>
+    public string Name => Draft is null ? $"Équipe {Of(ChessPiece.King).Name}" : $"Équipe {Of(ChessPiece.King).Name} ({Draft})";
 
     /// <summary>Le (premier) Pokémon de cette pièce.</summary>
     public ChessMon Of(ChessPiece piece) => Members.First(m => m.Piece == piece);
@@ -165,7 +168,7 @@ public static class ChessTeams
         new("sol",
         [
             new(111, 0, "Rhinocorne", PokeType.Ground, ChessPiece.Pawn),
-            new(322, 0, "Chamalot", PokeType.Fire, ChessPiece.Pawn),
+            new(322, 0, "Chamallot", PokeType.Fire, ChessPiece.Pawn),
             new(623, 0, "Golemastoc", PokeType.Ghost, ChessPiece.Rook),
             new(330, 0, "Libégon", PokeType.Dragon, ChessPiece.Knight),
             new(260, 0, "Laggron", PokeType.Water, ChessPiece.Bishop),

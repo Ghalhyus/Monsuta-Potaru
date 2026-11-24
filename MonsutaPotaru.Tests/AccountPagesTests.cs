@@ -243,6 +243,136 @@ public sealed class AccountPagesTests : PageTestContext
         Assert.Contains("active", cut.FindAll("[role=tab]")[1].ClassName);
     }
 
+    /// <summary>
+    /// Onglet « Brouillons d'échecs » : copie d'une équipe du jeu, Pokémon cherché et choisi, type changé, note, comptée ;
+    /// puis l'onglet « Échecs » avec les brouillons : le brouillon à la place de l'équipe, les écarts avec le jeu.
+    /// </summary>
+    [Fact]
+    public async Task Admin_ChessDrafts_EditThenCompare()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo("administration?onglet=brouillons-echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText("Aucun brouillon pour l'instant.");
+
+        cut.Find("#chess-draft-base").Change("psy");
+        await cut.Find("#chess-draft-from").ClickAsync(new());
+        cut.WaitForText("Brouillon 1 créé d'après l'équipe Gallame");
+        Assert.Contains("brouillon=1", navigation.Uri);
+        Assert.NotNull(cut.Find("#chess-draft-editor"));
+
+        // Le roi : Gallame remplacé par Lucario, cherché sans accent ni majuscule
+        await cut.Find("#chess-draft-slot-King").QuerySelectorAll("button")[0].ClickAsync(new());
+        await cut.Find("#chess-draft-search").InputAsync(new() { Value = "lucar" });
+        await cut.FindAll(".chess-draft-result")[0].ClickAsync(new()); // Lucario, avant Méga-Lucario
+        cut.WaitForText("Roi : Lucario (Combat).");
+        Assert.Contains("Brouillon 1 : Équipe Lucario", cut.Text());
+        // Son autre type
+        Assert.Equal(["Combat", "Acier"], cut.FindAll("#chess-draft-slot-King option").Select(o => o.TextContent));
+        await cut.Find("#chess-draft-slot-King select").ChangeAsync(new() { Value = "Steel" });
+        cut.WaitForText("Roi : Lucario (Acier).");
+
+        // 2e espèce d'un pion : seulement les Pokémon du type de la première (Tarsal, Psy)
+        await cut.Find("#chess-draft-slot-PawnA2").QuerySelectorAll("button")[0].ClickAsync(new());
+        await cut.Find("#chess-draft-search").InputAsync(new() { Value = "pikachu" });
+        Assert.Empty(cut.FindAll(".chess-draft-result"));
+        await cut.Find("#chess-draft-search").InputAsync(new() { Value = "kirlia" });
+        await cut.FindAll(".chess-draft-result")[0].ClickAsync(new());
+        cut.WaitForText("Kirlia (Psy).");
+
+        await cut.Find("#chess-draft-note").ChangeAsync(new() { Value = "roi Acier" });
+        await cut.Click("Enregistrer la note");
+        cut.WaitForText("Note enregistrée.");
+        await cut.Find("#chess-draft-counted").ChangeAsync(new() { Value = true });
+        cut.WaitForText("Brouillon 1 est compté dans l'équilibrage.");
+
+        // Copier pour Claude : le texte affiché (au cas où la copie échouerait)
+        await cut.Find("#chess-draft-copy").ClickAsync(new());
+        cut.WaitForText("Texte copié");
+        Assert.Contains("- Roi : Lucario (n° 448), Acier", cut.Find("#chess-draft-export").TextContent);
+        Assert.Contains("- Pion en a, c, e, g (2e espèce) : Kirlia (n° 281), Psy", cut.Find("#chess-draft-export").TextContent);
+
+        // L'équilibrage avec les brouillons : le brouillon en premier, à la place de l'équipe Gallame, avec ses écarts
+        await cut.Click("Échecs");
+        cut.WaitForText("Rois menacés");
+        Assert.Contains("onglet=echecs", navigation.Uri);
+        Assert.Empty(cut.FindAll(".chess-balance-delta"));
+        Assert.DoesNotContain("Lucario", cut.Find("#chess-balance-summary").TextContent);
+        await cut.Find("#chess-balance-with-drafts").ChangeAsync(new() { Value = true });
+        Assert.Contains("brouillons=oui", navigation.Uri);
+        var rows = cut.FindAll("#chess-balance-summary tbody tr");
+        Assert.Equal(ChessTeams.All.Count, rows.Count);
+        Assert.Contains("Équipe Lucario (brouillon 1)", rows[0].TextContent);
+        Assert.NotEmpty(cut.FindAll(".chess-balance-delta"));
+        var draft = (await Services.GetRequiredService<ChessDraftService>().ListAsync("sacha"))!.Single().Team!;
+        var fire = ChessTeams.Find("feu")!;
+        var cell = rows[0].QuerySelectorAll("td")[1].TextContent;
+        var now = ChessBalance.Points(ChessBalance.Matchup(draft, fire).Edible);
+        var before = ChessBalance.Points(ChessBalance.Matchup(ChessTeams.Find("psy")!, fire).Edible);
+        Assert.Contains($"{now} %", cell);
+        if (now != before)
+            Assert.Contains($"({(now > before ? "+" : "−")}{Math.Abs(now - before)})", cell);
+        Assert.NotNull(cut.Find("#equipe-brouillon-1"));
+
+        // Décompté : l'équipe du jeu revient
+        await cut.Find("#chess-balance-draft-1").ChangeAsync(new() { Value = false });
+        cut.WaitForText("Brouillon 1 n'est plus compté dans l'équilibrage.");
+        Assert.DoesNotContain("Lucario", cut.Find("#chess-balance-summary").TextContent);
+
+        // Retour aux brouillons : le brouillon ouvert l'est encore ; copie, puis suppression
+        await cut.Click("Brouillons d'échecs");
+        cut.WaitForText("Brouillon 1 : Équipe Lucario");
+        Assert.NotNull(cut.Find("#chess-draft-editor"));
+        await cut.Click("Dupliquer");
+        cut.WaitForText("Brouillon 2 : copie du brouillon 1");
+        await cut.Find("#chess-draft-1").QuerySelectorAll("button").Single(b => b.TextContent.Trim() == "Supprimer").ClickAsync(new());
+        await cut.Click("Supprimer pour de bon");
+        cut.WaitForText("Brouillon 1 supprimé.");
+        Assert.Single(cut.FindAll(".chess-draft-list .list-group-item"));
+    }
+
+    [Fact]
+    public async Task Admin_ChessDrafts_NewTeamAddedToTheBalance()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        var drafts = Services.GetRequiredService<ChessDraftService>();
+        var id = (await drafts.CreateAsync("sacha", null)).Id!.Value;
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo($"administration?onglet=brouillons-echecs&brouillon={id}");
+        var cut = Render<Admin>();
+        cut.WaitForText("Nouvelle équipe : comptée, elle s'ajoute");
+        Assert.Contains("À remplir avant d'être compté", cut.Find("#chess-draft-warnings").TextContent);
+        Assert.NotNull(cut.Find("#chess-draft-slot-PawnA2 button[disabled]")); // 2e espèce : la première d'abord
+
+        foreach (var (slot, species) in new[] { (ChessDraftSlot.PawnA1, 1), (ChessDraftSlot.PawnB1, 4), (ChessDraftSlot.Rook, 7),
+                     (ChessDraftSlot.Knight, 25), (ChessDraftSlot.Bishop, 39), (ChessDraftSlot.Queen, 52), (ChessDraftSlot.King, 150) })
+            Assert.True((await drafts.SetMemberAsync("sacha", id, slot, (ushort)species, 0, null)).Ok);
+        await drafts.SetCountedAsync("sacha", id, true);
+
+        navigation.NavigateTo("administration?onglet=echecs&brouillons=oui");
+        var balance = Render<Admin>();
+        balance.WaitForText("Rois menacés");
+        var rows = balance.FindAll("#chess-balance-summary tbody tr");
+        Assert.Equal(ChessTeams.All.Count + 1, rows.Count);
+        Assert.Contains("Équipe Mewtwo (brouillon 1)", rows[^1].TextContent);
+        // Nouvelle équipe : pas d'écart sur sa ligne (rien à comparer)
+        Assert.Empty(rows[^1].QuerySelectorAll(".chess-balance-delta"));
+        Assert.Equal(7 * 7 * (ChessTeams.All.Count + 1), balance.FindAll("table.chess-balance-big")[0].QuerySelectorAll("td").Length);
+    }
+
+    [Fact]
+    public async Task Admin_ChessDrafts_NotAdmin()
+    {
+        Assert.Null(await Services.GetRequiredService<ChessDraftService>().ListAsync("sacha"));
+        Services.GetRequiredService<NavigationManager>().NavigateTo("administration?onglet=brouillons-echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText(AdminService.NotAdminMessage);
+        Assert.Empty(cut.FindAll("#chess-drafts"));
+    }
+
     // ---------- Joueurs ----------
 
     [Fact]

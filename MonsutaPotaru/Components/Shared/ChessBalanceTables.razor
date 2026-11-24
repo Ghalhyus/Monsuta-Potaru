@@ -1,8 +1,55 @@
 @using MonsutaPotaru.Services
+@inject ChessDraftService Drafts
 @* Onglet « Échecs » de l'administration : l'équilibrage des équipes d'échecs, calculé d'après ChessTeams.All et la table
    des types (ChessBalance), rien en base. Trois synthèses (part mangeable, rois menacés, solde), puis chaque équipe
    contre les lignes (pièce et type : 7 par équipe, les pions ayant deux types) des sept équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
-   générée à part). *@
+   générée à part). Case « Avec les brouillons » (WithDrafts, gardée dans l'adresse par Admin.razor) : les brouillons
+   comptés (ChessDraftService.Teams) remplacent l'équipe qu'ils modifient ou s'ajoutent, et chaque chiffre montre son écart
+   avec les équipes du jeu (« (+6) »). *@
+
+<Block Title="Brouillons" Id="chess-balance-drafts">
+    @if (drafts.Count == 0)
+    {
+        <p class="small text-muted mb-0">
+            Aucun brouillon : crée une équipe ou modifie-en une dans l'onglet
+            <a href="administration?onglet=brouillons-echecs">« Brouillons d'échecs »</a>, puis compare-la ici.
+        </p>
+    }
+    else
+    {
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="chess-balance-with-drafts" checked="@WithDrafts"
+                   @onchange="e => SetWithDrafts(e.Value is true)" />
+            <label class="form-check-label" for="chess-balance-with-drafts">
+                Avec les brouillons comptés : ils remplacent l'équipe qu'ils modifient (ou s'ajoutent), et chaque chiffre
+                montre l'écart avec les équipes du jeu
+            </label>
+        </div>
+        <ul class="list-unstyled small mb-2 ms-4 chess-balance-draft-list">
+            @foreach (var draft in drafts)
+            {
+                var d = draft;
+                <li class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chess-balance-draft-@d.Id" checked="@d.Counted"
+                           disabled="@busy" @onchange="e => SetCounted(d, e.Value is true)" />
+                    <label class="form-check-label" for="chess-balance-draft-@d.Id">
+                        @d.Title : @d.TeamName
+                        <span class="text-muted">(@DraftDetails(d))</span>
+                        @if (!d.Complete)
+                        {
+                            <span class="badge text-bg-warning">incomplet : pas compté</span>
+                        }
+                    </label>
+                </li>
+            }
+        </ul>
+        @if (message is not null)
+        {
+            <p class="small @(messageIsError ? "text-danger" : "text-success") mb-2">@message</p>
+        }
+        <a href="administration?onglet=brouillons-echecs" class="small">Modifier les brouillons</a>
+    }
+</Block>
 
 <nav class="chess-balance-nav small mb-3" aria-label="Équipes">
     <a href="@Link("chess-balance-summary")">Synthèse</a>
@@ -45,12 +92,14 @@
                         @foreach (var other in Teams)
                         {
                             var m = ChessBalance.Matchup(team, other);
+                            var edible = ChessBalance.Points(m.Edible);
                             <td class="@(other == team ? withoutSelf ? "chess-balance-same chess-balance-excluded" : "chess-balance-same" : "")" style="--hue: @EdibleHue(m.Edible)">
-                                <strong>@ChessBalance.Points(m.Edible) %</strong>
+                                <strong>@edible %</strong>@Delta(edible, Before(team, other, (a, v) => ChessBalance.Points(ChessBalance.Matchup(a, v).Edible)), true)
                                 <span class="d-block small">dont ×2 : @ChessBalance.Points(m.Super) %</span>
                             </td>
                         }
-                        <td class="chess-balance-average"><strong>@ChessBalance.Points(ChessBalance.Average(team, withoutSelf)) %</strong></td>
+                        @{ var average = ChessBalance.Points(ChessBalance.Average(team, Teams, withoutSelf)); }
+                        <td class="chess-balance-average"><strong>@average %</strong>@Delta(average, AverageBefore(team), true)</td>
                     </tr>
                 }
             </tbody>
@@ -82,7 +131,7 @@
                         @foreach (var other in Teams)
                         {
                             var threats = ChessBalance.KingThreats(other, team);
-                            <td class="@(other == team ? "chess-balance-same" : "")" style="--hue: @ThreatHue(threats)">@threats</td>
+                            <td class="@(other == team ? "chess-balance-same" : "")" style="--hue: @ThreatHue(threats)">@threats@Delta(threats, Before(other, team, ChessBalance.KingThreats), false)</td>
                         }
                     </tr>
                 }
@@ -121,7 +170,7 @@
                             else
                             {
                                 var points = ChessBalance.Balance(team, other);
-                                <td style="--hue: @BalanceHue(points)">@(points > 0 ? "+" : "")@points</td>
+                                <td style="--hue: @BalanceHue(points)">@(points > 0 ? "+" : "")@points@Delta(points, Before(team, other, ChessBalance.Balance), true)</td>
                             }
                         }
                     </tr>
@@ -154,7 +203,89 @@
     /// <summary>Ordre des pièces : celui des listes d'équipes (roi d'abord).</summary>
     private static readonly ChessPiece[] Order = ChessTeamList.Order;
 
-    private static IReadOnlyList<ChessTeam> Teams => ChessTeams.All;
+    /// <summary>Administrateur qui regarde (les brouillons se lisent en revérifiant son rôle).</summary>
+    [Parameter, EditorRequired] public string UserId { get; set; } = "";
+
+    /// <summary>Case « Avec les brouillons » : gardée dans l'adresse (« &amp;brouillons=oui ») par la page.</summary>
+    [Parameter] public bool WithDrafts { get; set; }
+
+    [Parameter] public EventCallback<bool> WithDraftsChanged { get; set; }
+
+    private IReadOnlyList<ChessDraft> drafts = [];
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    /// <summary>Les équipes comparées : celles du jeu, ou avec les brouillons comptés.</summary>
+    private ChessBalanceTeams set = ChessBalanceTeams.Game;
+
+    private IReadOnlyList<ChessTeam> Teams => set.Teams;
+
+    protected override async Task OnInitializedAsync()
+    {
+        drafts = await Drafts.ListAsync(UserId) ?? [];
+        Refresh();
+    }
+
+    protected override void OnParametersSet() => Refresh();
+
+    /// <summary>Refait la liste des équipes comparées (case, ou brouillons changés).</summary>
+    private void Refresh() => set = WithDrafts ? ChessDraftService.Teams(drafts) : ChessBalanceTeams.Game;
+
+    private async Task SetWithDrafts(bool on)
+    {
+        WithDrafts = on;
+        Refresh();
+        await WithDraftsChanged.InvokeAsync(on);
+    }
+
+    private async Task SetCounted(ChessDraft draft, bool counted)
+    {
+        busy = true;
+        try
+        {
+            var result = await Drafts.SetCountedAsync(UserId, draft.Id, counted);
+            (message, messageIsError) = (result.Message, !result.Ok);
+            drafts = await Drafts.ListAsync(UserId) ?? [];
+            Refresh();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    /// <summary>« modifie l'équipe Gallame ; sans Combat ».</summary>
+    private static string DraftDetails(ChessDraft draft) =>
+        (draft.Base is { } b ? $"modifie l'{b.InSentence}" : "nouvelle équipe") + (draft.Note.Length > 0 ? $" ; {draft.Note}" : "");
+
+    /// <summary>
+    /// Valeur des deux équipes du jeu que <paramref name="first"/> et <paramref name="second"/> remplacent (pour l'écart) ;
+    /// null sans les brouillons, quand l'une est une nouvelle équipe, ou quand ce sont deux équipes du jeu.
+    /// </summary>
+    private int? Before(ChessTeam first, ChessTeam second, Func<ChessTeam, ChessTeam, int> value) =>
+        WithDrafts && set.OriginOf(first) is { } a && set.OriginOf(second) is { } b && (a != first || b != second) ? value(a, b) : null;
+
+    /// <summary>
+    /// Moyenne de l'équipe du jeu que <paramref name="team"/> remplace (elle-même pour une équipe du jeu : une nouvelle
+    /// équipe change la moyenne des autres), contre les équipes du jeu ; null sans les brouillons ou pour une nouvelle équipe.
+    /// </summary>
+    private int? AverageBefore(ChessTeam team) =>
+        WithDrafts && set.OriginOf(team) is { } origin ? ChessBalance.Points(ChessBalance.Average(origin, ChessTeams.All, withoutSelf)) : null;
+
+    /// <summary>
+    /// Écart avec les équipes du jeu (« (+6) »), rien s'il est nul ou sans objet ; vert s'il va dans le bon sens pour
+    /// l'équipe de la ligne (<paramref name="higherIsBetter"/> : plus elle mange, mieux c'est ; un roi plus menacé, moins bien).
+    /// </summary>
+    private static RenderFragment Delta(int now, int? before, bool higherIsBetter) => __builder =>
+    {
+        if (before is { } b && now != b)
+        {
+            var better = now > b == higherIsBetter;
+            <span class="chess-balance-delta @(better ? "chess-balance-better" : "chess-balance-worse")"
+                  title="@($"Avec les équipes du jeu : {b}")">(@(now > b ? "+" : "−")@Math.Abs(now - b))</span>
+        }
+    };
 
     /// <summary>Ancre d'une équipe (« equipe-psy »).</summary>
     private static string TeamAnchor(ChessTeam team) => $"equipe-{team.Id}";
@@ -175,7 +306,7 @@
     private static RenderFragment TeamHeader(ChessTeam team) => __builder =>
     {
         var king = team.Of(ChessPiece.King);
-        <span class="chess-balance-team">
+        <span class="chess-balance-team @(team.Draft is null ? "" : "chess-balance-draft")">
             <img src="@king.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
             <span>@team.Name</span>
         </span>
@@ -213,7 +344,7 @@
     /// Les lignes de <paramref name="team"/> en lignes, les 49 des sept équipes en colonnes (la sienne d'abord) ;
     /// <paramref name="attacking"/> : la ligne mange la colonne, sinon la colonne mange la ligne.
     /// </summary>
-    private static RenderFragment BigTable(ChessTeam team, bool attacking) => __builder =>
+    private RenderFragment BigTable(ChessTeam team, bool attacking) => __builder =>
     {
         var columns = Teams.OrderBy(t => t == team ? 0 : 1).ToList();
         <div class="chess-help-scroll chess-balance-big-scroll">

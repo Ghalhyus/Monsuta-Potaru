@@ -87,9 +87,15 @@ public static class ChessBalance
     /// Part mangeable moyenne de cette équipe contre les sept équipes, elle comprise (deux joueurs peuvent prendre la même),
     /// ou contre les six autres seulement (<paramref name="withoutSelf"/> : case de l'onglet « Échecs »).
     /// </summary>
-    public static double Average(ChessTeam team, bool withoutSelf = false)
+    public static double Average(ChessTeam team, bool withoutSelf = false) => Average(team, ChessTeams.All, withoutSelf);
+
+    /// <summary>
+    /// Part mangeable moyenne de cette équipe contre <paramref name="teams"/> (les équipes du jeu, ou avec les brouillons
+    /// comptés : <see cref="ChessDraftService.Teams"/>), elle comprise sauf avec <paramref name="withoutSelf"/>.
+    /// </summary>
+    public static double Average(ChessTeam team, IReadOnlyList<ChessTeam> teams, bool withoutSelf = false)
     {
-        var opponents = ChessTeams.All.Where(t => !withoutSelf || t.Id != team.Id).ToList();
+        var opponents = teams.Where(t => !withoutSelf || t.Id != team.Id).ToList();
         return opponents.Count == 0 ? 0 : opponents.Average(t => Matchup(team, t).Edible);
     }
 

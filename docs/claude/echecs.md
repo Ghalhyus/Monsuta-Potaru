@@ -6,7 +6,8 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 (règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
 (`docs/claude/statistiques.md`), `ChessBalanceTests` (équilibrage, onglet « Échecs » de l'administration),
 `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
-pièces », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe).
+pièces », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe),
+`ChessDraftTests` (brouillons d'équipes et catalogue `ChessDex`, onglet « Brouillons d'échecs » de l'administration).
 
 ## Choix de l'utilisateur (2026-11-22)
 - Demande d'origine : un seul type par Pokémon ; super efficace = la pièce rejoue ; neutre = elle mange ; pas très
@@ -111,7 +112,8 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 
 ## Deux types de pion par équipe (demandé le 2026-11-24)
 - Pions ajoutés par l'utilisateur, un sur deux : Lippouti (Glace, Psy), Hélionceau (Normal, Feu), Emolga (Vol,
-  Électrique), Nosferapti (Poison), Tentacool (Poison, Eau), Nénupiot (Eau, Plante ; remplacé le même jour par Granivol, Vol), Chamalot (Feu, Sol). Il avait écrit
+  Électrique), Nosferapti (Poison), Tentacool (Poison, Eau), Nénupiot (Eau, Plante ; remplacé le même jour par Granivol, Vol), Chamallot (Feu, Sol ;
+  écrit « Chamalot » jusqu'au 2026-11-24, trouvé par `ChessDraftTests.Dex_KnowsEveryGameTeamMember`). Il avait écrit
   Nosferapti « Glace » : corrigé en **Vol** (Poison / Vol ; chaque pièce garde un de ses vrais types), accord de
   l'utilisateur. « hélionceau » → Hélionceau.
 - Le même jour, remplacés à sa demande : Hélionceau par **Caninos d'Hisui** (58, forme 1, gardé **Roche** : Feu est
@@ -265,6 +267,48 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 - Liens vers les équipes : l'adresse entière (`administration?onglet=echecs#equipe-psy`) ; « #equipe-psy » seul partirait
   vers l'accueil (base « / »). Blazor appelle bien `scrollIntoView` ; dans le navigateur intégré masqué, le défilement
   doux (`scroll-behavior: smooth` du site) n'avance pas : vérifier en interceptant `Element.prototype.scrollIntoView`.
+
+## Brouillons d'équipes : onglet « Brouillons d'échecs » de l'administration (demandé le 2026-11-24)
+- But de l'utilisateur : créer et modifier des équipes, vérifier l'équilibrage, **puis** me demander de les entrer dans
+  le jeu. Les parties ne lisent que `ChessTeams.All` : un brouillon n'est jamais joué.
+- Choix de l'utilisateur (mes recommandations, toutes retenues) : **en base** (table `ChessTeamDrafts`, migration
+  `ChessTeamDrafts` écrite à la main, `dotnet ef` absent), communs à tous les administrateurs ; dans l'équilibrage, **case
+  « Avec les brouillons » et écarts** avec le jeu, une case par brouillon ; **un des vrais types** du Pokémon ; **mise en
+  jeu par moi** : bouton « Copier pour Claude ».
+- Proposés par moi, sans objection : troisième onglet (`?onglet=brouillons-echecs`, brouillon ouvert `&brouillon=3`) ;
+  « Nouvelle équipe » ou « Modifier cette équipe » (copie d'une équipe du jeu, `BaseTeam`) ; Dupliquer, Supprimer (avec
+  confirmation) ; note libre (100 caractères) ; enregistré à chaque changement ; remarques sans blocage ; rien dans le
+  guide du joueur (réservé à l'administration).
+- **Cases** (`ChessDraftSlot`) : `PawnA1`/`PawnA2` (a, c, e, g), `PawnB1`/`PawnB2` (b, d, f, h), puis une par pièce. La 2e
+  espèce d'un pion a **le type de la première** (la recherche ne propose que ceux qui l'ont) ; changer la première pour un
+  autre type retire la seconde ; vider la première y remonte la seconde. `ChessDraft.Team` (identifiant `brouillon-3`,
+  `ChessTeam.Draft` = « brouillon 3 », ajouté au nom) : pions A puis B, donc `LinesOf` et `PawnAt` comme les équipes du jeu ;
+  null tant qu'une case obligatoire est vide. `MembersOf(équipe)` fait l'inverse (vérifié : mêmes pions aux mêmes colonnes
+  pour l'équipe Nidoking).
+- JSON des Pokémon (`Members`) : relu en ignorant une case en double, un Pokémon inconnu ou un JSON illisible.
+- **Équilibrage** : `ChessDraftService.Teams(brouillons)` → `ChessBalanceTeams` (les équipes, et pour chacune l'équipe du
+  jeu qu'elle remplace : elle-même, ou null pour une nouvelle). Un brouillon compté remplace son équipe **à sa place** ; les
+  nouveaux à la fin. `ChessBalance.Average(équipe, équipes, sansElle)`. Écarts (`ChessBalanceTables.Before`) : la même
+  valeur entre les équipes du jeu d'origine, seulement si une des deux est un brouillon ; la moyenne d'une équipe du jeu
+  inchangée bouge aussi (une nouvelle équipe compte dans sa moyenne). Vert/rouge du point de vue de l'équipe de la ligne
+  (rois menacés : plus = rouge). Case gardée dans l'adresse par `Admin.razor` (`&brouillons=oui`, d'un onglet à l'autre).
+- **Catalogue** (`ChessDex`) : espèces 1 à 1 025, formes = max du nombre de formes d'Écarlate/Violet et de Légendes Z-A
+  (Méga-Raichu X / Y n'existent que dans Z-A). Types : table SV (elle donne les types de **toutes** les espèces, même
+  absentes du jeu), sinon ZA. Noms des formes en français par `FormConverter` (contexte `Gen9a`) mis en forme comme dans
+  les équipes : « Raichu d'Alola », « Miaouss de Galar », « Méga-Dracaufeu X », « Primo-Kyogre », « Motisma Lavage ».
+  ≈ 1 540 entrées (Zarbi, Prismillon : une par forme). Recherche sans accents (« libegon »), ou par numéro.
+- **Remarques** (`ChessDraft.Warnings`) : `PokemonSprites.HasImage` (image fixe de la forme, sans retomber sur l'espèce) et
+  `HasDonjonForm` (sprites Donjon de la forme, chromatiques ou non, sans retomber sur l'espèce : `DonjonFolder` le ferait
+  et le plateau montrerait la forme de base). Roserade : pas de sprites chromatiques (déjà connu).
+- **Piège trouvé dans le navigateur** : `<select value="@member.Type">` gardait la **position** de l'option choisie quand
+  le Pokémon changeait (Gallame Psy/Combat → Lucario Combat/Acier : « Acier » affiché, Combat enregistré) : `@key` sur le
+  `<select>` (espèce, forme). bUnit ne le voit pas.
+- La copie (`navigator.clipboard.writeText`) est refusée dans le navigateur intégré : le texte s'affiche aussi
+  (`#chess-draft-export`) pour être copié à la main. Le champ de recherche prend le curseur après le rendu (`FocusAsync`) :
+  dans un essai automatique, attendre une seconde avant de taper.
+- Tests : `ChessDraftTests` (catalogue, droits, valeurs trafiquées, pions à deux espèces, un compté par équipe,
+  `Teams`, remarques, texte, JSON abîmé), `AccountPagesTests.Admin_ChessDrafts_*` (éditeur puis équilibrage, nouvelle
+  équipe à huit, non administrateur).
 
 ## Pokémon au repos (demandé le 2026-11-22)
 - Case « Désactiver les animations » (`#chess-idle` ; d'abord « Animer les Pokémon au repos », sens inverse : renommée

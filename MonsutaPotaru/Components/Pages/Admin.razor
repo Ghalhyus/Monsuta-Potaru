@@ -12,7 +12,9 @@
 
 @* Réservée aux administrateurs (SiteRoles). Onglet « Général » : code d'invitation, mode debug, rôles des comptes ; chaque
    action revérifie le rôle en base (AdminService) : le cookie de connexion peut garder un rôle retiré pendant quelques
-   minutes. Onglet « Échecs » (?onglet=echecs) : équilibrage des équipes d'échecs (ChessBalanceTables), rien à modifier. *@
+   minutes. Onglet « Échecs » (?onglet=echecs) : équilibrage des équipes d'échecs (ChessBalanceTables), avec ou sans
+   les brouillons (&brouillons=oui). Onglet « Brouillons d'échecs » (?onglet=brouillons-echecs) : équipes proposées,
+   jamais jouées (ChessTeamDrafts). *@
 
 <PageHeader Title="Administration" Icon="bi-lock-nav-menu" />
 
@@ -35,19 +37,23 @@ else if (inviteCode is null)
 else
 {
     <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button type="button" role="tab" class="nav-link @(chessTab ? "" : "active")" aria-selected="@(chessTab ? "false" : "true")"
-                    @onclick="() => ShowTab(false)">Général</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button type="button" role="tab" class="nav-link @(chessTab ? "active" : "")" aria-selected="@(chessTab ? "true" : "false")"
-                    @onclick="() => ShowTab(true)">Échecs</button>
-        </li>
+        @foreach (var (key, label) in Tabs)
+        {
+            var k = key;
+            <li class="nav-item" role="presentation">
+                <button type="button" role="tab" class="nav-link @(tab == k ? "active" : "")" aria-selected="@(tab == k ? "true" : "false")"
+                        @onclick="() => ShowTab(k)">@label</button>
+            </li>
+        }
     </ul>
 
-    @if (chessTab)
+    @if (tab == ChessTab)
     {
-        <ChessBalanceTables />
+        <ChessBalanceTables UserId="@userId" WithDrafts="@withDrafts" WithDraftsChanged="SetWithDrafts" />
+    }
+    else if (tab == DraftsTab)
+    {
+        <ChessTeamDrafts UserId="@userId" />
     }
     else
     {
@@ -128,8 +134,17 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    /// <summary>Onglet ouvert, gardé dans l'adresse (« echecs » ; rien : « Général »).</summary>
+    /// <summary>Onglet ouvert, gardé dans l'adresse (« echecs », « brouillons-echecs » ; rien : « Général »).</summary>
     [SupplyParameterFromQuery(Name = "onglet")] private string? TabFromQuery { get; set; }
+
+    /// <summary>Case « Avec les brouillons » de l'onglet « Échecs » (« oui »), gardée dans l'adresse d'un onglet à l'autre.</summary>
+    [SupplyParameterFromQuery(Name = "brouillons")] private string? DraftsFromQuery { get; set; }
+
+    private const string ChessTab = "echecs";
+    private const string DraftsTab = "brouillons-echecs";
+
+    /// <summary>Les onglets : valeur dans l'adresse (vide : « Général ») et nom.</summary>
+    private static readonly (string Key, string Label)[] Tabs = [("", "Général"), (ChessTab, "Échecs"), (DraftsTab, "Brouillons d'échecs")];
 
     private string userId = "";
     private bool loaded;
@@ -140,7 +155,8 @@ else
     private List<AdminAccount> accounts = [];
     private bool confirmRegenerate;
     private bool debugActive; // mode debug de ce compte (DebugService)
-    private bool chessTab; // onglet « Échecs »
+    private string tab = ""; // onglet ouvert (Tabs)
+    private bool withDrafts; // case « Avec les brouillons » de l'onglet « Échecs »
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,12 +165,22 @@ else
         loaded = true;
     }
 
-    protected override void OnParametersSet() => chessTab = TabFromQuery == "echecs";
-
-    private void ShowTab(bool chess)
+    protected override void OnParametersSet()
     {
-        chessTab = chess;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("onglet", chess ? "echecs" : null), replace: true);
+        tab = Tabs.Any(t => t.Key == TabFromQuery) ? TabFromQuery! : "";
+        withDrafts = DraftsFromQuery == "oui";
+    }
+
+    private void ShowTab(string key)
+    {
+        tab = key;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("onglet", key.Length == 0 ? null : key), replace: true);
+    }
+
+    private void SetWithDrafts(bool on)
+    {
+        withDrafts = on;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("brouillons", on ? "oui" : null), replace: true);
     }
 
     private async Task Reload()

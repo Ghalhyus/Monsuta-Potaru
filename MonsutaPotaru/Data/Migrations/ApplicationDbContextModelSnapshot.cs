@@ -459,6 +459,41 @@ namespace MonsutaPotaru.Migrations
                     b.ToTable("ChessRecords");
                 });
 
+            modelBuilder.Entity("MonsutaPotaru.Data.ChessTeamDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BaseTeam")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Counted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Members")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ChessTeamDrafts");
+                });
+
             modelBuilder.Entity("MonsutaPotaru.Data.Completion", b =>
                 {
                     b.Property<int>("Id")

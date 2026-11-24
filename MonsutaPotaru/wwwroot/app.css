@@ -1490,6 +1490,25 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-balance-big .chess-balance-first { border-left: 3px solid var(--bs-emphasis-color, #212529); }
 .chess-balance-sticky { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg); }
 [data-theme="ardoise"] main .chess-balance-sticky { background: #fff; }
+/* Brouillons d'équipes (administration) : écarts avec les équipes du jeu dans l'équilibrage, éditeur */
+.chess-balance-delta { display: block; font-size: .75rem; font-weight: 600; }
+.chess-balance-better { color: #198754; }
+.chess-balance-worse { color: #dc3545; }
+.chess-balance-team.chess-balance-draft span { font-style: italic; }
+.chess-draft-list .chess-draft-open { background: rgba(var(--bs-primary-rgb, 13, 110, 253), .08); }
+.chess-draft-king { width: 2rem; height: 2rem; object-fit: contain; image-rendering: pixelated; }
+.chess-draft-editor { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: flex-start; }
+.chess-draft-slots { width: auto; }
+.chess-draft-slots tr.chess-draft-choosing > * { background: rgba(var(--bs-primary-rgb, 13, 110, 253), .12); }
+.chess-draft-mon { display: inline-flex; align-items: center; gap: .4rem; }
+.chess-draft-mon img, .chess-draft-result img { width: 4rem; height: 4rem; object-fit: contain; image-rendering: pixelated; }
+.chess-draft-search { flex: 1 1 30rem; max-width: 60rem; }
+.chess-draft-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: .4rem; }
+.chess-draft-result { display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .3rem; border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: .4rem; background: var(--bs-body-bg); color: inherit; }
+.chess-draft-result:hover, .chess-draft-result:focus-visible { border-color: var(--bs-primary, #0d6efd); }
+.chess-draft-result-name { font-size: .85rem; text-align: center; line-height: 1.2; }
+.chess-draft-export { white-space: pre-wrap; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .4rem; padding: .5rem; max-width: 60rem; }
 
 /* ---------- Cache-cache (Mini-jeux) : salle d'attente, parc du tour (wwwroot/js/parc.js), cible et scores ---------- */
 .hide-seek-lobby-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 1rem 2rem; margin-bottom: 1rem; }

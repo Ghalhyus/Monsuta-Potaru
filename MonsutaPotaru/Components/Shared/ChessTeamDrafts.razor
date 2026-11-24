@@ -1,0 +1,434 @@
+@using MonsutaPotaru.Services
+@inject ChessDraftService Drafts
+@inject IJSRuntime JS
+@* Onglet « Brouillons d'échecs » de l'administration (demandé le 2026-11-24) : équipes proposées par les administrateurs,
+   jamais jouées. Nouvelle équipe ou copie d'une équipe du jeu (qu'elle remplacera dans l'équilibrage) ; chaque case
+   (deux types de pion à une ou deux espèces, puis une pièce par case) prend un Pokémon cherché par son nom, et un de ses
+   vrais types. Tout est enregistré aussitôt (ChessDraftService, qui revérifie le rôle et chaque valeur). « Copier pour
+   Claude » : le texte à coller dans la conversation, pour l'entrer dans le jeu (ChessTeams.All). Brouillon ouvert gardé
+   dans l'adresse (&brouillon=3). *@
+
+<Block Title="Brouillons d'équipes" Id="chess-drafts">
+    <p class="small text-muted">
+        Propose des équipes sans rien changer pour les joueurs : compare-les dans l'onglet « Échecs » (case « Avec les
+        brouillons »), puis copie le brouillon pour Claude, qui l'entrera dans le jeu. Chaque changement est enregistré
+        tout de suite, et les brouillons sont communs à tous les administrateurs.
+    </p>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <button type="button" class="btn btn-primary" id="chess-draft-new" disabled="@busy" @onclick="() => Create(null)">Nouvelle équipe</button>
+        <span class="text-muted small">ou</span>
+        <select class="form-select w-auto" id="chess-draft-base" aria-label="Équipe du jeu à modifier" @bind="baseTeam">
+            @foreach (var team in ChessTeams.All)
+            {
+                <option value="@team.Id">@team.Name</option>
+            }
+        </select>
+        <button type="button" class="btn btn-outline-primary" id="chess-draft-from" disabled="@busy" @onclick="() => Create(baseTeam)">Modifier cette équipe</button>
+    </div>
+
+    @if (open is null)
+    {
+        @MessageAlert
+    }
+
+    @if (drafts.Count == 0)
+    {
+        <p class="text-muted mb-0">Aucun brouillon pour l'instant.</p>
+    }
+    else
+    {
+        <div class="list-group chess-draft-list">
+            @foreach (var draft in drafts)
+            {
+                var d = draft;
+                var warnings = d.Warnings().Count;
+                <div class="list-group-item @(d.Id == open?.Id ? "chess-draft-open" : "")" id="chess-draft-@d.Id">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        @if (d.At(ChessDraftSlot.King) is { } king)
+                        {
+                            <img class="chess-draft-king" src="@king.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                        }
+                        <strong>@d.Title : @d.TeamName</strong>
+                        <span class="small text-muted">@(d.Base is { } b ? $"modifie l'{b.InSentence}" : "nouvelle équipe")</span>
+                        @if (d.Counted)
+                        {
+                            <span class="badge text-bg-primary">compté dans l'équilibrage</span>
+                        }
+                        @if (!d.Complete)
+                        {
+                            <span class="badge text-bg-warning">incomplet</span>
+                        }
+                        else if (warnings > 0)
+                        {
+                            <span class="badge text-bg-secondary">@(warnings == 1 ? "1 remarque" : $"{warnings} remarques")</span>
+                        }
+                    </div>
+                    @if (d.Note.Length > 0)
+                    {
+                        <div class="small">@d.Note</div>
+                    }
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(busy || d.Id == open?.Id)" @onclick="() => Open(d.Id)">Modifier</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => Duplicate(d)">Dupliquer</button>
+                        @if (confirmDelete == d.Id)
+                        {
+                            <button type="button" class="btn btn-sm btn-danger" disabled="@busy" @onclick="() => Delete(d)">Supprimer pour de bon</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => confirmDelete = null">Annuler</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => confirmDelete = d.Id">Supprimer</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</Block>
+
+@if (open is { } draft)
+{
+    <Block Title="@($"{draft.Title} : {draft.TeamName}")" Id="chess-draft-editor">
+        <p class="small text-muted">
+            @(draft.Base is { } b ? $"Modifie l'{b.InSentence} : compté, il la remplace dans l'équilibrage." : "Nouvelle équipe : comptée, elle s'ajoute aux équipes du jeu dans l'équilibrage.")
+            Le premier pion joue les colonnes a, c, e, g, le second b, d, f, h ; une 2e espèce (du même type) se joue à tour de
+            rôle avec la première, comme Nidoran♂ et Nidoran♀.
+        </p>
+        <div class="d-flex flex-wrap align-items-end gap-3 mb-3">
+            <div>
+                <label class="form-label small mb-1" for="chess-draft-note">Note (pour t'y retrouver)</label>
+                <input class="form-control" id="chess-draft-note" maxlength="@ChessDraftService.MaxNote" @bind="note" />
+            </div>
+            <button type="button" class="btn btn-outline-primary" disabled="@busy" @onclick="SaveNote">Enregistrer la note</button>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="chess-draft-counted" checked="@draft.Counted" disabled="@busy"
+                       @onchange="e => SetCounted(draft, e.Value is true)" />
+                <label class="form-check-label" for="chess-draft-counted">Compter dans l'équilibrage</label>
+            </div>
+        </div>
+
+        @MessageAlert
+        <div class="chess-draft-editor">
+            <table class="table table-sm align-middle chess-draft-slots">
+                <tbody>
+                    @foreach (var slot in ChessDraft.DisplayOrder)
+                    {
+                        var s = slot;
+                        var member = draft.At(s);
+                        var first = FirstOf(draft, s);
+                        var locked = IsSecond(s) && first is null;
+                        <tr class="@(s == choosing ? "chess-draft-choosing" : "")" id="chess-draft-slot-@s">
+                            <th scope="row" class="fw-normal">
+                                <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(ChessDraft.PieceOf(s))</span>
+                                @ChessDraft.SlotName(s)
+                            </th>
+                            <td>
+                                @if (member is not null)
+                                {
+                                    <span class="chess-draft-mon">
+                                        <img src="@member.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                        <span>@member.Name</span>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">@(locked ? "choisis d'abord la 1re espèce" : IsSecond(s) ? "vide (facultatif)" : "vide")</span>
+                                }
+                            </td>
+                            <td>
+                                @if (member is not null)
+                                {
+                                    @if (first is not null)
+                                    {
+                                        <span class="chess-type type-@PokeTypes.Key(member.Type)" title="Le type de la 1re espèce">@PokeTypes.Name(member.Type)</span>
+                                    }
+                                    else
+                                    {
+                                        @* @key : liste recréée quand le Pokémon change (sinon le navigateur garde la position de l'option
+                                           choisie : Gallame Psy / Combat remplacé par Lucario Combat / Acier montrait « Acier ») *@
+                                        <select @key="(member.Species, member.Form)" class="form-select form-select-sm w-auto" aria-label="@($"Type de {member.Name}")" disabled="@busy"
+                                                value="@member.Type" @onchange="e => SetType(draft, member, e.Value as string)">
+                                            @foreach (var type in member.Entry?.Types ?? [member.Type])
+                                            {
+                                                <option value="@type">@PokeTypes.Name(type)</option>
+                                            }
+                                        </select>
+                                    }
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(busy || locked)" @onclick="() => Choose(s)">
+                                        @(member is null ? "Choisir" : "Changer")
+                                    </button>
+                                    @if (member is not null)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => Clear(draft, s)">Retirer</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (choosing is { } target)
+            {
+                <div class="chess-draft-search">
+                    <label class="form-label" for="chess-draft-search">Pokémon pour « @ChessDraft.SlotName(target) » : nom ou numéro</label>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <input class="form-control w-auto" id="chess-draft-search" autocomplete="off" @ref="searchInput" @bind="search" @bind:event="oninput" @bind:after="Search" />
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => choosing = null">Annuler</button>
+                    </div>
+                    @if (FirstOf(draft, target) is { } pawn)
+                    {
+                        <p class="small text-muted">2e espèce : elle doit pouvoir être @PokeTypes.Name(pawn.Type), comme @pawn.Name.</p>
+                    }
+                    @if (results.Count > 0)
+                    {
+                        <div class="chess-draft-results">
+                            @foreach (var entry in results)
+                            {
+                                var e = entry;
+                                <button type="button" class="chess-draft-result" disabled="@busy" @onclick="() => Pick(draft, target, e)">
+                                    <img src="@e.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                                    <span class="chess-draft-result-name">@e.Name</span>
+                                    <span class="d-flex flex-wrap gap-1 justify-content-center">
+                                        @foreach (var type in e.Types)
+                                        {
+                                            <span class="chess-type type-@PokeTypes.Key(type)">@PokeTypes.Name(type)</span>
+                                        }
+                                    </span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else if (search.Trim().Length > 0)
+                    {
+                        <p class="small text-muted">Aucun Pokémon de ce nom.</p>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (draft.Warnings() is { Count: > 0 } list)
+        {
+            <div class="alert alert-warning small" id="chess-draft-warnings">
+                <ul class="mb-0 ps-3">
+                    @foreach (var warning in list)
+                    {
+                        <li>@warning</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-primary" id="chess-draft-copy" @onclick="() => Copy(draft)">Copier pour Claude</button>
+            <a class="btn btn-outline-primary" href="administration?onglet=echecs&brouillons=oui">Voir l'équilibrage avec les brouillons</a>
+        </div>
+        @if (copied is not null)
+        {
+            <pre class="chess-draft-export small mt-2" id="chess-draft-export">@copied</pre>
+        }
+    </Block>
+}
+
+@code {
+    [Parameter, EditorRequired] public string UserId { get; set; } = "";
+
+    /// <summary>Brouillon ouvert, gardé dans l'adresse (« &amp;brouillon=3 ») : il reste ouvert au retour de l'onglet « Échecs ».</summary>
+    [SupplyParameterFromQuery(Name = "brouillon")] private int? OpenFromQuery { get; set; }
+
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private IReadOnlyList<ChessDraft> drafts = [];
+    private ChessDraft? open;
+    private string baseTeam = ChessTeams.All[0].Id;
+    private string note = "";
+    private ChessDraftSlot? choosing; // case dont on cherche le Pokémon
+    private ElementReference searchInput;
+    private bool focusSearch; // curseur à mettre dans la recherche après le rendu
+    private string search = "";
+    private IReadOnlyList<ChessDexEntry> results = [];
+    private int? confirmDelete;
+    private string? copied; // texte copié (affiché : on peut le recopier à la main si la copie échoue)
+    private bool busy;
+    private string? message;
+    private bool messageIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+        if (OpenFromQuery is { } id && drafts.Any(d => d.Id == id))
+            SetOpen(id);
+    }
+
+    private async Task Reload()
+    {
+        drafts = await Drafts.ListAsync(UserId) ?? [];
+        open = open is null ? null : drafts.FirstOrDefault(d => d.Id == open.Id);
+    }
+
+    private void SetOpen(int? id)
+    {
+        open = drafts.FirstOrDefault(d => d.Id == id);
+        note = open?.Note ?? "";
+        choosing = null;
+        copied = null;
+        search = "";
+        results = [];
+    }
+
+    private void Open(int id)
+    {
+        SetOpen(id);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("brouillon", id), replace: true);
+    }
+
+    private static bool IsSecond(ChessDraftSlot slot) => slot is ChessDraftSlot.PawnA2 or ChessDraftSlot.PawnB2;
+
+    /// <summary>Pour la 2e espèce d'un pion : la première (son type est imposé) ; null sinon.</summary>
+    private static ChessDraftMember? FirstOf(ChessDraft draft, ChessDraftSlot slot) => slot switch
+    {
+        ChessDraftSlot.PawnA2 => draft.At(ChessDraftSlot.PawnA1),
+        ChessDraftSlot.PawnB2 => draft.At(ChessDraftSlot.PawnB1),
+        _ => null,
+    };
+
+    private void Choose(ChessDraftSlot slot)
+    {
+        choosing = slot;
+        search = "";
+        results = [];
+        focusSearch = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusSearch && choosing is not null)
+        {
+            focusSearch = false;
+            try
+            {
+                await searchInput.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // champ déjà retiré (case refermée entre-temps) : rien à faire
+            }
+        }
+    }
+
+    /// <summary>Recherche ; pour la 2e espèce d'un pion, seulement ceux qui ont le type de la première.</summary>
+    private void Search()
+    {
+        var pawn = open is not null && choosing is { } slot ? FirstOf(open, slot) : null;
+        results = pawn is null ? ChessDex.Search(search) : ChessDex.Search(search, 200).Where(e => e.Types.Contains(pawn.Type)).Take(30).ToList();
+    }
+
+    /// <summary>Message de la dernière action : sous l'éditeur ouvert, sinon au-dessus de la liste.</summary>
+    private RenderFragment MessageAlert => __builder =>
+    {
+        if (message is not null)
+        {
+            <div class="alert @(messageIsError ? "alert-danger" : "alert-success") alert-dismissible small py-2" role="alert">
+                @message
+                <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => message = null"></button>
+            </div>
+        }
+    };
+
+    private Task Create(string? team) =>
+        Run(async () =>
+        {
+            var result = await Drafts.CreateAsync(UserId, team);
+            Show(result);
+            await Reload();
+            if (result.Id is { } id)
+                Open(id);
+        });
+
+    private Task Duplicate(ChessDraft draft) =>
+        Run(async () =>
+        {
+            var result = await Drafts.DuplicateAsync(UserId, draft.Id);
+            Show(result);
+            await Reload();
+            if (result.Id is { } id)
+                Open(id);
+        });
+
+    private Task Delete(ChessDraft draft) =>
+        Run(async () =>
+        {
+            confirmDelete = null;
+            Show(await Drafts.DeleteAsync(UserId, draft.Id));
+            await Reload();
+            if (open is null)
+                Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("brouillon", (int?)null), replace: true);
+        });
+
+    private Task Pick(ChessDraft draft, ChessDraftSlot slot, ChessDexEntry entry) =>
+        Change(async () =>
+        {
+            var result = await Drafts.SetMemberAsync(UserId, draft.Id, slot, entry.Species, entry.Form, null);
+            if (result.Ok)
+                choosing = null;
+            return result;
+        });
+
+    private Task SetType(ChessDraft draft, ChessDraftMember member, string? value) =>
+        Change(() => Enum.TryParse<PokeType>(value, out var type)
+            ? Drafts.SetMemberAsync(UserId, draft.Id, member.Slot, member.Species, member.Form, type)
+            : Task.FromResult(new ChessDraftResult(false, "Ce type n'existe pas.")));
+
+    private Task Clear(ChessDraft draft, ChessDraftSlot slot) =>
+        Change(() => Drafts.ClearMemberAsync(UserId, draft.Id, slot));
+
+    private Task SaveNote() => open is { } draft ? Change(() => Drafts.SetNoteAsync(UserId, draft.Id, note)) : Task.CompletedTask;
+
+    private Task SetCounted(ChessDraft draft, bool counted) => Change(() => Drafts.SetCountedAsync(UserId, draft.Id, counted));
+
+    /// <summary>Une modification du brouillon ouvert : message, puis relecture (le texte copié n'est plus à jour).</summary>
+    private Task Change(Func<Task<ChessDraftResult>> action) =>
+        Run(async () =>
+        {
+            Show(await action());
+            copied = null;
+            await Reload();
+        });
+
+    private async Task Copy(ChessDraft draft)
+    {
+        copied = draft.ExportText();
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", copied);
+            Show(new(true, "Texte copié : colle-le dans ta conversation avec Claude."));
+        }
+        catch (JSException)
+        {
+            Show(new(false, "Copie impossible : sélectionne le texte ci-dessous et copie-le à la main."));
+        }
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        busy = true;
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void Show(ChessDraftResult result)
+    {
+        message = result.Message;
+        messageIsError = !result.Ok;
+    }
+}
