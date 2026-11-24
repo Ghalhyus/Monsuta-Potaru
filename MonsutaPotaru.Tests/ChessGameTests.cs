@@ -36,37 +36,45 @@ public sealed class ChessGameTests
     }
 
     [Fact]
-    public void Teams_HaveOnePokemonPerPiece()
+    public void Teams_HaveOnePokemonPerPiece_AndTwoPawnTypes()
     {
         Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol"], ChessTeams.All.Select(t => t.Id));
         foreach (var team in ChessTeams.All)
         {
             Assert.Equal(Enum.GetValues<ChessPiece>(), team.Members.Select(m => m.Piece).Distinct().Order());
-            // Une seule pièce peut avoir deux espèces, le pion ; les Pokémon d'une même pièce ont le même type (aide)
-            foreach (var piece in Enum.GetValues<ChessPiece>())
-            {
-                var members = team.MembersOf(piece);
-                Assert.True(members.Count == 1 || piece == ChessPiece.Pawn && members.Count == 2, $"{team.Id} : {piece}");
-                Assert.Single(members.Select(m => m.Type).Distinct());
-            }
+            // Un Pokémon par pièce, sauf les pions : deux types, quatre pions chacun (une colonne sur deux)
+            foreach (var piece in Enum.GetValues<ChessPiece>().Where(p => p != ChessPiece.Pawn))
+                Assert.Single(team.MembersOf(piece));
+            var pawns = team.LinesOf(ChessPiece.Pawn);
+            Assert.Equal(2, pawns.Count);
+            Assert.All(pawns, line => Assert.Equal(4, ChessBalance.Count(team, line)));
+            Assert.Equal(pawns[0].Type, team.PawnAt(0).Type);
+            Assert.Equal(pawns[1].Type, team.PawnAt(1).Type);
         }
         Assert.Null(ChessTeams.Find("pirate"));
         Assert.Equal("Raichu d'Alola", Electric.Of(ChessPiece.Queen).Name);
-        Assert.Equal("Nidoran♂ / Nidoran♀", Poison.NamesOf(ChessPiece.Pawn));
-        Assert.Equal("Nidoran♂ ou Nidoran♀", Poison.NamesInSentence(ChessPiece.Pawn));
+        var poisonPawns = Poison.LinesOf(ChessPiece.Pawn);
+        Assert.Equal("Nidoran♂ / Nidoran♀", poisonPawns[0].Names);
+        Assert.Equal("Nidoran♂ ou Nidoran♀", poisonPawns[0].NamesInSentence);
+        Assert.Equal(("Toxizap", PokeType.Electric), (poisonPawns[1].Names, poisonPawns[1].Type));
+        Assert.Equal((ushort)58, Fire.LinesOf(ChessPiece.Pawn)[1].Mon.Species);
+        Assert.Equal((byte)1, Fire.LinesOf(ChessPiece.Pawn)[1].Mon.Form); // Caninos d'Hisui
         Assert.Equal("Libégon", ChessTeams.Find("sol")!.Of(ChessPiece.Knight).Name);
     }
 
     [Fact]
-    public void Start_NidoranPawnsAlternate()
+    public void Start_PawnTypesAlternate()
     {
+        const string F = "Toxizap";
+        // Les deux types une colonne sur deux ; dans le type Poison, Nidoran♂ et Nidoran♀ à tour de rôle
         var game = new ChessGame(Poison, Fire);
         var whites = Enumerable.Range(0, 8).Select(file => game.At(Sq($"{(char)('a' + file)}2"))!.Mon.Name);
-        Assert.Equal(["Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀", "Nidoran♂", "Nidoran♀"], whites);
-        Assert.Equal("Salamèche", game.At(Sq("b7"))!.Mon.Name);
+        Assert.Equal(["Nidoran♂", F, "Nidoran♀", F, "Nidoran♂", F, "Nidoran♀", F], whites);
+        Assert.Equal("Salamèche", game.At(Sq("a7"))!.Mon.Name);
+        Assert.Equal("Caninos d'Hisui", game.At(Sq("b7"))!.Mon.Name);
         var black = new ChessGame(Fire, Poison);
         Assert.Equal("Nidoran♂", black.At(Sq("a7"))!.Mon.Name);
-        Assert.Equal("Nidoran♀", black.At(Sq("h7"))!.Mon.Name);
+        Assert.Equal(F, black.At(Sq("h7"))!.Mon.Name);
         Assert.Equal("Nidoking", black.At(Sq("e8"))!.Mon.Name);
     }
 
@@ -95,13 +103,13 @@ public sealed class ChessGameTests
     [Fact]
     public void NeutralCapture_NoBonus()
     {
-        var game = Position(Fire, Psy, W, "wKa1 wPe4 bPd5 bKh8");
-        var step = Play(game, "e4", "d5"); // Feu contre Psy : neutre
+        var game = Position(Fire, Psy, W, "wKa1 wPd4 bPe5 bKh8");
+        var step = Play(game, "d4", "e5"); // Caninos d'Hisui (Roche) contre Tarsal (Psy) : neutre
         Assert.Equal(1, step.Effect);
         Assert.False(step.Bonus);
         Assert.Equal(B, game.Turn);
         Assert.Equal("Tarsal", Assert.Single(game.Ko(B)).Mon.Name);
-        Assert.Contains("Salamèche mange Tarsal en d5.", step.Text);
+        Assert.Contains("Caninos d'Hisui mange Tarsal en e5.", step.Text);
     }
 
     [Fact]
@@ -118,11 +126,11 @@ public sealed class ChessGameTests
     public void SuperEffective_GivesOneBonusTurn_ThenPass()
     {
         // Démolosse (Ténèbres) contre Tarsal (Psy) : super efficace, il rejoue
-        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPf6 bPd7 bKh1");
-        var first = Play(game, "e4", "f6");
+        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPg5 bPc7 bKh1");
+        var first = Play(game, "e4", "g5");
         Assert.True(first.Bonus);
         Assert.Equal(W, game.Turn);
-        Assert.Equal(Sq("f6"), game.BonusSquare);
+        Assert.Equal(Sq("g5"), game.BonusSquare);
         Assert.Empty(game.MovesFrom(Sq("a1"))); // seul Démolosse rejoue
         Assert.Contains(ChessMove.Pass, game.LegalMoves());
         Assert.Contains("super efficace", first.Text);
@@ -138,20 +146,20 @@ public sealed class ChessGameTests
     public void SuperEffective_DuringTheBonusTurn_DoesNotGiveAnother()
     {
         // Démolosse mange deux Tarsal de suite : le second, pendant son tour bonus, ne le fait pas rejouer encore
-        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPf6 bPd7 bPb6 bKh1");
-        Assert.True(Play(game, "e4", "f6").Bonus);
-        var second = Play(game, "f6", "d7");
+        var game = Position(Fire, Psy, W, "wKa1 wNe4 bPg5 bPe6 bPc5 bKh1");
+        Assert.True(Play(game, "e4", "g5").Bonus);
+        var second = Play(game, "g5", "e6");
         Assert.False(second.Bonus);
         Assert.Equal(2, second.Effect);
-        Assert.Equal("Démolosse mange Tarsal en d7. C'est super efficace, mais Démolosse a déjà rejoué.", second.Text);
+        Assert.Equal("Démolosse mange Tarsal en e6. C'est super efficace, mais Démolosse a déjà rejoué.", second.Text);
         Assert.Equal(B, game.Turn);
         Assert.Null(game.BonusSquare);
         Assert.DoesNotContain(ChessMove.Pass, game.LegalMoves());
 
         // Au tour suivant de ce camp, une nouvelle prise super efficace redonne un tour bonus
         Play(game, "h1", "h2");
-        Assert.True(Play(game, "d7", "b6").Bonus);
-        Assert.Equal(Sq("b6"), game.BonusSquare);
+        Assert.True(Play(game, "e6", "c5").Bonus);
+        Assert.Equal(Sq("c5"), game.BonusSquare);
     }
 
     [Fact]

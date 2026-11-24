@@ -214,10 +214,10 @@ public sealed class AccountPagesTests : PageTestContext
             cut.FindAll("#chess-balance-kings tbody tr")[0].QuerySelectorAll("td")[1].TextContent.Trim());
         Assert.Equal("—", cut.FindAll("#chess-balance-balance tbody tr")[0].QuerySelectorAll("td")[0].TextContent);
 
-        // Deux grandes tables par équipe : ses 6 pièces contre les 42 des sept équipes, la sienne d'abord
+        // Deux grandes tables par équipe : ses 7 lignes (deux types de pions) contre les 49 des sept équipes, la sienne d'abord
         var big = cut.FindAll("table.chess-balance-big");
         Assert.Equal(2 * ChessTeams.All.Count, big.Count);
-        Assert.All(big, t => Assert.Equal(6 * 6 * ChessTeams.All.Count, t.QuerySelectorAll("td").Length));
+        Assert.All(big, t => Assert.Equal(7 * 7 * ChessTeams.All.Count, t.QuerySelectorAll("td").Length));
         Assert.Equal("Même équipe", big[0].QuerySelector(".chess-balance-group")!.TextContent);
         // Gallame (Combat) ne peut pas manger Malvalame (Spectre) : sans effet, marqué à part
         var noEffect = big[0].QuerySelectorAll("td.blocked").First(td => td.GetAttribute("title")!.StartsWith("Gallame ne peut pas manger Malvalame"));

@@ -236,8 +236,10 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
 - **Équipes** par défaut (`ChessTeams.cs`), nommées d'après leur roi (« Équipe Nidoking » ; identifiants gardés en
-  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`), un Pokémon par pièce (les pions de l'équipe
-  Nidoking : Nidoran♂ en a, c, e, g, Nidoran♀ en b, d, f, h, même type). Choisies **à l'aveugle** : on sait seulement si
+  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`), un Pokémon par pièce, sauf les pions : **deux types**
+  une colonne sur deux (Tarsal Psy en a, c, e, g, Lippouti Glace en b, d, f, h ; équipe Nidoking : Nidoran♂ et
+  Nidoran♀, Poison, à tour de rôle en a, c, e, g, Toxizap Électrik en b, d, f, h). Listes et tables de type : une ligne par
+  pièce et par type (`ChessLine`), deux pour les pions. Choisies **à l'aveugle** : on sait seulement si
   l'autre a choisi (`ChessSession.TeamChoice`). La **même** prise par les deux : chacun la garde (`ChessHub.KeepTeam`) ou
   en change (`ClearTeam` : l'autre l'apprend, et peut changer aussi) ; gardée par les deux, la partie se joue avec la même
   équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade n'a pas de sprite Donjon chromatique : ordinaire sur
@@ -482,10 +484,10 @@ ce qui suit, sauf le dernier point) et « Échecs » (`?onglet=echecs`) :
   journal ; réduit, le parc rend ses derniers arrivés à la collection), « Habitats (debug) », « Attaquer (debug) ».
 - **Équilibrage des échecs** (onglet « Échecs », `Shared/ChessBalanceTables.razor`, calculs `Services/Chess/ChessBalance.cs`) :
   lecture seule, recalculé d'après `ChessTeams.All` et la table des types (rien en base). Parts **pondérées par le
-  nombre de pièces** (8 pions, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires) : part mangeable d'une
+  nombre de pièces** (8 pions, 4 de chaque type, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires) : part mangeable d'une
   équipe contre chaque autre et part super efficace, moyenne contre les sept équipes, elle comprise (une case l'exclut) ; rois menacés (pièces sur 16 qui
   peuvent manger chaque roi) ; solde (part de A contre B moins celle de B contre A, en points). Puis, par équipe, deux
-  tables contre les 42 pièces des sept équipes (ce qu'elle mange, qui la mange), même règle que les parties
+  tables contre les 49 lignes (pièce et type) des sept équipes (ce qu'elle mange, qui la mange), même règle que les parties
   (`ChessGame.CanEat`) ; ✗₀ distingue « sans effet », le multiplicateur au survol.
 
 ### Sauvegardes stockées (consultation)

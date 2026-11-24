@@ -160,11 +160,12 @@ public sealed class ChessHubTests : IDisposable
         Assert.Equal("Ce n'est pas à toi de jouer.", _hub.Play(session, "ondine", Move("e7", "e5")));
 
         // Cadres : Salamèche (Feu) contre l'équipe Psy, sur tout le plateau. Tarsal (Psy), Gallame (Combat), Gardevoir
-        // (Fée), Rhinolove (Vol) : neutres ; Kaorine (Sol) : neutre ; Roigada (Eau) résiste (0,5)
+        // (Fée), Rhinolove (Vol) : neutres ; Kaorine (Sol) : neutre ; Roigada (Eau) résiste (0,5) ; les pions Lippouti
+        // (Glace, b2, d2, f2, h2) lui sont faibles (×2)
         var matchups = preview.Matchups;
         Assert.All(matchups, m => Assert.NotEqual(1, m.Effect));
         Assert.Equal([Sq("c1"), Sq("f1")], matchups.Where(m => m.Effect < 1).Select(m => m.Square).Order());
-        Assert.DoesNotContain(matchups, m => m.Effect > 1);
+        Assert.Equal([Sq("b2"), Sq("d2"), Sq("f2"), Sq("h2")], matchups.Where(m => m.Effect > 1).Select(m => m.Square).Order());
     }
 
     [Fact]

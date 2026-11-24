@@ -20,16 +20,16 @@ public enum ChessEat
 public sealed record ChessMark(ChessEat Eat, double Effect, string Sentence);
 
 /// <summary>
-/// Une équipe contre une autre, pondéré par le nombre de pièces (8 pions, 2 tours, 2 cavaliers, 2 fous, une reine, un
-/// roi : 16 × 16 paires) : part des paires où la pièce de <c>attackers</c> peut manger celle de <c>victims</c>
+/// Une équipe contre une autre, pondéré par le nombre de pièces (8 pions, 4 de chaque type, 2 tours, 2 cavaliers, 2 fous,
+/// une reine, un roi : 16 × 16 paires) : part des paires où la pièce de <c>attackers</c> peut manger celle de <c>victims</c>
 /// (<see cref="Edible"/>), dont celles où c'est super efficace (<see cref="Super"/>), entre 0 et 1.
 /// </summary>
 public sealed record ChessTeamMatchup(double Edible, double Super);
 
 /// <summary>
 /// Équilibrage des équipes d'échecs (onglet « Échecs » de l'administration) : tout est calculé d'après
-/// <see cref="ChessTeams.All"/> et la table des types, rien n'est stocké. Les Pokémon d'une même pièce ont le même
-/// type : le premier suffit.
+/// <see cref="ChessTeams.All"/> et la table des types, rien n'est stocké. Par ligne (<see cref="ChessLine"/> : une pièce
+/// d'un type), pas par pièce : les pions ont deux types.
 /// </summary>
 public static class ChessBalance
 {
@@ -44,13 +44,20 @@ public static class ChessBalance
     /// <summary>Nombre de pièces d'une équipe (16).</summary>
     public static int PiecesPerTeam => Enum.GetValues<ChessPiece>().Sum(Count);
 
-    /// <summary>La pièce de la ligne contre celle de la colonne : prise, multiplicateur, phrase.</summary>
-    public static ChessMark Mark(ChessTeam attackers, ChessPiece attackerPiece, ChessTeam victims, ChessPiece victimPiece)
+    /// <summary>
+    /// Nombre de pièces de cette ligne au début de la partie : les pions d'un type sont ceux des colonnes où
+    /// <see cref="ChessTeam.PawnAt"/> place un de ses Pokémon (4 sur 8).
+    /// </summary>
+    public static int Count(ChessTeam team, ChessLine line) => line.Piece == ChessPiece.Pawn
+        ? Enumerable.Range(0, 8).Count(file => line.Has(team.PawnAt(file)))
+        : Count(line.Piece);
+
+    /// <summary>La ligne <paramref name="attacker"/> contre la ligne <paramref name="victim"/> : prise, multiplicateur, phrase.</summary>
+    public static ChessMark Mark(ChessLine attacker, ChessLine victim)
     {
-        var (attacker, victim) = (attackers.Of(attackerPiece).Type, victims.Of(victimPiece).Type);
-        var (who, whom) = (attackers.NamesInSentence(attackerPiece), victims.NamesInSentence(victimPiece));
-        var effect = PokeTypes.Effectiveness(attacker, victim);
-        if (!ChessGame.CanEat(attacker, victim))
+        var (who, whom) = (attacker.NamesInSentence, victim.NamesInSentence);
+        var effect = PokeTypes.Effectiveness(attacker.Type, victim.Type);
+        if (!ChessGame.CanEat(attacker.Type, victim.Type))
             return new(ChessEat.Blocked, effect, $"{who} ne peut pas manger {whom}.");
         return effect > 1
             ? new(ChessEat.Super, effect, $"{who} mange {whom} et rejoue : c'est super efficace !")
@@ -61,11 +68,12 @@ public static class ChessBalance
     public static ChessTeamMatchup Matchup(ChessTeam attackers, ChessTeam victims)
     {
         int edible = 0, super = 0;
-        foreach (var a in Enum.GetValues<ChessPiece>())
-            foreach (var v in Enum.GetValues<ChessPiece>())
+        var pieces = Enum.GetValues<ChessPiece>();
+        foreach (var a in attackers.Lines(pieces))
+            foreach (var v in victims.Lines(pieces))
             {
-                var weight = Count(a) * Count(v);
-                var eat = Mark(attackers, a, victims, v).Eat;
+                var weight = Count(attackers, a) * Count(victims, v);
+                var eat = Mark(a, v).Eat;
                 if (eat != ChessEat.Blocked)
                     edible += weight;
                 if (eat == ChessEat.Super)
@@ -91,9 +99,9 @@ public static class ChessBalance
 
     /// <summary>Nombre de pièces de <paramref name="attackers"/> (sur 16) qui peuvent manger le roi de <paramref name="defenders"/>.</summary>
     public static int KingThreats(ChessTeam attackers, ChessTeam defenders) =>
-        Enum.GetValues<ChessPiece>()
-            .Where(p => ChessGame.CanEat(attackers.Of(p).Type, defenders.Of(ChessPiece.King).Type))
-            .Sum(Count);
+        attackers.Lines(Enum.GetValues<ChessPiece>())
+            .Where(line => ChessGame.CanEat(line.Type, defenders.Of(ChessPiece.King).Type))
+            .Sum(line => Count(attackers, line));
 
     /// <summary>Une part (0 à 1) en points de pourcentage arrondis (0,836 → 84).</summary>
     public static int Points(double share) => (int)Math.Round(share * 100, MidpointRounding.AwayFromZero);

@@ -103,14 +103,37 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 - Composition et types donnés par l'utilisateur (`ChessTeams.All`) ; noms corrigés d'après PKHeX : **Roserade** (sans
   accent), **Libégon** (avec). Noms vérifiés en cherchant la chaîne UTF-8 dans `PKHeX.Core.dll` (Windows PowerShell 5.1
   ne charge pas une DLL .NET 10).
-- **Deux espèces de pion** (équipe Poison) : deux membres `Pawn` dans `Members`, `PawnAt(colonne)` les alterne
-  (Nidoran♂ en a, c, e, g, choix de l'utilisateur, pour les deux camps) ; `Of(pièce)` rend le premier. Ils doivent avoir
-  **le même type** (test `Teams_HaveOnePokemonPerPiece`) : l'aide n'a qu'une ligne par pièce et calcule sa marque avec le
-  premier. Choix de l'utilisateur : **une ligne « Pion », deux images** (`MembersOf`, `NamesOf` « Nidoran♂ / Nidoran♀ »,
-  `NamesInSentence` « … ou … » dans les phrases de l'aide). `.chess-team-list` est une grille dont les lignes sont des
-  sous-grilles : la colonne des images prend 8rem pour cette équipe, les noms restent alignés. Les tableaux de l'aide
-  passent alors à ≈ 800 px CSS de large (tiennent encore côte à côte chez l'utilisateur).
+- **Deux espèces de pion d'un même type** (Nidoran♂ et Nidoran♀, Poison) : une ligne, deux images (choix de
+  l'utilisateur ; `ChessLine.Names` « Nidoran♂ / Nidoran♀ », `NamesInSentence` « … ou … » dans les phrases de l'aide).
+  `.chess-team-list` est une grille dont les lignes sont des sous-grilles : la colonne des images prend 8rem pour cette
+  équipe, les noms restent alignés. Les tableaux de l'aide passent alors à ≈ 800 px CSS de large.
 - `FromPosition` place un pion selon la colonne de sa case ; un pion K.O. donné par `ko` est le premier.
+
+## Deux types de pion par équipe (demandé le 2026-11-24)
+- Pions ajoutés par l'utilisateur, un sur deux : Lippouti (Glace, Psy), Hélionceau (Normal, Feu), Emolga (Vol,
+  Électrique), Nosferapti (Poison), Tentacool (Poison, Eau), Nénupiot (Eau, Plante ; remplacé le même jour par Granivol, Vol), Chamalot (Feu, Sol). Il avait écrit
+  Nosferapti « Glace » : corrigé en **Vol** (Poison / Vol ; chaque pièce garde un de ses vrais types), accord de
+  l'utilisateur. « hélionceau » → Hélionceau.
+- Le même jour, remplacés à sa demande : Hélionceau par **Caninos d'Hisui** (58, forme 1, gardé **Roche** : Feu est
+  déjà le type de Salamèche) et Nosferapti par **Farfuret d'Hisui** (215, forme 1, gardé **Combat** : Poison est déjà
+  celui des Nidoran). Types choisis par moi selon cette règle, puis confirmés par l'utilisateur. Toujours le même jour,
+  Farfuret d'Hisui remplacé par **Toxizap** (848), **Électrik** (choix de l'utilisateur ; Poison est celui des Nidoran).
+- Le même jour, équipe Torterra : la tour Blindépique (Combat) remplacée par Noadkoko (Psy, forme de Kanto).
+- Placement (choix de l'utilisateur) : le pion d'origine en a, c, e, g, le nouveau en b, d, f, h. Équipe Nidoking : les
+  deux Nidoran gardés, à tour de rôle dans le type Poison (Nidoran♂ en a et e, Nidoran♀ en c et g), Toxizap en b, d, f,
+  h. `ChessTeam.PawnAt` : type `file % 2`, puis espèce `file / 2 % n` dans ce type (pour les deux camps).
+- **`ChessLine`** (une pièce d'un type, avec ses Pokémon) remplace « une ligne par pièce » : `LinesOf(pièce)` groupe par
+  type, `Lines(ordre)` pour les listes. Choix de l'utilisateur : **deux lignes « Pion »** partout (liste des équipes et
+  fenêtre « Pièces », « 4 sur le plateau » chacune ; table de type d'une partie : 7 × 7 ; administration : 7 lignes
+  contre 49 colonnes). `Of(pièce)` rend toujours le premier Pokémon : seulement pour les pièces à un Pokémon (roi…).
+- Équilibrage : `ChessBalance.Count(équipe, ligne)` compte les colonnes que `PawnAt` donne à la ligne (4) ; `Mark`
+  prend deux `ChessLine`.
+- La partie elle-même n'a rien changé : chaque `ChessUnit` garde son `ChessMon` (type par pièce sur le plateau). Les
+  parties enregistrées (`ChessRecord`) ne gardent que le résultat : rien à migrer.
+- Tests réécrits (ils supposaient Tarsal sur tout le rang 2) : `ChessGameTests` (positions sur les colonnes a, c, e, g
+  pour Tarsal), `ChessPageTests.BlockedCapture_…` (1. e4 Cf6 2. g3 Cxe4 Cxg3, puis 4. c3 Ce4 5. h3 Cxc3 et d1),
+  `SelectedPiece_…` (Gallame Combat ×2 contre les Caninos d'Hisui Roche), `ChessHubTests.Options_Preview…` (Salamèche ×2
+  contre les Lippouti).
 
 ## Partie publique (demandée le 2026-11-22)
 - Bouton « Créer une partie publique » dans « Nouvelle partie » (même sans ami ; le temps par coup est en premier dans la
@@ -211,8 +234,9 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 - Bouton « Table de type des pièces » à côté de « Pièces » ; fenêtre du même genre (fond grisé). Choix de l'utilisateur : **deux tableaux
   croisés** (« Tes Pokémon contre les siens », « Ceux de <pseudo> contre les tiens » : les menaces), marques **×2** (mange
   et rejoue), **✓** (mange), **✗** (ne mange pas, sans distinguer « pas très efficace » de « sans effet ») ; en têtes
-  l'image à 4rem, le nom, le type, la pièce. Une ligne (colonne) par pièce : les huit pions une fois.
-- Marques par `ChessGame.CanEat` puis `PokeTypes.Effectiveness` (`HelpMark`) : la même règle que les parties.
+  l'image à 4rem, le nom, le type, la pièce. Une ligne (colonne) par pièce et par type (`ChessLine`) : sept, deux pour
+  les pions.
+- Marques par `ChessBalance.Mark` (`ChessGame.CanEat` puis `PokeTypes.Effectiveness`) : la même règle que les parties.
 - Taille : un tableau ≈ 744 × 570 px CSS ; côte à côte (≈ 1550 × 760 px pour la fenêtre) sur l'écran de l'utilisateur
   (2293 px CSS de large), l'un sous l'autre sinon (la fenêtre défile) ; trop étroit pour un tableau (téléphone) : il
   défile de côté (`.chess-help-scroll`). Dans les lignes, nom et type sur une ligne (`.chess-help-title`), sinon un
@@ -223,7 +247,8 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   l'utilisateur, dans le site : `/administration?onglet=echecs` (onglets « Général » / « Échecs » de `Admin.razor`,
   comme `Friends.razor` : `[SupplyParameterFromQuery] onglet`, `NavigateTo(…, replace: true)`).
 - Choix de l'utilisateur : onglets (pas une sous-page) ; **tout** le contenu de la page générée (trois synthèses puis les
-  14 grandes tables, pas une équipe choisie dans une liste) ; parts **pondérées par le nombre de pièces** (16 × 16).
+  14 grandes tables, pas une équipe choisie dans une liste) ; parts **pondérées par le nombre de pièces** (16 × 16, 4
+  pions de chaque type).
 - Calculs `ChessBalance` (statique, rien en base : suit `ChessTeams.All` tout seul). `ChessBalance.Mark` remplace
   l'ancien `HelpMark` de `Chess.razor` : une seule règle pour la fenêtre des parties et l'administration. Tests
   `ChessBalanceTests` sur des équipes fabriquées (les vraies changeront avec l'équilibrage) ; page :
@@ -231,7 +256,7 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 - Moyenne de la synthèse : contre les **sept** équipes, elle comprise (deux joueurs peuvent prendre la même équipe) ;
   la case « Ne pas compter l'équipe contre elle-même dans la moyenne » (`withoutSelf`, non retenue d'une visite à
   l'autre) la calcule sur les six autres et grise la case du miroir (`.chess-balance-excluded`). Demandé le 2026-11-24.
-- `ChessMarkCell.Cell(…)` est un **fragment statique**, pas un composant : ~3 500 cases (14 × 6 × 42), un composant
+- `ChessMarkCell.Cell(…)` est un **fragment statique**, pas un composant : ~4 800 cases (14 × 7 × 49), un composant
   chacune resterait en mémoire dans le circuit Blazor Server. Les tables ne sont rendues qu'à l'ouverture de l'onglet.
 - Grandes tables : images à 2rem (moitié de 96 px chez l'utilisateur), colonne des pièces collée à gauche
   (`.chess-balance-sticky`, fond blanc du bloc en Ardoise). **Noms au survol seulement dans les en-têtes de colonne** :

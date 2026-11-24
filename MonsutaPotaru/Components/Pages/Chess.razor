@@ -1228,20 +1228,20 @@ else
     private static string Clock(int seconds) => $"{seconds / 60}:{seconds % 60:00}";
 
     /// <summary>
-    /// Les Pokémon d'une équipe, une ligne par pièce (sprite, symbole et nom de la pièce, Pokémon, type) ; pendant la partie
+    /// Les Pokémon d'une équipe, une ligne par pièce et par type (sprite, symbole et nom de la pièce, Pokémon, type) ; pendant la partie
     /// (<paramref name="color"/>), combien sont sur le plateau et combien sont K.O.
     /// </summary>
     private RenderFragment TeamList(ChessTeam team, ChessColor? color, bool shiny = false) => __builder =>
     {
-        <ChessTeamList Team="team" Shiny="shiny" Extra="@(color is { } c ? piece => PieceCount(c, piece) : null)" />
+        <ChessTeamList Team="team" Shiny="shiny" Extra="@(color is { } c ? line => PieceCount(c, line) : null)" />
     };
 
-    /// <summary>Pendant la partie : combien de pièces de ce camp sont sur le plateau, et combien sont K.O.</summary>
-    private RenderFragment PieceCount(ChessColor color, ChessPiece piece) => __builder =>
+    /// <summary>Pendant la partie : combien de pièces de cette ligne et de ce camp sont sur le plateau, et combien sont K.O.</summary>
+    private RenderFragment PieceCount(ChessColor color, ChessLine line) => __builder =>
     {
         @if (snapshot?.Position is { } position)
         {
-            var ids = units.Where(u => u.Color == color && u.Piece == piece).Select(u => u.Id).ToHashSet();
+            var ids = units.Where(u => u.Color == color && line.Has(u.Mon)).Select(u => u.Id).ToHashSet();
             var onBoard = position.Board.Count(p => ids.Contains(p.Id));
             var ko = (color == ChessColor.White ? position.WhiteKo : position.BlackKo).Count(ids.Contains);
             <span class="chess-piece-count small text-muted">· @onBoard sur le plateau@(ko > 0 ? $" · {ko} K.O." : "")</span>
@@ -1308,8 +1308,8 @@ else
     /// <summary>
     /// Fenêtre « Aide » : un tableau croisé, les Pokémon de <paramref name="attackers"/> en lignes, ceux de
     /// <paramref name="victims"/> en colonnes ; chaque case dit si la pièce de la ligne mange celle de la colonne. Une
-    /// ligne (ou colonne) par pièce : les huit pions n'en ont qu'une, même à deux espèces (Nidoran♂ et Nidoran♀, deux
-    /// images).
+    /// ligne (ou colonne) par pièce et par type (<see cref="ChessLine"/>) : sept, les pions en ayant deux ; deux espèces
+    /// d'un même type (Nidoran♂ et Nidoran♀) en partagent une, avec deux images.
     /// </summary>
     private static RenderFragment HelpTable(string title, (ChessTeam Team, bool Shiny) attacking, (ChessTeam Team, bool Shiny) eaten) => __builder =>
     {
@@ -1320,28 +1320,28 @@ else
                 <thead>
                     <tr>
                         <th scope="col" class="chess-help-corner small text-muted">mange&nbsp;→</th>
-                        @foreach (var piece in PieceOrder)
+                        @foreach (var line in victims.Lines(PieceOrder))
                         {
                             <th scope="col" class="chess-help-col">
-                                @HelpImages(victims, piece, eaten.Shiny)
-                                @HelpLabel(victims, piece)
+                                @HelpImages(line, eaten.Shiny)
+                                @HelpLabel(line)
                             </th>
                         }
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var piece in PieceOrder)
+                    @foreach (var line in attackers.Lines(PieceOrder))
                     {
                         <tr>
                             <th scope="row" class="chess-help-row">
                                 <div class="chess-help-row-content">
-                                    @HelpImages(attackers, piece, attacking.Shiny)
-                                    <div>@HelpLabel(attackers, piece)</div>
+                                    @HelpImages(line, attacking.Shiny)
+                                    <div>@HelpLabel(line)</div>
                                 </div>
                             </th>
-                            @foreach (var column in PieceOrder)
+                            @foreach (var column in victims.Lines(PieceOrder))
                             {
-                                @ChessMarkCell.Cell(ChessBalance.Mark(attackers, piece, victims, column))
+                                @ChessMarkCell.Cell(ChessBalance.Mark(line, column))
                             }
                         </tr>
                     }
@@ -1354,24 +1354,23 @@ else
     /// Nom, type et pièce d'un Pokémon, dans les en-têtes des tableaux de l'aide : le nom au-dessus du type dans les
     /// colonnes (étroites), sur la même ligne dans les lignes (le tableau tient ainsi en hauteur).
     /// </summary>
-    private static RenderFragment HelpLabel(ChessTeam team, ChessPiece piece) => __builder =>
+    private static RenderFragment HelpLabel(ChessLine line) => __builder =>
     {
-        var mon = team.Of(piece);
         <span class="chess-help-title">
-            <span class="chess-mon-name">@team.NamesOf(piece)</span>
-            <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+            <span class="chess-mon-name">@line.Names</span>
+            <span class="chess-type type-@PokeTypes.Key(line.Type)">@PokeTypes.Name(line.Type)</span>
         </span>
         <span class="chess-help-piece d-block">
-            <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(mon.Piece)</span>
-            <span class="chess-piece-name">@ChessTeams.PieceName(mon.Piece)</span>
+            <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(line.Piece)</span>
+            <span class="chess-piece-name">@ChessTeams.PieceName(line.Piece)</span>
         </span>
     };
 
-    /// <summary>Images des Pokémon d'une pièce dans les en-têtes de la table de type (deux pour les pions Nidoran).</summary>
-    private static RenderFragment HelpImages(ChessTeam team, ChessPiece piece, bool shiny) => __builder =>
+    /// <summary>Images des Pokémon d'une ligne dans les en-têtes de la table de type (deux pour les pions Nidoran).</summary>
+    private static RenderFragment HelpImages(ChessLine line, bool shiny) => __builder =>
     {
         <div class="chess-mon-images">
-            @foreach (var mon in team.MembersOf(piece))
+            @foreach (var mon in line.Members)
             {
                 <img src="@mon.SpriteUrlOf(shiny)" alt="" data-remplacement="images/pokemon/inconnu.png" />
             }

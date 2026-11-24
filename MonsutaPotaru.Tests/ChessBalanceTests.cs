@@ -13,6 +13,9 @@ public sealed class ChessBalanceTests
     private static ChessTeam Team(string id, PokeType pawn, PokeType others) => new(id,
         [.. Enum.GetValues<ChessPiece>().Select(p => new ChessMon(1, 0, $"{id}-{p}", p == ChessPiece.Pawn ? pawn : others, p))]);
 
+    /// <summary>La (première) ligne de cette pièce.</summary>
+    private static ChessLine L(ChessTeam team, ChessPiece piece) => team.LinesOf(piece)[0];
+
     [Fact]
     public void Count_SixteenPiecesPerTeam()
     {
@@ -29,19 +32,19 @@ public sealed class ChessBalanceTests
         var mixed = Team("mix", PokeType.Fire, PokeType.Ghost);
         var normal = Team("nor", PokeType.Normal, PokeType.Normal);
 
-        var super = ChessBalance.Mark(water, ChessPiece.King, mixed, ChessPiece.Pawn);
+        var super = ChessBalance.Mark(L(water, ChessPiece.King), L(mixed, ChessPiece.Pawn));
         Assert.Equal((ChessEat.Super, 2d), (super.Eat, super.Effect));
         Assert.Equal("eau-King mange mix-Pawn et rejoue : c'est super efficace !", super.Sentence);
 
-        var weak = ChessBalance.Mark(mixed, ChessPiece.Pawn, water, ChessPiece.Queen);
+        var weak = ChessBalance.Mark(L(mixed, ChessPiece.Pawn), L(water, ChessPiece.Queen));
         Assert.Equal((ChessEat.Blocked, 0.5), (weak.Eat, weak.Effect));
         Assert.Equal("mix-Pawn ne peut pas manger eau-Queen.", weak.Sentence);
 
         // Sans effet : bloquée comme « pas très efficace », le multiplicateur la distingue
-        var none = ChessBalance.Mark(normal, ChessPiece.Rook, mixed, ChessPiece.Rook);
+        var none = ChessBalance.Mark(L(normal, ChessPiece.Rook), L(mixed, ChessPiece.Rook));
         Assert.Equal((ChessEat.Blocked, 0d), (none.Eat, none.Effect));
 
-        var neutral = ChessBalance.Mark(water, ChessPiece.Rook, normal, ChessPiece.King);
+        var neutral = ChessBalance.Mark(L(water, ChessPiece.Rook), L(normal, ChessPiece.King));
         Assert.Equal((ChessEat.Eats, 1d), (neutral.Eat, neutral.Effect));
         Assert.Equal("eau-Rook mange nor-King.", neutral.Sentence);
     }
@@ -62,6 +65,30 @@ public sealed class ChessBalanceTests
         // Seuls les 8 Normal peuvent manger le roi Eau ; les 16 Eau, le roi Normal
         Assert.Equal(8, ChessBalance.KingThreats(fire, water));
         Assert.Equal(16, ChessBalance.KingThreats(water, fire));
+    }
+
+    [Fact]
+    public void TwoPawnTypes_FourPawnsEach()
+    {
+        // Pions Eau et Feu une colonne sur deux, le reste Normal ; en face, tout Plante
+        ChessTeam mixed = new("mix",
+        [
+            new(1, 0, "Eau", PokeType.Water, ChessPiece.Pawn),
+            new(2, 0, "Feu", PokeType.Fire, ChessPiece.Pawn),
+            .. Enum.GetValues<ChessPiece>().Where(p => p != ChessPiece.Pawn).Select(p => new ChessMon(3, 0, $"mix-{p}", PokeType.Normal, p)),
+        ]);
+        var grass = Team("pla", PokeType.Grass, PokeType.Grass);
+        var pawns = mixed.LinesOf(ChessPiece.Pawn);
+        Assert.Equal([PokeType.Water, PokeType.Fire], pawns.Select(l => l.Type));
+        Assert.All(pawns, l => Assert.Equal(4, ChessBalance.Count(mixed, l)));
+        Assert.Equal(7, mixed.Lines(Enum.GetValues<ChessPiece>()).Count);
+        Assert.Equal(16, mixed.Lines(Enum.GetValues<ChessPiece>()).Sum(l => ChessBalance.Count(mixed, l)));
+
+        // Contre Plante : les 4 pions Eau ne mangent rien, les 4 Feu en super efficace, les 8 Normal en neutre
+        Assert.Equal(new ChessTeamMatchup(12 / 16d, 4 / 16d), ChessBalance.Matchup(mixed, grass));
+        Assert.Equal(12, ChessBalance.KingThreats(mixed, grass));
+        // Plante contre : les pions Eau sont mangés (×2), les Feu non, le reste en neutre
+        Assert.Equal(new ChessTeamMatchup(12 / 16d, 4 / 16d), ChessBalance.Matchup(grass, mixed));
     }
 
     [Fact]

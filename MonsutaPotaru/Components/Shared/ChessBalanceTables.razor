@@ -1,7 +1,7 @@
 @using MonsutaPotaru.Services
 @* Onglet « Échecs » de l'administration : l'équilibrage des équipes d'échecs, calculé d'après ChessTeams.All et la table
    des types (ChessBalance), rien en base. Trois synthèses (part mangeable, rois menacés, solde), puis chaque équipe
-   contre les 42 pièces des sept équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
+   contre les lignes (pièce et type : 7 par équipe, les pions ayant deux types) des sept équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
    générée à part). *@
 
 <nav class="chess-balance-nav small mb-3" aria-label="Équipes">
@@ -17,7 +17,7 @@
 <Block Title="Synthèse" Id="chess-balance-summary">
     <p class="small text-muted">
         Part des pièces de l'équipe en colonne que celles de la ligne peuvent manger, <strong>selon le nombre de pièces</strong>
-        (8 pions, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires), et la part super efficace. La dernière
+        (8 pions, 4 de chaque type, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires), et la part super efficace. La dernière
         colonne fait la moyenne contre les sept équipes, elle comprise (deux joueurs peuvent prendre la même).
     </p>
     <div class="form-check small mb-2">
@@ -78,7 +78,7 @@
                 @foreach (var team in Teams)
                 {
                     <tr>
-                        <th scope="row">@PieceHeader(team, ChessPiece.King)</th>
+                        <th scope="row">@PieceHeader(team.LinesOf(ChessPiece.King)[0])</th>
                         @foreach (var other in Teams)
                         {
                             var threats = ChessBalance.KingThreats(other, team);
@@ -182,16 +182,15 @@
     };
 
     /// <summary>
-    /// Une pièce : images (deux pour les pions Nidoran), nom, type, pièce. <paramref name="column"/> : en-tête d'une des
-    /// 42 colonnes, le nom au survol seulement (dans 3,6rem, il se coupait au milieu ; écrit en entier, la table passait
-    /// de ~2 200 à ~2 700 px CSS).
+    /// Une ligne (pièce d'un type) : images (deux pour les pions Nidoran), nom, type, pièce. <paramref name="column"/> :
+    /// en-tête d'une des 49 colonnes, le nom au survol seulement (dans 3,6rem, il se coupait au milieu ; écrit en entier,
+    /// la table passait de ~2 200 à ~2 700 px CSS, avec 42 colonnes).
     /// </summary>
-    private static RenderFragment PieceHeader(ChessTeam team, ChessPiece piece, bool column = false) => __builder =>
+    private static RenderFragment PieceHeader(ChessLine line, bool column = false) => __builder =>
     {
-        var mon = team.Of(piece);
-        <span class="chess-balance-piece" title="@(column ? team.NamesOf(piece) : null)">
+        <span class="chess-balance-piece" title="@(column ? line.Names : null)">
             <span class="chess-mon-images">
-                @foreach (var member in team.MembersOf(piece))
+                @foreach (var member in line.Members)
                 {
                     <img src="@member.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
                 }
@@ -199,19 +198,19 @@
             <span class="chess-balance-piece-text">
                 @if (!column)
                 {
-                    <span class="chess-mon-name">@team.NamesOf(piece)</span>
+                    <span class="chess-mon-name">@line.Names</span>
                 }
-                <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+                <span class="chess-type type-@PokeTypes.Key(line.Type)">@PokeTypes.Name(line.Type)</span>
                 <span class="chess-help-piece">
-                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
-                    <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
+                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(line.Piece)</span>
+                    <span class="chess-piece-name">@ChessTeams.PieceName(line.Piece)</span>
                 </span>
             </span>
         </span>
     };
 
     /// <summary>
-    /// Les pièces de <paramref name="team"/> en lignes, les 42 pièces des sept équipes en colonnes (la sienne d'abord) ;
+    /// Les lignes de <paramref name="team"/> en lignes, les 49 des sept équipes en colonnes (la sienne d'abord) ;
     /// <paramref name="attacking"/> : la ligne mange la colonne, sinon la colonne mange la ligne.
     /// </summary>
     private static RenderFragment BigTable(ChessTeam team, bool attacking) => __builder =>
@@ -225,30 +224,32 @@
                         <th scope="col" rowspan="2" class="chess-balance-sticky chess-help-corner small text-muted">@(attacking ? "mange →" : "← mangée par")</th>
                         @foreach (var other in columns)
                         {
-                            <th scope="colgroup" colspan="@Order.Length" class="chess-balance-group">@(other == team ? "Même équipe" : other.Name)</th>
+                            <th scope="colgroup" colspan="@other.Lines(Order).Count" class="chess-balance-group">@(other == team ? "Même équipe" : other.Name)</th>
                         }
                     </tr>
                     <tr>
                         @foreach (var other in columns)
                         {
-                            @foreach (var piece in Order)
+                            var lines = other.Lines(Order);
+                            @foreach (var line in lines)
                             {
-                                <th scope="col" class="chess-balance-col @(piece == Order[0] ? "chess-balance-first" : "")">@PieceHeader(other, piece, true)</th>
+                                <th scope="col" class="chess-balance-col @(line == lines[0] ? "chess-balance-first" : "")">@PieceHeader(line, true)</th>
                             }
                         }
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var piece in Order)
+                    @foreach (var row in team.Lines(Order))
                     {
                         <tr>
-                            <th scope="row" class="chess-balance-sticky chess-balance-row">@PieceHeader(team, piece)</th>
+                            <th scope="row" class="chess-balance-sticky chess-balance-row">@PieceHeader(row)</th>
                             @foreach (var other in columns)
                             {
-                                @foreach (var column in Order)
+                                var lines = other.Lines(Order);
+                                @foreach (var column in lines)
                                 {
-                                    var mark = attacking ? ChessBalance.Mark(team, piece, other, column) : ChessBalance.Mark(other, column, team, piece);
-                                    @ChessMarkCell.Cell(mark, true, column == Order[0] ? "chess-balance-first" : null)
+                                    var mark = attacking ? ChessBalance.Mark(row, column) : ChessBalance.Mark(column, row);
+                                    @ChessMarkCell.Cell(mark, true, column == lines[0] ? "chess-balance-first" : null)
                                 }
                             }
                         </tr>

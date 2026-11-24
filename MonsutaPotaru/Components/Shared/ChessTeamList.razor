@@ -1,29 +1,28 @@
 @using MonsutaPotaru.Services
-@* Les Pokémon d'une équipe d'échecs, une ligne par pièce, du roi au pion : sprite (96 × 96) à 4rem, un pixel d'image par
+@* Les Pokémon d'une équipe d'échecs, une ligne par pièce et par type (ChessLine : deux pour les pions), du roi au pion : sprite (96 × 96) à 4rem, un pixel d'image par
    pixel d'écran à 150 % ; à côté, le nom en entier et le type, la pièce dessous, puis ce que la page ajoute (Extra :
    combien sur le plateau et K.O. pendant une partie ; Shiny : images chromatiques). Choix des équipes, fenêtre « Pièces », statistiques. Deux espèces
-   de pion (Nidoran♂ et Nidoran♀) : une seule ligne, les deux images côte à côte (la colonne des images s'élargit, les
-   lignes restent alignées : sous-grille). *@
+   d'un même type (pions Nidoran♂ et Nidoran♀) : une seule ligne, les deux images côte à côte (la colonne des images
+   s'élargit, les lignes restent alignées : sous-grille). *@
 <ul class="chess-team-list">
-    @foreach (var piece in Order)
+    @foreach (var line in Team.Lines(Order))
     {
-        var mon = Team.Of(piece);
         <li>
             <div class="chess-mon-images">
-                @foreach (var member in Team.MembersOf(piece))
+                @foreach (var member in line.Members)
                 {
                     <img src="@member.SpriteUrlOf(Shiny)" alt="" data-remplacement="images/pokemon/inconnu.png" />
                 }
             </div>
             <div class="chess-mon">
                 <div class="chess-mon-title">
-                    <span class="chess-mon-name">@Team.NamesOf(piece)</span>
-                    <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+                    <span class="chess-mon-name">@line.Names</span>
+                    <span class="chess-type type-@PokeTypes.Key(line.Type)">@PokeTypes.Name(line.Type)</span>
                 </div>
                 <div class="chess-mon-piece">
-                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
-                    <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
-                    @Extra?.Invoke(piece)
+                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(line.Piece)</span>
+                    <span class="chess-piece-name">@ChessTeams.PieceName(line.Piece)</span>
+                    @Extra?.Invoke(line)
                 </div>
             </div>
         </li>
@@ -40,6 +39,6 @@
     /// <summary>Images chromatiques (les noirs d'une partie où les deux joueurs ont la même équipe).</summary>
     [Parameter] public bool Shiny { get; set; }
 
-    /// <summary>Ajout après le nom de la pièce (rien par défaut).</summary>
-    [Parameter] public RenderFragment<ChessPiece>? Extra { get; set; }
+    /// <summary>Ajout après le nom de la pièce, pour cette ligne (rien par défaut).</summary>
+    [Parameter] public RenderFragment<ChessLine>? Extra { get; set; }
 }

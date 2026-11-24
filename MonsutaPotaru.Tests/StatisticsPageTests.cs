@@ -203,8 +203,8 @@ public sealed class StatisticsPageTests : PageTestContext
             cut.FindAll(".stat-group-title").Select(t => t.TextContent));
         Assert.Equal(["Jouées", "Gagnées", "Perdues", "Nulles", "Joueurs différents"],
             cut.FindAll(".stat-tiles")[0].QuerySelectorAll(".card .small.text-muted").Select(l => l.TextContent));
-        var members = cut.FindAll(".stat-team li"); // la carte de l'équipe : nom, parties, puis ses Pokémon
-        Assert.Equal(6, members.Count);
+        var members = cut.FindAll(".stat-team li"); // la carte de l'équipe : nom, parties, puis ses Pokémon (deux lignes de pions)
+        Assert.Equal(7, members.Count);
         Assert.Contains("Dracaufeu", members[0].TextContent);
         Assert.Contains("Roi", members[0].TextContent);
         Assert.DoesNotContain("pour l'instant", cut.Text());

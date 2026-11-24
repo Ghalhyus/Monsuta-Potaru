@@ -88,7 +88,7 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("Au tour de ondine");
 
         // Une pièce adverse décrite, et une pièce qui ne peut pas bouger
-        await Click(ondine, "d2");
+        await Click(ondine, "c2");
         ondine.WaitForText("Tarsal (Psy) · Pion adverse.");
         await Click(ondine, "a8");
         ondine.WaitForText("Boumata ne peut pas bouger.");
@@ -96,10 +96,10 @@ public sealed class ChessPageTests : PageTestContext
         await Click(ondine, "d5");
         sacha.WaitForText("À toi de jouer.");
 
-        // Prise neutre : Tarsal (Psy) mange Salamèche (Feu)
+        // Prise neutre : Tarsal (Psy) mange Caninos d'Hisui (Roche, le pion d7)
         await Click(sacha, "e4");
         await Click(sacha, "d5");
-        sacha.WaitForText("Tarsal mange Salamèche en d5.");
+        sacha.WaitForText("Tarsal mange Caninos d'Hisui en d5.");
 
         // Fenêtre « Pièces » : les deux équipes, un K.O. compté
         await sacha.Click("Pièces");
@@ -108,7 +108,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Contains("ondine · noirs", pieces);
         Assert.Contains("Gardevoir", pieces);
         Assert.Contains("Fée", pieces);
-        Assert.Contains("7 sur le plateau · 1 K.O.", PageTestExtensions.Normalize(pieces));
+        Assert.Contains("3 sur le plateau · 1 K.O.", PageTestExtensions.Normalize(pieces)); // les Caninos d'Hisui
         await sacha.Click("Fermer");
         Assert.Empty(sacha.FindAll(".chess-pieces"));
 
@@ -125,10 +125,10 @@ public sealed class ChessPageTests : PageTestContext
             tables.Select(t => t.QuerySelector("caption")!.TextContent));
         foreach (var table in tables)
         {
-            Assert.Equal(6, table.QuerySelectorAll("thead th.chess-help-col").Length);
-            Assert.All(table.QuerySelectorAll("tbody tr"), row => Assert.Equal(6, row.QuerySelectorAll("td").Length));
+            Assert.Equal(7, table.QuerySelectorAll("thead th.chess-help-col").Length);
+            Assert.All(table.QuerySelectorAll("tbody tr"), row => Assert.Equal(7, row.QuerySelectorAll("td").Length));
         }
-        // Colonnes : roi, reine, tour, fou, cavalier, pion
+        // Colonnes : roi, reine, tour, fou, cavalier, pion (premier type), pion (second type)
         string Mark(int table, string attacker, int column) =>
             tables[table].QuerySelectorAll("tbody tr").Single(r => r.QuerySelector("th")!.TextContent.Contains(attacker))
                 .QuerySelectorAll("td")[column].TextContent;
@@ -156,28 +156,33 @@ public sealed class ChessPageTests : PageTestContext
     }
 
     [Fact]
-    public async Task PoisonTeam_ShowsBothNidoranOnThePawnLine()
+    public async Task PoisonTeam_ShowsBothNidoranOnOnePawnLine_AndToxelOnTheOther()
     {
         var (sacha, ondine) = await Invited();
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
         Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
-        // Une ligne « Pion », deux images
-        var pawn = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li")[^1];
-        Assert.Equal(2, pawn.QuerySelectorAll(".chess-mon-images img").Length);
-        Assert.Equal("Nidoran♂ / Nidoran♀", pawn.QuerySelector(".chess-mon-name")!.TextContent);
+        // Deux lignes « Pion » : les Nidoran (Poison, deux images), puis Toxizap (Électrik)
+        var lines = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li");
+        Assert.Equal(7, lines.Length);
+        Assert.Equal(2, lines[^2].QuerySelectorAll(".chess-mon-images img").Length);
+        Assert.Equal("Nidoran♂ / Nidoran♀", lines[^2].QuerySelector(".chess-mon-name")!.TextContent);
+        Assert.Equal("Toxizap", lines[^1].QuerySelector(".chess-mon-name")!.TextContent);
+        Assert.Contains("Électrik", lines[^1].TextContent);
+        Assert.Contains("Pion", lines[^1].TextContent);
         await ondine.FindAll(".chess-team")[3].QuerySelector("button")!.ClickAsync(new()); // Poison
         sacha.WaitForText("Choisis ton équipe");
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
         sacha.WaitForText("À toi de jouer.");
 
-        // Table de type : toujours six colonnes, la colonne des pions avec les deux Nidoran (Psy contre Poison : ×2)
+        // Table de type : sept colonnes, une par type de pion ; celle des Nidoran avec deux images (Psy contre Poison : ×2)
         await sacha.Click("Table de type des pièces");
         var columns = sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("thead th.chess-help-col");
-        Assert.Equal(6, columns.Length);
+        Assert.Equal(7, columns.Length);
         Assert.Equal(2, columns[5].QuerySelectorAll("img").Length);
         Assert.Contains("Nidoran♂ / Nidoran♀", columns[5].TextContent);
+        Assert.Contains("Toxizap", columns[6].TextContent);
         Assert.Contains(sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("td"),
             td => td.GetAttribute("title") == "Tarsal mange Nidoran♂ ou Nidoran♀ et rejoue : c'est super efficace !");
     }
@@ -193,35 +198,36 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
         sacha.WaitForText("À toi de jouer.");
 
-        // 1. e4 Cf6 2. a3 Cxe4 (Ténèbres contre Psy : super efficace, Démolosse rejoue)
+        // 1. e4 Cf6 2. g3 Cxe4 (Ténèbres contre Tarsal, Psy : super efficace, Démolosse rejoue). Tarsal en a, c, e, g ;
+        // Lippouti (Glace : neutre pour Démolosse) en b, d, f, h
         await Click(sacha, "e2"); await Click(sacha, "e4");
         ondine.WaitForText("À toi de jouer.");
         await Click(ondine, "g8"); await Click(ondine, "f6");
         sacha.WaitForText("À toi de jouer.");
-        await Click(sacha, "a2"); await Click(sacha, "a3");
+        await Click(sacha, "g2"); await Click(sacha, "g3");
         ondine.WaitForText("À toi de jouer.");
         await Click(ondine, "f6"); await Click(ondine, "e4");
         ondine.WaitForText("Super efficace ! Démolosse rejoue");
         Assert.True(ondine.HasButton("Passer"));
         sacha.WaitForText("Au tour de ondine");
-        // Sur le plateau, la prise de Tarsal en f2 n'a pas les coins dorés (« il rejouera ») : un seul tour bonus
-        ondine.WaitForAssertion(() => Assert.False((bool?)LastMarkedMove(Sq("f2"))?.GetType().GetProperty("super")!.GetValue(LastMarkedMove(Sq("f2")))));
+        // Sur le plateau, la prise de Tarsal en g3 n'a pas les coins dorés (« il rejouera ») : un seul tour bonus
+        ondine.WaitForAssertion(() => Assert.False((bool?)LastMarkedMove(Sq("g3"))?.GetType().GetProperty("super")!.GetValue(LastMarkedMove(Sq("g3")))));
 
         // Pendant son tour bonus, Démolosse mange encore un Tarsal (super efficace) : il ne rejoue pas une deuxième fois
-        await Click(ondine, "f2");
-        ondine.WaitForText("Démolosse mange Tarsal en f2. C'est super efficace, mais Démolosse a déjà rejoué.");
+        await Click(ondine, "g3");
+        ondine.WaitForText("Démolosse mange Tarsal en g3. C'est super efficace, mais Démolosse a déjà rejoué.");
         sacha.WaitForText("À toi de jouer.");
         Assert.False(ondine.HasButton("Passer"));
 
-        // 4. a4 Cd3 5. h3 Cxb2 : un nouveau tour, un nouveau tour bonus. Démolosse ne peut pas manger Gardevoir (Fée) en
+        // 4. c3 Ce4 5. h3 Cxc3 : un nouveau tour, un nouveau tour bonus. Démolosse ne peut pas manger Gardevoir (Fée) en
         // d1 : expliqué, rien n'est joué ; il passe
-        await Click(sacha, "a3"); await Click(sacha, "a4");
+        await Click(sacha, "c2"); await Click(sacha, "c3");
         ondine.WaitForText("À toi de jouer.");
-        await Click(ondine, "f2"); await Click(ondine, "d3");
+        await Click(ondine, "g3"); await Click(ondine, "e4");
         sacha.WaitForText("À toi de jouer.");
         await Click(sacha, "h2"); await Click(sacha, "h3");
         ondine.WaitForText("À toi de jouer.");
-        await Click(ondine, "d3"); await Click(ondine, "b2");
+        await Click(ondine, "e4"); await Click(ondine, "c3");
         ondine.WaitForText("Super efficace ! Démolosse rejoue");
         await Click(ondine, "d1");
         ondine.WaitForText("Pas très efficace : Démolosse (Ténèbres) ne peut pas manger Gardevoir (Fée).");
@@ -312,11 +318,12 @@ public sealed class ChessPageTests : PageTestContext
         await ChooseTeams(sacha, ondine); // Sacha : Gallame (Psy), Ondine : Dracaufeu (Feu)
         sacha.WaitForText("À toi de jouer.");
 
-        // Gallame, sur e1, choisi : Combat contre l'équipe Feu. Super efficace contre Démolosse (Ténèbres, b8 et g8) ;
-        // Malvalame (Spectre, c8 et f8), Goupelin (Psy, d8) et Dracaufeu (Vol, e8) lui résistent. Rien à sa portée
+        // Gallame, sur e1, choisi : Combat contre l'équipe Feu. Super efficace contre Démolosse (Ténèbres, b8 et g8) et
+        // les pions Caninos d'Hisui (Roche, b7, d7, f7, h7) ; Malvalame (Spectre, c8 et f8), Goupelin (Psy, d8) et Dracaufeu
+        // (Vol, e8) lui résistent. Rien à sa portée
         await Click(sacha, "e1");
         sacha.WaitForText("Gallame ne peut pas bouger.");
-        Assert.Equal([Sq("b8"), Sq("g8")], LastMarks("weak"));
+        Assert.Equal([Sq("b7"), Sq("d7"), Sq("f7"), Sq("h7"), Sq("b8"), Sq("g8")], LastMarks("weak"));
         Assert.Equal([Sq("c8"), Sq("d8"), Sq("e8"), Sq("f8")], LastMarks("resist"));
         Assert.Empty(LastMarks("blocked"));
         Assert.Contains("Sur le plateau, en rouge, bouclier cassé : il leur est super efficace ; en bleu, bouclier : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
@@ -325,13 +332,12 @@ public sealed class ChessPageTests : PageTestContext
         await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = true });
         Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.Contains("Gallame ne peut pas bouger. Sur le plateau, cadre vert : il leur est super efficace ; cadre rouge : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
-        Assert.Equal([Sq("b8"), Sq("g8")], LastMarks("weak"));
+        Assert.Equal([Sq("b7"), Sq("d7"), Sq("f7"), Sq("h7"), Sq("b8"), Sq("g8")], LastMarks("weak"));
         await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.Contains("en rouge, bouclier cassé", sacha.Find(".chess-info").TextContent);
 
-        // 1. e4 Cc6 2. e5 : Démolosse (Ténèbres) en c6 regarde Tarsal (Psy, faible) ; pendant le tour de Sacha, Ondine
-        // choisit son pion d7 (Salamèche, Feu) : Roigada (Eau) lui résiste, à sa portée ou non
+        // 1. e4 Cc6 2. e5 : Démolosse (Ténèbres) en c6 regarde Tarsal (Psy, faible)
         await Click(sacha, "e2"); await Click(sacha, "e4");
         ondine.WaitForText("À toi de jouer.");
         await Click(ondine, "b8"); await Click(ondine, "c6");
@@ -341,8 +347,8 @@ public sealed class ChessPageTests : PageTestContext
         await Click(ondine, "c6");
         Assert.Contains(Sq("e5"), LastMarks("weak"));
 
-        // Sacha, pendant le tour d'Ondine, regarde Roigada (Eau) en c1 : les Salamèche (Feu) lui sont faibles, les
-        // Boumata (Dragon, a8 et h8) lui résistent
+        // Sacha, pendant le tour d'Ondine, regarde Roigada (Eau) en c1 : les Salamèche (Feu) et les Caninos d'Hisui
+        // (Roche) lui sont faibles, tout le rang 7 ; les Boumata (Dragon, a8 et h8) lui résistent
         await Click(sacha, "c1");
         sacha.WaitForText("Aperçu (au tour de ondine) : Roigada (Eau) · Fou.");
         Assert.Empty(LastMoves());
