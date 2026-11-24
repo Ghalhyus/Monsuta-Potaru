@@ -4,7 +4,8 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 `Services/Chess/ChessGame.cs`, types `ChessTypes.cs`, équipes `ChessTeams.cs`, parties en direct `ChessHub.cs`, résultats
 `ChessRecorder.cs` (+ `ChessService`, statistiques), plateau `wwwroot/js/echecs.js` (Phaser). Tests : `ChessGameTests`
 (règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
-(`docs/claude/statistiques.md`), `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
+(`docs/claude/statistiques.md`), `ChessBalanceTests` (équilibrage, onglet « Échecs » de l'administration),
+`ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
 pièces », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe).
 
 ## Choix de l'utilisateur (2026-11-22)
@@ -216,6 +217,29 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   (2293 px CSS de large), l'un sous l'autre sinon (la fenêtre défile) ; trop étroit pour un tableau (téléphone) : il
   défile de côté (`.chess-help-scroll`). Dans les lignes, nom et type sur une ligne (`.chess-help-title`), sinon un
   tableau ne tenait pas en hauteur.
+
+## Équilibrage : onglet « Échecs » de l'administration (demandé le 2026-11-24)
+- D'abord une page HTML générée par un script Python (lecture des `.cs`) et publiée en artéfact ; puis, à la demande de
+  l'utilisateur, dans le site : `/administration?onglet=echecs` (onglets « Général » / « Échecs » de `Admin.razor`,
+  comme `Friends.razor` : `[SupplyParameterFromQuery] onglet`, `NavigateTo(…, replace: true)`).
+- Choix de l'utilisateur : onglets (pas une sous-page) ; **tout** le contenu de la page générée (trois synthèses puis les
+  14 grandes tables, pas une équipe choisie dans une liste) ; parts **pondérées par le nombre de pièces** (16 × 16).
+- Calculs `ChessBalance` (statique, rien en base : suit `ChessTeams.All` tout seul). `ChessBalance.Mark` remplace
+  l'ancien `HelpMark` de `Chess.razor` : une seule règle pour la fenêtre des parties et l'administration. Tests
+  `ChessBalanceTests` sur des équipes fabriquées (les vraies changeront avec l'équilibrage) ; page :
+  `AccountPagesTests.Admin_ChessTab_*`.
+- Moyenne de la synthèse : contre les **sept** équipes, elle comprise (deux joueurs peuvent prendre la même équipe) ;
+  la case « Ne pas compter l'équipe contre elle-même dans la moyenne » (`withoutSelf`, non retenue d'une visite à
+  l'autre) la calcule sur les six autres et grise la case du miroir (`.chess-balance-excluded`). Demandé le 2026-11-24.
+- `ChessMarkCell.Cell(…)` est un **fragment statique**, pas un composant : ~3 500 cases (14 × 6 × 42), un composant
+  chacune resterait en mémoire dans le circuit Blazor Server. Les tables ne sont rendues qu'à l'ouverture de l'onglet.
+- Grandes tables : images à 2rem (moitié de 96 px chez l'utilisateur), colonne des pièces collée à gauche
+  (`.chess-balance-sticky`, fond blanc du bloc en Ardoise). **Noms au survol seulement dans les en-têtes de colonne** :
+  dans 3,6rem, « Nidoking » se coupait en « Nidoki / ng » ; écrits en entier, la table passait de ~2 200 à ~2 700 px CSS
+  (≈ 1 940 disponibles chez l'utilisateur : elle défile de côté de toute façon).
+- Liens vers les équipes : l'adresse entière (`administration?onglet=echecs#equipe-psy`) ; « #equipe-psy » seul partirait
+  vers l'accueil (base « / »). Blazor appelle bien `scrollIntoView` ; dans le navigateur intégré masqué, le défilement
+  doux (`scroll-behavior: smooth` du site) n'avance pas : vérifier en interceptant `Element.prototype.scrollIntoView`.
 
 ## Pokémon au repos (demandé le 2026-11-22)
 - Case « Désactiver les animations » (`#chess-idle` ; d'abord « Animer les Pokémon au repos », sens inverse : renommée

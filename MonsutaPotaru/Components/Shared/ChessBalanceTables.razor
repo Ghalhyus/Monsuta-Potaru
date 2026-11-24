@@ -1,0 +1,260 @@
+@using MonsutaPotaru.Services
+@* Onglet « Échecs » de l'administration : l'équilibrage des équipes d'échecs, calculé d'après ChessTeams.All et la table
+   des types (ChessBalance), rien en base. Trois synthèses (part mangeable, rois menacés, solde), puis chaque équipe
+   contre les 42 pièces des sept équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
+   générée à part). *@
+
+<nav class="chess-balance-nav small mb-3" aria-label="Équipes">
+    <a href="@Link("chess-balance-summary")">Synthèse</a>
+    <a href="@Link("chess-balance-kings")">Rois menacés</a>
+    <a href="@Link("chess-balance-balance")">Solde</a>
+    @foreach (var team in Teams)
+    {
+        <a href="@Link(TeamAnchor(team))">@team.ShortName</a>
+    }
+</nav>
+
+<Block Title="Synthèse" Id="chess-balance-summary">
+    <p class="small text-muted">
+        Part des pièces de l'équipe en colonne que celles de la ligne peuvent manger, <strong>selon le nombre de pièces</strong>
+        (8 pions, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires), et la part super efficace. La dernière
+        colonne fait la moyenne contre les sept équipes, elle comprise (deux joueurs peuvent prendre la même).
+    </p>
+    <div class="form-check small mb-2">
+        <input class="form-check-input" type="checkbox" id="chess-balance-without-self" checked="@withoutSelf"
+               @onchange="e => withoutSelf = e.Value is true" />
+        <label class="form-check-label" for="chess-balance-without-self">Ne pas compter l'équipe contre elle-même dans la moyenne</label>
+    </div>
+    <div class="chess-help-scroll">
+        <table class="chess-balance-summary">
+            <thead>
+                <tr>
+                    <th scope="col" class="chess-help-corner small text-muted">mange&nbsp;→</th>
+                    @foreach (var team in Teams)
+                    {
+                        <th scope="col">@TeamHeader(team)</th>
+                    }
+                    <th scope="col">Moyenne</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in Teams)
+                {
+                    <tr>
+                        <th scope="row">@TeamHeader(team)</th>
+                        @foreach (var other in Teams)
+                        {
+                            var m = ChessBalance.Matchup(team, other);
+                            <td class="@(other == team ? withoutSelf ? "chess-balance-same chess-balance-excluded" : "chess-balance-same" : "")" style="--hue: @EdibleHue(m.Edible)">
+                                <strong>@ChessBalance.Points(m.Edible) %</strong>
+                                <span class="d-block small">dont ×2 : @ChessBalance.Points(m.Super) %</span>
+                            </td>
+                        }
+                        <td class="chess-balance-average"><strong>@ChessBalance.Points(ChessBalance.Average(team, withoutSelf)) %</strong></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</Block>
+
+<Block Title="Rois menacés" Id="chess-balance-kings">
+    <p class="small text-muted">
+        Combien de pièces de l'équipe en colonne (sur 16) peuvent manger le roi de la ligne : seules celles-là peuvent le
+        mettre en échec.
+    </p>
+    <div class="chess-help-scroll">
+        <table class="chess-balance-summary">
+            <thead>
+                <tr>
+                    <th scope="col" class="chess-help-corner small text-muted">menacé&nbsp;par&nbsp;→</th>
+                    @foreach (var team in Teams)
+                    {
+                        <th scope="col">@TeamHeader(team)</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in Teams)
+                {
+                    <tr>
+                        <th scope="row">@PieceHeader(team, ChessPiece.King)</th>
+                        @foreach (var other in Teams)
+                        {
+                            var threats = ChessBalance.KingThreats(other, team);
+                            <td class="@(other == team ? "chess-balance-same" : "")" style="--hue: @ThreatHue(threats)">@threats</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</Block>
+
+<Block Title="Solde" Id="chess-balance-balance">
+    <p class="small text-muted">
+        Part mangeable de la ligne contre la colonne, moins celle de la colonne contre la ligne, en points. Positif : l'équipe
+        de la ligne mange plus qu'elle n'est mangée.
+    </p>
+    <div class="chess-help-scroll">
+        <table class="chess-balance-summary">
+            <thead>
+                <tr>
+                    <th scope="col" class="chess-help-corner small text-muted"></th>
+                    @foreach (var team in Teams)
+                    {
+                        <th scope="col">@TeamHeader(team)</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in Teams)
+                {
+                    <tr>
+                        <th scope="row">@TeamHeader(team)</th>
+                        @foreach (var other in Teams)
+                        {
+                            if (other == team)
+                            {
+                                <td class="chess-balance-same">—</td>
+                            }
+                            else
+                            {
+                                var points = ChessBalance.Balance(team, other);
+                                <td style="--hue: @BalanceHue(points)">@(points > 0 ? "+" : "")@points</td>
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</Block>
+
+<p class="chess-help-legend small">
+    <span class="chess-help-mark super">×2</span> super efficace : elle mange et rejoue
+    <span class="chess-help-mark eats">✓</span> elle mange
+    <span class="chess-help-mark blocked">✗</span> elle ne peut pas manger (pas très efficace)
+    <span class="chess-help-mark blocked">✗<sub>0</sub></span> sans effet
+    <span class="text-muted">— le survol d'une case donne le multiplicateur.</span>
+</p>
+
+@foreach (var team in Teams)
+{
+    <Block Title="@team.Name" Id="@TeamAnchor(team)">
+        @BigTable(team, true)
+        @BigTable(team, false)
+    </Block>
+}
+
+@code {
+    /// <summary>Case « Ne pas compter l'équipe contre elle-même » : la moyenne sur les six autres, la case du miroir grisée.</summary>
+    private bool withoutSelf;
+
+    /// <summary>Ordre des pièces : celui des listes d'équipes (roi d'abord).</summary>
+    private static readonly ChessPiece[] Order = ChessTeamList.Order;
+
+    private static IReadOnlyList<ChessTeam> Teams => ChessTeams.All;
+
+    /// <summary>Ancre d'une équipe (« equipe-psy »).</summary>
+    private static string TeamAnchor(ChessTeam team) => $"equipe-{team.Id}";
+
+    /// <summary>Lien vers une ancre de l'onglet : l'adresse entière (le lien « #… » seul partirait vers l'accueil, base « / »).</summary>
+    private static string Link(string anchor) => $"administration?onglet=echecs#{anchor}";
+
+    /// <summary>Couleur d'une part mangeable : rouge à 40 % ou moins, vert à 100 %.</summary>
+    private static int EdibleHue(double edible) => Math.Clamp((int)Math.Round((edible - 0.4) / 0.6 * 120), 0, 120);
+
+    /// <summary>Couleur d'un roi : vert s'il est peu menacé, rouge s'il l'est par les 16 pièces.</summary>
+    private static int ThreatHue(int threats) => Math.Clamp((16 - threats) * 12, 0, 120);
+
+    /// <summary>Couleur d'un solde : jaune à 0, vert au-delà de +30 points, rouge en deçà de −30.</summary>
+    private static int BalanceHue(int points) => Math.Clamp(60 + points * 2, 0, 120);
+
+    /// <summary>En-tête d'une équipe dans les synthèses : l'image de son roi et son nom.</summary>
+    private static RenderFragment TeamHeader(ChessTeam team) => __builder =>
+    {
+        var king = team.Of(ChessPiece.King);
+        <span class="chess-balance-team">
+            <img src="@king.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+            <span>@team.Name</span>
+        </span>
+    };
+
+    /// <summary>
+    /// Une pièce : images (deux pour les pions Nidoran), nom, type, pièce. <paramref name="column"/> : en-tête d'une des
+    /// 42 colonnes, le nom au survol seulement (dans 3,6rem, il se coupait au milieu ; écrit en entier, la table passait
+    /// de ~2 200 à ~2 700 px CSS).
+    /// </summary>
+    private static RenderFragment PieceHeader(ChessTeam team, ChessPiece piece, bool column = false) => __builder =>
+    {
+        var mon = team.Of(piece);
+        <span class="chess-balance-piece" title="@(column ? team.NamesOf(piece) : null)">
+            <span class="chess-mon-images">
+                @foreach (var member in team.MembersOf(piece))
+                {
+                    <img src="@member.SpriteUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                }
+            </span>
+            <span class="chess-balance-piece-text">
+                @if (!column)
+                {
+                    <span class="chess-mon-name">@team.NamesOf(piece)</span>
+                }
+                <span class="chess-type type-@PokeTypes.Key(mon.Type)">@PokeTypes.Name(mon.Type)</span>
+                <span class="chess-help-piece">
+                    <span class="chess-piece-symbol" aria-hidden="true">@ChessTeams.Symbol(piece)</span>
+                    <span class="chess-piece-name">@ChessTeams.PieceName(piece)</span>
+                </span>
+            </span>
+        </span>
+    };
+
+    /// <summary>
+    /// Les pièces de <paramref name="team"/> en lignes, les 42 pièces des sept équipes en colonnes (la sienne d'abord) ;
+    /// <paramref name="attacking"/> : la ligne mange la colonne, sinon la colonne mange la ligne.
+    /// </summary>
+    private static RenderFragment BigTable(ChessTeam team, bool attacking) => __builder =>
+    {
+        var columns = Teams.OrderBy(t => t == team ? 0 : 1).ToList();
+        <div class="chess-help-scroll chess-balance-big-scroll">
+            <table class="chess-help-table chess-balance-big">
+                <caption>@(attacking ? "Ce que mangent ses pièces (la ligne mange la colonne)" : "Qui peut manger ses pièces (la colonne mange la ligne)")</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" rowspan="2" class="chess-balance-sticky chess-help-corner small text-muted">@(attacking ? "mange →" : "← mangée par")</th>
+                        @foreach (var other in columns)
+                        {
+                            <th scope="colgroup" colspan="@Order.Length" class="chess-balance-group">@(other == team ? "Même équipe" : other.Name)</th>
+                        }
+                    </tr>
+                    <tr>
+                        @foreach (var other in columns)
+                        {
+                            @foreach (var piece in Order)
+                            {
+                                <th scope="col" class="chess-balance-col @(piece == Order[0] ? "chess-balance-first" : "")">@PieceHeader(other, piece, true)</th>
+                            }
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var piece in Order)
+                    {
+                        <tr>
+                            <th scope="row" class="chess-balance-sticky chess-balance-row">@PieceHeader(team, piece)</th>
+                            @foreach (var other in columns)
+                            {
+                                @foreach (var column in Order)
+                                {
+                                    var mark = attacking ? ChessBalance.Mark(team, piece, other, column) : ChessBalance.Mark(other, column, team, piece);
+                                    @ChessMarkCell.Cell(mark, true, column == Order[0] ? "chess-balance-first" : null)
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+}

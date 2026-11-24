@@ -1341,8 +1341,7 @@ else
                             </th>
                             @foreach (var column in PieceOrder)
                             {
-                                var (css, mark, sentence) = HelpMark(attackers, piece, victims, column);
-                                <td class="chess-help-mark @css" title="@sentence">@mark</td>
+                                @ChessMarkCell.Cell(ChessBalance.Mark(attackers, piece, victims, column))
                             }
                         </tr>
                     }
@@ -1378,22 +1377,6 @@ else
             }
         </div>
     };
-
-    /// <summary>
-    /// Marque d'une case de l'aide (classe CSS, symbole, phrase au survol), d'après la règle de prise des parties : les
-    /// Pokémon d'une même pièce ont le même type, le premier suffit.
-    /// </summary>
-    private static (string Css, string Mark, string Sentence) HelpMark(ChessTeam attackers, ChessPiece attackerPiece,
-        ChessTeam victims, ChessPiece victimPiece)
-    {
-        var (attacker, victim) = (attackers.Of(attackerPiece).Type, victims.Of(victimPiece).Type);
-        var (who, whom) = (attackers.NamesInSentence(attackerPiece), victims.NamesInSentence(victimPiece));
-        if (!ChessGame.CanEat(attacker, victim))
-            return ("blocked", "✗", $"{who} ne peut pas manger {whom}.");
-        return PokeTypes.Effectiveness(attacker, victim) > 1
-            ? ("super", "×2", $"{who} mange {whom} et rejoue : c'est super efficace !")
-            : ("eats", "✓", $"{who} mange {whom}.");
-    }
 
     public async ValueTask DisposeAsync()
     {

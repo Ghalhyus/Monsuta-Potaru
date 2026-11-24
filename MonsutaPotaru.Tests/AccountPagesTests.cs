@@ -178,6 +178,69 @@ public sealed class AccountPagesTests : PageTestContext
     {
         var cut = Render<Admin>();
         cut.WaitForAssertion(() => Assert.DoesNotContain("Code d'invitation :", cut.Text()));
+        Assert.Empty(cut.FindAll("[role=tab]"));
+    }
+
+    [Fact]
+    public async Task Admin_ChessTab_BalanceTables()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo("administration");
+        var cut = Render<Admin>();
+        cut.WaitForText("Code d'invitation");
+        Assert.Empty(cut.FindAll(".chess-balance-big"));
+
+        await cut.Click("Échecs");
+        cut.WaitForText("Rois menacés");
+        Assert.EndsWith("administration?onglet=echecs", navigation.Uri);
+        Assert.DoesNotContain("Code d'invitation", cut.Text());
+
+        // Synthèse : 7 × 7 parts et la moyenne, celles de ChessBalance
+        var psy = ChessTeams.Find("psy")!;
+        var fire = ChessTeams.Find("feu")!;
+        var summary = cut.FindAll("#chess-balance-summary tbody tr");
+        Assert.Equal(ChessTeams.All.Count, summary.Count);
+        Assert.Contains($"{ChessBalance.Points(ChessBalance.Matchup(psy, fire).Edible)} %", summary[0].QuerySelectorAll("td")[1].TextContent);
+        Assert.Contains($"{ChessBalance.Points(ChessBalance.Average(psy))} %", summary[0].QuerySelectorAll("td")[^1].TextContent);
+        Assert.Empty(cut.FindAll(".chess-balance-excluded"));
+        // Case cochée : moyenne sur les six autres équipes, la case du miroir grisée
+        cut.Find("#chess-balance-without-self").Change(true);
+        Assert.Contains($"{ChessBalance.Points(ChessBalance.Average(psy, true))} %",
+            cut.FindAll("#chess-balance-summary tbody tr")[0].QuerySelectorAll("td")[^1].TextContent);
+        Assert.Equal(ChessTeams.All.Count, cut.FindAll(".chess-balance-excluded").Count);
+        Assert.Equal($"{ChessBalance.KingThreats(fire, psy)}",
+            cut.FindAll("#chess-balance-kings tbody tr")[0].QuerySelectorAll("td")[1].TextContent.Trim());
+        Assert.Equal("—", cut.FindAll("#chess-balance-balance tbody tr")[0].QuerySelectorAll("td")[0].TextContent);
+
+        // Deux grandes tables par équipe : ses 6 pièces contre les 42 des sept équipes, la sienne d'abord
+        var big = cut.FindAll("table.chess-balance-big");
+        Assert.Equal(2 * ChessTeams.All.Count, big.Count);
+        Assert.All(big, t => Assert.Equal(6 * 6 * ChessTeams.All.Count, t.QuerySelectorAll("td").Length));
+        Assert.Equal("Même équipe", big[0].QuerySelector(".chess-balance-group")!.TextContent);
+        // Gallame (Combat) ne peut pas manger Malvalame (Spectre) : sans effet, marqué à part
+        var noEffect = big[0].QuerySelectorAll("td.blocked").First(td => td.GetAttribute("title")!.StartsWith("Gallame ne peut pas manger Malvalame"));
+        Assert.Equal("✗0", noEffect.TextContent.Replace(" ", ""));
+        Assert.Contains("×0 : sans effet", noEffect.GetAttribute("title"));
+        // Liens vers chaque équipe : l'adresse entière (base « / »)
+        Assert.Contains(cut.FindAll(".chess-balance-nav a"), a => a.GetAttribute("href") == "administration?onglet=echecs#equipe-sol");
+        Assert.NotNull(cut.Find("#equipe-sol"));
+
+        await cut.Click("Général");
+        cut.WaitForText("Code d'invitation");
+        Assert.EndsWith("administration", navigation.Uri);
+    }
+
+    [Fact]
+    public async Task Admin_ChessTab_FromTheAddress()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("administration?onglet=echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText("Rois menacés");
+        Assert.Contains("active", cut.FindAll("[role=tab]")[1].ClassName);
     }
 
     // ---------- Joueurs ----------

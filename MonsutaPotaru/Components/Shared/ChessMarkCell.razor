@@ -1,0 +1,29 @@
+@using MonsutaPotaru.Services
+@* Case d'une table de type des échecs : ×2 (mange et rejoue), ✓ (mange), ✗ (ne mange pas), la phrase au survol. Fenêtre
+   « Table de type des pièces » d'une partie et onglet « Échecs » de l'administration ; ce dernier (detailed) ajoute le
+   multiplicateur à la phrase et distingue « sans effet » (✗₀) de « pas très efficace » (✗), que les parties traitent
+   pareil. Fragment statique (@ChessMarkCell.Cell(…)) plutôt qu'un composant : l'administration en affiche ~3 500, un
+   composant chacune serait gardé en mémoire par Blazor Server. *@
+
+@code {
+    /// <summary>La case <c>td</c> d'une marque ; <paramref name="css"/> : classe ajoutée (première colonne d'une équipe).</summary>
+    public static RenderFragment Cell(ChessMark mark, bool detailed = false, string? css = null) => __builder =>
+    {
+        var (kind, symbol) = mark.Eat switch
+        {
+            ChessEat.Super => ("super", "×2"),
+            ChessEat.Eats => ("eats", "✓"),
+            _ => ("blocked", "✗"),
+        };
+        var title = detailed ? $"{mark.Sentence} ({Multiplier(mark.Effect)})" : mark.Sentence;
+        <td class="chess-help-mark @kind @css" title="@title">@symbol@if (detailed && mark.Effect == 0) { <sub>0</sub> }</td>
+    };
+
+    /// <summary>« ×2 », « ×0,5 », « ×0 : sans effet ».</summary>
+    private static string Multiplier(double effect) => effect switch
+    {
+        0 => "×0 : sans effet",
+        0.5 => "×0,5",
+        _ => $"×{effect:0}",
+    };
+}

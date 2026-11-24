@@ -271,7 +271,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   sans cases : on ne peut pas jouer). Boutons **Pièces** et **Table de type des pièces** dans la couleur principale du
   thème. « Pièces » : les deux équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Table de type : qui mange
   qui, deux tableaux croisés (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après
-  `ChessGame.CanEat` et la table des types. Case **« Désactiver les animations »** : cochée, les pièces du plateau restent
+  `ChessGame.CanEat` et la table des types (`ChessBalance.Mark`, comme l'onglet « Échecs » de l'administration, voir
+  « Administration »). Case **« Désactiver les animations »** : cochée, les pièces du plateau restent
   sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O. sur celle de Sleep (marche, attaque et blessure
   restent animées). Gardée dans le compte (`SortPreferences.ChessIdle`, aussi dans « Préférences ») ; sans compte, pour
   la partie en cours seulement.
@@ -464,7 +465,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
 
 Rôles Identity **exclusifs** (`Data/SiteSetting.cs`, `SiteRoles`, créés avec la base, identifiants fixes) : **Standard**
 pour tous, **Administrateur** en plus pour ceux qui gèrent le site. Page `/administration` (`Components/Pages/Admin.razor`,
-lien du menu pour les seuls administrateurs ; les autres lisent « Accès refusé ») :
+lien du menu pour les seuls administrateurs ; les autres lisent « Accès refusé »), en deux onglets : « Général » (tout
+ce qui suit, sauf le dernier point) et « Échecs » (`?onglet=echecs`) :
 
 - **Code d'invitation** (`ABCD-EFGH`, sans caractères ambigus) : régénéré après confirmation, l'ancien ne marche plus.
   Table `SiteSettings` : au premier démarrage, il reprend `Bank:InviteCode` (`INVITE_CODE` du `.env`) ou est tiré au
@@ -478,6 +480,13 @@ lien du menu pour les seuls administrateurs ; les autres lisent « Accès refus�
   redémarrage ; chaque action revérifie en base que le compte est administrateur. Inventaire : +10 000, +100 000 et
   +1 000 000 ₽ (montants fixes, tout autre refusé, écrits au journal) ; Parc : « + taille » / « − taille » (gratuits, hors
   journal ; réduit, le parc rend ses derniers arrivés à la collection), « Habitats (debug) », « Attaquer (debug) ».
+- **Équilibrage des échecs** (onglet « Échecs », `Shared/ChessBalanceTables.razor`, calculs `Services/Chess/ChessBalance.cs`) :
+  lecture seule, recalculé d'après `ChessTeams.All` et la table des types (rien en base). Parts **pondérées par le
+  nombre de pièces** (8 pions, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires) : part mangeable d'une
+  équipe contre chaque autre et part super efficace, moyenne contre les sept équipes, elle comprise (une case l'exclut) ; rois menacés (pièces sur 16 qui
+  peuvent manger chaque roi) ; solde (part de A contre B moins celle de B contre A, en points). Puis, par équipe, deux
+  tables contre les 42 pièces des sept équipes (ce qu'elle mange, qui la mange), même règle que les parties
+  (`ChessGame.CanEat`) ; ✗₀ distingue « sans effet », le multiplicateur au survol.
 
 ### Sauvegardes stockées (consultation)
 
@@ -916,7 +925,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/WorldFolderPicker.razor` | Bouton « choisir le dossier du monde » (« Dépôt / Retrait », « Mes sauvegardes ») : reçoit du navigateur les seuls fichiers utiles, les fait revérifier |
 | `MonsutaPotaru/Services/AdminService.cs` | Administration : rôles (donner, retirer, garde-fous), liste des comptes, code d'invitation (lecture, régénération), initialisation au démarrage (code, premier administrateur) |
 | `MonsutaPotaru/Services/DebugService.cs` | Mode debug d'un administrateur : comptes actifs en mémoire (`DebugMode`, coupé à la déconnexion), argent ajouté (montants fixes, journal), parc agrandi ou réduit gratuitement |
-| `MonsutaPotaru/Components/Pages/Admin.razor` | Page « Administration » : code d'invitation, comptes et rôles |
+| `MonsutaPotaru/Components/Pages/Admin.razor` | Page « Administration » : onglet « Général » (code d'invitation, mode debug, comptes et rôles) et onglet « Échecs » (équilibrage) |
 | `MonsutaPotaru/Services/PlayerService.cs` | Multijoueurs : recherche par pseudo, joueur consultable selon sa visibilité et le lien avec le visiteur, visibilité du profil |
 | `MonsutaPotaru/Services/FriendService.cs` | Amis : code ami, demandes (par pseudo ou par code), acceptation, refus, annulation, retrait, listes, compteur du menu |
 | `MonsutaPotaru/Components/Pages/Friends.razor` | « Multijoueurs » → « Amis » : onglets Amis (recherche, retrait) et Demandes (code ami, reçues, envoyées) |
@@ -942,6 +951,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes à l'aveugle (même équipe : la garder ou en changer), partie en direct (clics sur le plateau, pièce choisie et les pièces adverses faibles ou qui lui résistent, aperçu pendant le tour adverse, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Table de type des pièces » (qui mange qui), cases « Désactiver les animations » et « Contraste élevé », « Recommencer » sur l'écran de fin |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
+| `MonsutaPotaru/Services/Chess/ChessBalance.cs` | Équilibrage des équipes d'échecs : marque de chaque case des tables de type (prise, multiplicateur, phrase), parts pondérées par le nombre de pièces, moyenne, solde, rois menacés |
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes (à l'aveugle, la même gardée ou changée), coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Components/Pages/HideSeek.razor` | « Mini-jeux » → « Cache-cache » (`/mini-jeux/cache-cache`, ouverte sans compte pour rejoindre une partie par son code) : invitations reçues, salle d'attente (code, lien, amis invités, réglages de l'hôte, Pokémon disponibles), parc de chaque tour (`parc.js` sans noms), cible, temps, clics, blocage, scores, écran de fin et « Recommencer » |
@@ -962,6 +972,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Shared/PokemonPickerSearch.razor` | Recherche et pastilles de « Ma collection » au-dessus des Pokémon à choisir (échanges, équipe de combat) |
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs, cache-cache) |
 | `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce ; chromatiques pour les noirs d'une partie à même équipe) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
+| `MonsutaPotaru/Components/Shared/ChessMarkCell.razor` | Case d'une table de type des échecs (×2, ✓, ✗, phrase au survol ; multiplicateur et « sans effet » en plus pour l'administration) : fenêtre « Table de type des pièces », onglet « Échecs » de l'administration |
+| `MonsutaPotaru/Components/Shared/ChessBalanceTables.razor` | Onglet « Échecs » de l'administration : synthèse, rois menacés, solde, puis les deux grandes tables de chaque équipe contre les 42 pièces |
 | `MonsutaPotaru/Services/MiniGames.cs` | Statistiques des mini-jeux : une partie vue par un joueur, parties gagnées, perdues, nulles, joueurs différents (sans les invités), le plus joué ; `MiniGameService` pour l'onglet Mini-jeux |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
 | `MonsutaPotaru/Components/Shared/RibbonStatsBlock.razor` | Statistiques des rubans des Pokémon suivis : rubans gagnés, par Pokémon, complétion moyenne, Pokémon complets |
