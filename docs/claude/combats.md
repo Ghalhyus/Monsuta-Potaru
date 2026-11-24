@@ -130,6 +130,10 @@ README : « Combats ».
 - Sinon, une graine fixe : `BattleHub(..., seed: [1, 2, 3, 4])` rejoue toujours le même combat (`BattleHubTests` : Charge
   critique de Bulbidou au tour 1, premier Pokémon d'Ondine K.O. 3 fois sur 40, le « tour 2 » n'arrivait jamais ;
   2026-11-15). Le site garde `BattleSetup.NewSeed`.
+- La page se redessine d'elle-même (messages du simulateur) : trouver un bouton puis cliquer en deux temps échouait
+  parfois (« There is no event handler with ID … », CI du 2026-11-24, `Battle_TeamsThenMenus_ThenForfeit`, clic sur un
+  panneau de l'équipe). Cliquer d'un seul tenant : `cut.Click("texte")` et `cut.ClickOn("sélecteur", n)`
+  (`PageTestExtensions`, dans `InvokeAsync`), jamais `cut.Find(…).ClickAsync` sur cette page.
 
 ## Essai à deux dans le navigateur
 - Sacha sur `127.0.0.1:5299`, Ondine sur `localhost:5299` ; chacune a une sauvegarde de 3e génération dans la base de

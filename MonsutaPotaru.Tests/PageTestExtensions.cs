@@ -23,9 +23,17 @@ internal static class PageTestExtensions
     public static string Normalize(string text) =>
         string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    /// <summary>Clique sur le bouton qui porte ce texte et attend la fin de son traitement.</summary>
+    /// <summary>
+    /// Clique sur le bouton qui porte ce texte et attend la fin de son traitement. Trouvé et cliqué d'un seul tenant
+    /// (<c>InvokeAsync</c>) : une page qui se redessine d'elle-même (combat Showdown, partie d'échecs, minuteries) ne peut
+    /// pas remplacer le bouton entre les deux (sinon « There is no event handler with ID … », vu en CI le 2026-11-24).
+    /// </summary>
     public static Task Click<T>(this IRenderedComponent<T> cut, string text) where T : IComponent =>
-        cut.Button(text).ClickAsync(new());
+        cut.InvokeAsync(() => cut.Button(text).ClickAsync(new()));
+
+    /// <summary>Clique sur l'élément n° <paramref name="index"/> de ce sélecteur, trouvé et cliqué d'un seul tenant (voir <see cref="Click{T}"/>).</summary>
+    public static Task ClickOn<T>(this IRenderedComponent<T> cut, string selector, int index = 0) where T : IComponent =>
+        cut.InvokeAsync(() => cut.FindAll(selector)[index].ClickAsync(new()));
 
     /// <summary>Texte de la page, espaces regroupés (pour les Assert.Contains).</summary>
     public static string Text<T>(this IRenderedComponent<T> cut) where T : IComponent =>
