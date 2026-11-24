@@ -72,6 +72,23 @@ public sealed class ChessDraftTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Chaque Pokémon des équipes du jeu a son image fixe et ses sprites animés (de sa forme), chromatiques aussi, sauf
+    /// Roserade, Minidraco et Dedenne (pas de dossier chromatique : ils restent ordinaires chez les noirs d'une partie à
+    /// même équipe).
+    /// </summary>
+    [Fact]
+    public void GameTeams_HaveTheirImages()
+    {
+        foreach (var mon in ChessTeams.All.SelectMany(t => t.Members))
+        {
+            Assert.True(PokemonSprites.HasImage(mon.Species, mon.Form, PKHeX.Core.EntityContext.Gen9, false), $"{mon.Name} : pas d'image fixe");
+            Assert.True(PokemonSprites.HasDonjonForm(mon.Species, mon.Form, PKHeX.Core.EntityContext.Gen9, false), $"{mon.Name} : pas de sprites animés");
+            Assert.True(mon.Species is 407 or 147 or 702 || PokemonSprites.HasDonjonForm(mon.Species, mon.Form, PKHeX.Core.EntityContext.Gen9, true),
+                $"{mon.Name} : pas de sprites animés chromatiques");
+        }
+    }
+
     // ---------- Droits et valeurs revérifiées ----------
 
     [Fact]

@@ -214,7 +214,7 @@ public sealed class AccountPagesTests : PageTestContext
             cut.FindAll("#chess-balance-kings tbody tr")[0].QuerySelectorAll("td")[1].TextContent.Trim());
         Assert.Equal("—", cut.FindAll("#chess-balance-balance tbody tr")[0].QuerySelectorAll("td")[0].TextContent);
 
-        // Deux grandes tables par équipe : ses 7 lignes (deux types de pions) contre les 49 des sept équipes, la sienne d'abord
+        // Deux grandes tables par équipe : ses 7 lignes (deux types de pions) contre les 7 de chaque équipe, la sienne d'abord
         var big = cut.FindAll("table.chess-balance-big");
         Assert.Equal(2 * ChessTeams.All.Count, big.Count);
         Assert.All(big, t => Assert.Equal(7 * 7 * ChessTeams.All.Count, t.QuerySelectorAll("td").Length));

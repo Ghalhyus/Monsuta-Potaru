@@ -255,7 +255,7 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   l'ancien `HelpMark` de `Chess.razor` : une seule règle pour la fenêtre des parties et l'administration. Tests
   `ChessBalanceTests` sur des équipes fabriquées (les vraies changeront avec l'équilibrage) ; page :
   `AccountPagesTests.Admin_ChessTab_*`.
-- Moyenne de la synthèse : contre les **sept** équipes, elle comprise (deux joueurs peuvent prendre la même équipe) ;
+- Moyenne de la synthèse : contre **toutes** les équipes, elle comprise (deux joueurs peuvent prendre la même équipe) ;
   la case « Ne pas compter l'équipe contre elle-même dans la moyenne » (`withoutSelf`, non retenue d'une visite à
   l'autre) la calcule sur les six autres et grise la case du miroir (`.chess-balance-excluded`). Demandé le 2026-11-24.
 - `ChessMarkCell.Cell(…)` est un **fragment statique**, pas un composant : ~4 800 cases (14 × 7 × 49), un composant
@@ -268,6 +268,24 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   vers l'accueil (base « / »). Blazor appelle bien `scrollIntoView` ; dans le navigateur intégré masqué, le défilement
   doux (`scroll-behavior: smooth` du site) n'avance pas : vérifier en interceptant `Element.prototype.scrollIntoView`.
 
+## Équipes Acier, Dragon, Fée, Ténèbres et retouches (2026-11-24, d'après les brouillons de l'utilisateur)
+- Lues dans sa base locale (`MonsutaPotaru/Data/app.db`, celle de Visual Studio, ouverte en lecture seule avec
+  `sqlite3` de Python, `?mode=ro`) : brouillons 3 à 6 (nouvelles équipes) et 7, 9, 10 (modifications). Celle du serveur
+  ne m'est pas accessible : pour un brouillon fait en ligne, « Copier pour Claude ».
+- Nouvelles (identifiants proposés par moi, sans objection) : `acier` (roi Galeking Roche), `dragon` (Dracolosse Vol),
+  `fee` (Diancie Fée ; pions Flabébé Rouge et Flabébé Jaune, deux formes d'une espèce, à tour de rôle), `tenebres`
+  (Scalpereur Ténèbres). Ajoutées à la fin de `ChessTeams.All`.
+- Retouches : équipe Nidoking (pion Toxizap → Nosferapti Vol ; Malamandre retiré, Ectoplasma passe cavalier, Floréclat
+  Roche en fou), équipe Rhinastoc (roi Roche → Sol, comme ses pions Rhinocorne), équipe Tokorico (pion Emolga → Motisma
+  Spectre, cavalier Mygavolt → Motisma Chaleur Feu ; trois Motisma voulus par l'utilisateur).
+- Sans sprites Donjon chromatiques, comme Roserade : **Minidraco** et **Dedenne** (ordinaires chez les noirs d'une
+  partie à même équipe). Test : `ChessDraftTests.GameTeams_HaveTheirImages` (image fixe, sprites animés de la forme,
+  chromatiques sauf ces trois).
+- Les brouillons restent dans sa base : ceux des nouvelles équipes, s'ils restent comptés, s'ajoutent en double dans
+  l'équilibrage « Avec les brouillons » (à supprimer par lui).
+- Vérifié dans le navigateur : les 11 cartes du choix des équipes (images chargées), une partie Scalpereur contre Diancie
+  (plateau et sprites).
+
 ## Brouillons d'équipes : onglet « Brouillons d'échecs » de l'administration (demandé le 2026-11-24)
 - But de l'utilisateur : créer et modifier des équipes, vérifier l'équilibrage, **puis** me demander de les entrer dans
   le jeu. Les parties ne lisent que `ChessTeams.All` : un brouillon n'est jamais joué.
@@ -277,8 +295,9 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   jeu par moi** : bouton « Copier pour Claude ».
 - Proposés par moi, sans objection : troisième onglet (`?onglet=brouillons-echecs`, brouillon ouvert `&brouillon=3`) ;
   « Nouvelle équipe » ou « Modifier cette équipe » (copie d'une équipe du jeu, `BaseTeam`) ; Dupliquer, Supprimer (avec
-  confirmation) ; note libre (100 caractères) ; enregistré à chaque changement ; remarques sans blocage ; rien dans le
-  guide du joueur (réservé à l'administration).
+  confirmation) ; note libre (100 caractères) ; enregistré à chaque changement ; remarques sans blocage. Guide du
+  joueur : chapitre « Administration » (case « Avec les brouillons » sous l'onglet « Échecs », puis l'onglet « Brouillons
+  d'échecs »), ajouté le 2026-11-24 avec les nouvelles équipes.
 - **Cases** (`ChessDraftSlot`) : `PawnA1`/`PawnA2` (a, c, e, g), `PawnB1`/`PawnB2` (b, d, f, h), puis une par pièce. La 2e
   espèce d'un pion a **le type de la première** (la recherche ne propose que ceux qui l'ont) ; changer la première pour un
   autre type retire la seconde ; vider la première y remonte la seconde. `ChessDraft.Team` (identifiant `brouillon-3`,

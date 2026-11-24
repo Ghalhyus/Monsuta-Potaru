@@ -38,7 +38,7 @@ public sealed class ChessGameTests
     [Fact]
     public void Teams_HaveOnePokemonPerPiece_AndTwoPawnTypes()
     {
-        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol"], ChessTeams.All.Select(t => t.Id));
+        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol", "acier", "dragon", "fee", "tenebres"], ChessTeams.All.Select(t => t.Id));
         foreach (var team in ChessTeams.All)
         {
             Assert.Equal(Enum.GetValues<ChessPiece>(), team.Members.Select(m => m.Piece).Distinct().Order());
@@ -56,7 +56,8 @@ public sealed class ChessGameTests
         var poisonPawns = Poison.LinesOf(ChessPiece.Pawn);
         Assert.Equal("Nidoran♂ / Nidoran♀", poisonPawns[0].Names);
         Assert.Equal("Nidoran♂ ou Nidoran♀", poisonPawns[0].NamesInSentence);
-        Assert.Equal(("Toxizap", PokeType.Electric), (poisonPawns[1].Names, poisonPawns[1].Type));
+        Assert.Equal(("Nosferapti", PokeType.Flying), (poisonPawns[1].Names, poisonPawns[1].Type));
+        Assert.Equal("Flabébé Rouge / Flabébé Jaune", ChessTeams.Find("fee")!.LinesOf(ChessPiece.Pawn)[0].Names); // deux formes d'une espèce
         Assert.Equal((ushort)58, Fire.LinesOf(ChessPiece.Pawn)[1].Mon.Species);
         Assert.Equal((byte)1, Fire.LinesOf(ChessPiece.Pawn)[1].Mon.Form); // Caninos d'Hisui
         Assert.Equal("Libégon", ChessTeams.Find("sol")!.Of(ChessPiece.Knight).Name);
@@ -65,7 +66,7 @@ public sealed class ChessGameTests
     [Fact]
     public void Start_PawnTypesAlternate()
     {
-        const string F = "Toxizap";
+        const string F = "Nosferapti";
         // Les deux types une colonne sur deux ; dans le type Poison, Nidoran♂ et Nidoran♀ à tour de rôle
         var game = new ChessGame(Poison, Fire);
         var whites = Enumerable.Range(0, 8).Select(file => game.At(Sq($"{(char)('a' + file)}2"))!.Mon.Name);

@@ -236,14 +236,16 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
 - **Équipes** par défaut (`ChessTeams.cs`), nommées d'après leur roi (« Équipe Nidoking » ; identifiants gardés en
-  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`), un Pokémon par pièce, sauf les pions : **deux types**
-  une colonne sur deux (Tarsal Psy en a, c, e, g, Lippouti Glace en b, d, f, h ; équipe Nidoking : Nidoran♂ et
-  Nidoran♀, Poison, à tour de rôle en a, c, e, g, Toxizap Électrik en b, d, f, h). Listes et tables de type : une ligne par
+  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`, `acier`, `dragon`, `fee`, `tenebres` ; les quatre
+  dernières faites par l'utilisateur dans les brouillons de l'administration), un Pokémon par pièce, sauf les pions :
+  **deux types** une colonne sur deux (Tarsal Psy en a, c, e, g, Lippouti Glace en b, d, f, h ; équipe Nidoking : Nidoran♂
+  et Nidoran♀, Poison, à tour de rôle en a, c, e, g, Nosferapti Vol en b, d, f, h ; équipe Diancie : Flabébé Rouge et
+  Flabébé Jaune). Une espèce peut revenir sous plusieurs formes (trois Motisma dans l'équipe Tokorico). Listes et tables de type : une ligne par
   pièce et par type (`ChessLine`), deux pour les pions. Choisies **à l'aveugle** : on sait seulement si
   l'autre a choisi (`ChessSession.TeamChoice`). La **même** prise par les deux : chacun la garde (`ChessHub.KeepTeam`) ou
   en change (`ClearTeam` : l'autre l'apprend, et peut changer aussi) ; gardée par les deux, la partie se joue avec la même
-  équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade n'a pas de sprite Donjon chromatique : ordinaire sur
-  le plateau). Pas encore d'équipe faite par les joueurs.
+  équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade, Minidraco et Dedenne n'ont pas de sprite Donjon
+  chromatique : ordinaires sur le plateau). Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
   sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;
   invitation valable 10 minutes ; l'ami accepte. Ou **partie publique** (`ChessHub.CreatePublic`) : un code de 8
@@ -486,12 +488,12 @@ ce qui suit, sauf les deux derniers points), « Échecs » (`?onglet=echecs`) et
 - **Équilibrage des échecs** (onglet « Échecs », `Shared/ChessBalanceTables.razor`, calculs `Services/Chess/ChessBalance.cs`) :
   lecture seule, recalculé d'après `ChessTeams.All` et la table des types (rien en base). Parts **pondérées par le
   nombre de pièces** (8 pions, 4 de chaque type, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires) : part mangeable d'une
-  équipe contre chaque autre et part super efficace, moyenne contre les sept équipes, elle comprise (une case l'exclut) ; rois menacés (pièces sur 16 qui
+  équipe contre chaque autre et part super efficace, moyenne contre toutes les équipes, elle comprise (une case l'exclut) ; rois menacés (pièces sur 16 qui
   peuvent manger chaque roi) ; solde (part de A contre B moins celle de B contre A, en points). Puis, par équipe, deux
-  tables contre les 49 lignes (pièce et type) des sept équipes (ce qu'elle mange, qui la mange), même règle que les parties
+  tables contre les lignes (pièce et type, 7 par équipe) de toutes les équipes (ce qu'elle mange, qui la mange), même règle que les parties
   (`ChessGame.CanEat`) ; ✗₀ distingue « sans effet », le multiplicateur au survol. Case **« Avec les brouillons »**
   (`&brouillons=oui`) : chaque brouillon compté et complet remplace l'équipe qu'il modifie (à sa place) ou s'ajoute (nouvelle
-  équipe, moyennes sur huit) ; chaque chiffre montre son écart avec les équipes du jeu (« (+6) », vert s'il est favorable
+  équipe, ajoutée à la moyenne) ; chaque chiffre montre son écart avec les équipes du jeu (« (+6) », vert s'il est favorable
   à l'équipe de la ligne). Une case par brouillon pour le compter.
 - **Brouillons d'échecs** (`Shared/ChessTeamDrafts.razor`, `Services/Chess/ChessDraftService.cs`, table
   `ChessTeamDrafts`) : équipes proposées par les administrateurs (communes à tous), **jamais jouées** : les parties ne lisent

@@ -51,7 +51,7 @@ public sealed record ChessLine(ChessPiece Piece, IReadOnlyList<ChessMon> Members
 /// <summary>
 /// Une équipe toute faite : un Pokémon par pièce, sauf les pions. Les pions ont deux types joués une colonne sur deux
 /// (demandé le 2026-11-24 : Tarsal Psy en a, c, e, g, Lippouti Glace en b, d, f, h) ; un type peut avoir deux espèces à
-/// tour de rôle (Poison : Nidoran♂ en a et e, Nidoran♀ en c et g, Toxizap Électrik en b, d, f, h). Listes et tables de type :
+/// tour de rôle (Poison : Nidoran♂ en a et e, Nidoran♀ en c et g, Nosferapti Vol en b, d, f, h). Listes et tables de type :
 /// une ligne par pièce et par type (<see cref="LinesOf"/>), donc deux pour les pions. L'identifiant (« poison ») est
 /// gardé en base ; le nom vient du roi (« Équipe Nidoking », demandé par l'utilisateur le 2026-11-22 : avant, le type du
 /// thème, « Équipe Poison »).
@@ -96,9 +96,9 @@ public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members, strin
 }
 
 /// <summary>
-/// Les équipes par défaut (choisies par l'utilisateur, le 2026-11-22 ; Poison, Eau, Plante et Sol ajoutées le même jour) ; les joueurs ne font pas encore les leurs. Deux
-/// joueurs d'une partie ne peuvent pas prendre la même (les pièces d'un même type ne se mangent souvent pas entre elles :
-/// la partie serait bloquée).
+/// Les équipes par défaut (choisies par l'utilisateur, le 2026-11-22 ; Poison, Eau, Plante et Sol ajoutées le même jour ;
+/// Acier, Dragon, Fée et Ténèbres le 2026-11-24, d'après ses brouillons de l'administration, qui ont aussi modifié Poison,
+/// Sol et Électrik) ; les joueurs ne font pas les leurs. Deux joueurs peuvent prendre la même (les noirs en chromatique).
 /// </summary>
 public static class ChessTeams
 {
@@ -127,9 +127,9 @@ public static class ChessTeams
         new("electrique",
         [
             new(25, 0, "Pikachu", PokeType.Electric, ChessPiece.Pawn),
-            new(587, 0, "Emolga", PokeType.Flying, ChessPiece.Pawn),
+            new(479, 0, "Motisma", PokeType.Ghost, ChessPiece.Pawn),
             new(462, 0, "Magnézone", PokeType.Steel, ChessPiece.Rook),
-            new(596, 0, "Mygavolt", PokeType.Bug, ChessPiece.Knight),
+            new(479, 1, "Motisma Chaleur", PokeType.Fire, ChessPiece.Knight),
             new(479, 2, "Motisma Lavage", PokeType.Water, ChessPiece.Bishop),
             new(26, 1, "Raichu d'Alola", PokeType.Psychic, ChessPiece.Queen),
             new(785, 0, "Tokorico", PokeType.Fairy, ChessPiece.King),
@@ -138,10 +138,10 @@ public static class ChessTeams
         [
             new(32, 0, "Nidoran♂", PokeType.Poison, ChessPiece.Pawn),
             new(29, 0, "Nidoran♀", PokeType.Poison, ChessPiece.Pawn),
-            new(848, 0, "Toxizap", PokeType.Electric, ChessPiece.Pawn),
+            new(41, 0, "Nosferapti", PokeType.Flying, ChessPiece.Pawn),
             new(748, 0, "Prédastérie", PokeType.Water, ChessPiece.Rook),
-            new(758, 0, "Malamandre", PokeType.Fire, ChessPiece.Knight),
-            new(94, 0, "Ectoplasma", PokeType.Ghost, ChessPiece.Bishop),
+            new(94, 0, "Ectoplasma", PokeType.Ghost, ChessPiece.Knight),
+            new(970, 0, "Floréclat", PokeType.Rock, ChessPiece.Bishop),
             new(31, 0, "Nidoqueen", PokeType.Ground, ChessPiece.Queen),
             new(34, 0, "Nidoking", PokeType.Poison, ChessPiece.King),
         ]),
@@ -173,7 +173,49 @@ public static class ChessTeams
             new(330, 0, "Libégon", PokeType.Dragon, ChessPiece.Knight),
             new(260, 0, "Laggron", PokeType.Water, ChessPiece.Bishop),
             new(472, 0, "Scorvol", PokeType.Flying, ChessPiece.Queen),
-            new(464, 0, "Rhinastoc", PokeType.Rock, ChessPiece.King),
+            new(464, 0, "Rhinastoc", PokeType.Ground, ChessPiece.King),
+        ]),
+        // Quatre équipes ajoutées le 2026-11-24, faites par l'utilisateur dans l'onglet « Brouillons d'échecs »
+        new("acier",
+        [
+            new(304, 0, "Galekid", PokeType.Steel, ChessPiece.Pawn),
+            new(81, 0, "Magnéti", PokeType.Electric, ChessPiece.Pawn),
+            new(376, 0, "Métalosse", PokeType.Psychic, ChessPiece.Rook),
+            new(530, 0, "Minotaupe", PokeType.Ground, ChessPiece.Knight),
+            new(395, 0, "Pingoléon", PokeType.Water, ChessPiece.Bishop),
+            new(212, 0, "Cizayox", PokeType.Bug, ChessPiece.Queen),
+            new(306, 0, "Galeking", PokeType.Rock, ChessPiece.King),
+        ]),
+        new("dragon",
+        [
+            new(147, 0, "Minidraco", PokeType.Dragon, ChessPiece.Pawn),
+            new(443, 0, "Griknot", PokeType.Ground, ChessPiece.Pawn),
+            new(697, 0, "Rexillius", PokeType.Rock, ChessPiece.Rook),
+            new(887, 0, "Lanssorien", PokeType.Ghost, ChessPiece.Knight),
+            new(784, 0, "Ékaïser", PokeType.Fighting, ChessPiece.Bishop),
+            new(635, 0, "Trioxhydre", PokeType.Dark, ChessPiece.Queen),
+            new(149, 0, "Dracolosse", PokeType.Flying, ChessPiece.King),
+        ]),
+        new("fee",
+        [
+            new(669, 0, "Flabébé Rouge", PokeType.Fairy, ChessPiece.Pawn),
+            new(669, 1, "Flabébé Jaune", PokeType.Fairy, ChessPiece.Pawn),
+            new(702, 0, "Dedenne", PokeType.Electric, ChessPiece.Pawn),
+            new(861, 0, "Angoliath", PokeType.Dark, ChessPiece.Rook),
+            new(743, 0, "Rubombelle", PokeType.Bug, ChessPiece.Knight),
+            new(122, 0, "M. Mime", PokeType.Psychic, ChessPiece.Bishop),
+            new(801, 0, "Magearna", PokeType.Steel, ChessPiece.Queen),
+            new(719, 0, "Diancie", PokeType.Fairy, ChessPiece.King),
+        ]),
+        new("tenebres",
+        [
+            new(624, 0, "Scalpion", PokeType.Dark, ChessPiece.Pawn),
+            new(318, 0, "Carvanha", PokeType.Water, ChessPiece.Pawn),
+            new(442, 0, "Spiritomb", PokeType.Ghost, ChessPiece.Rook),
+            new(630, 0, "Vaututrice", PokeType.Flying, ChessPiece.Knight),
+            new(275, 0, "Tengalice", PokeType.Grass, ChessPiece.Bishop),
+            new(461, 0, "Dimoret", PokeType.Ice, ChessPiece.Queen),
+            new(983, 0, "Scalpereur", PokeType.Dark, ChessPiece.King),
         ]),
     ];
 

@@ -2,7 +2,7 @@
 @inject ChessDraftService Drafts
 @* Onglet « Échecs » de l'administration : l'équilibrage des équipes d'échecs, calculé d'après ChessTeams.All et la table
    des types (ChessBalance), rien en base. Trois synthèses (part mangeable, rois menacés, solde), puis chaque équipe
-   contre les lignes (pièce et type : 7 par équipe, les pions ayant deux types) des sept équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
+   contre les lignes (pièce et type : 7 par équipe, les pions ayant deux types) de toutes les équipes, dans les deux sens. Demandé par l'utilisateur le 2026-11-24 (d'abord une page
    générée à part). Case « Avec les brouillons » (WithDrafts, gardée dans l'adresse par Admin.razor) : les brouillons
    comptés (ChessDraftService.Teams) remplacent l'équipe qu'ils modifient ou s'ajoutent, et chaque chiffre montre son écart
    avec les équipes du jeu (« (+6) »). *@
@@ -65,7 +65,7 @@
     <p class="small text-muted">
         Part des pièces de l'équipe en colonne que celles de la ligne peuvent manger, <strong>selon le nombre de pièces</strong>
         (8 pions, 4 de chaque type, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires), et la part super efficace. La dernière
-        colonne fait la moyenne contre les sept équipes, elle comprise (deux joueurs peuvent prendre la même).
+        colonne fait la moyenne contre toutes les équipes, elle comprise (deux joueurs peuvent prendre la même).
     </p>
     <div class="form-check small mb-2">
         <input class="form-check-input" type="checkbox" id="chess-balance-without-self" checked="@withoutSelf"
@@ -341,7 +341,7 @@
     };
 
     /// <summary>
-    /// Les lignes de <paramref name="team"/> en lignes, les 49 des sept équipes en colonnes (la sienne d'abord) ;
+    /// Les lignes de <paramref name="team"/> en lignes, celles de toutes les équipes en colonnes (la sienne d'abord) ;
     /// <paramref name="attacking"/> : la ligne mange la colonne, sinon la colonne mange la ligne.
     /// </summary>
     private RenderFragment BigTable(ChessTeam team, bool attacking) => __builder =>

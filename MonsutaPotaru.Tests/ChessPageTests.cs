@@ -156,20 +156,21 @@ public sealed class ChessPageTests : PageTestContext
     }
 
     [Fact]
-    public async Task PoisonTeam_ShowsBothNidoranOnOnePawnLine_AndToxelOnTheOther()
+    public async Task PoisonTeam_ShowsBothNidoranOnOnePawnLine_AndZubatOnTheOther()
     {
         var (sacha, ondine) = await Invited();
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
-        Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc"],
+        Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc",
+                "Équipe Galeking", "Équipe Dracolosse", "Équipe Diancie", "Équipe Scalpereur"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
-        // Deux lignes « Pion » : les Nidoran (Poison, deux images), puis Toxizap (Électrik)
+        // Deux lignes « Pion » : les Nidoran (Poison, deux images), puis Nosferapti (Vol)
         var lines = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li");
         Assert.Equal(7, lines.Length);
         Assert.Equal(2, lines[^2].QuerySelectorAll(".chess-mon-images img").Length);
         Assert.Equal("Nidoran♂ / Nidoran♀", lines[^2].QuerySelector(".chess-mon-name")!.TextContent);
-        Assert.Equal("Toxizap", lines[^1].QuerySelector(".chess-mon-name")!.TextContent);
-        Assert.Contains("Électrik", lines[^1].TextContent);
+        Assert.Equal("Nosferapti", lines[^1].QuerySelector(".chess-mon-name")!.TextContent);
+        Assert.Contains("Vol", lines[^1].TextContent);
         Assert.Contains("Pion", lines[^1].TextContent);
         await ondine.FindAll(".chess-team")[3].QuerySelector("button")!.ClickAsync(new()); // Poison
         sacha.WaitForText("Choisis ton équipe");
@@ -182,7 +183,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal(7, columns.Length);
         Assert.Equal(2, columns[5].QuerySelectorAll("img").Length);
         Assert.Contains("Nidoran♂ / Nidoran♀", columns[5].TextContent);
-        Assert.Contains("Toxizap", columns[6].TextContent);
+        Assert.Contains("Nosferapti", columns[6].TextContent);
         Assert.Contains(sacha.FindAll(".chess-help-table")[0].QuerySelectorAll("td"),
             td => td.GetAttribute("title") == "Tarsal mange Nidoran♂ ou Nidoran♀ et rejoue : c'est super efficace !");
     }

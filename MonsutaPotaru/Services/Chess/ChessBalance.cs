@@ -84,7 +84,7 @@ public static class ChessBalance
     }
 
     /// <summary>
-    /// Part mangeable moyenne de cette équipe contre les sept équipes, elle comprise (deux joueurs peuvent prendre la même),
+    /// Part mangeable moyenne de cette équipe contre toutes les équipes du jeu, elle comprise (deux joueurs peuvent prendre la même),
     /// ou contre les six autres seulement (<paramref name="withoutSelf"/> : case de l'onglet « Échecs »).
     /// </summary>
     public static double Average(ChessTeam team, bool withoutSelf = false) => Average(team, ChessTeams.All, withoutSelf);
