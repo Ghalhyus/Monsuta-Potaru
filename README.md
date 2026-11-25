@@ -243,7 +243,9 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   Flabébé Jaune). Une espèce peut revenir sous plusieurs formes (trois Motisma dans l'équipe Tokorico). Listes et tables de type : une ligne par
   pièce et par type (`ChessLine`), deux pour les pions. Choisies **à l'aveugle** : on sait seulement si
   l'autre a choisi (`ChessSession.TeamChoice`). La **même** prise par les deux : chacun la garde (`ChessHub.KeepTeam`) ou
-  en change (`ClearTeam` : l'autre l'apprend, et peut changer aussi) ; gardée par les deux, la partie se joue avec la même
+  en change (`ClearTeam`) **en secret** : la décision de l'autre ne se dévoile qu'une fois la sienne prise
+  (`ChessSameDecision`) ; puis celui qui change rechoisit (les deux, s'ils changent tous les deux), et reprendre l'équipe
+  que l'autre a gardée lance la partie ; gardée par les deux, la partie se joue avec la même
   équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade, Minidraco, Dedenne, Météno N-Vert et Stalgamin n'ont pas de sprite
   Donjon chromatique : ordinaires sur le plateau). Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
@@ -272,7 +274,9 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   case **« Contraste élevé »** : **cadre vert** et **cadre rouge** à la place (`SortPreferences.ChessContrast`, aussi
   dans « Préférences » ; sans compte, pour la partie en cours), avec une **croix rouge** sur celles qu'elle atteint
   mais ne peut pas manger (`Blocked` ; pas de croix par défaut : elles sont déjà bleues). Pendant le tour adverse, on peut choisir ses pièces pour cet **aperçu** (mêmes marques,
-  sans cases : on ne peut pas jouer). Boutons **Pièces** et **Table de type des pièces** dans la couleur principale du
+  sans cases : on ne peut pas jouer). **Pièce adverse choisie** (`ChessSession.Threats`, à tout moment sauf pendant son
+  propre tour bonus) : les mêmes marques sur ses propres pièces, vues depuis elle (en danger : elle leur est super
+  efficace ; bleues : elle ne peut pas les manger), d'après les types seulement, sans cases. Boutons **Pièces** et **Table de type des pièces** dans la couleur principale du
   thème. « Pièces » : les deux équipes (pièce, Pokémon, type, combien sur le plateau et K.O.). Table de type : qui mange
   qui, deux tableaux croisés (ses Pokémon contre ceux de l'adversaire, puis l'inverse ; ×2 / ✓ / ✗), d'après
   `ChessGame.CanEat` et la table des types (`ChessBalance.Mark`, comme l'onglet « Échecs » de l'administration, voir

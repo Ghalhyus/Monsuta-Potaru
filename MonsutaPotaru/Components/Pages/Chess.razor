@@ -14,13 +14,13 @@
 @* Mini-jeux → Échecs : échecs Pokémon en direct (règles : ChessGame). L'hôte invite un ami, ou crée une partie publique
    dont il donne le code (8 caractères) ; l'ami accepte, ou l'adversaire saisit le code : avec un compte, ou sans (page
    ouverte à tous, mais un visiteur sans compte n'y voit que « Rejoindre une partie », sous un prénom) ; chacun prend une
-   équipe sans voir celle de l'autre (la même : chacun la garde ou en change) ; l'hôte joue les blancs. Le plateau est dessiné
+   équipe sans voir celle de l'autre (la même : chacun la garde ou en change, sans voir la décision de l'autre) ; l'hôte joue les blancs. Le plateau est dessiné
    et animé par wwwroot/js/echecs.js (Phaser, pixel art) : il signale les clics sur les cases, la page décide (coups permis
    relus dans ChessHub) et lui fait jouer chaque coup (marche, attaque, blessure, K.O. sur le côté). Les Pokémon au repos
    peuvent rester figés (préférence du compte, case « Désactiver les animations ») : seule la pièce choisie s'anime. Face à
    la pièce choisie, les pièces adverses faibles sont teintées en rouge (bouclier cassé) et celles qui
-   résistent en bleu (bouclier) ; case « Contraste élevé » (préférence du compte) : des cadres vert et
-   rouge à la place. Quitter la page pendant la partie demande confirmation, puis fait perdre. *@
+   résistent en bleu (bouclier) ; une pièce adverse choisie marque de même mes pièces en danger ou à l'abri ; case
+   « Contraste élevé » (préférence du compte) : des cadres vert et rouge à la place. Quitter la page pendant la partie demande confirmation, puis fait perdre. *@
 <NavigationLock ConfirmExternalNavigation="InGame" OnBeforeInternalNavigation="BeforeLeaving" />
 
 @if (BoardShown)
@@ -81,7 +81,7 @@ else
 
                 case ChessStage.TeamChoice:
                     @* À l'aveugle : on ne voit pas l'équipe de l'autre (seulement s'il a choisi) ; la même prise par les
-                       deux : chacun la garde ou en change *@
+                       deux : chacun la garde ou en change, sans voir la décision de l'autre avant d'avoir pris la sienne *@
                     var choice = s.TeamChoice(userId);
                     var mine = choice.Mine;
                     @if (choice.Same is { } same)
@@ -89,25 +89,25 @@ else
                         <div class="alert alert-warning chess-same-team">
                             <p class="mb-2"><strong>Vous avez pris la même équipe, @other.Pseudo et toi : l'@same.InSentence.</strong></p>
                             <p class="small mb-2">
-                                Garde-la ou change d'équipe. Si vous la gardez tous les deux, la partie se joue avec les mêmes
-                                Pokémon des deux côtés (ceux des noirs en chromatique) : des Pokémon du même type ne se mangent
-                                souvent pas entre eux.
+                                Garde-la ou change d'équipe : @other.Pseudo décide de son côté, et vous ne saurez ce qu'a fait
+                                l'autre qu'une fois vos deux décisions prises. Si vous la gardez tous les deux, la partie se joue
+                                avec les mêmes Pokémon des deux côtés (ceux des noirs en chromatique) : des Pokémon du même type
+                                ne se mangent souvent pas entre eux.
                             </p>
-                            @if (choice.IKeep)
+                            @if (choice.MyDecision == ChessSameDecision.None)
                             {
-                                <p class="small mb-2 chess-kept">Tu la gardes. En attente de la réponse de @other.Pseudo…</p>
-                            }
-                            else if (choice.OtherKeeps)
-                            {
-                                <p class="small mb-2 chess-other-kept">@other.Pseudo la garde.</p>
-                            }
-                            <div class="d-flex flex-wrap gap-2">
-                                @if (!choice.IKeep)
-                                {
+                                <div class="d-flex flex-wrap gap-2">
                                     <button type="button" class="btn btn-primary btn-sm chess-keep-team" disabled="@busy" @onclick="KeepTeam">Garder l'@same.InSentence</button>
-                                }
-                                <button type="button" class="btn btn-outline-secondary btn-sm chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
-                            </div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="small mb-0 chess-my-decision">
+                                    @(choice.MyDecision == ChessSameDecision.Keep ? "Tu la gardes." : "Tu changes d'équipe.")
+                                    En attente de la décision de @other.Pseudo…
+                                </p>
+                            }
                         </div>
                         break;
                     }
@@ -116,7 +116,7 @@ else
                         <p class="mb-1">Tu as choisi l'@mine.InSentence. En attente de l'équipe de @other.Pseudo…</p>
                         @if (choice.OtherChanging)
                         {
-                            <p class="small mb-1 chess-other-changing">@other.Pseudo change d'équipe : tu peux garder la tienne, ou en changer aussi.</p>
+                            <p class="small mb-1 chess-other-changing">@other.Pseudo a choisi de changer d'équipe : tu peux garder la tienne, ou en changer aussi.</p>
                         }
                         <button type="button" class="btn btn-outline-secondary btn-sm mb-3 chess-change-team" disabled="@busy" @onclick="ClearTeam">Changer d'équipe</button>
                     }
@@ -126,7 +126,13 @@ else
                             Choisis ton équipe : un Pokémon par pièce, chacun avec un seul type. Tu ne verras celle de @other.Pseudo
                             qu'une fois vos deux équipes choisies, et tu pourras changer la tienne tant que @other.Pseudo n'a pas choisi.
                         </p>
-                        @if (choice.OtherChose)
+                        @if (choice.OtherKept is { } kept)
+                        {
+                            <p class="small mb-2 chess-other-kept">
+                                @other.Pseudo a gardé l'@kept.InSentence. Si tu la reprends, la partie commence avec la même équipe des deux côtés.
+                            </p>
+                        }
+                        else if (choice.OtherChose)
                         {
                             <p class="small mb-2 chess-other-chose">@other.Pseudo a choisi son équipe.</p>
                         }
@@ -801,14 +807,14 @@ else
 
     /// <summary>
     /// Revient sur son choix d'équipe (refusé si l'autre a choisi une autre équipe entre-temps : la partie a commencé) ;
-    /// avec la même équipe que l'autre, il en change.
+    /// avec la même équipe que l'autre, sa décision secrète d'en changer.
     /// </summary>
     private void ClearTeam()
     {
         if (session is null)
             return;
         busy = true;
-        if (ChessHub.ClearTeam(session, userId) is { } error)
+        if (Hub.ClearTeam(session, userId) is { } error)
         {
             message = error;
             messageIsError = true;
@@ -890,11 +896,13 @@ else
         {
             await Select(square);
         }
+        else if (unit is not null && unit.Color != mine && !bonusTurn)
+        {
+            await SelectOpponent(square);
+        }
         else if (unit is not null && unit.Color != mine)
         {
-            info = Describe(unit);
-            if (!bonusTurn)
-                ClearSelection(keepInfo: true);
+            info = Describe(unit); // tour bonus : la pièce qui rejoue reste choisie, la pièce adverse n'est que décrite
             await Highlight();
         }
         else if (!bonusTurn)
@@ -905,8 +913,8 @@ else
     }
 
     /// <summary>
-    /// Tour de l'autre : clic sur une de ses pièces (aperçu : ses cases, ses cadres), sur une pièce qu'elle ne peut pas
-    /// manger (pourquoi), ou ailleurs (la sélection s'efface). Rien ne se joue.
+    /// Tour de l'autre : clic sur une de mes pièces (aperçu : ses cadres), sur une pièce qu'elle ne peut pas manger
+    /// (pourquoi), sur une pièce de l'autre (mes pièces qu'elle menace), ou ailleurs (la sélection s'efface). Rien ne se joue.
     /// </summary>
     private async Task Preview(int square, ChessUnit? unit)
     {
@@ -916,11 +924,10 @@ else
             info = Refusal(session.At(from)!, UnitOf(blocked.VictimId)!, blocked.Effect);
         else if (unit is not null && unit.Color == session.ColorOf(userId))
             await Select(square);
+        else if (unit is not null)
+            await SelectOpponent(square);
         else
-        {
             ClearSelection();
-            info = unit is null ? null : Describe(unit);
-        }
         await Highlight();
         StateHasChanged();
     }
@@ -949,14 +956,38 @@ else
     }
 
     /// <summary>
+    /// Pièce de l'autre choisie (demandé le 2026-11-25) : mes pièces qu'elle menace, avec les mêmes marques que pour une des
+    /// miennes, vues depuis elle (rouge, bouclier cassé : elle leur est super efficace ; bleu, bouclier : elle ne peut pas
+    /// les manger), d'après les types seulement. Ni cases ni prises : elle ne joue pas.
+    /// </summary>
+    private async Task SelectOpponent(int square)
+    {
+        if (session is null)
+            return;
+        selected = square;
+        pendingTo = null;
+        swapChoices = null;
+        options = session.Threats(userId, square);
+        info = session.At(square) is { } unit ? $"{Describe(unit)}{MatchupLegend()}" : null;
+        if (info is not null && !CanAct)
+            info = $"Aperçu (au tour de {session.Other(userId).Pseudo}) : {info}";
+        await Highlight();
+    }
+
+    /// <summary>La pièce choisie est à l'autre joueur (légende : ce sont mes pièces qui sont marquées).</summary>
+    private bool WatchingOther => selected is { } square && session?.At(square) is { } unit && unit.Color != session.ColorOf(userId);
+
+    /// <summary>
     /// Ce que disent les marques de la pièce choisie, seulement celles qui sont là : cadres vert et rouge en contraste élevé,
-    /// sinon Pokémon teintés en rouge (bouclier cassé) ou en bleu (bouclier) ; croix, en contraste élevé seulement.
+    /// sinon Pokémon teintés en rouge (bouclier cassé) ou en bleu (bouclier) ; croix, en contraste élevé seulement. Pièce de
+    /// l'autre : les marques sont sur mes pièces (en danger, à l'abri).
     /// </summary>
     private string MatchupLegend()
     {
         var parts = new List<string>();
+        var danger = WatchingOther ? " (tes pièces en danger)" : "";
         if (options.Matchups.Any(m => m.Effect > 1))
-            parts.Add(contrast ? "cadre vert : il leur est super efficace" : "en rouge, bouclier cassé : il leur est super efficace");
+            parts.Add((contrast ? "cadre vert : il leur est super efficace" : "en rouge, bouclier cassé : il leur est super efficace") + danger);
         if (options.Matchups.Any(m => m.Effect < 1))
             parts.Add(contrast ? "cadre rouge : il ne peut pas les manger" : "en bleu, bouclier : il ne peut pas les manger");
         if (contrast && options.Blocked.Count > 0)

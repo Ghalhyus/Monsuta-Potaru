@@ -20,6 +20,11 @@ const WIDTH = PANEL + GAP + FRAME + GAP + PANEL;
 const HEIGHT = FRAME;
 const BOARD_X = PANEL + GAP; // bord gauche du cadre de pierre
 const MARGIN = 8; // pixels CSS gardés libres sous le plateau (en plus des marges de la page) : rien ne défile
+// Le canvas est plus haut que le plateau : les grands Pokémon de la rangée du haut dépassent du cadre (mesuré le 2026-11-25
+// sur les 128 Pokémon des équipes : jusqu'à 18 px au repos, 28 en attaquant, Golemastoc). L'agrandissement ne compte
+// que le plateau (le garder grand d'abord) ; la hauteur qui reste dans la fenêtre va d'abord au-dessus du cadre, jusqu'à
+// HEADROOM, puis centre le plateau, jusqu'à MAX_ROOM au-dessus et au-dessous (un écran très haut ne l'envoie pas en bas).
+const HEADROOM = 28, MAX_ROOM = 64;
 
 // Couleurs (r, g, b)
 const LIGHT = [232, 214, 168], DARK = [143, 100, 63];
@@ -373,7 +378,12 @@ export async function create(container, component, options) {
         }
         const top = container.getBoundingClientRect().top + window.scrollY;
         const height = Math.max(HEIGHT, (window.innerHeight - top - below) * ratio);
-        return { ratio, k: Math.max(1, Math.floor(Math.min(width / WIDTH, height / HEIGHT))) };
+        const k = Math.max(1, Math.floor(Math.min(width / WIDTH, height / HEIGHT)));
+        // Hauteur du canvas en pixels du plateau (paire : la caméra se centre sur un pixel entier) ; room : ce qui reste
+        let view = Math.min(HEIGHT + 2 * MAX_ROOM, Math.max(HEIGHT, Math.floor(height / k)));
+        view -= view % 2;
+        const room = view - HEIGHT;
+        return { ratio, k, view, top: Math.min(room, Math.max(HEADROOM, Math.floor(room / 2))) };
     };
     let size = fit();
 
@@ -392,7 +402,7 @@ export async function create(container, component, options) {
         type: Phaser.AUTO,
         parent: container,
         width: WIDTH * size.k,
-        height: HEIGHT * size.k,
+        height: size.view * size.k,
         transparent: true,
         pixelArt: true,
         roundPixels: true,
@@ -408,16 +418,16 @@ export async function create(container, component, options) {
 
     // Fonctions déclarées (hissées) : Phaser appelle build() et tick() avant que la suite de create() ne s'exécute
     function applySize() {
-        game.scale.resize(WIDTH * size.k, HEIGHT * size.k);
+        game.scale.resize(WIDTH * size.k, size.view * size.k);
         game.scale.setZoom(1 / size.ratio);
         const camera = scene.cameras.main;
-        camera.setSize(WIDTH * size.k, HEIGHT * size.k);
+        camera.setSize(WIDTH * size.k, size.view * size.k);
         camera.setZoom(size.k);
-        camera.centerOn(WIDTH / 2, HEIGHT / 2);
+        camera.centerOn(WIDTH / 2, size.view / 2 - size.top); // le canvas montre de -top à view - top
     }
     const onResize = () => {
         const next = fit();
-        if (next.k === size.k && next.ratio === size.ratio) return;
+        if (next.k === size.k && next.ratio === size.ratio && next.view === size.view && next.top === size.top) return;
         size = next;
         applySize();
     };
@@ -447,12 +457,12 @@ export async function create(container, component, options) {
         drawMarks();
 
         // Case sous le pointeur d'après la place du canvas au moment même (Phaser garde celle du démarrage : la page a pu
-        // bouger depuis, et le CSS peut réduire le canvas) ; la caméra montre tout le plateau, rien d'autre.
+        // bouger depuis, et le CSS peut réduire le canvas) ; la caméra montre le plateau et la place au-dessus (size.top).
         const squareOf = p => {
             const r = game.canvas.getBoundingClientRect();
             const e = p.event;
             if (!e || !r.width || !r.height) return null;
-            return squareAt((e.clientX - r.left) / r.width * WIDTH, (e.clientY - r.top) / r.height * HEIGHT);
+            return squareAt((e.clientX - r.left) / r.width * WIDTH, (e.clientY - r.top) / r.height * size.view - size.top);
         };
         s.input.on("pointerdown", p => {
             const square = squareOf(p);

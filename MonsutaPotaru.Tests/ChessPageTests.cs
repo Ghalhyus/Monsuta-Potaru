@@ -87,9 +87,16 @@ public sealed class ChessPageTests : PageTestContext
         ondine.WaitForText("À toi de jouer.");
         sacha.WaitForText("Au tour de ondine");
 
-        // Une pièce adverse décrite, et une pièce qui ne peut pas bouger
+        // Une pièce adverse : décrite, et les pièces d'Ondine qu'elle menace (demandé le 2026-11-25). Tarsal (Psy) : les
+        // Démolosse (Ténèbres, b8, g8) et Goupelin (Psy, d8) lui résistent ; Hoopa Enchaîné (Spectre) : Goupelin en danger
         await Click(ondine, "c2");
-        ondine.WaitForText("Tarsal (Psy) · Pion adverse.");
+        ondine.WaitForText("Tarsal (Psy) · Pion adverse. Sur le plateau, en bleu, bouclier : il ne peut pas les manger.");
+        Assert.Equal([Sq("b8"), Sq("d8"), Sq("g8")], LastMarks("resist"));
+        Assert.Empty(LastMarks("weak"));
+        await Click(ondine, "c1");
+        ondine.WaitForText("Hoopa Enchaîné (Spectre) · Fou adverse. Sur le plateau, en rouge, bouclier cassé : il leur est super efficace (tes pièces en danger)");
+        Assert.Equal([Sq("d8")], LastMarks("weak"));
+        Assert.Empty(LastMoves());
         await Click(ondine, "a8");
         ondine.WaitForText("Boumata ne peut pas bouger.");
         await Click(ondine, "d7");
@@ -382,25 +389,25 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("ondine a choisi son équipe.");
         await sacha.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
 
-        // La même : les deux le voient, à chacun de la garder ou d'en changer
+        // La même : les deux le voient, à chacun de la garder ou d'en changer, sans voir la décision de l'autre
         sacha.WaitForText("Vous avez pris la même équipe, ondine et toi : l'équipe Dracaufeu.");
         ondine.WaitForText("Vous avez pris la même équipe, sacha et toi : l'équipe Dracaufeu.");
         await sacha.Click("Garder l'équipe Dracaufeu");
-        sacha.WaitForText("Tu la gardes. En attente de la réponse de ondine");
-        ondine.WaitForText("sacha la garde.");
+        sacha.WaitForText("Tu la gardes. En attente de la décision de ondine…");
+        Assert.False(sacha.HasButton("Changer d'équipe"));
+        var ondineSees = ondine.Find(".chess-same-team").TextContent;
+        Assert.DoesNotContain("a gardé", ondineSees);
+        Assert.DoesNotContain("la garde.", ondineSees);
+        Assert.True(ondine.HasButton("Garder l'équipe Dracaufeu"));
 
-        // Ondine change : Sacha peut garder la sienne, ou changer aussi
+        // Ondine change : les deux décisions se dévoilent ; Sacha peut garder la sienne, ou changer aussi
         await ondine.Click("Changer d'équipe");
-        ondine.WaitForText("sacha a choisi son équipe.");
-        sacha.WaitForText("ondine change d'équipe : tu peux garder la tienne, ou en changer aussi.");
+        ondine.WaitForText("sacha a gardé l'équipe Dracaufeu. Si tu la reprends, la partie commence avec la même équipe des deux côtés.");
+        sacha.WaitForText("ondine a choisi de changer d'équipe : tu peux garder la tienne, ou en changer aussi.");
         Assert.True(sacha.HasButton("Changer d'équipe"));
 
-        // Elle reprend la même ; cette fois les deux la gardent : la partie commence, les noirs en chromatique
+        // Elle reprend la même, que Sacha a gardée : la partie commence, les noirs en chromatique
         await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
-        ondine.WaitForText("Vous avez pris la même équipe");
-        sacha.WaitForAssertion(() => Assert.False(sacha.Text().Contains("Tu la gardes", StringComparison.Ordinal)));
-        await ondine.Click("Garder l'équipe Dracaufeu");
-        await sacha.Click("Garder l'équipe Dracaufeu");
         sacha.WaitForText("À toi de jouer.");
         ondine.WaitForText("Au tour de sacha");
 

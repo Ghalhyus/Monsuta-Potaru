@@ -46,11 +46,16 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   `ChessSession.TeamChoice` (`ChessTeamChoice` : la sienne, `OtherChose` sans dire laquelle, `Same`, `IKeep`,
   `OtherKeeps`, `OtherChanging`). Choix de l'utilisateur : « X a choisi son équipe » affiché.
 - **La même** : `ChooseTeam` ne la refuse plus ; deux équipes différentes, la partie commence (`Start`) ; la même, la
-  partie attend. Chacun « Garder l'équipe … » (`KeepTeam` ; les deux : `Start`) ou « Changer d'équipe » (`ClearTeam`).
-  Celui qui change d'une même équipe est noté (`ChangingId`) : l'autre lit « X change d'équipe : tu peux garder la
-  tienne, ou en changer aussi » (le simple « Changer d'équipe » d'avant lui suffit, l'autre n'ayant plus d'équipe) ;
-  si l'autre change aussi, ou que celui qui changeait rechoisit, `ChangingId` s'efface. Choisir ou changer remet les
-  deux « garder » à faux (même équipe reprise : on redemande aux deux).
+  partie attend. Chacun « Garder l'équipe … » (`KeepTeam`) ou « Changer d'équipe » (`ClearTeam`).
+- **Décisions secrètes** (demandé le 2026-11-25 : avant, l'autre lisait « X la garde » et pouvait prendre une équipe
+  contre elle ; choix de l'utilisateur, plutôt que de supprimer l'étape) : `HostDecision` / `GuestDecision`
+  (`ChessSameDecision`), on ne voit que la sienne (« Tu la gardes. En attente de la décision de X… »), une seule fois
+  (« Tu as déjà décidé »). Les deux décidées (`Reveal`) : deux « garder », `Start` ; sinon l'équipe de celui qui change
+  est vidée, celui qui garde est noté (`HostKept` / `GuestKept`) : le premier lit « X a gardé l'équipe … ; si tu la
+  reprends, la partie commence avec la même équipe » (`ChessTeamChoice.OtherKept`, il la connaissait de toute façon),
+  le second « X a choisi de changer d'équipe : tu peux garder la tienne, ou en changer aussi » (`OtherChanging`) ;
+  reprendre l'équipe gardée lance la partie sans redemander (`ChooseTeam`, `otherKept`). `ClearTeam` devient une méthode
+  d'instance (`Decide` → `Start` lit l'horloge) ; il appelle `Decide` hors du verrou (`Notify` jamais sous le verrou).
 - **Partie à même équipe** (choix de l'utilisateur) : les noirs en **chromatique** (`ChessGame.SameTeams`,
   `ChessUnit.Shiny`, posé par `NewUnit` ; `ChessUnit.SpriteUrl` / `DonjonFolder` ; `ChessMon.SpriteUrlOf` /
   `DonjonFolderOf`) sur le plateau, chez les K.O., dans « Pièces » (`ChessTeamList Shiny`) et la table de type
@@ -76,6 +81,14 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   une prise impossible, ou efface ; `Play` revérifie le tour. `PlayAsync` efface la sélection quand l'autre joue ; la fin
   de la partie aussi (`OnSessionChanged`). Texte : « Aperçu (au tour de X) : … », puis la légende des marques présentes
   (`MatchupLegend`).
+- **Pièce adverse choisie** (demandé le 2026-11-25, « voir lesquelles de ses pièces sont en danger ») : `SelectOpponent`
+  (page) et `ChessSession.Threats` (`game.Matchups` de cette pièce : mes pièces ; rien si ce n'est pas une pièce de
+  l'autre). Choix de l'utilisateur (mes recommandations) : **les mêmes marques** que pour une de mes pièces, vues depuis
+  elle (rouge, bouclier cassé : en danger ; bleu : elle ne peut pas les manger), légende « (tes pièces en danger) »
+  (`WatchingOther`) ; **le type seulement**, ni cases ni portée ; à mon tour comme pendant le sien (préfixe « Aperçu
+  (au tour de X) ») ; **pas pendant mon tour bonus** (la pièce qui rejoue reste choisie, la pièce adverse est seulement
+  décrite). `echecs.js` n'a pas changé : ses marques ne dépendent que des cases. Une pièce de l'autre choisie n'a ni
+  `Targets` ni `Blocked` : `TryTarget` la laisse passer.
 - Boutons « Pièces » et « Table de type des pièces » (ancien « Aide ») en `btn-primary` : la couleur principale du thème
   (bleu, orange avec Ardoise), choix de l'utilisateur ; « Abandonner » reste en contour.
 
@@ -403,6 +416,15 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   `.chess-play` moins la colonne d'à côté ; en hauteur, la fenêtre sous le haut du plateau, moins les marges, bordures et
   rembourrages des blocs qui l'entourent (mesurés : marche avec chaque thème). Recalculé quand la rangée ou la page
   change de taille ; plus étroit qu'à `k = 1` : le CSS réduit le canvas.
+- **Place au-dessus du plateau** (2026-11-25, « trop collé au bord supérieur », les grands Pokémon adverses coupés) : le
+  canvas est plus haut que le plateau (`size.view`, en pixels du plateau), le cadre décalé de `size.top`
+  (`camera.centerOn(WIDTH / 2, view / 2 - top)` ; clic : `y × view − top`). Mesuré sur les 128 Pokémon des équipes
+  (canvas 2D, premier pixel opaque de chaque image d'Idle, Walk, Attack, Hurt ; centre d'un sprite de la rangée du haut à
+  28 px du haut du cadre) : jusqu'à 18 px de plateau au-dessus du cadre au repos (Tokorico, animations coupées), 28 en
+  attaquant (Golemastoc), 25 en ayant mal (Dragmara). **`k` ne compte que le plateau** (une première version comptait
+  aussi les 28 px : le plateau pouvait passer de ×3 à ×2) ; la hauteur restante va d'abord au-dessus (`HEADROOM` = 28),
+  puis centre le plateau, au plus `MAX_ROOM` = 64 de chaque côté. Fenêtre trop juste : moins de place, des têtes
+  peuvent encore être coupées. La colonne `.chess-side` reste en haut.
 - **Page d'une partie sans défilement** (demande de l'utilisateur, 2026-11-22) : pendant la partie (et à la fin), pas de
   bandeau de titre (`PageHeader` remplacé par un `h1` masqué) ni d'en-tête de bloc ; adversaire, boutons « Pièces » /
   « Abandonner », tour, temps, dernier coup, messages et échange du pion dans la colonne `.chess-side`, collée à droite
