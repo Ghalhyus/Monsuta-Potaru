@@ -135,7 +135,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal("×2", Mark(0, "Gallame", 4)); // Combat contre Démolosse (Ténèbres)
         Assert.Equal("×2", Mark(0, "Gardevoir", 2)); // Fée contre Boumata (Dragon)
         Assert.Equal("✗", Mark(0, "Tarsal", 4)); // Psy contre Ténèbres : sans effet
-        Assert.Equal("✗", Mark(0, "Kaorine", 0)); // Sol contre Dracaufeu (Vol) : sans effet
+        Assert.Equal("✗", Mark(0, "Gallame", 0)); // Combat contre Dracaufeu (Vol) : pas très efficace
         Assert.Equal("✓", Mark(0, "Tarsal", 5)); // Psy contre Salamèche (Feu)
         Assert.Equal("×2", Mark(1, "Démolosse", 5)); // Ténèbres contre Tarsal (Psy)
         Assert.Equal("✗", Mark(1, "Boumata", 1)); // Dragon contre Gardevoir (Fée)
@@ -163,7 +163,8 @@ public sealed class ChessPageTests : PageTestContext
         ondine.WaitForText("Choisis ton équipe");
         Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc",
                 "Équipe Galeking", "Équipe Dracolosse", "Équipe Diancie", "Équipe Scalpereur",
-                "Équipe Ursaking", "Équipe Shifours Mille Poings", "Équipe Gueriaigle", "Équipe Terrakium"],
+                "Équipe Ursaking", "Équipe Shifours Mille Poings", "Équipe Gueriaigle", "Équipe Terrakium",
+                "Équipe Kaimorse", "Équipe Sarmuraï", "Équipe Lugulabre"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
         // Deux lignes « Pion » : les Nidoran (Poison, deux images), puis Nosferapti (Vol)
         var lines = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li");
@@ -269,7 +270,7 @@ public sealed class ChessPageTests : PageTestContext
     [Fact]
     public async Task RedCross_OnlyInHighContrast()
     {
-        // Position posée : Gallame (roi Combat) en e4 atteint Malvalame (fou Spectre) en d5 mais ne peut pas le manger
+        // Position posée : Gallame (roi Combat) en e4 atteint Scolocendre (fou Insecte) en d5 mais ne peut pas le manger
         var hub = Services.GetRequiredService<ChessHub>();
         var session = hub.Request(new ChessParty("sacha", "sacha"), new ChessParty("ondine", "ondine"), 120).Session!;
         Assert.Null(hub.Accept(session, "ondine"));
@@ -283,7 +284,7 @@ public sealed class ChessPageTests : PageTestContext
         var sacha = Render<Chess>();
         sacha.WaitForText("À toi de jouer.");
 
-        // Mode par défaut : Malvalame est bleu (bouclier), sans croix dans la légende ; la croix est dans les marques, le
+        // Mode par défaut : Scolocendre est bleu (bouclier), sans croix dans la légende ; la croix est dans les marques, le
         // plateau ne la dessine qu'en contraste élevé
         await Click(sacha, "e4");
         Assert.Contains(Sq("d5"), LastMarks("blocked"));
@@ -321,7 +322,7 @@ public sealed class ChessPageTests : PageTestContext
         sacha.WaitForText("À toi de jouer.");
 
         // Gallame, sur e1, choisi : Combat contre l'équipe Feu. Super efficace contre Démolosse (Ténèbres, b8 et g8) et
-        // les pions Caninos d'Hisui (Roche, b7, d7, f7, h7) ; Malvalame (Spectre, c8 et f8), Goupelin (Psy, d8) et Dracaufeu
+        // les pions Caninos d'Hisui (Roche, b7, d7, f7, h7) ; Scolocendre (Insecte, c8 et f8), Goupelin (Psy, d8) et Dracaufeu
         // (Vol, e8) lui résistent. Rien à sa portée
         await Click(sacha, "e1");
         sacha.WaitForText("Gallame ne peut pas bouger.");
@@ -349,13 +350,13 @@ public sealed class ChessPageTests : PageTestContext
         await Click(ondine, "c6");
         Assert.Contains(Sq("e5"), LastMarks("weak"));
 
-        // Sacha, pendant le tour d'Ondine, regarde Roigada (Eau) en c1 : les Salamèche (Feu) et les Caninos d'Hisui
-        // (Roche) lui sont faibles, tout le rang 7 ; les Boumata (Dragon, a8 et h8) lui résistent
+        // Sacha, pendant le tour d'Ondine, regarde Hoopa Enchaîné (Spectre) en c1 : Goupelin (Psy, d8) lui est faible ;
+        // les Démolosse (Ténèbres, c6 et g8) lui résistent
         await Click(sacha, "c1");
-        sacha.WaitForText("Aperçu (au tour de ondine) : Roigada (Eau) · Fou.");
+        sacha.WaitForText("Aperçu (au tour de ondine) : Hoopa Enchaîné (Spectre) · Fou.");
         Assert.Empty(LastMoves());
-        Assert.Equal([Sq("a7"), Sq("b7"), Sq("c7"), Sq("d7"), Sq("e7"), Sq("f7"), Sq("g7"), Sq("h7")], LastMarks("weak"));
-        Assert.Equal([Sq("a8"), Sq("h8")], LastMarks("resist"));
+        Assert.Equal([Sq("d8")], LastMarks("weak"));
+        Assert.Equal([Sq("c6"), Sq("g8")], LastMarks("resist"));
 
         // Son Tarsal e5 : pas de case montrée (il ne peut pas jouer), et cliquer sur e6 ne joue rien
         await Click(sacha, "e5");

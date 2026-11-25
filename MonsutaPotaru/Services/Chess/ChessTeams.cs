@@ -98,8 +98,9 @@ public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members, strin
 /// <summary>
 /// Les équipes par défaut (choisies par l'utilisateur, le 2026-11-22 ; Poison, Eau, Plante et Sol ajoutées le même jour ;
 /// Acier, Dragon, Fée et Ténèbres le 2026-11-24, d'après ses brouillons de l'administration, qui ont aussi modifié Poison,
-/// Sol et Électrik ; Normal, Combat, Vol et Roche le 2026-11-25, d'après ses brouillons) ; les joueurs ne font pas les
-/// leurs. Deux joueurs peuvent prendre la même (les noirs en chromatique).
+/// Sol et Électrik ; Normal, Combat, Vol et Roche le 2026-11-25, d'après ses brouillons ; Glace, Insecte et Spectre le
+/// même soir, avec des retouches de Psy, Feu, Plante, Acier, Dragon, Combat et Vol) ; les joueurs ne font pas les leurs.
+/// Deux joueurs peuvent prendre la même (les noirs en chromatique).
 /// </summary>
 public static class ChessTeams
 {
@@ -109,9 +110,9 @@ public static class ChessTeams
         [
             new(280, 0, "Tarsal", PokeType.Psychic, ChessPiece.Pawn),
             new(238, 0, "Lippouti", PokeType.Ice, ChessPiece.Pawn),
-            new(344, 0, "Kaorine", PokeType.Ground, ChessPiece.Rook),
+            new(437, 0, "Archéodong", PokeType.Steel, ChessPiece.Rook),
             new(528, 0, "Rhinolove", PokeType.Flying, ChessPiece.Knight),
-            new(199, 0, "Roigada", PokeType.Water, ChessPiece.Bishop),
+            new(720, 0, "Hoopa Enchaîné", PokeType.Ghost, ChessPiece.Bishop),
             new(282, 0, "Gardevoir", PokeType.Fairy, ChessPiece.Queen),
             new(475, 0, "Gallame", PokeType.Fighting, ChessPiece.King),
         ]),
@@ -121,7 +122,7 @@ public static class ChessTeams
             new(58, 1, "Caninos d'Hisui", PokeType.Rock, ChessPiece.Pawn),
             new(776, 0, "Boumata", PokeType.Dragon, ChessPiece.Rook),
             new(229, 0, "Démolosse", PokeType.Dark, ChessPiece.Knight),
-            new(937, 0, "Malvalame", PokeType.Ghost, ChessPiece.Bishop),
+            new(851, 0, "Scolocendre", PokeType.Bug, ChessPiece.Bishop),
             new(655, 0, "Goupelin", PokeType.Psychic, ChessPiece.Queen),
             new(6, 0, "Dracaufeu", PokeType.Flying, ChessPiece.King),
         ]),
@@ -162,9 +163,9 @@ public static class ChessTeams
             new(187, 0, "Granivol", PokeType.Flying, ChessPiece.Pawn),
             new(103, 0, "Noadkoko", PokeType.Psychic, ChessPiece.Rook),
             new(547, 0, "Farfaduvet", PokeType.Fairy, ChessPiece.Knight),
-            new(272, 0, "Ludicolo", PokeType.Water, ChessPiece.Bishop),
+            new(711, 0, "Banshitrouye Moyenne", PokeType.Ghost, ChessPiece.Bishop),
             new(407, 0, "Roserade", PokeType.Poison, ChessPiece.Queen),
-            new(389, 0, "Torterra", PokeType.Ground, ChessPiece.King),
+            new(389, 0, "Torterra", PokeType.Grass, ChessPiece.King),
         ]),
         new("sol",
         [
@@ -179,10 +180,10 @@ public static class ChessTeams
         // Quatre équipes ajoutées le 2026-11-24, faites par l'utilisateur dans l'onglet « Brouillons d'échecs »
         new("acier",
         [
-            new(304, 0, "Galekid", PokeType.Steel, ChessPiece.Pawn),
+            new(304, 0, "Galekid", PokeType.Rock, ChessPiece.Pawn),
             new(81, 0, "Magnéti", PokeType.Electric, ChessPiece.Pawn),
             new(376, 0, "Métalosse", PokeType.Psychic, ChessPiece.Rook),
-            new(530, 0, "Minotaupe", PokeType.Ground, ChessPiece.Knight),
+            new(530, 0, "Minotaupe", PokeType.Steel, ChessPiece.Knight),
             new(395, 0, "Pingoléon", PokeType.Water, ChessPiece.Bishop),
             new(212, 0, "Cizayox", PokeType.Bug, ChessPiece.Queen),
             new(306, 0, "Galeking", PokeType.Rock, ChessPiece.King),
@@ -190,11 +191,11 @@ public static class ChessTeams
         new("dragon",
         [
             new(147, 0, "Minidraco", PokeType.Dragon, ChessPiece.Pawn),
-            new(443, 0, "Griknot", PokeType.Ground, ChessPiece.Pawn),
-            new(697, 0, "Rexillius", PokeType.Rock, ChessPiece.Rook),
-            new(887, 0, "Lanssorien", PokeType.Ghost, ChessPiece.Knight),
-            new(784, 0, "Ékaïser", PokeType.Fighting, ChessPiece.Bishop),
-            new(635, 0, "Trioxhydre", PokeType.Dark, ChessPiece.Queen),
+            new(633, 0, "Solochi", PokeType.Dark, ChessPiece.Pawn),
+            new(780, 0, "Draïeul", PokeType.Normal, ChessPiece.Rook),
+            new(841, 0, "Pomdrapi", PokeType.Grass, ChessPiece.Knight),
+            new(697, 0, "Rexillius", PokeType.Rock, ChessPiece.Bishop),
+            new(784, 0, "Ékaïser", PokeType.Fighting, ChessPiece.Queen),
             new(149, 0, "Dracolosse", PokeType.Flying, ChessPiece.King),
         ]),
         new("fee",
@@ -231,18 +232,18 @@ public static class ChessTeams
         ]),
         new("combat",
         [
-            new(891, 0, "Wushours", PokeType.Fighting, ChessPiece.Pawn),
-            new(559, 0, "Baggiguane", PokeType.Dark, ChessPiece.Pawn),
+            new(307, 0, "Méditikka", PokeType.Psychic, ChessPiece.Pawn),
+            new(215, 1, "Farfuret d'Hisui", PokeType.Poison, ChessPiece.Pawn),
             new(448, 0, "Lucario", PokeType.Steel, ChessPiece.Rook),
             new(128, 2, "Tauros de Paldea Flamboyante", PokeType.Fire, ChessPiece.Knight),
-            new(308, 0, "Charmina", PokeType.Psychic, ChessPiece.Bishop),
+            new(802, 0, "Marshadow", PokeType.Ghost, ChessPiece.Bishop),
             new(549, 1, "Fragilady d'Hisui", PokeType.Grass, ChessPiece.Queen),
             new(892, 1, "Shifours Mille Poings", PokeType.Water, ChessPiece.King),
         ]),
         new("vol",
         [
             new(627, 0, "Furaiglon", PokeType.Flying, ChessPiece.Pawn),
-            new(441, 0, "Pijako", PokeType.Normal, ChessPiece.Pawn),
+            new(722, 0, "Brindibou", PokeType.Grass, ChessPiece.Pawn),
             new(645, 1, "Démétéros Totémique", PokeType.Ground, ChessPiece.Rook),
             new(774, 10, "Météno N-Vert", PokeType.Rock, ChessPiece.Knight),
             new(479, 4, "Motisma Hélice", PokeType.Electric, ChessPiece.Bishop),
@@ -258,6 +259,38 @@ public static class ChessTeams
             new(76, 1, "Grolem d'Alola", PokeType.Electric, ChessPiece.Bishop),
             new(699, 0, "Dragmara", PokeType.Ice, ChessPiece.Queen),
             new(639, 0, "Terrakium", PokeType.Rock, ChessPiece.King),
+        ]),
+        // Trois équipes ajoutées le 2026-11-25 au soir, d'après les brouillons 11, 12 et 14 de l'utilisateur ; sans sprites
+        // Donjon, M. Glaquette, Crabaraque et Viskuse remplacés à sa demande par Lippoutou, Caratroc et Zorua d'Hisui
+        new("glace",
+        [
+            new(363, 0, "Obalie", PokeType.Water, ChessPiece.Pawn),
+            new(361, 0, "Stalgamin", PokeType.Ice, ChessPiece.Pawn),
+            new(460, 0, "Blizzaroi", PokeType.Grass, ChessPiece.Rook),
+            new(461, 0, "Dimoret", PokeType.Dark, ChessPiece.Knight),
+            new(124, 0, "Lippoutou", PokeType.Psychic, ChessPiece.Bishop),
+            new(478, 0, "Momartik", PokeType.Ghost, ChessPiece.Queen),
+            new(365, 0, "Kaimorse", PokeType.Water, ChessPiece.King),
+        ]),
+        new("insecte",
+        [
+            new(767, 0, "Sovkipou", PokeType.Water, ChessPiece.Pawn),
+            new(595, 0, "Statitik", PokeType.Electric, ChessPiece.Pawn),
+            new(213, 0, "Caratroc", PokeType.Rock, ChessPiece.Rook),
+            new(666, 0, "Prismillon Blizzard", PokeType.Flying, ChessPiece.Knight),
+            new(292, 0, "Munja", PokeType.Ghost, ChessPiece.Bishop),
+            new(542, 0, "Manternel", PokeType.Grass, ChessPiece.Queen),
+            new(768, 0, "Sarmuraï", PokeType.Bug, ChessPiece.King),
+        ]),
+        new("spectre",
+        [
+            new(607, 0, "Funécire", PokeType.Ghost, ChessPiece.Pawn),
+            new(570, 1, "Zorua d'Hisui", PokeType.Normal, ChessPiece.Pawn),
+            new(770, 0, "Trépassable", PokeType.Ground, ChessPiece.Rook),
+            new(778, 0, "Mimiqui Déguisée", PokeType.Fairy, ChessPiece.Knight),
+            new(709, 0, "Desséliande", PokeType.Grass, ChessPiece.Bishop),
+            new(681, 0, "Exagide Parade", PokeType.Steel, ChessPiece.Queen),
+            new(609, 0, "Lugulabre", PokeType.Fire, ChessPiece.King),
         ]),
     ];
 

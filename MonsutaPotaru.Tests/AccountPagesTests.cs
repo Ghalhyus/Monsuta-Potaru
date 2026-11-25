@@ -219,8 +219,8 @@ public sealed class AccountPagesTests : PageTestContext
         Assert.Equal(2 * ChessTeams.All.Count, big.Count);
         Assert.All(big, t => Assert.Equal(7 * 7 * ChessTeams.All.Count, t.QuerySelectorAll("td").Length));
         Assert.Equal("Même équipe", big[0].QuerySelector(".chess-balance-group")!.TextContent);
-        // Gallame (Combat) ne peut pas manger Malvalame (Spectre) : sans effet, marqué à part
-        var noEffect = big[0].QuerySelectorAll("td.blocked").First(td => td.GetAttribute("title")!.StartsWith("Gallame ne peut pas manger Malvalame"));
+        // Gallame (Combat) ne peut pas manger Hoopa Enchaîné (Spectre, même équipe) : sans effet, marqué à part
+        var noEffect = big[0].QuerySelectorAll("td.blocked").First(td => td.GetAttribute("title")!.StartsWith("Gallame ne peut pas manger Hoopa Enchaîné"));
         Assert.Equal("✗0", noEffect.TextContent.Replace(" ", ""));
         Assert.Contains("×0 : sans effet", noEffect.GetAttribute("title"));
         // Liens vers chaque équipe : l'adresse entière (base « / »)

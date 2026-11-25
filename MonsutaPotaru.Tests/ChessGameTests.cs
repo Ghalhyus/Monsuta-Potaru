@@ -12,6 +12,7 @@ public sealed class ChessGameTests
     private static readonly ChessTeam Psy = ChessTeams.Find("psy")!;
     private static readonly ChessTeam Electric = ChessTeams.Find("electrique")!;
     private static readonly ChessTeam Poison = ChessTeams.Find("poison")!;
+    private static readonly ChessTeam Normal = ChessTeams.Find("normal")!;
 
     private const ChessColor W = ChessColor.White;
     private const ChessColor B = ChessColor.Black;
@@ -38,7 +39,7 @@ public sealed class ChessGameTests
     [Fact]
     public void Teams_HaveOnePokemonPerPiece_AndTwoPawnTypes()
     {
-        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol", "acier", "dragon", "fee", "tenebres", "normal", "combat", "vol", "roche"], ChessTeams.All.Select(t => t.Id));
+        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol", "acier", "dragon", "fee", "tenebres", "normal", "combat", "vol", "roche", "glace", "insecte", "spectre"], ChessTeams.All.Select(t => t.Id));
         foreach (var team in ChessTeams.All)
         {
             Assert.Equal(Enum.GetValues<ChessPiece>(), team.Members.Select(m => m.Piece).Distinct().Order());
@@ -116,11 +117,11 @@ public sealed class ChessGameTests
     [Fact]
     public void WeakCapture_IsRefusedAndExplained()
     {
-        var game = Position(Fire, Psy, W, "wKa1 wPe4 bBd5 bKh8");
-        Assert.DoesNotContain(game.MovesFrom(Sq("e4")), m => m.To == Sq("d5")); // Feu contre Eau : pas très efficace
-        var blocked = Assert.Single(game.Blocked(Sq("e4")));
-        Assert.Equal((Sq("d5"), 0.5), (blocked.Square, blocked.Effect));
-        Assert.Null(game.Play(new ChessMove(Sq("e4"), Sq("d5"))));
+        var game = Position(Fire, Psy, W, "wKa1 wPd4 bRe5 bKh8");
+        Assert.DoesNotContain(game.MovesFrom(Sq("d4")), m => m.To == Sq("e5")); // Caninos d'Hisui (Roche) contre Archéodong (Acier) : pas très efficace
+        var blocked = Assert.Single(game.Blocked(Sq("d4")));
+        Assert.Equal((Sq("e5"), 0.5), (blocked.Square, blocked.Effect));
+        Assert.Null(game.Play(new ChessMove(Sq("d4"), Sq("e5"))));
     }
 
     [Fact]
@@ -208,11 +209,11 @@ public sealed class ChessGameTests
     [Fact]
     public void BonusTurn_CanEatTheKing()
     {
-        // Malvalame (Spectre) mange Tarsal (super efficace), puis le roi Gallame (Combat : neutre) derrière lui
-        var game = Position(Fire, Psy, W, "wKh1 wBc1 bPe3 bKg5");
+        // Salamèche (Feu) mange Lippouti (Glace : super efficace), puis le roi Gallame (Combat : neutre) derrière lui
+        var game = Position(Fire, Psy, W, "wKh1 wPe4 bPf5 bKg6");
         Assert.False(game.InCheck(B));
-        Assert.True(Play(game, "c1", "e3").Bonus);
-        var win = Play(game, "e3", "g5");
+        Assert.True(Play(game, "e4", "f5").Bonus);
+        var win = Play(game, "f5", "g6");
         Assert.Equal((W, ChessEnd.KingEaten), (win.Winner, win.End));
         Assert.True(game.IsOver);
         Assert.Empty(game.LegalMoves());
@@ -253,8 +254,8 @@ public sealed class ChessGameTests
     [Fact]
     public void Castling_DependsOnWhatCanEatTheKing()
     {
-        // Kaorine (Sol) ne peut rien contre Dracaufeu (Vol) : f1 n'est pas menacée, le petit roque est permis
-        var free = Position(Fire, Psy, W, "wKe1 wRh1 bRf8 bKa8");
+        // Chelours (Combat) ne peut rien contre Dracaufeu (Vol) : f1 n'est pas menacée, le petit roque est permis
+        var free = Position(Fire, Normal, W, "wKe1 wRh1 bRf8 bKa8");
         var step = Play(free, "e1", "g1");
         Assert.Equal((Sq("h1"), Sq("f1")), (step.RookFrom, step.RookTo));
         Assert.Equal(ChessPiece.Rook, free.At(Sq("f1"))!.Piece);
@@ -295,7 +296,7 @@ public sealed class ChessGameTests
         var game = Position(Fire, Psy, W, "wKa1 wPb7 wRd4 bRd8 bKh1");
         Play(game, "b7", "b8"); // aucun K.O. : le pion attend
         Assert.Equal(ChessPiece.Pawn, game.At(Sq("b8"))!.Piece);
-        Play(game, "d8", "d4"); // Kaorine (Sol) mange Boumata (Dragon) : neutre
+        Play(game, "d8", "d4"); // Archéodong (Acier) mange Boumata (Dragon) : neutre
         var swaps = game.SwapsFrom(Sq("b8"));
         var rook = Assert.Single(swaps);
         var step = Play(game, "b8", "b8", rook);
@@ -306,7 +307,7 @@ public sealed class ChessGameTests
     [Fact]
     public void Playback_CountsTheWalkToTheKnockedOut()
     {
-        // Kaorine mange Boumata en d4 : Boumata marche jusqu'à la première place des K.O. blancs. Vu des blancs (306 px) :
+        // Archéodong mange Boumata en d4 : Boumata marche jusqu'à la première place des K.O. blancs. Vu des blancs (306 px) :
         // demi-case, 158 px jusqu'à l'espace à droite du plateau, trois lignes vers le haut, 20 px, demi-case ; vu des
         // noirs (plateau retourné, K.O. blancs à gauche) : deux lignes seulement mais 52 px dans le panneau, 306 px aussi
         var game = Position(Fire, Psy, B, "wKa1 wRd4 bRd8 bKh8");

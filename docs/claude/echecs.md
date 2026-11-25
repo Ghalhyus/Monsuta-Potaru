@@ -274,7 +274,7 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   (ordre de l'enum `ChessPiece`, pas `ChessTeamList.Order`). Compte des **lignes** (`ChessBalance.LinesOfType`) : « les
   types de pion, pas les pions » (ses mots) ; deux espèces de pion du même type (Nidoran) comptent une fois. Survol : une
   équipe par ligne (« Dracaufeu : Salamèche (pion) »). Avec les brouillons : écart sans couleur (`Delta(…, null)`).
-  Vérifié le 2026-11-25 : 15 équipes, 105 lignes, 30 types de pion.
+  Vérifié le 2026-11-25 : 15 équipes, 105 lignes, 30 types de pion (18 équipes le soir même).
 - Repli : `Block` a `Collapsible` / `Collapsed` / `CollapsedChanged` (le titre devient un bouton, chevron en CSS : pas
   d'icônes Bootstrap dans le site) ; replié, ni contenu ni actions ne sont rendus. Toutes les sections de l'onglet, état
   **retenu** dans le navigateur (`localStorage`, clé `monsuta-potaru.administration.echecs.replie`, ancres séparées par
@@ -313,6 +313,23 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   noyaux : ajouté aux exceptions (avec Roserade, Minidraco, Dedenne).
 - **Mégapagos** (565, tour Eau du brouillon 4) : **aucun sprite Donjon** (ni 0564 ni 0565 dans le pack) ; remplacé à la
   demande de l'utilisateur par **Volcaropod** (219), **Feu**.
+
+## Équipes Glace, Insecte, Spectre et retouches (2026-11-25 au soir, brouillons 11 à 22 de l'utilisateur)
+- Dix brouillons comptés, lus dans sa base locale (WAL plus récent que `app.db` : la lecture `?mode=ro` le voit bien).
+  Nouvelles : `glace` (roi Kaimorse Eau), `insecte` (Sarmuraï Insecte), `spectre` (Lugulabre Feu) ; identifiants proposés
+  par moi d'après le thème (les trois types qui manquaient). Retouches : Gallame (tour Archéodong Acier, fou Hoopa
+  Enchaîné Spectre), Dracaufeu (fou Scolocendre Insecte), Torterra (fou Banshitrouye Moyenne Spectre, roi passé Plante),
+  Galeking (Galekid Roche, Minotaupe Acier), Dracolosse (pion Solochi, tour Draïeul, cavalier Pomdrapi, fou Rexillius,
+  reine Ékaïser), Shifours (pions Méditikka et Farfuret d'Hisui, fou Marshadow), Gueriaigle (pion Brindibou).
+- **Sans sprites Donjon** : M. Glaquette (866), Crabaraque (558), Viskuse (592, et Moyade 593) ; remplacés à la demande de
+  l'utilisateur par **Lippoutou** (124, Psy), **Caratroc** (213, Roche) et **Zorua d'Hisui** (570 forme 1, **Normal**, son
+  choix à lui). Paragruel ♀ (902/1) n'en a pas non plus. **Stalgamin** : pas de chromatiques, gardé (exceptions de
+  `GameTeams_HaveTheirImages`).
+- Pour voir toutes les images manquantes d'un coup (le test s'arrête à la première) : test jetable qui appelle
+  `PokemonSprites.Load(RealSavesTests.WebRootWithImages())` puis `HasImage` / `HasDonjonForm` sur chaque Pokémon.
+- Tests du jeu qui reposaient sur les pièces changées (Kaorine, Roigada, Malvalame) : refaits avec les nouvelles (Caninos
+  d'Hisui contre Archéodong pour la prise refusée, Salamèche contre Lippouti puis Gallame pour le tour bonus, Chelours
+  de l'équipe Ursaking pour le roque permis).
 
 ## Brouillons d'équipes : onglet « Brouillons d'échecs » de l'administration (demandé le 2026-11-24)
 - But de l'utilisateur : créer et modifier des équipes, vérifier l'équilibrage, **puis** me demander de les entrer dans
