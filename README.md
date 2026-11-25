@@ -283,7 +283,10 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   « Administration »). Case **« Désactiver les animations »** : cochée, les pièces du plateau restent
   sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O. sur celle de Sleep (marche, attaque et blessure
   restent animées). Gardée dans le compte (`SortPreferences.ChessIdle`, aussi dans « Préférences ») ; sans compte, pour
-  la partie en cours seulement.
+  la partie en cours seulement. Bouton bascule **« Types »** (en contour éteint, plein allumé) : une étiquette de la
+  couleur du type et trois lettres (FEU, PSY…) en bas à gauche de **toutes les pièces du plateau** (pas des K.O.) ; éteint
+  à l'ouverture de la page, **jamais enregistré**. **« Abandonner »** seul en bas de la colonne, loin des autres boutons
+  (confirmé).
 - **Résultats** : table `ChessRecords` (`ChessRecorder`, événement `ChessHub.Finished`), sans clé étrangère ; comptés dans
   « Statistiques » (onglet Mini-jeux, bloc « Échecs »). Pièces mangées par chaque camp (`WhiteCaptures`,
   `BlackCaptures`, migration `ChessCaptures` : 0 pour les parties d'avant).
@@ -975,7 +978,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Battle/BattleSprites.cs` | Sprites d'un combat vus par un joueur : ceux de son jeu, de face et de dos, chromatiques, formes (Zarbi, Morphéo, Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleRecorder.cs` | Résultat de chaque combat terminé écrit en base (statistiques) |
 | `MonsutaPotaru/Data/BattleRecord.cs` | Table des combats terminés (vainqueur ou match nul) |
-| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes à l'aveugle (même équipe : la garder ou en changer), partie en direct (clics sur le plateau, pièce choisie et les pièces adverses faibles ou qui lui résistent, aperçu pendant le tour adverse, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Table de type des pièces » (qui mange qui), cases « Désactiver les animations » et « Contraste élevé », « Recommencer » sur l'écran de fin |
+| `MonsutaPotaru/Components/Pages/Chess.razor` | « Mini-jeux » → « Échecs » (`/mini-jeux/echecs`, ouverte sans compte pour rejoindre une partie publique) : invitations, ami et temps par coup, partie publique (code, lien), « Rejoindre une partie », choix des équipes à l'aveugle (même équipe : la garder ou en changer), partie en direct (clics sur le plateau, pièce choisie et les pièces adverses faibles ou qui lui résistent, aperçu pendant le tour adverse, prises impossibles expliquées, tour bonus, pion au bout), fenêtres « Pièces » et « Table de type des pièces » (qui mange qui), bouton « Types » (étiquettes de type sur le plateau), cases « Désactiver les animations » et « Contraste élevé », « Abandonner » en bas de la colonne, « Recommencer » sur l'écran de fin |
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
 | `MonsutaPotaru/Services/Chess/ChessDraftService.cs`, `ChessDex.cs`, `Data/ChessTeamDraft.cs` | Brouillons d'équipes d'échecs (administration) : cases, vérifications, équipes de l'équilibrage avec les brouillons, remarques, texte à copier ; catalogue des Pokémon et formes avec leurs types (PKHeX) |
@@ -987,7 +990,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/HideSeek/HideSeekHub.cs` | Parties de cache-cache en direct (singleton, en mémoire) : salle d'attente (8 joueurs, invitations, code), tours (préparation, recherche, cible montrée), clics vérifiés, blocage, départs, fin, « Recommencer » |
 | `MonsutaPotaru/Services/HideSeek/HideSeekRecorder.cs` | Résultats des parties terminées écrits en base ; `HideSeekService` : Pokémon des collections à tirer, statistiques |
 | `MonsutaPotaru/Data/ChessRecord.cs` | Table des parties d'échecs terminées (équipes, fin, vainqueur ou nulle) |
-| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces faibles ou qui résistent : teintes et boucliers en pixel art, ou cadres vert / rouge en contraste élevé (`setContrast`), croix rouge des prises impossibles en contraste élevé, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`) |
+| `MonsutaPotaru/wwwroot/js/echecs.js` | Plateau des échecs avec Phaser : cases, bordure et lettres dessinées en pixel art, sprites Donjon Mystère, marques (coups, prises, pièces faibles ou qui résistent : teintes et boucliers en pixel art, ou cadres vert / rouge en contraste élevé (`setContrast`), croix rouge des prises impossibles en contraste élevé, dernier coup, échec), animations des coups (dont la marche des K.O. vers leur place), Pokémon figés au repos sauf la pièce sélectionnée (`setIdle`), étiquettes de type des pièces du plateau (`setTypes`) |
 | `MonsutaPotaru/Services/Battle/ShowdownBattle.cs` | Un combat dans le simulateur : processus Node.js, envoi des choix, réception du protocole |
 | `MonsutaPotaru/Services/Battle/BattleTeam.cs` | Pokémon d'une sauvegarde → Pokémon du simulateur (format par génération, forme de Deoxys) |
 | `MonsutaPotaru/Services/Battle/BattleProtocol.cs` | Lecture du protocole de Showdown : lignes, parties secrètes de chaque joueur, requêtes |

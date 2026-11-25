@@ -175,10 +175,10 @@ else
                                 @* « Pièces » et la table de type dans la couleur principale du thème (orange avec Ardoise) : bien visibles *@
                                 <button type="button" class="btn btn-sm btn-primary chess-pieces-button" @onclick="() => showPieces = true">Pièces</button>
                                 <button type="button" class="btn btn-sm btn-primary chess-help-button" @onclick="() => showHelp = true">Table de type des pièces</button>
-                                @if (s.Stage == ChessStage.Playing)
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
-                                }
+                                @* Étiquettes de type sur toutes les pièces du plateau : en contour éteint, plein allumé ; gardé pour la page
+                                   seulement (pas dans « Préférences », choix de l'utilisateur) *@
+                                <button type="button" class="btn btn-sm @(showTypes ? "btn-primary" : "btn-outline-primary") chess-types-button"
+                                        aria-pressed="@(showTypes ? "true" : "false")" @onclick="ToggleTypes">Types</button>
                             </div>
                             @* Préférence du compte (aussi dans « Préférences ») ; sans compte : pour cette partie seulement *@
                             <div class="form-check small mb-2 chess-idle">
@@ -226,6 +226,14 @@ else
                                     {
                                         <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearSelection">Annuler</button>
                                     }
+                                </div>
+                            }
+                            @if (s.Stage == ChessStage.Playing)
+                            {
+                                @* Seul en bas de la colonne, loin des autres boutons : un clic par erreur stressait les joueurs (la
+                                   confirmation reste) *@
+                                <div class="chess-forfeit-zone">
+                                    <button type="button" class="btn btn-sm btn-outline-danger chess-forfeit" @onclick="Forfeit">Abandonner</button>
                                 </div>
                             }
                             @if (s.IsOver)
@@ -434,6 +442,7 @@ else
     private bool boardStarting;
     private bool idleAnimated = true; // Pokémon animés au repos (préférence du compte ; sans compte : pour la page)
     private bool contrast; // contraste élevé : cadres au lieu des filtres et boucliers (préférence du compte ; sans compte : pour la page)
+    private bool showTypes; // bouton « Types » : étiquettes de type sur les pièces du plateau (pour la page, jamais enregistré)
     private DotNetObjectReference<Chess>? selfRef;
     private int played; // coups déjà montrés sur le plateau
     private bool animating;
@@ -543,10 +552,11 @@ else
         var created = await module.InvokeAsync<IJSObjectReference>("create", boardHost, selfRef, new
         {
             flip = mine == ChessColor.Black,
-            units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.DonjonFolder, name = u.Mon.Name }),
+            units = units.Select(u => new { id = u.Id, mine = u.Color == mine, folder = u.DonjonFolder, name = u.Mon.Name, type = PokeTypes.Key(u.Type) }),
             position = start.Position,
             idle = idleAnimated,
             contrast,
+            types = showTypes,
             timing = new
             {
                 walk = ChessTiming.WalkPerSquare.TotalMilliseconds,
@@ -1071,6 +1081,22 @@ else
         }
         if (signedIn && !(await PreferenceStore.SetChessContrastAsync(userId, contrast)).Ok)
             info = "Ton choix vaut pour cette partie, mais il n'a pas pu être gardé dans ton compte.";
+    }
+
+    /// <summary>Bouton « Types » : étiquettes de type sur toutes les pièces du plateau, ou plus aucune ; rien d'enregistré.</summary>
+    private async Task ToggleTypes()
+    {
+        showTypes = !showTypes;
+        if (board is null)
+            return;
+        try
+        {
+            await board.InvokeVoidAsync("setTypes", showTypes);
+        }
+        catch (JSDisconnectedException)
+        {
+            // onglet fermé
+        }
     }
 
     private async Task Forfeit()

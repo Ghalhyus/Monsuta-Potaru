@@ -467,6 +467,64 @@ public sealed class ChessPageTests : PageTestContext
     }
 
     [Fact]
+    public async Task TypesButton_ShowsTheTypesOfAllPieces_ForThePageOnly()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        await ChooseTeams(sacha, ondine);
+        sacha.WaitForText("À toi de jouer.");
+
+        // Éteint au début : en contour, et le plateau naît sans étiquettes ; il reçoit le type de chaque pièce (des deux camps)
+        var button = sacha.Find(".chess-side-buttons .chess-types-button");
+        Assert.Equal("Types", button.TextContent);
+        Assert.Contains("btn-outline-primary", button.ClassName);
+        Assert.Equal("false", button.GetAttribute("aria-pressed"));
+        sacha.WaitForAssertion(() => Assert.Equal(2, BoardsOption("types").Length));
+        Assert.All(BoardsOption("types"), on => Assert.False(on));
+        var create = JSInterop.Invocations.First(i => i.Identifier == "create").Arguments[2]!;
+        var units = ((System.Collections.IEnumerable)create.GetType().GetProperty("units")!.GetValue(create)!).Cast<object>().ToList();
+        var types = units.Select(u => (string?)u.GetType().GetProperty("type")!.GetValue(u)).ToList();
+        Assert.Equal(32, types.Count);
+        Assert.Contains("psychic", types); // Tarsal (équipe Psy)
+        Assert.Contains("fire", types); // Salamèche (équipe Dracaufeu)
+        Assert.All(types, t => Assert.Contains(t, Enum.GetValues<PokeType>().Select(PokeTypes.Key)));
+
+        // Allumé : plein, et le plateau de Sacha seul les montre ; éteint de nouveau au second clic
+        await sacha.Find(".chess-types-button").ClickAsync(new());
+        Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setTypes").Arguments[0]);
+        Assert.Contains("btn-primary", sacha.Find(".chess-types-button").ClassName);
+        Assert.DoesNotContain("btn-outline-primary", sacha.Find(".chess-types-button").ClassName);
+        Assert.Equal("true", sacha.Find(".chess-types-button").GetAttribute("aria-pressed"));
+        Assert.Equal("false", ondine.Find(".chess-types-button").GetAttribute("aria-pressed"));
+        await sacha.Find(".chess-types-button").ClickAsync(new());
+        Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setTypes").Arguments[0]);
+        Assert.Equal("false", sacha.Find(".chess-types-button").GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
+    public async Task ForfeitButton_AloneAtTheBottomOfTheColumn()
+    {
+        var (sacha, ondine) = await Invited();
+        await ondine.Click("Accepter");
+        await ChooseTeams(sacha, ondine);
+        sacha.WaitForText("À toi de jouer.");
+
+        // Loin des autres boutons (un clic par erreur stressait les joueurs) : seul, après le tour et les messages
+        Assert.Empty(sacha.FindAll(".chess-side-buttons .chess-forfeit"));
+        var zone = sacha.Find(".chess-side > .chess-forfeit-zone");
+        Assert.Single(zone.QuerySelectorAll("button"));
+        Assert.NotNull(zone.QuerySelector(".chess-forfeit"));
+        var side = sacha.Find(".chess-side").Children.Select(e => e.ClassName ?? "").ToList();
+        Assert.True(side.FindIndex(c => c.Contains("chess-status")) < side.FindIndex(c => c.Contains("chess-forfeit-zone")));
+        Assert.Contains("chess-forfeit-zone", side[^1]);
+
+        // La confirmation reste : refusée, la partie continue
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(false);
+        await sacha.Find(".chess-forfeit").ClickAsync(new());
+        Assert.Equal(ChessStage.Playing, Services.GetRequiredService<ChessHub>().Active("sacha")!.Stage);
+    }
+
+    [Fact]
     public async Task IdleAnimations_FollowTheAccount_AndAreSavedFromTheGame()
     {
         var preferences = Services.GetRequiredService<PreferencesService>();

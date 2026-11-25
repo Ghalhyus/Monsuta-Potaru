@@ -1425,11 +1425,14 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-board { flex: 0 1 auto; min-width: 0; display: flex; justify-content: center; touch-action: manipulation; }
 .chess-side { flex: 0 0 17rem; min-width: 0; }
 .chess-side-buttons { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+/* « Abandonner » seul en bas de la colonne, séparé par un trait et un grand espace : loin des autres boutons */
+.chess-forfeit-zone { margin-top: 2.5rem; padding-top: .75rem; border-top: 1px solid var(--bs-border-color, #dee2e6); }
 @media (max-width: 1100px) {
     .chess-play { flex-direction: column; align-items: stretch; gap: .5rem; }
     .chess-board { flex: none; width: 100%; order: 1; }
     .chess-side { flex: none; }
     .chess-side-buttons { margin-bottom: .4rem; }
+    .chess-forfeit-zone { margin-top: 1.5rem; }
 }
 
 /* Un nombre entier de pixels d'écran par pixel du plateau (echecs.js) ; plus étroit que le plateau : réduit, faute de mieux */

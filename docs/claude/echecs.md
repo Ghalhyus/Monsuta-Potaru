@@ -6,7 +6,7 @@ README : « Échecs (Mini-jeux) ». Page `Components/Pages/Chess.razor` (`/mini-
 (règles), `ChessHubTests` (hub, enregistrement, pièces prises), statistiques dans l'onglet Mini-jeux
 (`docs/claude/statistiques.md`), `ChessBalanceTests` (équilibrage, onglet « Échecs » de l'administration),
 `ChessPageTests` (page, deux joueurs, fenêtres « Pièces » et « Table de type des
-pièces », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe),
+pièces », bouton « Types », place d'« Abandonner », cases « Désactiver les animations » et « Contraste élevé », marques de la pièce choisie, même équipe),
 `ChessDraftTests` (brouillons d'équipes et catalogue `ChessDex`, onglet « Brouillons d'échecs » de l'administration).
 
 ## Choix de l'utilisateur (2026-11-22)
@@ -91,6 +91,28 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   `Targets` ni `Blocked` : `TryTarget` la laisse passer.
 - Boutons « Pièces » et « Table de type des pièces » (ancien « Aide ») en `btn-primary` : la couleur principale du thème
   (bleu, orange avec Ardoise), choix de l'utilisateur ; « Abandonner » reste en contour.
+
+## Bouton « Types » et place d'« Abandonner » (demandés le 2026-11-25)
+- Demande : un bouton pour voir les types des pièces, pas dans les préférences ; d'abord un pour les siennes et un pour
+  celles de l'adversaire, puis (en répondant à mes questions) **un seul bouton pour toutes les pièces**. Choix de
+  l'utilisateur (mes recommandations) : **étiquette pixel art** dans le canvas, **plateau seul** (pas les K.O.).
+- Bouton bascule `.chess-types-button` après la table de type : `btn-outline-primary` éteint, `btn-primary` allumé,
+  `aria-pressed`. Champ `showTypes` de la page : passé à `create` (`types`, donc gardé pour « Recommencer » sur la même
+  page) puis `setTypes` ; **jamais enregistré** (ni compte ni invité). `units[].type` = `PokeTypes.Key`.
+- `echecs.js` : `TYPE_PLATES` (couleurs de `.chess-type` dans `app.css`, trois lettres sans accent : NOR, FEU, EAU, ELE,
+  PLA, GLA, COM, POI, SOL, VOL, PSY, INS, ROC, SPE, DRA, TEN, ACI, FEE ; lettres I L M N O P R S T U V Y ajoutées à
+  `GLYPHS`) ; texture 15 × 9 par type (`plateTexture` : bord à moitié plus sombre, coins coupés, lettres blanches,
+  ombre d'un pixel). Une image par pièce (`a.plate`), placée par `placePlate` à chaque `tick` d'après les pieds : en bas
+  à gauche de la case, à 2 px des bords (sous les cadres des marques, à l'écart du bouclier en bas à droite) ; elle suit
+  la marche. Profondeur 45 : au-dessus de tous les sprites (la tête d'un grand Pokémon de la rangée du dessous la
+  couvrirait), sous boucliers et croix (50). Cachée pour un K.O. (`sleep`) et dès que le Pokémon sort des huit colonnes
+  (en route vers les K.O.).
+- « Abandonner » : `.chess-forfeit-zone`, **dernier élément de `.chess-side`** pendant la partie (après le tour, le
+  dernier coup, les messages et l'échange du pion), trait au-dessus et 2,5rem d'espace (1,5rem sous 1100 px) : un clic
+  par erreur à côté de « Pièces » stressait les joueurs. La confirmation reste.
+- Vérifié dans le navigateur le 2026-11-25 (étiquettes des deux camps, qui suivent un coup, aucune sur le Caninos K.O.,
+  bouton éteint : plus rien). Tests : `TypesButton_ShowsTheTypesOfAllPieces_ForThePageOnly`,
+  `ForfeitButton_AloneAtTheBottomOfTheColumn`.
 
 ## Pièces faibles ou qui résistent : teintes, boucliers, animations (demandés le 2026-11-23)
 - Mode par défaut depuis le 2026-11-23 ; les cadres vert et rouge (ci-dessus) sont devenus le mode **« Contraste
@@ -427,7 +449,7 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   peuvent encore être coupées. La colonne `.chess-side` reste en haut.
 - **Page d'une partie sans défilement** (demande de l'utilisateur, 2026-11-22) : pendant la partie (et à la fin), pas de
   bandeau de titre (`PageHeader` remplacé par un `h1` masqué) ni d'en-tête de bloc ; adversaire, boutons « Pièces » /
-  « Abandonner », tour, temps, dernier coup, messages et échange du pion dans la colonne `.chess-side`, collée à droite
+  « Types », tour, temps, dernier coup, messages, échange du pion et « Abandonner » (en bas) dans la colonne `.chess-side`, collée à droite
   du plateau (au-dessus sur un écran de moins de 1100 px). Avant (2026-11-22, première version) : le plateau était sous
   le bandeau, l'en-tête du bloc et l'état de la partie (334 px CSS), estimés à 170 : la page défilait.
 - Tout est dessiné dans une texture `createCanvas` (ImageData, grain tiré d'une graine fixe) ; lettres 3 × 5 pixels

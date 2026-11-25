@@ -8,7 +8,8 @@
 // joueur, setIdle) : les pièces du plateau restent sur la première image d'Idle, sauf la pièce sélectionnée, et les K.O.
 // sur la première image de Sleep. Pièces adverses face à la pièce choisie : teintées (copies des planches recolorées) et
 // petit bouclier, sans autre changement (faible : rouge, bouclier cassé ; qui résiste : bleu, bouclier) ; en contraste
-// élevé (setContrast), des cadres.
+// élevé (setContrast), des cadres. Bouton « Types » de la page (setTypes) : une étiquette de la couleur de son type, trois
+// lettres, en bas à gauche de chaque pièce du plateau (pas des K.O.), qui la suit quand elle marche.
 import * as Phaser from "../lib/phaser/phaser.esm.min.js";
 import { loadSheets } from "./parc.js";
 
@@ -46,7 +47,25 @@ const GLYPHS = {
     F: "####..##.#..#..", G: ".###..#.##.#.##", H: "#.##.#####.##.#", 1: ".#.##..#..#.###", 2: "##...#.#.#..###",
     3: "##...#.#...###.", 4: "#.##.####..#..#", 5: "####..##...###.", 6: ".###..####.####", 7: "###..#.#..#..#.",
     8: "####.#####.####",
+    // Pour les étiquettes de type (FEU, PSY…) : rangées de trois pixels, de haut en bas
+    I: ["###", ".#.", ".#.", ".#.", "###"].join(""), L: ["#..", "#..", "#..", "#..", "###"].join(""),
+    M: ["#.#", "###", "###", "#.#", "#.#"].join(""), N: ["##.", "#.#", "#.#", "#.#", "#.#"].join(""),
+    O: ["###", "#.#", "#.#", "#.#", "###"].join(""), P: ["##.", "#.#", "##.", "#..", "#.."].join(""),
+    R: ["##.", "#.#", "##.", "#.#", "#.#"].join(""), S: [".##", "#..", ".#.", "..#", "##."].join(""),
+    T: ["###", ".#.", ".#.", ".#.", ".#."].join(""), U: ["#.#", "#.#", "#.#", "#.#", "###"].join(""),
+    V: ["#.#", "#.#", "#.#", "#.#", ".#."].join(""), Y: ["#.#", "#.#", ".#.", ".#.", ".#."].join(""),
 };
+
+// Étiquettes de type (bouton « Types ») : couleur des badges du site (.chess-type, app.css) et trois lettres sans accent,
+// d'après PokeTypes.Key. 15 × 9 pixels : bord plus sombre, lettres blanches avec une ombre d'un pixel dessous.
+const TYPE_PLATES = {
+    normal: [0xa8a878, "NOR"], fire: [0xe8782c, "FEU"], water: [0x5f88e8, "EAU"], electric: [0xd8b428, "ELE"],
+    grass: [0x64b448, "PLA"], ice: [0x78c8c8, "GLA"], fighting: [0xb83028, "COM"], poison: [0x9840a0, "POI"],
+    ground: [0xc8a858, "SOL"], flying: [0x9888e0, "VOL"], psychic: [0xe85888, "PSY"], bug: [0x98a820, "INS"],
+    rock: [0xa89038, "ROC"], ghost: [0x685090, "SPE"], dragon: [0x6838e8, "DRA"], dark: [0x685040, "TEN"],
+    steel: [0xa0a0c0, "ACI"], fairy: [0xe48fb0, "FEE"],
+};
+const PLATE_W = 15, PLATE_H = 9, PLATE_INSET = 2; // à 2 pixels des bords de la case : sous les cadres des marques
 
 /** Générateur pseudo-aléatoire à graine (le grain des cases est le même à chaque affichage). */
 function seeded(seed) {
@@ -104,6 +123,39 @@ function shadowTexture(s) {
         t.refresh();
     }
     return "ombre-echecs";
+}
+
+/** Étiquette d'un type (TYPE_PLATES), faite une fois par jeu de Phaser ; null pour un type inconnu. */
+function plateTexture(s, type) {
+    const plate = TYPE_PLATES[type];
+    if (!plate) return null;
+    const key = `type-echecs-${type}`;
+    if (s.textures.exists(key)) return key;
+    const [color, label] = plate;
+    const css = c => `rgb(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255})`;
+    const dark = [16, 8, 0].reduce((c, shift) => c | (Math.round(((color >> shift) & 255) * 0.5) << shift), 0);
+    const t = s.textures.createCanvas(key, PLATE_W, PLATE_H), c = t.getContext();
+    c.fillStyle = css(dark); // bord, coins coupés
+    c.fillRect(1, 0, PLATE_W - 2, PLATE_H);
+    c.fillRect(0, 1, PLATE_W, PLATE_H - 2);
+    c.fillStyle = css(color);
+    c.fillRect(1, 1, PLATE_W - 2, PLATE_H - 2);
+    [...label].forEach((char, n) => {
+        const pattern = GLYPHS[char] ?? "";
+        for (let i = 0; i < pattern.length; i++) {
+            if (pattern[i] !== "#") continue;
+            const x = 2 + n * 4 + (i % 3), y = 2 + Math.floor(i / 3);
+            c.fillStyle = css(dark);
+            c.fillRect(x, y + 1, 1, 1); // ombre d'un pixel
+        }
+        for (let i = 0; i < pattern.length; i++) {
+            if (pattern[i] !== "#") continue;
+            c.fillStyle = "#ffffff";
+            c.fillRect(2 + n * 4 + (i % 3), 2 + Math.floor(i / 3), 1, 1);
+        }
+    });
+    t.refresh();
+    return key;
 }
 
 /** Sprites absents (images pas récupérées) : un rond de la couleur du camp. */
@@ -301,12 +353,14 @@ function placeSprite(a, anim, key) {
  * Plateau dans <container> ; <component> (Chess.razor) est prévenu des clics. Options : flip (les noirs en bas : je joue
  * les noirs), units (toutes les pièces : id, mine, folder des sprites, name), position (Board : id et case ; WhiteKo,
  * BlackKo), timing (walk : durée de marche d'une case ; strike : attaque et K.O., en ms), idle (faux : pièces figées au
- * repos, sauf la sélectionnée), contrast (vrai : cadres vert et rouge au lieu des teintes, boucliers et animations).
+ * repos, sauf la sélectionnée), contrast (vrai : cadres vert et rouge au lieu des teintes, boucliers et animations), types
+ * (vrai : étiquettes de type sur les pièces du plateau ; units[].type : PokeTypes.Key).
  */
 export async function create(container, component, options) {
     const flip = options?.flip === true;
     let idleAnimated = options?.idle !== false;
     let contrast = options?.contrast === true;
+    let showTypes = options?.types === true;
     const walkMs = Number(options?.timing?.walk) || 350;
     const units = new Map((options?.units ?? []).map(u => [u.id, u]));
     let position = options?.position ?? { board: [], whiteKo: [], blackKo: [] };
@@ -446,10 +500,14 @@ export async function create(container, component, options) {
         overlay = s.add.graphics().setDepth(1);
         crosses = s.add.graphics().setDepth(50);
         for (const u of units.values()) {
-            const a = { id: u.id, mine: u.mine, name: u.name, anims: anims.get(u.id), x: 0, y: 0, dir: u.mine ? UP : DOWN, state: "idle", frame: 0, frameTime: 0, alpha: 1, once: false };
+            const a = { id: u.id, mine: u.mine, name: u.name, type: u.type, anims: anims.get(u.id), x: 0, y: 0, dir: u.mine ? UP : DOWN, state: "idle", frame: 0, frameTime: 0, alpha: 1, once: false };
             if (a.anims) addTextures(s, a.anims);
             a.shadow = s.add.image(0, 0, shadowTexture(s)).setDepth(2);
             a.sprite = a.anims ? s.add.image(0, 0, a.anims.Idle.key, 0) : s.add.image(0, 0, placeholder(s, u.mine));
+            // Étiquette de type par-dessus tous les Pokémon (la tête d'un grand Pokémon de la rangée du dessous la cacherait),
+            // sous les boucliers et les croix (profondeur 50), qui sont en bas à droite
+            const plate = plateTexture(s, u.type);
+            a.plate = plate ? s.add.image(0, 0, plate).setOrigin(0, 0).setDepth(45).setVisible(false) : null;
             actors.set(u.id, a);
         }
         applySize();
@@ -602,7 +660,19 @@ export async function create(container, component, options) {
                 advanceFrame(a, anim, delta);
             }
             placeSprite(a, anim, anim && a.filter ? tinted(anim, a.filter) : anim?.key);
+            placePlate(a);
         }
+    }
+
+    /**
+     * Étiquette de type en bas à gauche de la case du Pokémon (d'après ses pieds : elle le suit quand il marche) ; seulement
+     * sur le plateau : cachée dès qu'il en sort pour les K.O., et chez eux.
+     */
+    function placePlate(a) {
+        if (!a.plate) return;
+        const left = BOARD_X + BORDER, onBoard = a.x > left && a.x < left + 8 * SQ;
+        a.plate.setVisible(showTypes && a.visible && a.state !== "sleep" && onBoard);
+        a.plate.setPosition(Math.round(a.x - SQ / 2 + PLATE_INSET), Math.round(a.y - FOOT + SQ / 2 - PLATE_INSET - PLATE_H)).setAlpha(a.alpha);
     }
 
     const wait = ms => new Promise(resolve => scene.time.delayedCall(ms, resolve));
@@ -772,6 +842,8 @@ export async function create(container, component, options) {
         setIdle(animated) { idleAnimated = animated !== false; },
         /** Contraste élevé : cadres vert et rouge ; sinon teintes, boucliers et animations. */
         setContrast(on) { contrast = on === true; drawMarks(); },
+        /** Étiquettes de type sur toutes les pièces du plateau (bouton « Types » de la page). */
+        setTypes(on) { showTypes = on === true; },
         dispose() {
             disposed = true;
             observer.disconnect();
