@@ -286,6 +286,20 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
 - Vérifié dans le navigateur : les 11 cartes du choix des équipes (images chargées), une partie Scalpereur contre Diancie
   (plateau et sprites).
 
+## Équipes Normal, Combat, Vol, Roche (2026-11-25, d'après les brouillons 1 à 4 de l'utilisateur)
+- Lues dans sa base locale comme le 2026-11-24 (la table avait été vidée : numéros repartis de 1). Les noms des Pokémon sont
+  ceux du catalogue (`ChessDex`, exigés par `Dex_KnowsEveryGameTeamMember`) : « Meloetta Chant », « Tauros de Paldea
+  Flamboyante », « Météno N-Vert », « Démétéros Totémique », « Shifours Mille Poings ». Pour les lire tous d'un coup sans
+  passer par la page : désérialiser `Members` (enums en texte) en `ChessDraftMember` dans un test jetable et écrire
+  `ChessDraft.ExportText()` ; les remarques d'images y sont fausses (`PokemonSprites.Load` pas appelé) : se fier à
+  `GameTeams_HaveTheirImages`.
+- Identifiants proposés par moi : `normal` (roi Ursaking Sol), `combat` (Shifours Mille Poings Eau), `vol` (Gueriaigle Vol),
+  `roche` (Terrakium Roche).
+- **Météno N-Vert** : le pack Donjon n'a de dossier chromatique que pour la forme Météore (`0774/0000/0001`), aucun pour les
+  noyaux : ajouté aux exceptions (avec Roserade, Minidraco, Dedenne).
+- **Mégapagos** (565, tour Eau du brouillon 4) : **aucun sprite Donjon** (ni 0564 ni 0565 dans le pack) ; remplacé à la
+  demande de l'utilisateur par **Volcaropod** (219), **Feu**.
+
 ## Brouillons d'équipes : onglet « Brouillons d'échecs » de l'administration (demandé le 2026-11-24)
 - But de l'utilisateur : créer et modifier des équipes, vérifier l'équilibrage, **puis** me demander de les entrer dans
   le jeu. Les parties ne lisent que `ChessTeams.All` : un brouillon n'est jamais joué.

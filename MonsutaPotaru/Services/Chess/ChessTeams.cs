@@ -98,7 +98,8 @@ public sealed record ChessTeam(string Id, IReadOnlyList<ChessMon> Members, strin
 /// <summary>
 /// Les équipes par défaut (choisies par l'utilisateur, le 2026-11-22 ; Poison, Eau, Plante et Sol ajoutées le même jour ;
 /// Acier, Dragon, Fée et Ténèbres le 2026-11-24, d'après ses brouillons de l'administration, qui ont aussi modifié Poison,
-/// Sol et Électrik) ; les joueurs ne font pas les leurs. Deux joueurs peuvent prendre la même (les noirs en chromatique).
+/// Sol et Électrik ; Normal, Combat, Vol et Roche le 2026-11-25, d'après ses brouillons) ; les joueurs ne font pas les
+/// leurs. Deux joueurs peuvent prendre la même (les noirs en chromatique).
 /// </summary>
 public static class ChessTeams
 {
@@ -216,6 +217,47 @@ public static class ChessTeams
             new(275, 0, "Tengalice", PokeType.Grass, ChessPiece.Bishop),
             new(461, 0, "Dimoret", PokeType.Ice, ChessPiece.Queen),
             new(983, 0, "Scalpereur", PokeType.Dark, ChessPiece.King),
+        ]),
+        // Quatre équipes ajoutées le 2026-11-25, d'après les brouillons 1 à 4 de l'utilisateur
+        new("normal",
+        [
+            new(216, 0, "Teddiursa", PokeType.Normal, ChessPiece.Pawn),
+            new(298, 0, "Azurill", PokeType.Fairy, ChessPiece.Pawn),
+            new(760, 0, "Chelours", PokeType.Fighting, ChessPiece.Rook),
+            new(400, 0, "Castorno", PokeType.Water, ChessPiece.Knight),
+            new(571, 1, "Zoroark d'Hisui", PokeType.Ghost, ChessPiece.Bishop),
+            new(648, 0, "Meloetta Chant", PokeType.Psychic, ChessPiece.Queen),
+            new(901, 0, "Ursaking", PokeType.Ground, ChessPiece.King),
+        ]),
+        new("combat",
+        [
+            new(891, 0, "Wushours", PokeType.Fighting, ChessPiece.Pawn),
+            new(559, 0, "Baggiguane", PokeType.Dark, ChessPiece.Pawn),
+            new(448, 0, "Lucario", PokeType.Steel, ChessPiece.Rook),
+            new(128, 2, "Tauros de Paldea Flamboyante", PokeType.Fire, ChessPiece.Knight),
+            new(308, 0, "Charmina", PokeType.Psychic, ChessPiece.Bishop),
+            new(549, 1, "Fragilady d'Hisui", PokeType.Grass, ChessPiece.Queen),
+            new(892, 1, "Shifours Mille Poings", PokeType.Water, ChessPiece.King),
+        ]),
+        new("vol",
+        [
+            new(627, 0, "Furaiglon", PokeType.Flying, ChessPiece.Pawn),
+            new(441, 0, "Pijako", PokeType.Normal, ChessPiece.Pawn),
+            new(645, 1, "Démétéros Totémique", PokeType.Ground, ChessPiece.Rook),
+            new(774, 10, "Météno N-Vert", PokeType.Rock, ChessPiece.Knight),
+            new(479, 4, "Motisma Hélice", PokeType.Electric, ChessPiece.Bishop),
+            new(715, 0, "Bruyverne", PokeType.Dragon, ChessPiece.Queen),
+            new(628, 0, "Gueriaigle", PokeType.Flying, ChessPiece.King),
+        ]),
+        new("roche",
+        [
+            new(698, 0, "Amagara", PokeType.Rock, ChessPiece.Pawn),
+            new(246, 0, "Embrylex", PokeType.Ground, ChessPiece.Pawn),
+            new(219, 0, "Volcaropod", PokeType.Fire, ChessPiece.Rook),
+            new(348, 0, "Armaldo", PokeType.Bug, ChessPiece.Knight),
+            new(76, 1, "Grolem d'Alola", PokeType.Electric, ChessPiece.Bishop),
+            new(699, 0, "Dragmara", PokeType.Ice, ChessPiece.Queen),
+            new(639, 0, "Terrakium", PokeType.Rock, ChessPiece.King),
         ]),
     ];
 

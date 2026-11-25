@@ -38,7 +38,7 @@ public sealed class ChessGameTests
     [Fact]
     public void Teams_HaveOnePokemonPerPiece_AndTwoPawnTypes()
     {
-        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol", "acier", "dragon", "fee", "tenebres"], ChessTeams.All.Select(t => t.Id));
+        Assert.Equal(["psy", "feu", "electrique", "poison", "eau", "plante", "sol", "acier", "dragon", "fee", "tenebres", "normal", "combat", "vol", "roche"], ChessTeams.All.Select(t => t.Id));
         foreach (var team in ChessTeams.All)
         {
             Assert.Equal(Enum.GetValues<ChessPiece>(), team.Members.Select(m => m.Piece).Distinct().Order());

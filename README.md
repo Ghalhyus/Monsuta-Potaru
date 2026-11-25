@@ -236,16 +236,16 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   plateau prend la place d'un Pokémon K.O. de son camp (pas d'un pion), qui revient sur sa case ; sans K.O., il attend et
   l'échange se fera plus tard, à la place d'un coup.
 - **Équipes** par défaut (`ChessTeams.cs`), nommées d'après leur roi (« Équipe Nidoking » ; identifiants gardés en
-  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`, `acier`, `dragon`, `fee`, `tenebres` ; les quatre
-  dernières faites par l'utilisateur dans les brouillons de l'administration), un Pokémon par pièce, sauf les pions :
+  base : `psy`, `feu`, `electrique`, `poison`, `eau`, `plante`, `sol`, `acier`, `dragon`, `fee`, `tenebres`, `normal`,
+  `combat`, `vol`, `roche` ; les huit dernières faites par l'utilisateur dans les brouillons de l'administration), un Pokémon par pièce, sauf les pions :
   **deux types** une colonne sur deux (Tarsal Psy en a, c, e, g, Lippouti Glace en b, d, f, h ; équipe Nidoking : Nidoran♂
   et Nidoran♀, Poison, à tour de rôle en a, c, e, g, Nosferapti Vol en b, d, f, h ; équipe Diancie : Flabébé Rouge et
   Flabébé Jaune). Une espèce peut revenir sous plusieurs formes (trois Motisma dans l'équipe Tokorico). Listes et tables de type : une ligne par
   pièce et par type (`ChessLine`), deux pour les pions. Choisies **à l'aveugle** : on sait seulement si
   l'autre a choisi (`ChessSession.TeamChoice`). La **même** prise par les deux : chacun la garde (`ChessHub.KeepTeam`) ou
   en change (`ClearTeam` : l'autre l'apprend, et peut changer aussi) ; gardée par les deux, la partie se joue avec la même
-  équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade, Minidraco et Dedenne n'ont pas de sprite Donjon
-  chromatique : ordinaires sur le plateau). Pas encore d'équipe faite par les joueurs.
+  équipe, **les noirs en chromatique** (`ChessUnit.Shiny` ; Roserade, Minidraco, Dedenne et Météno N-Vert n'ont pas de sprite
+  Donjon chromatique : ordinaires sur le plateau). Pas encore d'équipe faite par les joueurs.
 - **Déroulé** (`Services/Chess/ChessHub.cs`, singleton en mémoire, comme les combats) : l'hôte invite un ami (choisi dans
   sa liste lue sur le serveur) et choisit le **temps par coup** (30 s à 10 min, `ChessTiming.MoveSeconds`, revérifié) ;
   invitation valable 10 minutes ; l'ami accepte. Ou **partie publique** (`ChessHub.CreatePublic`) : un code de 8

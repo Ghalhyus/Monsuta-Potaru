@@ -162,7 +162,8 @@ public sealed class ChessPageTests : PageTestContext
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
         Assert.Equal(["Équipe Gallame", "Équipe Dracaufeu", "Équipe Tokorico", "Équipe Nidoking", "Équipe Hyporoi", "Équipe Torterra", "Équipe Rhinastoc",
-                "Équipe Galeking", "Équipe Dracolosse", "Équipe Diancie", "Équipe Scalpereur"],
+                "Équipe Galeking", "Équipe Dracolosse", "Équipe Diancie", "Équipe Scalpereur",
+                "Équipe Ursaking", "Équipe Shifours Mille Poings", "Équipe Gueriaigle", "Équipe Terrakium"],
             ondine.FindAll(".chess-team h3").Select(h => h.TextContent));
         // Deux lignes « Pion » : les Nidoran (Poison, deux images), puis Nosferapti (Vol)
         var lines = ondine.FindAll(".chess-team")[3].QuerySelectorAll(".chess-team-list li");
