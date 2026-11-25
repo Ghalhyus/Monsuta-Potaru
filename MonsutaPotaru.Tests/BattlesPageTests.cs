@@ -22,7 +22,7 @@ public sealed class BattlesPageTests : PageTestContext
         var sacha = Render<Battles>();
         var ondine = RenderAs<Battles>("ondine");
         sacha.WaitForText("Choisis un ami");
-        await sacha.Find("select.battle-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.ChangeOn("select.battle-friend", "ondine");
         sacha.WaitForText("Proposer le combat");
         await sacha.Click("Proposer le combat");
         sacha.WaitForText("En attente de la réponse de ondine");
@@ -240,11 +240,11 @@ public sealed class BattlesPageTests : PageTestContext
         // Le premier Pokémon choisi, puis une recherche qui le cache : il reste dans l'équipe.
         var first = sacha.Find(".trade-candidate .trade-candidate-name").TextContent.Replace(" ✨", "");
         await sacha.ClickOn(".trade-candidate");
-        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "aucun pokémon de ce nom" });
+        await sacha.InputOn(".pokemon-picker-text", "aucun pokémon de ce nom");
         sacha.WaitForText("Aucun Pokémon ne correspond.");
         Assert.Empty(sacha.FindAll(".trade-candidate"));
         Assert.Contains(first, sacha.Find(".battle-team-slot:not(.empty)").TextContent);
-        await sacha.Find(".pokemon-picker-text").InputAsync(new() { Value = "" });
+        await sacha.InputOn(".pokemon-picker-text", "");
         Assert.Equal(all, sacha.FindAll(".trade-candidate").Count);
         await DisposeComponentsAsync();
     }
@@ -256,7 +256,7 @@ public sealed class BattlesPageTests : PageTestContext
         await ondine.Click("Refuser");
         sacha.WaitForText("Retour à l'accueil");
         await sacha.Click("Nouveau combat");
-        await sacha.Find("select.battle-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.ChangeOn("select.battle-friend", "ondine");
         await sacha.Click("Proposer le combat");
         ondine.WaitForText("te propose un combat");
         await ondine.Click("Accepter");
@@ -272,7 +272,7 @@ public sealed class BattlesPageTests : PageTestContext
         await ondine.Click("Nouveau combat");
 
         await sacha.Click("Nouveau combat");
-        await sacha.Find("select.battle-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.ChangeOn("select.battle-friend", "ondine");
         await sacha.Click("Proposer le combat");
         await sacha.Click("Annuler le combat");
         ondine.WaitForAssertion(() => Assert.DoesNotContain("te propose un combat", ondine.Text()));
@@ -328,8 +328,8 @@ public sealed class BattlesPageTests : PageTestContext
         alone.WaitForText("Il te faut un ami pour combattre");
         await MakeFriends("sacha", "pierre");
         var cut = Render<Battles>();
-        await cut.Find("select.battle-friend").ChangeAsync(new() { Value = "pierre" });
+        await cut.ChangeOn("select.battle-friend", "pierre");
         cut.WaitForText("aucune sauvegarde stockée de la même génération");
-        await cut.Find("select.battle-friend").ChangeAsync(new() { Value = "" });
+        await cut.ChangeOn("select.battle-friend", "");
     }
 }

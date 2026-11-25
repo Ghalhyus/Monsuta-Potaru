@@ -35,6 +35,18 @@ internal static class PageTestExtensions
     public static Task ClickOn<T>(this IRenderedComponent<T> cut, string selector, int index = 0) where T : IComponent =>
         cut.InvokeAsync(() => cut.FindAll(selector)[index].ClickAsync(new()));
 
+    /// <summary>Clique sur l'élément que rend <paramref name="find"/> (bouton d'une carte...), trouvé et cliqué d'un seul tenant (voir <see cref="Click{T}"/>).</summary>
+    public static Task ClickOn<T>(this IRenderedComponent<T> cut, Func<IRenderedComponent<T>, IElement> find) where T : IComponent =>
+        cut.InvokeAsync(() => find(cut).ClickAsync(new()));
+
+    /// <summary>Change la valeur du premier élément de ce sélecteur (liste, case, champ), trouvé et changé d'un seul tenant (voir <see cref="Click{T}"/>).</summary>
+    public static Task ChangeOn<T>(this IRenderedComponent<T> cut, string selector, object? value) where T : IComponent =>
+        cut.InvokeAsync(() => cut.Find(selector).ChangeAsync(new() { Value = value }));
+
+    /// <summary>Tape cette valeur dans le premier champ de ce sélecteur (événement « input »), d'un seul tenant (voir <see cref="Click{T}"/>).</summary>
+    public static Task InputOn<T>(this IRenderedComponent<T> cut, string selector, object? value) where T : IComponent =>
+        cut.InvokeAsync(() => cut.Find(selector).InputAsync(new() { Value = value }));
+
     /// <summary>Texte de la page, espaces regroupés (pour les Assert.Contains).</summary>
     public static string Text<T>(this IRenderedComponent<T> cut) where T : IComponent =>
         Normalize(string.Concat(cut.Nodes.Select(n => n.TextContent + " ")));
@@ -47,6 +59,9 @@ internal static class PageTestExtensions
     public static async Task ClickAll<T>(this IRenderedComponent<T> cut, string text) where T : IComponent
     {
         for (var i = 0; i < cut.Buttons(text).Count; i++)
-            await cut.Buttons(text)[i].ClickAsync(new());
+        {
+            var index = i;
+            await cut.InvokeAsync(() => cut.Buttons(text)[index].ClickAsync(new()));
+        }
     }
 }

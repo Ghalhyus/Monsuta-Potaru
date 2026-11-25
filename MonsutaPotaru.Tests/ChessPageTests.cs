@@ -23,8 +23,8 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal(["30 s par coup", "1 min par coup", "2 min par coup", "5 min par coup", "10 min par coup"],
             sacha.FindAll("select.chess-time option").Select(o => o.TextContent));
         Assert.True(sacha.Find("button.chess-invite").HasAttribute("disabled"));
-        await sacha.Find("select.chess-friend").ChangeAsync(new() { Value = "ondine" });
-        await sacha.Find("select.chess-time").ChangeAsync(new() { Value = "300" });
+        await sacha.ChangeOn("select.chess-friend", "ondine");
+        await sacha.ChangeOn("select.chess-time", "300");
         await sacha.Click("Inviter");
         sacha.WaitForText("En attente de la réponse de ondine");
         sacha.WaitForText("5 min par coup");
@@ -45,7 +45,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.DoesNotContain("Invitation envoyée", sacha.Text()); // l'ami a répondu
 
         // Ondine prend l'équipe Dracaufeu : Sacha sait qu'elle a choisi, pas laquelle (toutes restent libres pour lui)
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         ondine.WaitForText("Tu as choisi l'équipe Dracaufeu");
         sacha.WaitForText("ondine a choisi son équipe.");
         Assert.DoesNotContain("Dracaufeu", sacha.Find(".chess-other-chose").TextContent);
@@ -56,10 +56,10 @@ public sealed class ChessPageTests : PageTestContext
         await ondine.Click("Changer d'équipe");
         ondine.WaitForText("tu pourras changer la tienne tant que sacha n'a pas choisi.");
         sacha.WaitForAssertion(() => Assert.Empty(sacha.FindAll(".chess-other-chose")));
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         ondine.WaitForText("Tu as choisi l'équipe Dracaufeu");
         sacha.WaitForText("ondine a choisi son équipe.");
-        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!);
 
         sacha.WaitForText("À toi de jouer.");
         ondine.WaitForText("Au tour de sacha");
@@ -181,9 +181,9 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal("Nosferapti", lines[^1].QuerySelector(".chess-mon-name")!.TextContent);
         Assert.Contains("Vol", lines[^1].TextContent);
         Assert.Contains("Pion", lines[^1].TextContent);
-        await ondine.FindAll(".chess-team")[3].QuerySelector("button")!.ClickAsync(new()); // Poison
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[3].QuerySelector("button")!); // Poison
         sacha.WaitForText("Choisis ton équipe");
-        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!); // Psy
         sacha.WaitForText("À toi de jouer.");
 
         // Table de type : sept colonnes, une par type de pion ; celle des Nidoran avec deux images (Psy contre Poison : ×2)
@@ -203,9 +203,9 @@ public sealed class ChessPageTests : PageTestContext
         var (sacha, ondine) = await Invited();
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new()); // Feu
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!); // Feu
         sacha.WaitForText("Choisis ton équipe");
-        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new()); // Psy
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!); // Psy
         sacha.WaitForText("À toi de jouer.");
 
         // 1. e4 Cf6 2. g3 Cxe4 (Ténèbres contre Tarsal, Psy : super efficace, Démolosse rejoue). Tarsal en a, c, e, g ;
@@ -297,10 +297,10 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Contains(Sq("d5"), LastMarks("blocked"));
         Assert.Contains("en bleu, bouclier : il ne peut pas les manger", sacha.Find(".chess-info").TextContent);
         Assert.DoesNotContain("croix rouge", sacha.Find(".chess-info").TextContent);
-        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        await sacha.ChangeOn("#chess-contrast", true);
         Assert.Contains("cadre rouge : il ne peut pas les manger ; croix rouge : à sa portée, mais son type l'empêche de les manger.",
             sacha.Find(".chess-info").TextContent);
-        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        await sacha.ChangeOn("#chess-contrast", false);
         Assert.DoesNotContain("croix rouge", sacha.Find(".chess-info").TextContent);
         await DisposeComponentsAsync();
     }
@@ -339,11 +339,11 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Contains("Sur le plateau, en rouge, bouclier cassé : il leur est super efficace ; en bleu, bouclier : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
 
         // Contraste élevé : des cadres (la légende suit tout de suite, la pièce reste choisie) ; puis retour au mode par défaut
-        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        await sacha.ChangeOn("#chess-contrast", true);
         Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.Contains("Gallame ne peut pas bouger. Sur le plateau, cadre vert : il leur est super efficace ; cadre rouge : il ne peut pas les manger.", sacha.Find(".chess-info").TextContent);
         Assert.Equal([Sq("b7"), Sq("d7"), Sq("f7"), Sq("h7"), Sq("b8"), Sq("g8")], LastMarks("weak"));
-        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        await sacha.ChangeOn("#chess-contrast", false);
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.Contains("en rouge, bouclier cassé", sacha.Find(".chess-info").TextContent);
 
@@ -385,9 +385,9 @@ public sealed class ChessPageTests : PageTestContext
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
         sacha.WaitForText("Choisis ton équipe");
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         sacha.WaitForText("ondine a choisi son équipe.");
-        await sacha.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
 
         // La même : les deux le voient, à chacun de la garder ou d'en changer, sans voir la décision de l'autre
         sacha.WaitForText("Vous avez pris la même équipe, ondine et toi : l'équipe Dracaufeu.");
@@ -407,7 +407,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.True(sacha.HasButton("Changer d'équipe"));
 
         // Elle reprend la même, que Sacha a gardée : la partie commence, les noirs en chromatique
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         sacha.WaitForText("À toi de jouer.");
         ondine.WaitForText("Au tour de sacha");
 
@@ -458,10 +458,10 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal([false, true], BoardsOption("contrast").Order());
 
         // Sacha l'enlève pendant la partie : le plateau suit, le compte le garde, les animations au repos ne changent pas
-        await sacha.Find("#chess-contrast").ChangeAsync(new() { Value = false });
+        await sacha.ChangeOn("#chess-contrast", false);
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.Equal((false, true), ((await preferences.SortsAsync("sacha")).ChessContrast, (await preferences.SortsAsync("sacha")).ChessIdle));
-        await ondine.Find("#chess-contrast").ChangeAsync(new() { Value = true });
+        await ondine.ChangeOn("#chess-contrast", true);
         Assert.True((await preferences.SortsAsync("ondine")).ChessContrast);
         Assert.False((await preferences.SortsAsync("sacha")).ChessContrast);
     }
@@ -490,13 +490,13 @@ public sealed class ChessPageTests : PageTestContext
         Assert.All(types, t => Assert.Contains(t, Enum.GetValues<PokeType>().Select(PokeTypes.Key)));
 
         // Allumé : plein, et le plateau de Sacha seul les montre ; éteint de nouveau au second clic
-        await sacha.Find(".chess-types-button").ClickAsync(new());
+        await sacha.ClickOn(".chess-types-button");
         Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setTypes").Arguments[0]);
         Assert.Contains("btn-primary", sacha.Find(".chess-types-button").ClassName);
         Assert.DoesNotContain("btn-outline-primary", sacha.Find(".chess-types-button").ClassName);
         Assert.Equal("true", sacha.Find(".chess-types-button").GetAttribute("aria-pressed"));
         Assert.Equal("false", ondine.Find(".chess-types-button").GetAttribute("aria-pressed"));
-        await sacha.Find(".chess-types-button").ClickAsync(new());
+        await sacha.ClickOn(".chess-types-button");
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setTypes").Arguments[0]);
         Assert.Equal("false", sacha.Find(".chess-types-button").GetAttribute("aria-pressed"));
     }
@@ -520,7 +520,7 @@ public sealed class ChessPageTests : PageTestContext
 
         // La confirmation reste : refusée, la partie continue
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(false);
-        await sacha.Find(".chess-forfeit").ClickAsync(new());
+        await sacha.ClickOn(".chess-forfeit");
         Assert.Equal(ChessStage.Playing, Services.GetRequiredService<ChessHub>().Active("sacha")!.Stage);
     }
 
@@ -532,9 +532,9 @@ public sealed class ChessPageTests : PageTestContext
         var (sacha, ondine) = await Invited();
         await ondine.Click("Accepter");
         ondine.WaitForText("Choisis ton équipe");
-        await ondine.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await ondine.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         sacha.WaitForText("Choisis ton équipe");
-        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!);
         sacha.WaitForText("À toi de jouer.");
         ondine.WaitForText("Au tour de sacha");
 
@@ -546,10 +546,10 @@ public sealed class ChessPageTests : PageTestContext
         Assert.Equal([false, true], BoardsIdle().Order());
 
         // Sacha les remet pendant la partie : le plateau suit, le compte le garde
-        await sacha.Find("#chess-idle").ChangeAsync(new() { Value = false });
+        await sacha.ChangeOn("#chess-idle", false);
         Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
-        await ondine.Find("#chess-idle").ChangeAsync(new() { Value = true });
+        await ondine.ChangeOn("#chess-idle", true);
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.False((await preferences.SortsAsync("ondine")).ChessIdle);
         Assert.True((await preferences.SortsAsync("sacha")).ChessIdle);
@@ -574,9 +574,9 @@ public sealed class ChessPageTests : PageTestContext
     {
         first.WaitForText("Choisis ton équipe");
         second.WaitForText("Choisis ton équipe");
-        await first.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        await first.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!);
         second.WaitForText("a choisi son équipe.");
-        await second.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
+        await second.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
         first.WaitForAssertion(() => Assert.NotNull(first.Find(".chess-board")));
         second.WaitForAssertion(() => Assert.NotNull(second.Find(".chess-board")));
     }
@@ -601,7 +601,7 @@ public sealed class ChessPageTests : PageTestContext
         Assert.False(ondine.HasButton("Recommencer avec sacha"));
         Assert.True(Services.GetRequiredService<ChessHub>().Incoming("ondine").Single().RematchOf is not null);
 
-        await ondine.Find(".chess-rematch-accept").ClickAsync(new());
+        await ondine.ClickOn(".chess-rematch-accept");
         await ChooseTeams(ondine, sacha); // équipes rechoisies
         ondine.WaitForText("Tu joues les blancs · 5 min par coup");
         ondine.WaitForText("À toi de jouer.");
@@ -636,8 +636,8 @@ public sealed class ChessPageTests : PageTestContext
         var sacha = Render<Chess>();
         var code = await CreatePublic(sacha);
         var guest = RenderAnonymous<Chess>();
-        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
-        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = code });
+        await guest.ChangeOn("input.chess-guest-name", "Léo");
+        await guest.ChangeOn("input.chess-code-input", code);
         await guest.Click("Rejoindre");
         await ChooseTeams(sacha, guest);
         JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
@@ -648,7 +648,7 @@ public sealed class ChessPageTests : PageTestContext
         await guest.Click("Recommencer avec sacha");
         guest.WaitForText("Tu joues les blancs · 2 min par coup");
         sacha.WaitForAssertion(() => Assert.Contains("Léo (invité) te propose de recommencer", sacha.Find(".chess-rematch-offer").TextContent));
-        await sacha.Find(".chess-rematch-accept").ClickAsync(new());
+        await sacha.ClickOn(".chess-rematch-accept");
         await ChooseTeams(guest, sacha);
         guest.WaitForText("À toi de jouer.");
 
@@ -668,7 +668,7 @@ public sealed class ChessPageTests : PageTestContext
     {
         var sacha = Render<Chess>();
         sacha.WaitForText("Pour inviter un ami, ajoute-en dans Amis."); // pas d'ami : la partie publique reste possible
-        await sacha.Find("select.chess-time").ChangeAsync(new() { Value = "60" });
+        await sacha.ChangeOn("select.chess-time", "60");
         var code = await CreatePublic(sacha);
         sacha.WaitForText("Partie publique");
         sacha.WaitForText("1 min par coup");
@@ -686,14 +686,14 @@ public sealed class ChessPageTests : PageTestContext
         Assert.DoesNotContain("Nouvelle partie", guest.Text());
         Assert.Empty(guest.FindAll("button.chess-public"));
         Assert.Contains("Connecte-toi", guest.Text());
-        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = code.ToLowerInvariant() });
+        await guest.ChangeOn("input.chess-code-input", code.ToLowerInvariant());
         await guest.Click("Rejoindre");
         guest.WaitForText("Ton prénom doit faire de 2 à 20 caractères.");
-        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
-        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = OtherCode(code) });
+        await guest.ChangeOn("input.chess-guest-name", "Léo");
+        await guest.ChangeOn("input.chess-code-input", OtherCode(code));
         await guest.Click("Rejoindre");
         guest.WaitForText("Aucune partie n'attend avec ce code");
-        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = $"{code[..4]}-{code[4..]}".ToLowerInvariant() });
+        await guest.ChangeOn("input.chess-code-input", $"{code[..4]}-{code[4..]}".ToLowerInvariant());
         await guest.Click("Rejoindre");
 
         // Choix des équipes, puis la partie : l'invité joue les noirs. Le message de la copie du lien disparaît dès que
@@ -701,19 +701,19 @@ public sealed class ChessPageTests : PageTestContext
         guest.WaitForText("Partie contre sacha");
         sacha.WaitForText("Partie contre Léo (invité)");
         Assert.DoesNotContain("Lien copié", sacha.Text());
-        await guest.FindAll(".chess-team")[1].QuerySelector("button")!.ClickAsync(new());
-        await sacha.FindAll(".chess-team")[0].QuerySelector("button")!.ClickAsync(new());
+        await guest.ClickOn(c => c.FindAll(".chess-team")[1].QuerySelector("button")!);
+        await sacha.ClickOn(c => c.FindAll(".chess-team")[0].QuerySelector("button")!);
         guest.WaitForText("Tu joues les noirs · 1 min par coup");
         sacha.WaitForText("Partie contre Léo (invité)");
 
         // L'invité a la case des animations au repos, pour cette partie seulement (pas de compte où la garder)
         Assert.False(guest.Find("#chess-idle").HasAttribute("checked"));
-        await guest.Find("#chess-idle").ChangeAsync(new() { Value = true });
+        await guest.ChangeOn("#chess-idle", true);
         Assert.False((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setIdle").Arguments[0]);
         Assert.True(guest.Find("#chess-idle").HasAttribute("checked"));
         Assert.DoesNotContain("gardé dans ton compte", guest.Text());
         Assert.True((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessIdle);
-        await guest.Find("#chess-contrast").ChangeAsync(new() { Value = true }); // de même pour le contraste élevé
+        await guest.ChangeOn("#chess-contrast", true); // de même pour le contraste élevé
         Assert.True((bool?)JSInterop.Invocations.Last(i => i.Identifier == "setContrast").Arguments[0]);
         Assert.DoesNotContain("gardé dans ton compte", guest.Text());
         Assert.False((await Services.GetRequiredService<PreferencesService>().SortsAsync("sacha")).ChessContrast);
@@ -745,8 +745,8 @@ public sealed class ChessPageTests : PageTestContext
 
         // Essais de codes limités par adresse IP (Ondine en a déjà fait un) : au-delà, le code n'est plus cherché
         var guest = RenderAnonymous<Chess>();
-        await guest.Find("input.chess-guest-name").ChangeAsync(new() { Value = "Léo" });
-        await guest.Find("input.chess-code-input").ChangeAsync(new() { Value = OtherCode(code) });
+        await guest.ChangeOn("input.chess-guest-name", "Léo");
+        await guest.ChangeOn("input.chess-code-input", OtherCode(code));
         for (var i = 1; i < AccountLimiter.ChessCodesPerMinute; i++)
         {
             await guest.Click("Rejoindre");

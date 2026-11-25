@@ -20,6 +20,10 @@ public abstract class PageTestContext : BunitContext
 
     protected PageTestContext(string userId = "sacha")
     {
+        // WaitForAssertion sans délai donné : 1 s par défaut chez bUnit, trop court pour la CI (machine partagée, couverture
+        // du code qui ralentit tout) quand l'étape attendue lit une sauvegarde ou un monde. Une attente réussie ne dure
+        // pas plus longtemps pour autant : elle s'arrête dès que l'assertion passe.
+        DefaultWaitTimeout = TimeSpan.FromSeconds(15);
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton(Db.Factory);
         Services.AddSingleton(Db.Config);

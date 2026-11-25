@@ -30,3 +30,7 @@ __pycache__/
 
 # Liste de succès (docs/succes.csv) : gardée hors du dépôt
 /docs/succes.csv
+
+# Rapports des outils de qualité des tests (Stryker.NET, ReportGenerator), recréés à chaque lancement
+StrykerOutput/
+/coveragereport/

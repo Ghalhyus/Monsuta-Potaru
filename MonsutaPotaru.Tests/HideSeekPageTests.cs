@@ -50,20 +50,20 @@ public sealed class HideSeekPageTests : PageTestContext
         sacha.WaitForText("Aucun Pokémon dans ce choix : change les réglages.");
         Assert.True(sacha.Find("button.hide-seek-start").HasAttribute("disabled"));
 
-        await sacha.Find("select.hide-seek-pool").ChangeAsync(new() { Value = nameof(HideSeekPool.Random) });
-        await sacha.Find("input.hide-seek-rounds").ChangeAsync(new() { Value = "2" });
-        await sacha.Find("input.hide-seek-count").ChangeAsync(new() { Value = "20" });
-        await sacha.Find("input.hide-seek-seconds").ChangeAsync(new() { Value = "30" });
-        await sacha.Find("input.hide-seek-countdown").ChangeAsync(new() { Value = "4" });
-        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = nameof(ParkLandscape.Forest) });
+        await sacha.ChangeOn("select.hide-seek-pool", nameof(HideSeekPool.Random));
+        await sacha.ChangeOn("input.hide-seek-rounds", "2");
+        await sacha.ChangeOn("input.hide-seek-count", "20");
+        await sacha.ChangeOn("input.hide-seek-seconds", "30");
+        await sacha.ChangeOn("input.hide-seek-countdown", "4");
+        await sacha.ChangeOn("select.hide-seek-landscape", nameof(ParkLandscape.Forest));
         sacha.WaitForText("Pokémon différents peuvent être tirés.");
         Assert.True(sacha.Find("input.hide-seek-nicknamed").HasAttribute("disabled")); // pas de surnom au hasard
         // Valeur trafiquée : refusée, les réglages ne changent pas
-        await sacha.Find("input.hide-seek-count").ChangeAsync(new() { Value = "500" });
+        await sacha.ChangeOn("input.hide-seek-count", "500");
         sacha.WaitForText("Le parc compte de 20 à 80 Pokémon.");
         Assert.Equal(20, _hub.Active("sacha")!.Snapshot("sacha").Settings.Count);
 
-        await sacha.Find("select.hide-seek-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.ChangeOn("select.hide-seek-friend", "ondine");
         await sacha.Click("Inviter");
         sacha.WaitForText("Invitation envoyée à ondine.");
         sacha.WaitForText("invité, en attente de sa réponse");
@@ -101,36 +101,36 @@ public sealed class HideSeekPageTests : PageTestContext
         sacha.WaitForText("Créer une partie");
         await sacha.Click("Créer une partie");
         sacha.WaitForText("Salle d'attente");
-        await sacha.Find("input.hide-seek-rounds").ChangeAsync(new() { Value = "1" });
-        await sacha.Find("input.hide-seek-count").ChangeAsync(new() { Value = "20" });
-        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = nameof(ParkLandscape.Beach) });
+        await sacha.ChangeOn("input.hide-seek-rounds", "1");
+        await sacha.ChangeOn("input.hide-seek-count", "20");
+        await sacha.ChangeOn("select.hide-seek-landscape", nameof(ParkLandscape.Beach));
         sacha.WaitForText("5 Pokémon différents dans ce choix peuvent vivre à la plage : des Pokémon aléatoires complètent le parc.");
         Assert.True(sacha.Find("input.hide-seek-fill").HasAttribute("checked")); // complété par défaut, tous les Pokémon par défaut
         Assert.Equal(nameof(HideSeekMood.All), sacha.Find("select.hide-seek-mood").GetAttribute("value"));
 
         // Sans complément : le parc n'a que les Pokémon du choix
-        await sacha.Find("input.hide-seek-fill").ChangeAsync(new() { Value = false });
+        await sacha.ChangeOn("input.hide-seek-fill", false);
         sacha.WaitForText("5 Pokémon différents dans ce choix peuvent vivre à la plage : le parc n'en aura que 5.");
         // Heureux seulement : ceux qui aiment la plage
-        await sacha.Find("select.hide-seek-mood").ChangeAsync(new() { Value = nameof(HideSeekMood.Happy) });
+        await sacha.ChangeOn("select.hide-seek-mood", nameof(HideSeekMood.Happy));
         sacha.WaitForText($"{happy} Pokémon différents dans ce choix peuvent vivre à la plage (heureux dans le parc) : le parc n'en aura que {happy}.");
         Assert.Contains("un Pokémon est heureux quand un habitat qu'il aime couvre plus de la moitié du parc", sacha.Text());
         // Paysage au hasard : le nombre dépend du paysage du tour
-        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = "" });
+        await sacha.ChangeOn("select.hide-seek-landscape", "");
         sacha.WaitForText("selon le paysage du tour, le parc en aura de");
-        await sacha.Find("select.hide-seek-landscape").ChangeAsync(new() { Value = nameof(ParkLandscape.Beach) });
+        await sacha.ChangeOn("select.hide-seek-landscape", nameof(ParkLandscape.Beach));
         // Valeur trafiquée : refusée
-        await sacha.Find("select.hide-seek-mood").ChangeAsync(new() { Value = "9" });
+        await sacha.ChangeOn("select.hide-seek-mood", "9");
         sacha.WaitForText("Cette humeur n'est pas proposée.");
         Assert.Equal(HideSeekMood.Happy, Shown.Settings.Mood);
         Assert.False(Shown.Settings.FillWithRandom);
         // Des Pokémon aléatoires : pas de case « compléter » (ils remplissent le parc eux-mêmes)
-        await sacha.Find("select.hide-seek-pool").ChangeAsync(new() { Value = nameof(HideSeekPool.Random) });
+        await sacha.ChangeOn("select.hide-seek-pool", nameof(HideSeekPool.Random));
         sacha.WaitForText("Pokémon différents (heureux dans le parc) peuvent être tirés.");
         Assert.Empty(sacha.FindAll("input.hide-seek-fill"));
-        await sacha.Find("select.hide-seek-pool").ChangeAsync(new() { Value = nameof(HideSeekPool.Host) });
+        await sacha.ChangeOn("select.hide-seek-pool", nameof(HideSeekPool.Host));
 
-        await sacha.Find("select.hide-seek-friend").ChangeAsync(new() { Value = "ondine" });
+        await sacha.ChangeOn("select.hide-seek-friend", "ondine");
         await sacha.Click("Inviter");
         ondine.WaitForText("t'invite à une partie de cache-cache");
         await ondine.Click("Accepter");
@@ -215,7 +215,7 @@ public sealed class HideSeekPageTests : PageTestContext
         sacha.WaitForText("Salle d'attente");
         sacha.WaitForText("ondine est invité");
         ondine.WaitForText("sacha propose de recommencer avec les mêmes réglages.");
-        await ondine.Find("button.hide-seek-rematch-accept").ClickAsync(new());
+        await ondine.ClickOn("button.hide-seek-rematch-accept");
         ondine.WaitForText("En attente du lancement de la partie par sacha");
         sacha.WaitForText("Joueurs (2 / 8)");
         Assert.Equal(2, _hub.Active("sacha")!.Snapshot("sacha").Settings.Rounds);
@@ -233,11 +233,11 @@ public sealed class HideSeekPageTests : PageTestContext
         var guest = RenderAnonymous<HideSeek>();
         guest.WaitForText("Rejoindre une partie");
         Assert.Empty(guest.FindAll("button.hide-seek-create")); // sans compte : seulement rejoindre
-        guest.Find("input.hide-seek-code-input").Change(code);
-        guest.Find("input.hide-seek-guest-name").Change("L");
+        await guest.ChangeOn("input.hide-seek-code-input", code);
+        await guest.ChangeOn("input.hide-seek-guest-name", "L");
         await guest.Click("Rejoindre");
         guest.WaitForText("Ton prénom doit faire de 2 à 20 caractères.");
-        guest.Find("input.hide-seek-guest-name").Change("Léo");
+        await guest.ChangeOn("input.hide-seek-guest-name", "Léo");
         await guest.Click("Rejoindre");
         guest.WaitForText("En attente du lancement de la partie par sacha");
         sacha.WaitForText("Léo (invité)");
