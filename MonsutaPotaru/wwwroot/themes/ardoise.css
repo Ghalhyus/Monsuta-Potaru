@@ -683,6 +683,8 @@ a.ardoise-link.active {
     border-bottom: 1px solid var(--ard-line);
 }
 [data-theme="ardoise"] main .block-title { font-size: 1rem; font-weight: 600; }
+/* Bloc replié : l'en-tête seul, sans le trait qui le sépare du contenu */
+[data-theme="ardoise"] main .block-collapsed > .block-header { border-bottom: 0; }
 [data-theme="ardoise"] main .block-count { --bs-primary-rgb: var(--ard-head-rgb); color: var(--ard-muted); border: 1px solid var(--ard-line); }
 [data-theme="ardoise"] main .block-body { padding: 1rem; }
 /* Contenu collé aux bords : listes et tableaux sans leur propre cadre */

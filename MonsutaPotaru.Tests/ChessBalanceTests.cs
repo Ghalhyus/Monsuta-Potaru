@@ -92,6 +92,33 @@ public sealed class ChessBalanceTests
     }
 
     [Fact]
+    public void LinesOfType_OncePerPawnType()
+    {
+        // Pions Eau et Feu, tour Eau, le reste Normal ; en face, tout Eau (pions compris) : un seul type de pion
+        ChessTeam mixed = new("mix",
+        [
+            new(1, 0, "Eau", PokeType.Water, ChessPiece.Pawn),
+            new(2, 0, "Feu", PokeType.Fire, ChessPiece.Pawn),
+            new(3, 0, "Tour", PokeType.Water, ChessPiece.Rook),
+            .. new[] { ChessPiece.Knight, ChessPiece.Bishop, ChessPiece.Queen, ChessPiece.King }
+                .Select(p => new ChessMon(4, 0, $"mix-{p}", PokeType.Normal, p)),
+        ]);
+        var water = Team("eau", PokeType.Water, PokeType.Water);
+        ChessTeam[] teams = [mixed, water];
+
+        // Eau : pion et tour de « mix », puis les six pièces de « eau » (ses huit pions comptent pour un)
+        var lines = ChessBalance.LinesOfType(teams, PokeType.Water);
+        Assert.Equal(8, lines.Count);
+        Assert.Equal([ChessPiece.Pawn, ChessPiece.Rook], lines.Where(l => l.Team == mixed).Select(l => l.Line.Piece));
+        Assert.Equal(6, lines.Count(l => l.Team == water));
+        Assert.Single(ChessBalance.LinesOfType(teams, PokeType.Fire));
+        Assert.Equal(4, ChessBalance.LinesOfType(teams, PokeType.Normal).Count);
+        Assert.Empty(ChessBalance.LinesOfType(teams, PokeType.Dragon));
+        // Toutes les lignes, une fois chacune
+        Assert.Equal(7 + 6, Enum.GetValues<PokeType>().Sum(t => ChessBalance.LinesOfType(teams, t).Count));
+    }
+
+    [Fact]
     public void Points_RoundedHalfUp()
     {
         Assert.Equal(84, ChessBalance.Points(0.836));

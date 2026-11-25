@@ -1,8 +1,10 @@
 @* Bloc d'une page : une partie avec son titre (h2), son aide en infobulle (« ? ») et ses boutons d'action dessous
    (jamais collés à droite). Thèmes Classique et Pokédex : le titre comme un sous-titre, le contenu dessous, sans cadre.
-   Thème Ardoise : un panneau blanc à en-tête (wwwroot/themes/ardoise.css). *@
+   Thème Ardoise : un panneau blanc à en-tête (wwwroot/themes/ardoise.css). Repliable (Collapsible) : le titre devient un
+   bouton à chevron ; replié, le contenu n'est pas rendu du tout (onglet « Échecs » de l'administration : ses grandes
+   tables sont lourdes). La page garde l'état (Collapsed, CollapsedChanged). *@
 
-<section class="block @(Flush ? "block-flush" : "") @Class" id="@Id">
+<section class="block @(Flush ? "block-flush" : "") @(Collapsible && Collapsed ? "block-collapsed" : "") @Class" id="@Id">
     @if (Title is not null || Actions is not null)
     {
         <div class="block-header">
@@ -10,7 +12,15 @@
             {
                 <div class="block-heading help-tip-anchor">
                     <h2 class="block-title h5">
-                        @Title
+                        @if (Collapsible)
+                        {
+                            <button type="button" class="block-toggle" aria-expanded="@(Collapsed ? "false" : "true")"
+                                    title="@(Collapsed ? "Déplier" : "Replier")" @onclick="Toggle">@Title</button>
+                        }
+                        else
+                        {
+                            @Title
+                        }
                         @if (Count is not null)
                         {
                             <span class="badge bg-primary ms-1 block-count">@Count</span>
@@ -22,13 +32,16 @@
                     }
                 </div>
             }
-            @if (Actions is not null)
+            @if (Actions is not null && !(Collapsible && Collapsed))
             {
                 <div class="block-actions">@Actions</div>
             }
         </div>
     }
-    <div class="block-body">@ChildContent</div>
+    @if (!(Collapsible && Collapsed))
+    {
+        <div class="block-body">@ChildContent</div>
+    }
 </section>
 
 @code {
@@ -48,6 +61,20 @@
     /// <summary>Contenu collé aux bords du panneau (liste, tableau) dans le thème Ardoise.</summary>
     [Parameter] public bool Flush { get; set; }
 
+    /// <summary>Bloc repliable : un clic sur le titre le replie ou le déplie (il faut un <see cref="Title"/>).</summary>
+    [Parameter] public bool Collapsible { get; set; }
+
+    /// <summary>Bloc replié : seul le titre reste, le contenu n'est pas rendu.</summary>
+    [Parameter] public bool Collapsed { get; set; }
+
+    [Parameter] public EventCallback<bool> CollapsedChanged { get; set; }
+
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Id { get; set; }
+
+    private async Task Toggle()
+    {
+        Collapsed = !Collapsed;
+        await CollapsedChanged.InvokeAsync(Collapsed);
+    }
 }

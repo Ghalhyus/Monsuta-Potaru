@@ -268,6 +268,20 @@ pièces », cases « Désactiver les animations » et « Contraste élevé », m
   vers l'accueil (base « / »). Blazor appelle bien `scrollIntoView` ; dans le navigateur intégré masqué, le défilement
   doux (`scroll-behavior: smooth` du site) n'avance pas : vérifier en interceptant `Element.prototype.scrollIntoView`.
 
+## Somme des types et sections repliables (demandé le 2026-11-25)
+- Section « Types » après « Solde » (choix de l'utilisateur, mes recommandations) : les 18 types en lignes, triés du plus
+  fréquent au moins fréquent (ceux à 0 restent, à la fin), colonnes Total puis Pion, Tour, Cavalier, Fou, Reine, Roi
+  (ordre de l'enum `ChessPiece`, pas `ChessTeamList.Order`). Compte des **lignes** (`ChessBalance.LinesOfType`) : « les
+  types de pion, pas les pions » (ses mots) ; deux espèces de pion du même type (Nidoran) comptent une fois. Survol : une
+  équipe par ligne (« Dracaufeu : Salamèche (pion) »). Avec les brouillons : écart sans couleur (`Delta(…, null)`).
+  Vérifié le 2026-11-25 : 15 équipes, 105 lignes, 30 types de pion.
+- Repli : `Block` a `Collapsible` / `Collapsed` / `CollapsedChanged` (le titre devient un bouton, chevron en CSS : pas
+  d'icônes Bootstrap dans le site) ; replié, ni contenu ni actions ne sont rendus. Toutes les sections de l'onglet, état
+  **retenu** dans le navigateur (`localStorage`, clé `monsuta-potaru.administration.echecs.replie`, ancres séparées par
+  des espaces). Le contenu de l'onglet attend la lecture (« Chargement… » le temps d'un aller-retour) : sinon les ~22 000
+  cases des grandes tables seraient calculées puis retirées. Un lien du menu (`@onclick` en plus du `href`) déplie la
+  section ; « Tout replier » / « Tout déplier ». Tests : `Admin_ChessTab_TypeSums`, `Admin_ChessTab_FoldedSections_*`.
+
 ## Équipes Acier, Dragon, Fée, Ténèbres et retouches (2026-11-24, d'après les brouillons de l'utilisateur)
 - Lues dans sa base locale (`MonsutaPotaru/Data/app.db`, celle de Visual Studio, ouverte en lecture seule avec
   `sqlite3` de Python, `?mode=ro`) : brouillons 3 à 6 (nouvelles équipes) et 7, 9, 10 (modifications). Celle du serveur

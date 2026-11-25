@@ -489,12 +489,16 @@ ce qui suit, sauf les deux derniers points), « Échecs » (`?onglet=echecs`) et
   lecture seule, recalculé d'après `ChessTeams.All` et la table des types (rien en base). Parts **pondérées par le
   nombre de pièces** (8 pions, 4 de chaque type, 2 tours, 2 fous, 2 cavaliers, une reine, un roi : 16 × 16 paires) : part mangeable d'une
   équipe contre chaque autre et part super efficace, moyenne contre toutes les équipes, elle comprise (une case l'exclut) ; rois menacés (pièces sur 16 qui
-  peuvent manger chaque roi) ; solde (part de A contre B moins celle de B contre A, en points). Puis, par équipe, deux
+  peuvent manger chaque roi) ; solde (part de A contre B moins celle de B contre A, en points) ; **types** (les 18 types,
+  du plus fréquent au moins fréquent, au total et par pièce : une fois par pièce et **une fois par type de pion**, pas
+  une par pion ; les équipes au survol). Puis, par équipe, deux
   tables contre les lignes (pièce et type, 7 par équipe) de toutes les équipes (ce qu'elle mange, qui la mange), même règle que les parties
   (`ChessGame.CanEat`) ; ✗₀ distingue « sans effet », le multiplicateur au survol. Case **« Avec les brouillons »**
   (`&brouillons=oui`) : chaque brouillon compté et complet remplace l'équipe qu'il modifie (à sa place) ou s'ajoute (nouvelle
   équipe, ajoutée à la moyenne) ; chaque chiffre montre son écart avec les équipes du jeu (« (+6) », vert s'il est favorable
-  à l'équipe de la ligne). Une case par brouillon pour le compter.
+  à l'équipe de la ligne ; sans couleur pour les types). Une case par brouillon pour le compter. Chaque section se
+  replie (clic sur son titre, « Tout replier », « Tout déplier ») : repliée, elle n'est pas calculée ; l'état est gardé
+  dans le navigateur (`localStorage`), un lien du menu déplie la section visée.
 - **Brouillons d'échecs** (`Shared/ChessTeamDrafts.razor`, `Services/Chess/ChessDraftService.cs`, table
   `ChessTeamDrafts`) : équipes proposées par les administrateurs (communes à tous), **jamais jouées** : les parties ne lisent
   que `ChessTeams.All`, un brouillon équilibré est recopié dans le code (bouton « Copier pour Claude » : le texte de
@@ -971,7 +975,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Services/Chess/ChessGame.cs` | Règles des échecs Pokémon : coups permis, prises selon les types, tour bonus, échec et mat, roque, prise en passant, pion échangé avec un K.O., récit de chaque coup |
 | `MonsutaPotaru/Services/Chess/ChessTypes.cs`, `ChessTeams.cs` | Table des types (efficacité, noms) ; équipes par défaut et noms des pièces |
 | `MonsutaPotaru/Services/Chess/ChessDraftService.cs`, `ChessDex.cs`, `Data/ChessTeamDraft.cs` | Brouillons d'équipes d'échecs (administration) : cases, vérifications, équipes de l'équilibrage avec les brouillons, remarques, texte à copier ; catalogue des Pokémon et formes avec leurs types (PKHeX) |
-| `MonsutaPotaru/Services/Chess/ChessBalance.cs` | Équilibrage des équipes d'échecs : marque de chaque case des tables de type (prise, multiplicateur, phrase), parts pondérées par le nombre de pièces, moyenne, solde, rois menacés |
+| `MonsutaPotaru/Services/Chess/ChessBalance.cs` | Équilibrage des équipes d'échecs : marque de chaque case des tables de type (prise, multiplicateur, phrase), parts pondérées par le nombre de pièces, moyenne, solde, rois menacés, somme des types |
 | `MonsutaPotaru/Services/Chess/ChessHub.cs` | Parties d'échecs en direct (singleton, en mémoire) : invitation, partie publique (code, invité sans compte), équipes (à l'aveugle, la même gardée ou changée), coups vérifiés, temps par coup, abandon, fin, « Recommencer » (couleurs inversées) |
 | `MonsutaPotaru/Services/Chess/ChessRecorder.cs` | Résultat de chaque partie terminée écrit en base ; `ChessService` : statistiques |
 | `MonsutaPotaru/Components/Pages/HideSeek.razor` | « Mini-jeux » → « Cache-cache » (`/mini-jeux/cache-cache`, ouverte sans compte pour rejoindre une partie par son code) : invitations reçues, salle d'attente (code, lien, amis invités, réglages de l'hôte, Pokémon disponibles), parc de chaque tour (`parc.js` sans noms), cible, temps, clics, blocage, scores, écran de fin et « Recommencer » |
@@ -993,7 +997,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Statistics.razor` | Statistiques du joueur (menu du pseudo, ou profil d'un joueur) : onglets Générale (argent), Défis (living dex, rubans, complétion), Multijoueurs (échanges, combats), Mini-jeux (général, échecs, cache-cache) |
 | `MonsutaPotaru/Components/Shared/ChessTeamList.razor` | Les six Pokémon d'une équipe d'échecs (image, nom, type, pièce ; chromatiques pour les noirs d'une partie à même équipe) : choix des équipes, fenêtre « Pièces », équipe favorite des statistiques |
 | `MonsutaPotaru/Components/Shared/ChessMarkCell.razor` | Case d'une table de type des échecs (×2, ✓, ✗, phrase au survol ; multiplicateur et « sans effet » en plus pour l'administration) : fenêtre « Table de type des pièces », onglet « Échecs » de l'administration |
-| `MonsutaPotaru/Components/Shared/ChessBalanceTables.razor` | Onglet « Échecs » de l'administration : brouillons comptés (case « Avec les brouillons », écarts), synthèse, rois menacés, solde, puis les deux grandes tables de chaque équipe contre les lignes de toutes les équipes |
+| `MonsutaPotaru/Components/Shared/ChessBalanceTables.razor` | Onglet « Échecs » de l'administration : brouillons comptés (case « Avec les brouillons », écarts), synthèse, rois menacés, solde, types, puis les deux grandes tables de chaque équipe contre les lignes de toutes les équipes |
 | `MonsutaPotaru/Components/Shared/ChessTeamDrafts.razor` | Onglet « Brouillons d'échecs » de l'administration : liste des brouillons, éditeur (cases, recherche d'un Pokémon, type, note, compté), remarques, « Copier pour Claude » |
 | `MonsutaPotaru/Services/MiniGames.cs` | Statistiques des mini-jeux : une partie vue par un joueur, parties gagnées, perdues, nulles, joueurs différents (sans les invités), le plus joué ; `MiniGameService` pour l'onglet Mini-jeux |
 | `MonsutaPotaru/Components/Shared/LivingDexStatsBlock.razor` | Statistiques d'un groupe de living dex (normaux ou chromatiques) : moyennes en barres, living dex complétés |
@@ -1012,7 +1016,7 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/wwwroot/themes/pokedex.css` | Thème Pokédex, sous `[data-theme="pokedex"]` : menu, barre du haut, contenu de toutes les pages |
 | `MonsutaPotaru/wwwroot/themes/ardoise.css` | Thème Ardoise : son cadre (classes `ardoise-…`, menu replié, téléphone) et le contenu des pages sous `[data-theme="ardoise"]` |
 | `MonsutaPotaru/Components/Shared/PageHeader.razor` | En-tête de chaque page : titre, nombre, aide en infobulle, actions, icône (bandeau dans le thème Ardoise) |
-| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec son aide en infobulle et ses actions (panneau blanc dans le thème Ardoise) |
+| `MonsutaPotaru/Components/Shared/Block.razor` | Partie titrée d'une page, avec son aide en infobulle et ses actions (panneau blanc dans le thème Ardoise) ; repliable (`Collapsible`, `Collapsed`) |
 | `MonsutaPotaru/Components/Shared/HelpTip.razor` | Infobulle d'aide : icône « ? », bulle ouverte d'un clic (élément `details`, refermé par `wwwroot/js/app.js`) |
 | `MonsutaPotaru/Components/Layout/ArdoiseLayout.razor` | Cadre du thème Ardoise (choisi par `MainLayout`) : menu repliable (le compte en bas, `ArdoiseLayoutTests`), barre du haut (fil d'Ariane, porte-monnaie, menu du compte) |
 | `MonsutaPotaru/Components/Layout/SiteMenuBase.cs` | Commun aux menus (`NavMenu`, `ArdoiseLayout`) : adresse de la page, solde, demandes reçues en direct, rubriques ouvertes (`SiteMenusTests`) |

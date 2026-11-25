@@ -38,6 +38,11 @@ h1:focus {
 .block { margin-bottom: 1.5rem; }
 .block-header { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; margin-bottom: .5rem; }
 .block-title { margin-bottom: 0; }
+/* Bloc repliable (Block Collapsible) : le titre est un bouton, un chevron devant (▾ ouvert, ▸ replié) */
+.block-toggle { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.block-toggle::before { content: "▾"; display: inline-block; width: 1.1em; color: var(--bs-secondary-color, #6c757d); }
+.block-collapsed .block-toggle::before { content: "▸"; }
+.block-toggle:hover { text-decoration: underline; }
 
 /* Infobulle d'aide (Shared/HelpTip.razor) : l'icône « ? » à côté du titre ; la bulle sous la ligne du titre
    (help-tip-anchor), alignée à gauche, jamais plus large que cette ligne. Refermée par wwwroot/js/app.js. */
@@ -1495,6 +1500,10 @@ button.livingdex-slot:hover { border-color: var(--bs-primary); box-shadow: 0 0 0
 .chess-balance-better { color: #198754; }
 .chess-balance-worse { color: #dc3545; }
 .chess-balance-team.chess-balance-draft span { font-style: italic; }
+/* Section « Types » : des chiffres sans couleur (ni bons ni mauvais), le total sur fond bleu comme la moyenne */
+.chess-balance-types td { min-width: 4.5rem; background: none; }
+.chess-balance-types td.chess-balance-zero { color: var(--bs-secondary-color, #6c757d); }
+.chess-balance-types tfoot th, .chess-balance-types tfoot td { font-weight: 600; border-top-width: 2px; }
 .chess-draft-list .chess-draft-open { background: rgba(var(--bs-primary-rgb, 13, 110, 253), .08); }
 .chess-draft-king { width: 2rem; height: 2rem; object-fit: contain; image-rendering: pixelated; }
 .chess-draft-editor { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: flex-start; }

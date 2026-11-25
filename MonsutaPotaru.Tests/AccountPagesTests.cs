@@ -232,6 +232,90 @@ public sealed class AccountPagesTests : PageTestContext
         Assert.EndsWith("administration", navigation.Uri);
     }
 
+    /// <summary>Section « Types » : les 18 types, du plus fréquent au moins fréquent, une fois par type de pion.</summary>
+    [Fact]
+    public async Task Admin_ChessTab_TypeSums()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("administration?onglet=echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText("Rois menacés");
+
+        var rows = cut.FindAll("#chess-balance-types tbody tr");
+        Assert.Equal(Enum.GetValues<PokeType>().Length, rows.Count);
+        var totals = rows.Select(r => int.Parse(r.QuerySelectorAll("td")[0].TextContent)).ToList();
+        Assert.Equal(totals.OrderByDescending(n => n), totals);
+        // Toutes les lignes une fois : 7 par équipe (deux types de pion)
+        Assert.Equal(ChessTeams.All.Sum(t => t.Lines(Enum.GetValues<ChessPiece>()).Count), totals.Sum());
+        Assert.Equal($"{totals.Sum()}", cut.Find("#chess-balance-types tfoot td").TextContent.Trim());
+
+        // Psy : ses pions (Tarsal), sa reine (Goupelin)… ; colonne « Pion » (la 2e après le total) et survol
+        var psychic = rows.Single(r => r.QuerySelector("th")!.TextContent == "Psy");
+        var lines = ChessBalance.LinesOfType(ChessTeams.All, PokeType.Psychic);
+        Assert.Equal($"{lines.Count}", psychic.QuerySelectorAll("td")[0].TextContent);
+        Assert.Equal($"{lines.Count(l => l.Line.Piece == ChessPiece.Pawn)}", psychic.QuerySelectorAll("td")[1].TextContent);
+        Assert.Contains("Gallame : Tarsal (pion)", psychic.QuerySelectorAll("td")[0].GetAttribute("title"));
+        Assert.Contains("Dracaufeu : Goupelin", psychic.QuerySelectorAll("td")[5].GetAttribute("title"));
+    }
+
+    /// <summary>
+    /// Sections repliables : un clic sur le titre replie (contenu plus rendu), gardé dans le navigateur ; lu à l'ouverture ;
+    /// un lien du menu déplie la section visée ; « Tout replier », « Tout déplier ».
+    /// </summary>
+    [Fact]
+    public async Task Admin_ChessTab_FoldedSections_KeptInTheBrowser()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        const string key = "monsuta-potaru.administration.echecs.replie";
+        JSInterop.Setup<string?>("localStorage.getItem", key).SetResult("chess-balance-summary equipe-psy");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("administration?onglet=echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText("Rois menacés");
+
+        // Lu dans le navigateur : synthèse et équipe Gallame repliées, leur titre seul
+        Assert.Empty(cut.FindAll("#chess-balance-summary tbody tr"));
+        Assert.Empty(cut.FindAll("#equipe-psy table"));
+        Assert.Equal("false", cut.Find("#equipe-psy .block-toggle").GetAttribute("aria-expanded"));
+        Assert.Equal(2 * (ChessTeams.All.Count - 1), cut.FindAll("table.chess-balance-big").Count);
+
+        // Le titre replie et déplie, l'état est enregistré
+        await cut.ClickOn("#chess-balance-kings .block-toggle");
+        Assert.Empty(cut.FindAll("#chess-balance-kings table"));
+        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem"
+            && Equals(i.Arguments[1], "chess-balance-kings chess-balance-summary equipe-psy"));
+        await cut.ClickOn("#equipe-psy .block-toggle");
+        Assert.Equal(2, cut.FindAll("#equipe-psy table").Count);
+
+        // Le lien du menu déplie la section visée
+        await cut.ClickOn(".chess-balance-nav a", 0);
+        Assert.NotEmpty(cut.FindAll("#chess-balance-summary tbody tr"));
+
+        await cut.Click("Tout replier");
+        Assert.Empty(cut.FindAll("table"));
+        Assert.Equal(5 + ChessTeams.All.Count, cut.FindAll(".block-collapsed").Count);
+        await cut.Click("Tout déplier");
+        Assert.Empty(cut.FindAll(".block-collapsed"));
+        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.removeItem");
+    }
+
+    /// <summary>Stockage du navigateur refusé : tout est ouvert, le repli marche pour la visite.</summary>
+    [Fact]
+    public async Task Admin_ChessTab_FoldedSections_WithoutStorage()
+    {
+        MakeAdmin("sacha");
+        await AdminService.InitializeAsync(Db.NewContext(), Db.Config, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.administration.echecs.replie").SetException(new Microsoft.JSInterop.JSException("bloqué"));
+        JSInterop.SetupVoid("localStorage.setItem", _ => true).SetException(new Microsoft.JSInterop.JSException("bloqué"));
+        Services.GetRequiredService<NavigationManager>().NavigateTo("administration?onglet=echecs");
+        var cut = Render<Admin>();
+        cut.WaitForText("Rois menacés");
+        Assert.Empty(cut.FindAll(".block-collapsed"));
+        await cut.ClickOn("#chess-balance-types .block-toggle");
+        Assert.Empty(cut.FindAll("#chess-balance-types table"));
+    }
+
     [Fact]
     public async Task Admin_ChessTab_FromTheAddress()
     {

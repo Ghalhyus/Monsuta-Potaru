@@ -26,6 +26,9 @@ public sealed record ChessMark(ChessEat Eat, double Effect, string Sentence);
 /// </summary>
 public sealed record ChessTeamMatchup(double Edible, double Super);
 
+/// <summary>Une ligne (pièce d'un type) et son équipe : somme des types de l'onglet « Échecs ».</summary>
+public sealed record ChessTeamLine(ChessTeam Team, ChessLine Line);
+
 /// <summary>
 /// Équilibrage des équipes d'échecs (onglet « Échecs » de l'administration) : tout est calculé d'après
 /// <see cref="ChessTeams.All"/> et la table des types, rien n'est stocké. Par ligne (<see cref="ChessLine"/> : une pièce
@@ -108,6 +111,16 @@ public static class ChessBalance
         attackers.Lines(Enum.GetValues<ChessPiece>())
             .Where(line => ChessGame.CanEat(line.Type, defenders.Of(ChessPiece.King).Type))
             .Sum(line => Count(attackers, line));
+
+    /// <summary>
+    /// Somme des types (section « Types » de l'onglet « Échecs ») : les lignes de ce type dans ces équipes, équipe par
+    /// équipe dans l'ordre des pièces. Une par type de pion, pas une par pion (demandé le 2026-11-25) : les huit pions d'une
+    /// équipe comptent pour deux, ou pour un si ses deux espèces de pion ont le même type.
+    /// </summary>
+    public static IReadOnlyList<ChessTeamLine> LinesOfType(IEnumerable<ChessTeam> teams, PokeType type) =>
+        [.. teams.SelectMany(team => team.Lines(Enum.GetValues<ChessPiece>())
+            .Where(line => line.Type == type)
+            .Select(line => new ChessTeamLine(team, line)))];
 
     /// <summary>Une part (0 à 1) en points de pourcentage arrondis (0,836 → 84).</summary>
     public static int Points(double share) => (int)Math.Round(share * 100, MidpointRounding.AwayFromZero);
