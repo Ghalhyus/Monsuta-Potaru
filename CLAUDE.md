@@ -43,8 +43,8 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
 - **Nouvelle fonctionnalité** : poser d'abord les questions (pièges, choix, avec une recommandation), puis **attendre son
   « go »** explicite avant d'écrire du code. Petites corrections demandées : directement.
 - **Dès les questions, vérifier l'environnement** et signaler ce qui manque : SDK .NET 10 (`dotnet --list-sdks`), images
-  (`MonsutaPotaru/wwwroot/images` ; `outils\recuperer-images.cmd`, par SSH : c'est l'utilisateur qui le lance), Node.js 22+
-  et `showdown/node_modules` (combats).
+  (`MonsutaPotaru/wwwroot/images` ; `outils\recuperer-images.cmd`, par SSH : c'est l'utilisateur qui le lance), Node.js
+  22.12+ (tests JavaScript du parc, combats) et `showdown/node_modules` (combats).
 - Tout en français : code commenté en français, interface qui tutoie (« Retire de l'argent… »), messages prêts à afficher.
 - Son écran : 3440×1440 à 150 % de mise à l'échelle Windows. Il raisonne en **pixels physiques**
   (`innerWidth * devicePixelRatio`), pas en pixels CSS.

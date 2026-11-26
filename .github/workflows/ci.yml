@@ -58,11 +58,15 @@ jobs:
       # Règles écartées pour outils/ (scripts lancés à la main sur le poste, jamais par le site) : le générateur
       # pseudo-aléatoire (python:S2245 ; graine fixe voulue : mêmes cartes à chaque lancement) et les chemins ou commandes
       # venus de la ligne de commande (pythonsecurity:* ; c'est l'utilisateur qui les donne).
+      # Couverture du JavaScript : seuls les modules testés par Node comptent (wwwroot/js/parc-modele.js, rapport LCOV écrit
+      # par ParcJsTests) ; les scripts du site sans tests sont écartés (sinon comptés à 0 %), comme les tests eux-mêmes. Un
+      # script qui reçoit des tests sort de cette liste.
       - name: SonarCloud (début de l'analyse)
         id: sonar
         continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SCRIPTS_SANS_TESTS: "MonsutaPotaru.Tests/js/**,**/wwwroot/js/app.js,**/wwwroot/js/echange.js,**/wwwroot/js/echecs.js,**/wwwroot/js/parc.js,**/wwwroot/js/transfert-objets.js"
         run: |
           if [ -z "$SONAR_TOKEN" ]; then
             echo "::warning::Secret SONAR_TOKEN manquant : pas d'analyse SonarCloud (voir la section « CI/CD » du README)."
@@ -72,19 +76,26 @@ jobs:
           dotnet sonarscanner begin /k:"ghalhyus_monsuta-potaru" /o:"ghalhyus" /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
+            /d:sonar.javascript.lcov.reportPaths="MonsutaPotaru.Tests/TestResults/parc-js.lcov" \
             /d:sonar.exclusions="**/Data/Migrations/**,**/wwwroot/lib/**,**/wwwroot/images/**" \
-            /d:sonar.coverage.exclusions="outils/**,deploy/**,**/wwwroot/**" \
+            /d:sonar.coverage.exclusions="outils/**,deploy/**,$SCRIPTS_SANS_TESTS" \
             /d:sonar.issue.ignore.multicriteria="aleatoire,lignecommande" \
             /d:sonar.issue.ignore.multicriteria.aleatoire.ruleKey="python:S2245" \
             /d:sonar.issue.ignore.multicriteria.aleatoire.resourceKey="outils/**" \
             /d:sonar.issue.ignore.multicriteria.lignecommande.ruleKey="pythonsecurity:*" \
             /d:sonar.issue.ignore.multicriteria.lignecommande.resourceKey="outils/**"
 
-      # Simulateur de combat (showdown/, Node.js déjà présent sur les machines de GitHub) : exigé par les tests de combat.
+      # Node.js : simulateur de combat (tests de combat) et tests JavaScript du parc (ParcJsTests : 22.12 au moins).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Simulateur de combat (showdown/) : exigé par les tests de combat.
       - name: Simulateur de combat
         run: npm ci --ignore-scripts --prefix showdown
 
-      # Couverture des tests au format OpenCover (coverlet.collector), lue par SonarCloud.
+      # Couverture des tests au format OpenCover (coverlet.collector), lue par SonarCloud ; celle du JavaScript du parc en
+      # LCOV (ParcJsTests).
       - name: Tests
         run: >
           dotnet test MonsutaPotaru.Tests/MonsutaPotaru.Tests.csproj --collect:"XPlat Code Coverage"

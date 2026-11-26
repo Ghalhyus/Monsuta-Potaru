@@ -24,7 +24,7 @@ Réponses à mes questions :
   graine du tour `HideSeekRound.Seed` (tirée par `Draw`), début = `StartsAt` du serveur (`startsIn` passé à `create`).
   Rien ne passe par le réseau pendant le tour. Pas de Pokémon qui viennent voir la souris au cache-cache. **La nuit**
   (demandée ensuite) : `HideSeekDraw.NightLevel(StartsAt)`, l'heure de **Paris** au début du tour (le serveur est en UTC
-  dans Docker ; sans base des fuseaux : UTC+1), même formule que `nightLevel` de parc.js, passée dans `sync.night`.
+  dans Docker ; sans base des fuseaux : UTC+1), même formule que `nightLevel` (`parc-modele.js`), passée dans `sync.night`.
 - **Unicité : espèce + forme** (`HideSeekCandidate.Key` = dossier Donjon de la forme, sans chromatique ni femelle : deux
   formes au même dessin comptent pour une). Une cible ne revient pas dans la partie (les leurres, si).
 - **Cible : image + nom** ; avec « surnommés seulement », « Bob (Pikachu) » et « Pokémon de Sacha ».

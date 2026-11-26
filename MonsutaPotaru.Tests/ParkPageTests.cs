@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Park = MonsutaPotaru.Components.Pages.Park;
 using MonsutaPotaru.Data;
@@ -11,11 +12,23 @@ public sealed class ParkPageTests : PageTestContext
 {
     public ParkPageTests()
     {
-        PokemonSprites.Load(RealSavesTests.WebRootWithImages()); // sprites Donjon Mystère : qui peut aller au parc
-        ParkHabitats.Load(RealSavesTests.WebRoot());
+        // Sprites Donjon Mystère (qui peut aller au parc) et types de cases des cartes : chargés une fois pour tous par
+        // TestAssemblySetup ; ici, seulement un message clair si les images n'ont pas été récupérées.
+        RealSavesTests.WebRootWithImages();
     }
 
     private ParkService Parks => Services.GetRequiredService<ParkService>();
+
+    /// <summary>Démarrages du parc dans le navigateur (parc.js : create) : carte, taille, Pokémon déplaçables.</summary>
+    private List<(string Map, int Size, bool CanMove)> Starts() =>
+        [.. JSInterop.Invocations.Where(i => i.Identifier == "create").Select(i => i.Arguments[2]!)
+            .Select(o => ((string)Option(o, "map")!, (int)Option(o, "size")!, (bool)Option(o, "canMove")!))];
+
+    private static object? Option(object options, string name) => options.GetType().GetProperty(name)!.GetValue(options);
+
+    /// <summary>Pokémon envoyés au parc dans le navigateur la dernière fois (parc.js : setPokemon).</summary>
+    private List<int> ShownInThePark() =>
+        [.. ((IEnumerable<ParkPokemon>)JSInterop.Invocations.Last(i => i.Identifier == "setPokemon").Arguments[0]!).Select(p => p.Id)];
 
     [Fact]
     public async Task Chooser_PutsPokemonInThePark_ThenOneIsClickedAndRemoved()
@@ -23,11 +36,14 @@ public sealed class ParkPageTests : PageTestContext
         var ids = AddToBank("sacha", 25, 1, 4, 7);
         var cut = Render<Park>();
         cut.WaitForText("Le parc est vide.");
+        // Le parc démarre dans le navigateur avec la carte de la Forêt, sans agrandissement ; le propriétaire déplace ses Pokémon
+        cut.WaitForAssertion(() => Assert.Equal([("parc-1", 1, true)], Starts()));
+        Assert.Empty(ShownInThePark());
 
         await cut.Click("Choisir des Pokémon");
         cut.WaitForText("Pokémon du parc");
         var count = cut.FindAll(".park-candidates .slot").Count;
-        Assert.True(count >= 3, cut.Markup);
+        Assert.Equal(ids.Count, count);
         foreach (var i in Enumerable.Range(0, count))
             await cut.FindAll(".park-candidates .slot")[i].ClickAsync(new());
         await cut.FindAll(".park-candidates .slot")[count - 1].ClickAsync(new()); // décoché
@@ -44,6 +60,7 @@ public sealed class ParkPageTests : PageTestContext
         // Fiche d'un Pokémon cliqué dans le parc (son humeur), puis départ
         var parkId = (await Parks.ListParksAsync("sacha"))[0].Id;
         var members = (await Parks.ListAsync("sacha", parkId)).Select(m => m.Id).ToList();
+        Assert.Equal(members, ShownInThePark()); // envoyés au parc du navigateur
         var outside = ids.Except(members).First();
         ids = [members[0]];
         await cut.Instance.OnPokemonClicked(ids[0]);
@@ -53,21 +70,63 @@ public sealed class ParkPageTests : PageTestContext
         Assert.False(cut.HasButton("Retirer du parc"));
         await cut.Instance.OnPokemonClicked(ids[0]);
         await cut.Find(".collection-backdrop").ClickAsync(new());
+        Assert.False(cut.HasButton("Retirer du parc")); // clic à côté : fiche fermée
         await cut.Instance.OnPokemonClicked(ids[0]);
         await cut.Click("Retirer du parc");
         cut.WaitForText("a quitté le parc");
         Assert.Contains($"{count - 2} / 20", cut.Text());
+        Assert.DoesNotContain(ids[0], ShownInThePark());
 
-        // Vider le parc : confirmation, annulation, puis pour de bon
+        // Vider le parc : confirmation, annulation (clic à côté, « Annuler » : rien ne part), puis pour de bon
         await cut.Click("Vider le parc");
         cut.WaitForText("Vider le parc ?");
         await cut.Find(".dialog-backdrop").ClickAsync(new());
+        Assert.DoesNotContain("Vider le parc ?", cut.Text());
         await cut.Click("Vider le parc");
         await cut.Buttons("Annuler")[0].ClickAsync(new());
+        Assert.DoesNotContain("Vider le parc ?", cut.Text());
+        Assert.Equal(count - 2, (await Parks.ListAsync("sacha", parkId)).Count);
         await cut.Click("Vider le parc");
         await cut.Find(".dialog-panel .btn-danger").ClickAsync(new());
         cut.WaitForText("Le parc est vide.");
+        Assert.Empty(ShownInThePark());
         await cut.Find(".alert .btn-close").ClickAsync(new());
+        Assert.Empty(cut.FindAll(".alert"));
+    }
+
+    [Fact]
+    public async Task Chooser_KeepsTheChoiceOpen_WhenTheServerRefusesIt()
+    {
+        // Un Pokémon coché disparaît de la collection avant « Valider » (sauvegarde mise à jour dans un autre onglet)
+        var ids = AddToBank("sacha", 25, 1);
+        var cut = Render<Park>();
+        await cut.Click("Choisir les Pokémon");
+        cut.WaitForText("Pokémon du parc");
+        await cut.ClickOn(".park-candidates .slot", 0);
+        await cut.ClickOn(".park-candidates .slot", 1);
+        using (var db = Db.NewContext())
+            await db.BankPokemon.Where(p => p.Id == ids[0]).ExecuteDeleteAsync();
+        await cut.Click("Valider");
+        cut.WaitForText("Seuls tes Pokémon (pas les œufs) peuvent aller au parc.");
+        Assert.NotEmpty(cut.FindAll(".park-candidates")); // la fenêtre reste ouverte, rien n'a changé
+        Assert.Contains("· 2 / 20", cut.Text());
+        Assert.Empty(await Parks.ListAsync("sacha", (await Parks.ListParksAsync("sacha"))[0].Id));
+        Assert.Empty(ShownInThePark());
+    }
+
+    [Fact]
+    public async Task Chooser_FiltersWithTheChips_LikeMyCollection()
+    {
+        AddToBank("sacha", 25, 152); // Pikachu (1re génération), Germignon (2e)
+        var cut = Render<Park>();
+        await cut.Click("Choisir les Pokémon");
+        cut.WaitForText("Pokémon du parc");
+        Assert.Equal(2, cut.FindAll(".park-candidates .slot").Count);
+
+        await cut.Click("+ Filtre");
+        await cut.ClickOn(c => c.FindAll(".filter-chip-add .dropdown-item").Single(i => i.TextContent.Contains("Génération")));
+        await cut.ChangeOn(".filter-chip.open .filter-popover input[type=checkbox]", true); // la première : 1re génération
+        cut.WaitForAssertion(() => Assert.Equal("Pikachu", Assert.Single(cut.FindAll(".park-candidates .slot")).GetAttribute("title")!.Split('(', ')')[1]));
     }
 
     [Fact]
@@ -177,6 +236,10 @@ public sealed class ParkPageTests : PageTestContext
         Assert.Equal(["Pikachu", "Tissenboule"], Locked().Order());
         Assert.Empty(cut.FindAll(".park-candidates .slot.locked ~ .slot:not(.locked)")); // aucun Pokémon permis après un grisé
         Assert.Equal(3, Shown().Length);
+        // Clic sur un grisé par le paysage : la raison, et il n'est pas choisi
+        await cut.ClickOn(c => c.FindAll(".park-candidates .slot.locked").Single(s => s.GetAttribute("title")!.Contains("Pikachu")));
+        cut.WaitForText("Pikachu ne nage pas : seuls les Pokémon qui nagent (type Eau) peuvent vivre dans l'océan.");
+        Assert.Contains("· 0 / 20", cut.Text());
     }
 
     [Fact]
@@ -197,18 +260,29 @@ public sealed class ParkPageTests : PageTestContext
         cut.WaitForText("/ 40");
         // Le message de l'agrandissement, affiché quand le parc redémarre, ne compte pas dans sa hauteur (parc.js)
         Assert.True(cut.Find(".alert").HasAttribute("data-hors-mesure"));
+        // Redémarré avec la carte de la taille suivante
+        cut.WaitForAssertion(() => Assert.Equal([("parc-1", 1, true), ("parc-1", 2, true)], Starts()));
+        Assert.Equal(1, JSInterop.Invocations.Count(i => i.Identifier == "dispose")); // l'ancien parc arrêté avant
         await cut.Click("Agrandir le parc");
         await cut.Find(".dialog-backdrop").ClickAsync(new());
+        Assert.False(cut.HasButton($"Payer {InventoryService.FormatMoney(ParkService.ExpansionPrice)}")); // fenêtre fermée, rien payé
+        Assert.Equal(2 * ParkService.ExpansionPrice, await Services.GetRequiredService<InventoryService>().GetBalanceAsync("sacha"));
 
         await cut.Click("Acheter un parc");
         Assert.True(cut.Button("Payer").HasAttribute("disabled")); // aucun paysage choisi
         await cut.Find("#landscape-" + (int)ParkLandscape.Beach).ChangeAsync(new() { Value = true });
         await cut.Click("Payer");
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("select.park-choice")));
+        Assert.Equal(ParkService.ExpansionPrice, await Services.GetRequiredService<InventoryService>().GetBalanceAsync("sacha"));
+        cut.WaitForAssertion(() => Assert.Equal(("plage-1", 1, true), Starts()[^1])); // la plage, sans agrandissement
         var forest = (await Parks.ListParksAsync("sacha")).Single(p => p.Landscape == ParkLandscape.Forest).Id;
         await cut.Find("select.park-choice").ChangeAsync(new() { Value = forest.ToString() });
         cut.WaitForText("/ 40");
+        Assert.Equal(("parc-1", 2, true), Starts()[^1]); // retour à la forêt, à sa taille
+        // Valeur trafiquée dans la liste déroulante : rien ne change
         await cut.Find("select.park-choice").ChangeAsync(new() { Value = "pas un nombre" });
+        Assert.Equal(4, Starts().Count);
+        Assert.Contains("/ 40", cut.Text());
 
         // Dans la plage, la fenêtre de choix parle de l'autre parc
         AddToBank("sacha", 25);
@@ -280,6 +354,9 @@ public sealed class ParkPageTests : PageTestContext
         var cut = Render<Park>(p => p.Add(x => x.Pseudo, "ondine"));
         cut.WaitForText("Les Pokémon de ondine vivent ici");
         Assert.False(cut.HasButton("Choisir les Pokémon"));
+        // Son parc à elle, où le visiteur ne peut rien déplacer
+        cut.WaitForAssertion(() => Assert.Equal([("parc-1", 1, false)], Starts()));
+        Assert.Equal(ids, ShownInThePark());
         Assert.Null(await cut.Instance.OnPokemonAttacked(ids[0])); // les attaques chez un visiteur ne comptent pas
         Assert.Null(await Parks.GetMalusAsync("ondine", (await Parks.ListParksAsync("ondine"))[0].Id, ids[0]));
         await cut.Instance.OnPokemonClicked(ids[0]);

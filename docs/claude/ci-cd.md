@@ -11,7 +11,15 @@
   identiques octet pour octet, graine fixe).
 - **Couverture** : objectif 70 % (environ 88 % fin 2026-11, 51 % avant les tests de pages), pour information (rien ne
   bloque). Chiffre de SonarCloud = (lignes couvertes + conditions couvertes) / (lignes + conditions), hors `Data/Migrations`,
-  `wwwroot`, `outils`, `deploy` ; `showdown/combat.js` y compte (51 lignes à 0 %, aucun outil ne mesure le JavaScript).
+  `outils`, `deploy` et les scripts de `wwwroot/js` sans tests (`SCRIPTS_SANS_TESTS` dans `ci.yml` : sinon comptés à
+  0 %) ; `showdown/combat.js` y compte (51 lignes à 0 %, aucun test ne le mesure).
+- **Couverture du JavaScript** (depuis le 2026-11-26) : `ParcJsTests` lance `node --test --experimental-test-coverage`
+  sur `MonsutaPotaru.Tests/js/*.test.mjs`, couverture limitée à `wwwroot/js/parc-modele.js` (`--test-coverage-include`),
+  écrite en LCOV dans `MonsutaPotaru.Tests/TestResults/parc-js.lcov` (chemins relatifs à la racine du dépôt), lue par
+  `sonar.javascript.lcov.reportPaths`. Node.js 24 installé par `actions/setup-node` (22.12 au moins : modules ES
+  détectés sans `package.json`, option `--test-coverage-include`). Un script de `wwwroot/js` qui reçoit des tests :
+  l'ajouter à `--test-coverage-include` (`ParcJsTests`) et le retirer de `SCRIPTS_SANS_TESTS` ; un nouveau script sans
+  tests : l'ajouter à `SCRIPTS_SANS_TESTS`. Les tests eux-mêmes (`MonsutaPotaru.Tests/js/**`) en sont exclus.
   Mesure par fichier : API `api/measures/component_tree?component=ghalhyus_monsuta-potaru&metricKeys=coverage,uncovered_lines,uncovered_conditions&qualifiers=FIL`
   (projet public, sans jeton). En local : `dotnet test ... --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover`,
   puis compter `SequencePoint` (lignes) et `BranchPoint` (conditions) du `coverage.opencover.xml` avec la même formule.
@@ -63,6 +71,10 @@
     normaux (mutants qui ne compilent pas, écartés). Essai du 2026-11-25 sur `CollectionCapacity.cs` : 37 mutants,
     score de 67,5 % (10 survivants, 3 non couverts : `IsFull`, `Exceeds` quand le total ne change pas, message de
     `SaveFullMessage` pour une nouvelle version d'une sauvegarde déjà stockée).
+    Sans `showdown/node_modules`, la passe initiale de toute la suite échoue (combats) : limiter les tests à ceux du sujet
+    par un `stryker-config.json` dans `MonsutaPotaru.Tests` de la copie (`"mutate": [...]`, `"test-case-filter":
+    "FullyQualifiedName~MonsutaPotaru.Tests.Park"`), plus rapide aussi. Essai du 2026-11-26 sur les trois services du parc :
+    voir `parc.md`, « Tester ».
   - Les doublons sont mesurés par SonarCloud (onglet « Duplications »).
   - Les outils de ub-mode (crapper, dryer, mutator, de Robert C. Martin) ne lisent pas le C# : ceux-ci les remplacent.
 - Un nouveau fichier nécessaire au déploiement s'ajoute à l'archive des deux côtés (`publier.ps1` et le workflow ; rappelé

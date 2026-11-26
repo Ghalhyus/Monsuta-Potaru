@@ -1,6 +1,7 @@
 # Parc
 
-README : « Parc ». Page `Park.razor`, service `ParkService`, affichage et animation `wwwroot/js/parc.js` (Phaser).
+README : « Parc ». Page `Park.razor`, service `ParkService`, affichage et animation `wwwroot/js/parc.js` (Phaser), modèle
+sans affichage `wwwroot/js/parc-modele.js` (voir « Modèle sans affichage »).
 
 Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
 
@@ -572,7 +573,7 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   seulement pour un nageur). `nearestFree`, `path`, `lineFree`, `isFree` prennent un masque (`Ground.mask` garde celui
   de la recherche en cours pour `canStep` et `smooth`, sans fonction créée). `walkTo(x, y, intent, reach)`.
 - Nageur : `ground.waterShare` de ses promenades et de ses arrivées au parc dans l'eau (`randomSpot(WATER)`), y
-  dort : `SWIM.waterShare` (2/3), ou plus quand la terre est rare (part de l'eau parmi les cases libres ; 2026-11-23 :
+  dort : `WATER_SHARE` de `parc-modele.js` (2/3), ou plus quand la terre est rare (part de l'eau parmi les cases libres ; 2026-11-23 :
   à l'océan, les îlots de 8 à 68 cases attiraient un tiers des promenades, et avec 40 à 80 Pokémon au cache-cache tous
   s'y entassaient). Plage et lacs inchangés (la règle des 2/3 l'emporte). Océan, taille 3, 60 nageurs : 0 à 5 sur les
   îlots. Volant : arrêté au-dessus de l'eau (clic, chemin barré), `decide` l'envoie d'abord se poser ; pas de petite pause
@@ -609,8 +610,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   arrondit au plus proche (au-dessus, un test donnait parfois « 26 min » au lieu de 25). `SetAsync` efface le malus d'un
   Pokémon qui change de parc.
   `ParkPokemon.Mood` reste l'humeur de l'habitat, `ParkPokemon.Malus` (`ParkMalusInfo` : niveaux, secondes restantes) à
-  côté ; `parc.js` : `setMalus` (fin = `Date.now()` + secondes ; `skew` avance avec `simulate`), `moodOf(p)` (liste
-  `MOODS`, même règle que `ParkHabitats.WithMalus`) partout où `p.mood` comptait, malus fini → `p.malus = null`.
+  côté ; `parc.js` : `setMalus` (fin = `Date.now()` + secondes ; `skew` avance avec `simulate`), `moodOf(p)` (`loweredMood` et
+  `MOODS` de `parc-modele.js`, même règle que `ParkHabitats.WithMalus`, mêmes cas dans les deux tests) partout où `p.mood` comptait, malus fini → `p.malus = null`.
   Frappé (`p.hit` → `hurt`) : `reportAttack` → `OnPokemonAttacked` de la page (rien si `canMove` est faux : visiteur),
   qui rend le nouveau malus. `StartEngine` relit la liste (temps restants à jour).
   Fiche : `GetMalusAsync`, portrait de l'humeur abaissée, ligne `.park-malus` (`ParkMalus.Message` : « Attaqué : neutre au
@@ -639,7 +640,8 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   fois par seconde, A* sur des tableaux gardés (`Ground`) = 2-5 Ko et 0,18 ms. Ne pas remettre de `Graphics` vidé et
   redessiné à chaque image, ni de calque de tuiles affiché.
 - **Simulation commune (`sync`, cache-cache, 2026-11-23)** : `create(..., { sync: { seed, startsIn } })`. Le hasard de la
-  simulation passe par `rand` (module) : `seeded(seed)` (mulberry32) au lieu de `Math.random` ; le dessin seul (éclairs,
+  simulation passe par `rand` (module `parc.js`, donné aussi à `new Ground(data, rand)` et à `personalityOf(nature, rand)`) :
+  `seeded(seed)` (mulberry32, `parc-modele.js`) au lieu de `Math.random` ; le dessin seul (éclairs,
   décalage des tuiles animées) garde `Math.random`, pour ne pas décaler la suite. Pas fixe `SYNC_STEP` (1/60 s) compté
   depuis le début du tour (`performance.now()` + `startsIn`), une fois les Pokémon posés (`syncReady`, une seule liste,
   posée dans le même ordre partout) ; retard (onglet en arrière-plan, page rechargée) rattrapé par morceaux de
@@ -688,8 +690,51 @@ Projet à venir (refuge, IA par espèce) : `docs/projet-parc.md`.
   grossières : répéter).
 - Sans les images : faux fichiers `MonsutaPotaru/wwwroot/images/donjon/<0001…1025>/AnimData.xml` (contenu `<AnimData/>`)
   pour que le parc accepte des Pokémon ; supprimer `wwwroot/images` après (vérifier d'abord qu'il ne contient que ces
-  faux fichiers). Pour `ParkServiceTests` : `PokemonSprites.Load` sur un dossier temporaire du même genre, le temps de
-  l'essai, puis remettre le test (`Sprites_AndFamilies` exige les vrais fichiers).
+  faux fichiers). Les tests les voient aussi (`TestAssemblySetup` charge `PokemonSprites` depuis `wwwroot` au démarrage),
+  sauf `Sprites_AndFamilies`, qui exige les vrais fichiers.
+- **Tests automatiques** (`ParkServiceTests`, `ParkHabitatsTests`, `ParkMapTests`, `ParkPageTests`), règles tirées du
+  test de mutation du 2026-11-26 (Stryker sur `ParkService`, `ParkHabitats`, `ParkLandscapes`, avec les seuls tests du
+  parc : `test-case-filter` `FullyQualifiedName~MonsutaPotaru.Tests.Park` dans `stryker-config.json` de la copie, 15 min ;
+  score passé de 72,9 à 77,5 %, `ParkService` de 81,9 à 89,3 %, avant que les messages des refus faute d'argent soient
+  vérifiés en entier) :
+  - un refus se vérifie avec `Ok` **et** le message (`Outcome`) : la page affiche le message en erreur selon `Ok` ;
+  - un ordre se vérifie avec des données qui le distinguent d'un autre (le Pokémon resté a un numéro plus grand que le
+    nouveau venu : sinon un tri par numéro donne le même ordre) ; un compte, avec des parcs de tailles différentes ;
+  - les bornes : somme exacte (agrandissement payé avec 25 000 ₽ pile), 60 min pile (« 1 h 00 ») ;
+  - double type : « un type n'aime pas, l'autre sans avis » (Roche + Glace) est un cas à part de « les deux n'aiment
+    pas » ;
+  - page : ce qui part vers `parc.js` se lit dans `JSInterop.Invocations` (`Starts()` : carte, taille, `canMove` ;
+    `ShownInThePark()` : dernier `setPokemon`), le mode `Loose` de bUnit rendant des références JavaScript factices ;
+  - mutants sans intérêt : textes et couleurs de `ParkLandscapes` / `ParkHabitats`, `RollbackAsync` retiré (la
+    transaction non validée est annulée de toute façon), retour anticipé d'`EnsureForestAsync` (`INSERT OR IGNORE`).
+  - `ParkMapTests` refait certaines règles du modèle en C# (`FreeTiles`, `OpenWater`, diagonales) : `OpenWater` n'y
+    prend que l'eau, pas son bord d'écume (`liquidTiles`) ni le lien avec la terre. Les tests Node (« Modèle sans
+    affichage ») vérifient le vrai code ; une règle de `parc-modele.js` changée : vérifier aussi ces copies.
+
+## Modèle sans affichage (`parc-modele.js`, tests Node, 2026-11-26)
+- Sorti de `parc.js` pour être testé sans navigateur (choix de l'utilisateur : séparer le modèle du dessin, pas exporter
+  l'intérieur de `parc.js` pour les tests) : `Ground` (cases libres, eau et lave libres avec l'écume, sommets, A*,
+  lissage, endroits au hasard), masques `LAND`…`AIR`, `TILE`, `seeded`, `between`, `hypot`, `clamp`, `distance`,
+  `MOODS` / `loweredMood`, `nightLevel`, `personalityOf`. N'exporte que ce que `parc.js` utilise ; rien ne dépend de
+  Phaser ni de `document`. Le reste (décisions, attaques, dessin) est encore dans `create` de `parc.js`, sans tests :
+  le séparer serait la suite (simulation à part du dessin), plus lourde à cause des règles « pas de déchets à chaque
+  image » et du hasard commun.
+- **Hasard** : `Ground` et `personalityOf` reçoivent le tirage (`rand`) en paramètre au lieu de lire une variable du
+  module : `parc.js` leur donne le sien (`Math.random`, ou `seeded` au cache-cache). L'ordre des tirages n'a pas changé.
+  Vérifié le 2026-11-26 : même graine, `simulate(120)` sur la forêt, l'océan, la montagne et le volcan (taille 3, 10
+  Pokémon de chaque façon de se déplacer), positions, états et énergies identiques avant et après le découpage ; partie
+  de cache-cache à deux onglets : mêmes Pokémon aux mêmes endroits. Pour refaire la comparaison : enregistrer la
+  référence (`create` avec `sync: { seed }`, `setPokemon`, `simulate`) **avant** de toucher au code.
+- **Tests** : `MonsutaPotaru.Tests/js/parc-modele.test.mjs` (`node:test`, aucun paquet), sur les 32 vraies cartes, lancés
+  par `ParcJsTests` (`dotnet test`), couverture en LCOV pour SonarCloud (`ci-cd.md`). À la main :
+  `node --test "MonsutaPotaru.Tests/js/*.test.mjs"` depuis la racine. Moins d'une seconde.
+- **Chemins** : les lignes droites du lissage ne sont vérifiées que tous les 4 pixels (`lineFree`) : elles effleurent
+  parfois le coin d'une case interdite (mesuré : 5 % des morceaux, 1,2 pixel au plus dans la case, 5,2 pixels de long),
+  sans conséquence (la marche glisse le long des cases bloquées). Le test l'admet jusqu'à 2 pixels. Ne pas « corriger »
+  sans raison : un autre lissage changerait les chemins, donc la simulation commune entre deux versions.
+- À l'océan, seuls les nageurs ont des chemins entre les îlots (les autres n'y vivent pas : `ParkLandscapes.Refusal`).
+- Test de mutation à la main (le module modifié, les tests doivent échouer) : diagonale sans vérifier les coins, part
+  de l'eau, caractère, océan sans terre, écume : tous vus (l'écume seulement depuis le test de la plage).
 - Fenêtre de choix : liste « Pokémon affichés » (`select.park-shown`, `ShownFilter`, 2026-11-08) d'après le parc
   **enregistré** (`ParkCandidate.InPark`, `OtherPark`), pas d'après les cases cochées : rien ne bouge avant « Valider »
   (un Pokémon décoché reste affiché pour le recocher). « Dans aucun parc » : `!InPark && OtherPark is null`, les trois

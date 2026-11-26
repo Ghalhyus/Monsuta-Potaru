@@ -57,6 +57,9 @@ simulé, deux joueurs sur la même page pour les échanges et les combats) ; le 
 (`SiteFactory`, WebApplicationFactory : base, copies et clés dans un dossier temporaire, jamais `Data/app.db`) pour
 l'inscription, la connexion, les pages du compte (formulaires envoyés au serveur), le rendu serveur de chaque page et
 l'API de la 3DS. Couverture mesurée par SonarCloud (lignes et conditions) : environ 88 %, objectif 70 % (voir « CI/CD »).
+Le modèle du parc en JavaScript (`wwwroot/js/parc-modele.js` : carte, chemins, hasard, caractère, humeur) a ses tests
+Node (`MonsutaPotaru.Tests/js/*.test.mjs`, `node --test`), lancés par `ParcJsTests` : `dotnet test` les passe aussi
+(Node.js 22.12 ou plus).
 
 `exemple-blanc2.sav` est une sauvegarde de test (Pikachu + Évoli) pour essayer le site sans vraie partie.
 Pour la régénérer : `MONSUTA_POTARU_SAMPLE_OUT=chemin/fichier.sav dotnet test`.
@@ -460,8 +463,8 @@ Détails et pièges (même composant pour deux adresses, valeurs trafiquées) : 
   nôtre la contient. En `Development` seulement, les scripts de rechargement de Visual Studio (`localhost:*`) sont permis.
 - **Aucun script écrit dans la page** : la CSP ne l'exécuterait pas. Les scripts du site sont dans `wwwroot/js` :
   `app.js` (chargé dans le `<head>` d'`App.razor` : images de remplacement, téléchargement, largeur d'écran, grille de
-  l'inventaire, glisser-déposer, fermeture du menu sur téléphone), `parc.js` et `transfert-objets.js` (modules chargés
-  par leur page). Pas de `onerror` / `onclick` dans le
+  l'inventaire, glisser-déposer, fermeture du menu sur téléphone), `parc.js` (qui importe `parc-modele.js`) et
+  `transfert-objets.js` (modules chargés par leur page). Pas de `onerror` / `onclick` dans le
   HTML : une image absente prend `data-remplacement="images/…/inconnu.png"` (ou `data-cacher-si-absente`), un seul
   écouteur d'`app.js` s'en charge. Pas d'`<ImportMap />` (script écrit dans la page) : `parc.js` est chargé par son
   chemin, et charge Phaser par le sien (`wwwroot/lib/phaser`, servi par le site). Test
@@ -1042,7 +1045,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru/Components/Pages/Park.razor` | Page « Parc » : carte où vivent de 20 à 80 Pokémon, liste déroulante des parcs, « Agrandir le parc » et « Acheter un parc » (confirmation, prix et solde), fenêtre de choix (« Seulement ceux du parc », « Tout retirer », Pokémon d'un autre parc), « Vider le parc », fiche au clic |
 | `MonsutaPotaru/SecurityHeaders.cs` | En-têtes de sécurité de toutes les réponses : nosniff, Referrer-Policy, CSP stricte (plus aucun script écrit dans la page) |
 | `MonsutaPotaru/wwwroot/js/app.js` | Scripts du site (chargés dans le `<head>`) : images de remplacement (`data-remplacement`), téléchargement, dossier d'un monde Minecraft (tri des fichiers envoyés), largeur d'écran, glisser-déposer, menu sur téléphone, cadre du thème Ardoise (repli du menu, rubriques, menu du compte) |
-| `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, chemins autour des obstacles, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes ; `simulate` et `view` pour les essais ; repris par le cache-cache (`names: false`, `fill: true`, `focus`) |
+| `MonsutaPotaru/wwwroot/js/parc.js` | Parc avec Phaser : carte Tiled, brouillard hors de la zone « Départ », vue qu'on fait glisser ; animation et comportement des Pokémon (énergie, intentions, famille, nuit, curiosité, nage des types Eau et survol des types Vol, sommets de la montagne) ; pénombre des grottes ; `simulate` et `view` pour les essais ; repris par le cache-cache (`names: false`, `fill: true`, `focus`) |
+| `MonsutaPotaru/wwwroot/js/parc-modele.js` | Modèle du parc sans affichage (ni Phaser ni navigateur), importé par `parc.js` : cases libres, eau et lave libres, sommets, chemins autour des obstacles (`Ground`), tirage à graine du cache-cache, caractère tiré de la nature, humeur abaissée par le malus, nuit |
 | `MonsutaPotaru/wwwroot/lib/phaser/` | Phaser 3.90.0 (`phaser.esm.min.js`, module ES) et sa licence MIT |
 | `MonsutaPotaru/wwwroot/parc/plage-1-1.json` … `plage-1-4.json` | Cartes de la plage, une par taille, même format |
 | `MonsutaPotaru/wwwroot/parc/volcan-1-1.json` … `volcan-1-4.json` | Cartes du volcan, une par taille, même format (plus le calque « Bulles » et les tuiles animées) |
@@ -1130,6 +1134,8 @@ jamais bloqué. « Agrandir » achète des lots de 50 emplacements pour 10 000 �
 | `MonsutaPotaru.Tests/AllTheMonsLivingDexTests.cs` | Living dex All the Mons : cases de chaque mode (Méga de Légendes Z-A, formes et espèces du modpack, ce que Cobblemon n'a pas), images versionnées, formes de Cobblemon lues comme celles de PKHeX, création sur un monde seulement, comptage de l'équipe et du PC |
 | `MonsutaPotaru.Tests/AllTheMonsCompletionTests.cs` | Complétion All the Mons : tables du modpack, lecteur SNBT, succès et quêtes gardés (équipe ou groupe FTB), étapes lues dans le vrai monde, poids par étape, service ; pages dans `CompletionPagesTests` |
 | `MonsutaPotaru.Tests/ParkMapTests.cs` | Carte du parc : ce que `parc.js` lit, zone « Départ » dans la carte, chaque case libre accessible |
+| `MonsutaPotaru.Tests/js/parc-modele.test.mjs` | Tests Node de `parc-modele.js` sur les vraies cartes (cases libres, eau et lave libres, écume, sommets, chemins de chaque façon de se déplacer, endroits au hasard), tirage à graine, caractère, humeur, nuit |
+| `MonsutaPotaru.Tests/ParcJsTests.cs` | Lance les tests Node du parc (`node --test`) et écrit leur couverture en LCOV (`TestResults/parc-js.lcov`, lue par SonarCloud) |
 | `MonsutaPotaru.Tests/ParkHabitatsTests.cs` | Types de cases : feuille « Habitat » recopiée, un type par case de chaque carte, d'après ses tuiles ; humeur (seuils, double type, cartes actuelles), choix du portrait |
 | `MonsutaPotaru.Tests/PageTestContext.cs` | Base des tests de pages (bUnit) : vrais services sur une base temporaire, compte connecté, JavaScript simulé, aides (sauvegarde stockée, Pokémon au stockage interne, argent, amis, administrateur, page rendue pour un autre compte) |
 | `MonsutaPotaru.Tests/PageTestExtensions.cs` | Aides des tests de pages : bouton par son texte, clic, texte affiché, attente d'un texte |
@@ -1210,9 +1216,10 @@ partent au bout de 14 jours, comme les nouvelles.
   noms de fichiers, Windows non.
 - **Qualité du code** : dans le même job, [SonarCloud](https://sonarcloud.io) (organisation `ghalhyus`, projet
   `Monsuta-Potaru`, clé `ghalhyus_monsuta-potaru`) analyse le code pendant la compilation des tests (`dotnet-sonarscanner` : début avant les tests,
-  envoi après), avec la **couverture** des tests (coverlet, format OpenCover). Exclus : `Data/Migrations` (généré),
-  `wwwroot/lib` (Bootstrap) et `wwwroot/images` (copiées du VPS) ; pas de couverture comptée pour `outils`, `deploy` et
-  `wwwroot`. **Pour information seulement** : un échec de l'analyse (jeton absent, SonarCloud injoignable, Quality Gate
+  envoi après), avec la **couverture** des tests (coverlet, format OpenCover ; celle de `parc-modele.js` en LCOV, écrite
+  par `ParcJsTests`). Exclus : `Data/Migrations` (généré), `wwwroot/lib` (Bootstrap) et `wwwroot/images` (copiées du
+  VPS) ; pas de couverture comptée pour `outils`, `deploy` et les scripts de `wwwroot/js` sans tests (liste
+  `SCRIPTS_SANS_TESTS` de `ci.yml`). **Pour information seulement** : un échec de l'analyse (jeton absent, SonarCloud injoignable, Quality Gate
   non passée) est signalé en avertissement, la CI reste verte si les tests passent, et le déploiement n'en dépend pas.
   Dans SonarCloud, l'**analyse automatique** doit rester désactivée (Administration → Analysis Method) : sinon l'envoi
   de la CI est refusé.

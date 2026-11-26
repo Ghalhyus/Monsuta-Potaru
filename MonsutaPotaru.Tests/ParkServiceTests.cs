@@ -18,8 +18,9 @@ public sealed class ParkServiceTests : IDisposable
 
     public ParkServiceTests()
     {
-        PokemonSprites.Load(RealSavesTests.WebRootWithImages()); // sprites Donjon Mystère : qui peut aller au parc
-        ParkHabitats.Load(RealSavesTests.WebRoot()); // types de cases des cartes : humeur des Pokémon
+        // Sprites Donjon Mystère (qui peut aller au parc) et types de cases des cartes : chargés une fois pour tous par
+        // TestAssemblySetup ; ici, seulement un message clair si les images n'ont pas été récupérées.
+        RealSavesTests.WebRootWithImages();
         _park = new ParkService(_db.Factory, NullLogger<ParkService>.Instance);
         _inventory = _db.Inventory();
     }
@@ -27,12 +28,12 @@ public sealed class ParkServiceTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private int Add(ushort species, string owner = "sacha", bool egg = false, bool shiny = false, MoveType type = MoveType.Normal,
-        MoveType? type2 = null)
+        MoveType? type2 = null, byte level = 10)
     {
         using var db = _db.NewContext();
         var entry = new BankPokemon
         {
-            OwnerId = owner, Species = species, SpeciesName = $"Espèce {species}", Nickname = $"N{species}", Level = 10,
+            OwnerId = owner, Species = species, SpeciesName = $"Espèce {species}", Nickname = $"N{species}", Level = level,
             IsEgg = egg, IsShiny = shiny, Nature = 0, DepositedAt = DateTime.UtcNow, Data = [1],
             Type1 = (byte)type, Type2 = (byte)(type2 ?? type),
         };
@@ -146,8 +147,15 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Null(await _park.RecordAttackAsync("ondine", ondine, pikachu));
         Assert.Null(await _park.GetMalusAsync("ondine", ondine, misty));
 
-        // Parti dans un autre parc : son malus reste derrière lui
+        // La fiche ne lit que le malus d'un Pokémon de ce parc du joueur (numéros venus du navigateur)
         Assert.NotNull(await _park.RecordAttackAsync("sacha", forest, pikachu));
+        Assert.NotNull(await _park.GetMalusAsync("sacha", forest, pikachu));
+        Assert.Null(await _park.GetMalusAsync("ondine", forest, pikachu)); // le parc d'un autre joueur
+        Assert.Null(await _park.GetMalusAsync("ondine", ondine, pikachu)); // pas dans ce parc
+        Assert.Null(await _park.GetMalusAsync("sacha", ondine, pikachu));
+        Assert.Null(await _park.GetMalusAsync("sacha", forest, mew)); // dans la collection, pas au parc
+
+        // Parti dans un autre parc : son malus reste derrière lui
         var beach = await _park.BuyAsync("sacha", ParkLandscape.Beach);
         Assert.True((await _park.SetAsync("sacha", beach.ParkId, [pikachu])).Ok);
         Assert.Null((await _park.ListAsync("sacha", beach.ParkId)).Single().Malus);
@@ -170,10 +178,18 @@ public sealed class ParkServiceTests : IDisposable
         var now = new DateTime(2026, 11, 14, 18, 0, 0, DateTimeKind.Utc);
         Assert.Equal("Attaqué : malheureux au lieu de neutre encore 1 h 05.", new ParkMalus(1, now.AddMinutes(65)).Message(ParkMood.Normal, now));
         Assert.Equal("Attaqué : déjà malheureux, son malus dure encore 1 min.", new ParkMalus(2, now.AddSeconds(10)).Message(ParkMood.Sad, now));
+        // Une heure pile s'écrit en heures, une minute de moins en minutes
+        Assert.Equal("Attaqué : neutre au lieu d'heureux encore 1 h 00.", new ParkMalus(1, now.AddMinutes(60)).Message(ParkMood.Happy, now));
+        Assert.Equal("Attaqué : neutre au lieu d'heureux encore 59 min.", new ParkMalus(1, now.AddMinutes(59)).Message(ParkMood.Happy, now));
         Assert.Null(ParkMalus.Active(1, now, now)); // fini à l'instant
         Assert.Null(ParkMalus.Active(0, now.AddMinutes(1), now));
         Assert.Equal(new ParkMalusInfo(1, 61), new ParkMalus(1, now.AddSeconds(60.5)).Info(now));
     }
+
+    /// <summary>Réussite et message ensemble : un refus doit aussi s'afficher comme une erreur (Ok faux), pas seulement le dire.</summary>
+    private static (bool, string) Outcome(ParkResult result) => (result.Ok, result.Message);
+    private static (bool, string) Outcome(ParkExpansionResult result) => (result.Ok, result.Message);
+    private static (bool, string) Outcome(ParkPurchaseResult result) => (result.Ok, result.Message);
 
     private static void AssertClose(DateTime expected, DateTime actual) =>
         Assert.InRange((actual - expected).Duration().TotalSeconds, 0, 1);
@@ -188,7 +204,7 @@ public sealed class ParkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Choice_IsLimitedToTwentyFivePokemonWithSprites_OfTheTrainer()
+    public async Task Choice_IsLimitedToTwentyPokemonWithSprites_OfTheTrainer()
     {
         var pikachu = Add(25);
         var mew = Add(151);
@@ -198,9 +214,9 @@ public sealed class ParkServiceTests : IDisposable
         var misty = Add(120, owner: "ondine");
         var forest = await Forest();
 
-        Assert.Equal("Espèce 514 n'a pas encore de sprites Donjon Mystère : il ne peut pas aller au parc.",
-            (await _park.SetAsync("sacha", forest, [pikachu, simisear])).Message);
-        Assert.False((await _park.SetAsync("sacha", forest, [egg])).Ok);
+        Assert.Equal((false, "Espèce 514 n'a pas encore de sprites Donjon Mystère : il ne peut pas aller au parc."),
+            Outcome(await _park.SetAsync("sacha", forest, [pikachu, simisear])));
+        Assert.Equal((false, "Seuls tes Pokémon (pas les œufs) peuvent aller au parc."), Outcome(await _park.SetAsync("sacha", forest, [egg])));
         Assert.False((await _park.SetAsync("sacha", forest, [misty])).Ok); // pas le sien
         var many = Enumerable.Range(0, 21).Select(_ => Add(19)).ToList();
         Assert.Equal("Le parc accueille 20 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", forest, many)).Message);
@@ -246,9 +262,9 @@ public sealed class ParkServiceTests : IDisposable
             (await _park.ListParksAsync("sacha")).Select(p => (p.Id, p.Landscape)));
 
         // Paysage déjà acheté, la Forêt, paysage inconnu (valeurs envoyées par un navigateur modifié)
-        Assert.Equal("Tu as déjà un parc « Plage ».", (await _park.BuyAsync("sacha", ParkLandscape.Beach)).Message);
-        Assert.Equal("Tu as déjà un parc « Forêt ».", (await _park.BuyAsync("sacha", ParkLandscape.Forest)).Message);
-        Assert.Equal("Ce paysage n'existe pas.", (await _park.BuyAsync("sacha", (ParkLandscape)99)).Message);
+        Assert.Equal((false, "Tu as déjà un parc « Plage »."), Outcome(await _park.BuyAsync("sacha", ParkLandscape.Beach)));
+        Assert.Equal((false, "Tu as déjà un parc « Forêt »."), Outcome(await _park.BuyAsync("sacha", ParkLandscape.Forest)));
+        Assert.Equal((false, "Ce paysage n'existe pas."), Outcome(await _park.BuyAsync("sacha", (ParkLandscape)99)));
         Assert.Equal(90_000, await _inventory.GetBalanceAsync("sacha"));
         var operation = Assert.Single(await _inventory.ListOperationsAsync("sacha"));
         Assert.Equal((WalletOperationKind.BuyPark, -25_000L, 90_000L, "Nouveau parc : Plage"),
@@ -269,8 +285,9 @@ public sealed class ParkServiceTests : IDisposable
         if (money > 0) await SetWallet("sacha", money);
 
         var result = await _park.BuyAsync("sacha", ParkLandscape.Beach);
-        Assert.False(result.Ok);
-        Assert.Contains($"il manque {InventoryService.FormatMoney(25_000 - money)}", result.Message);
+        Assert.Equal((false, $"Un nouveau parc coûte {InventoryService.FormatMoney(25_000)}, ton porte-monnaie contient " +
+                             $"{InventoryService.FormatMoney(money)} : il manque {InventoryService.FormatMoney(25_000 - money)}. " +
+                             "Retire de l'argent d'une sauvegarde depuis « Banque d'objets »."), Outcome(result));
         Assert.Equal([ParkLandscape.Forest], (await _park.ListParksAsync("sacha")).Select(p => p.Landscape)); // transaction annulée
         Assert.Equal(money, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
@@ -286,6 +303,7 @@ public sealed class ParkServiceTests : IDisposable
         var beach = (await _park.BuyAsync("sacha", ParkLandscape.Beach)).ParkId;
         Assert.True((await _park.SetAsync("sacha", forest, [squirtle, eevee])).Ok);
         Assert.Equal("sad", (await _park.ListAsync("sacha", forest)).Single(p => p.Id == squirtle).Mood); // la végétation
+        Assert.Equal([2, 0], (await _park.ListParksAsync("sacha")).Select(p => p.Count)); // chaque parc compte les siens
 
         var candidates = await _park.ListCandidatesAsync("sacha", beach);
         Assert.All(candidates, c => Assert.Equal((false, ParkLandscape.Forest), (c.InPark, c.OtherPark)));
@@ -302,7 +320,7 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal((true, (ParkLandscape?)null), fromForest.Where(c => c.Id == eevee).Select(c => (c.InPark, c.OtherPark)).Single());
 
         // Vider la plage ne touche pas la forêt
-        Assert.True((await _park.ClearAsync("sacha", beach)).Ok);
+        Assert.Equal((true, "Le parc est vide : son Pokémon reste dans ta collection."), Outcome(await _park.ClearAsync("sacha", beach)));
         Assert.Equal([eevee], (await _park.ListAsync("sacha", forest)).Select(p => p.Id));
     }
 
@@ -351,7 +369,8 @@ public sealed class ParkServiceTests : IDisposable
         Assert.Equal("happy", (await _park.ListAsync("sacha", mountain)).First().Mood); // herbe et falaises : les Vol aiment
         // Dans la forêt, Dracaufeu garde la lave et Léviator la nage
         var forest = await Forest();
-        Assert.True((await _park.SetAsync("sacha", forest, [charizard, gyarados])).Ok);
+        Assert.Equal((true, "Parc mis à jour : 2 Pokémon, dont 2 venus d'un autre parc."),
+            Outcome(await _park.SetAsync("sacha", forest, [charizard, gyarados])));
         Assert.Equal(["lava", "swim"], (await _park.ListAsync("sacha", forest)).Select(p => p.Moves));
     }
 
@@ -365,8 +384,8 @@ public sealed class ParkServiceTests : IDisposable
         Assert.True((await _park.SetAsync("ondine", ondine, [misty])).Ok);
 
         // Numéro de parc envoyé par un navigateur modifié
-        Assert.Equal("Ce parc n'existe pas.", (await _park.SetAsync("sacha", ondine, [pikachu])).Message);
-        Assert.Equal("Ce parc n'existe pas.", (await _park.ExpandAsync("sacha", ondine)).Message);
+        Assert.Equal((false, "Ce parc n'existe pas."), Outcome(await _park.SetAsync("sacha", ondine, [pikachu])));
+        Assert.Equal((false, "Ce parc n'existe pas."), Outcome(await _park.ExpandAsync("sacha", ondine)));
         Assert.False((await _park.ClearAsync("sacha", ondine)).Ok);
         Assert.Empty(await _park.ListAsync("sacha", ondine));
         Assert.DoesNotContain(await _park.ListCandidatesAsync("sacha", ondine), c => c.InPark);
@@ -379,28 +398,27 @@ public sealed class ParkServiceTests : IDisposable
     [Fact]
     public async Task Expanding_DebitsTheWallet_AndAddsTwentyPokemon_ThreeTimesAtMost()
     {
-        await SetWallet("sacha", 85_000);
+        await SetWallet("sacha", 75_000); // le troisième se paie avec la somme exacte
         await SetWallet("ondine", 1_000_000);
         var many = Enumerable.Range(0, 41).Select(_ => Add(19)).ToList();
         var forest = await Forest();
 
         var first = await _park.ExpandAsync("sacha", forest);
-        Assert.True(first.Ok, first.Message);
-        Assert.Equal((1, 60_000L), (first.Expansions, first.Balance));
-        Assert.StartsWith("Parc agrandi : il accueille maintenant 40 Pokémon.", first.Message);
+        Assert.Equal((true, $"Parc agrandi : il accueille maintenant 40 Pokémon. Solde : {InventoryService.FormatMoney(50_000)}."),
+            Outcome(first));
+        Assert.Equal((1, 50_000L), (first.Expansions, first.Balance));
         Assert.True((await _park.SetAsync("sacha", forest, many[..40])).Ok);
         Assert.Equal("Le parc accueille 40 Pokémon au plus : retires-en 1.", (await _park.SetAsync("sacha", forest, many)).Message);
 
         Assert.True((await _park.ExpandAsync("sacha", forest)).Ok);
         var third = await _park.ExpandAsync("sacha", forest);
-        Assert.Equal((true, 3, 10_000L), (third.Ok, third.Expansions, third.Balance));
+        Assert.Equal((true, 3, 0L), (third.Ok, third.Expansions, third.Balance));
         Assert.Equal(80, ParkService.CapacityOf(await Expansions(forest)));
 
         var fourth = await _park.ExpandAsync("sacha", forest); // la plus grande taille pour l'instant
-        Assert.False(fourth.Ok);
-        Assert.Equal("Ce parc a déjà sa plus grande taille (80 Pokémon).", fourth.Message);
+        Assert.Equal((false, "Ce parc a déjà sa plus grande taille (80 Pokémon)."), Outcome(fourth));
         Assert.Equal(3, await Expansions(forest));
-        Assert.Equal(10_000, await _inventory.GetBalanceAsync("sacha"));
+        Assert.Equal(0, await _inventory.GetBalanceAsync("sacha"));
 
         var operations = await _inventory.ListOperationsAsync("sacha"); // les plus récentes d'abord
         Assert.All(operations, op => Assert.Equal((WalletOperationKind.ExpandPark, -25_000L), (op.Kind, op.Amount)));
@@ -418,8 +436,9 @@ public sealed class ParkServiceTests : IDisposable
         var forest = await Forest();
 
         var result = await _park.ExpandAsync("sacha", forest);
-        Assert.False(result.Ok);
-        Assert.Contains($"il manque {InventoryService.FormatMoney(25_000 - money)}", result.Message);
+        Assert.Equal((false, $"L'agrandissement coûte {InventoryService.FormatMoney(25_000)}, ton porte-monnaie contient " +
+                             $"{InventoryService.FormatMoney(money)} : il manque {InventoryService.FormatMoney(25_000 - money)}. " +
+                             "Retire de l'argent d'une sauvegarde depuis « Banque d'objets »."), Outcome(result));
         Assert.Equal(0, await Expansions(forest)); // taille remise comme avant (transaction annulée)
         Assert.Equal(money, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
@@ -450,13 +469,32 @@ public sealed class ParkServiceTests : IDisposable
     {
         var (a, b, c) = (Add(1), Add(4), Add(7));
         var forest = await Forest();
-        await _park.SetAsync("sacha", forest, [a, b]);
+        await _park.SetAsync("sacha", forest, [b, c]);
+        Assert.NotNull(await _park.RecordAttackAsync("sacha", forest, c));
         await Task.Delay(10);
-        await _park.SetAsync("sacha", forest, [c, b]);
-        Assert.Equal([b, c], (await _park.ListAsync("sacha", forest)).Select(p => p.Id)); // b était là avant c
-        Assert.True(await _park.RemoveAsync("sacha", b));
-        Assert.False(await _park.RemoveAsync("ondine", c)); // pas le sien
-        Assert.Equal([c], (await _park.ListAsync("sacha", forest)).Select(p => p.Id));
+        // c reste, a arrive : c d'abord, bien que son numéro soit plus grand (l'ordre d'arrivée, pas celui des numéros) ;
+        // c n'est pas « venu d'un autre parc » et garde son malus
+        Assert.Equal((true, "Parc mis à jour : 2 Pokémon."), Outcome(await _park.SetAsync("sacha", forest, [a, c])));
+        var list = await _park.ListAsync("sacha", forest);
+        Assert.Equal([c, a], list.Select(p => p.Id));
+        Assert.Equal(1, list[0].Malus?.Levels);
+        Assert.True(await _park.RemoveAsync("sacha", c));
+        Assert.False(await _park.RemoveAsync("ondine", a)); // pas le sien
+        Assert.Equal([a], (await _park.ListAsync("sacha", forest)).Select(p => p.Id));
+        // Aucun Pokémon choisi : le parc se vide
+        Assert.Equal((true, "Le parc est vide."), Outcome(await _park.SetAsync("sacha", forest, [])));
+        Assert.Empty(await _park.ListAsync("sacha", forest));
+    }
+
+    [Fact]
+    public async Task Candidates_ByPokedexNumber_ThenHighestLevel_ThenArrival()
+    {
+        var low = Add(19, level: 5);
+        var high = Add(19, level: 30);
+        var highToo = Add(19, level: 30);
+        var pidgey = Add(16, level: 2);
+        var forest = await Forest();
+        Assert.Equal([pidgey, high, highToo, low], (await _park.ListCandidatesAsync("sacha", forest)).Select(c => c.Id));
     }
 
     [Fact]

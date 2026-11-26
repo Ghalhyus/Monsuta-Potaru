@@ -34,3 +34,5 @@ __pycache__/
 # Rapports des outils de qualité des tests (Stryker.NET, ReportGenerator), recréés à chaque lancement
 StrykerOutput/
 /coveragereport/
+# Résultats et couverture des tests (dotnet test --collect, LCOV du JavaScript du parc écrit par ParcJsTests)
+/MonsutaPotaru.Tests/TestResults/

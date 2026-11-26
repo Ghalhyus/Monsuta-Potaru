@@ -156,6 +156,11 @@ public sealed class ParkHabitatsTests
         Assert.Equal(ParkMood.Sad, Mood(MoveType.Rock, "4444444400").Mood);
         Assert.Equal(ParkMood.Happy, Mood(MoveType.Rock, MoveType.Grass, "4444444400").Mood);
         Assert.Equal(HabitatOpinion.Likes, ParkHabitats.OpinionOf((byte)MoveType.Grass, (byte)MoveType.Rock, Habitat.Vegetation));
+        // Un seul type qui n'aime pas suffit quand l'autre n'a pas d'avis : Roche + Glace dans la végétation
+        Assert.Equal(HabitatOpinion.Neutral, ParkHabitats.OpinionOf((byte)MoveType.Ice, Habitat.Vegetation));
+        Assert.Equal(HabitatOpinion.Dislikes, ParkHabitats.OpinionOf((byte)MoveType.Rock, (byte)MoveType.Ice, Habitat.Vegetation));
+        Assert.Equal(HabitatOpinion.Dislikes, ParkHabitats.OpinionOf((byte)MoveType.Ice, (byte)MoveType.Rock, Habitat.Vegetation));
+        Assert.Equal(ParkMood.Sad, Mood(MoveType.Rock, MoveType.Ice, "4444444400").Mood);
         // Un type sans avis ne change rien : Glace + Eau aime l'eau, n'aime pas les autres habitats
         Assert.Equal(ParkMood.Happy, Mood(MoveType.Ice, MoveType.Water, "5555550000").Mood);
         Assert.Equal(ParkMood.Sad, Mood(MoveType.Ice, MoveType.Water, "7777700000").Mood);
