@@ -255,6 +255,8 @@ public sealed class InventoryTransferPageTests : PageTestContext
     {
         var red = await StoreReal("sacha", "rouge.sav");
         var b2 = await StoreBw2(items: [(PokeBall, 3)]);
+        var inventory = Services.GetRequiredService<InventoryService>();
+        var before = (await inventory.ListItemSourcesAsync("sacha")).Single(s => s.SaveId == red);
         Services.GetRequiredService<NavigationManager>().NavigateTo($"inventaire/transfert?gauche={b2}&droite={red}");
         var cut = Render<InventoryTransfer>();
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".transfer-column-droite .nav-pills button")));
@@ -268,7 +270,9 @@ public sealed class InventoryTransferPageTests : PageTestContext
         Assert.Contains("sac → PC", cut.Find(".transfer-recap").TextContent);
         await cut.Click("Valider");
         cut.WaitForText("Transfert fait entre");
-        var rouge = (await Services.GetRequiredService<InventoryService>().ListItemSourcesAsync("sacha")).Single(s => s.SaveId == red);
-        Assert.True(rouge.CountIn(PokeBall, BagPlace.Pc) >= 1);
+        var after = (await inventory.ListItemSourcesAsync("sacha")).Single(s => s.SaveId == red);
+        Assert.Equal(before.CountIn(PokeBall, BagPlace.Pc) + 1, after.CountIn(PokeBall, BagPlace.Pc)); // dans le PC...
+        Assert.Equal(before.CountIn(PokeBall, BagPlace.Bag), after.CountIn(PokeBall, BagPlace.Bag)); // ... pas dans le sac
+        Assert.Equal(2, (await inventory.ListItemSourcesAsync("sacha")).Single(s => s.SaveId == b2).CountOf(PokeBall));
     }
 }

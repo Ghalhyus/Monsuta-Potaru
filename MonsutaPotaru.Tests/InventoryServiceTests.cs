@@ -118,7 +118,10 @@ public sealed class InventoryServiceTests : IDisposable
     {
         var id = await Store();
         var result = await _inventory.WithdrawFromSaveAsync("sacha", id, amount);
-        Assert.False(result.Ok);
+        var expected = amount > 0
+            ? $"« Jeu de génération 5 — Ludo » ne contient que {InventoryService.FormatMoney(100_000)}."
+            : "Le montant doit être supérieur à 0.";
+        Assert.Equal(new WithdrawResult(false, expected), result);
         Assert.Equal(100_000u, await StoredMoney(id));
         Assert.Equal(0, await _inventory.GetBalanceAsync("sacha"));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
@@ -129,7 +132,7 @@ public sealed class InventoryServiceTests : IDisposable
     public async Task Withdraw_RefusesSomeoneElsesSave()
     {
         var id = await Store(owner: "ondine");
-        Assert.False((await _inventory.WithdrawFromSaveAsync("sacha", id, 1_000)).Ok);
+        Assert.Equal(new WithdrawResult(false, "Cette sauvegarde n'existe plus."), await _inventory.WithdrawFromSaveAsync("sacha", id, 1_000));
         Assert.Equal(100_000u, await StoredMoney(id));
         Assert.Equal(0, await _inventory.GetBalanceAsync("sacha"));
     }
@@ -281,11 +284,13 @@ public sealed class InventoryServiceTests : IDisposable
     public async Task WithdrawBalls_RefusesMoreThanTheBagHolds_AndChangesNothing()
     {
         var id = await Store(items: [(PokeBall, 10)]);
-        Assert.False((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = 11 })).Ok);
-        Assert.False((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = 5, [MasterBall] = 1 })).Ok);
-        Assert.False((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = -1 })).Ok);
-        Assert.False((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int>())).Ok);
-        Assert.False((await _inventory.WithdrawItemsAsync("ondine", id, new Dictionary<int, int> { [PokeBall] = 1 })).Ok); // pas sa sauvegarde
+        async Task Refused(string expected, Dictionary<int, int> quantities, string owner = "sacha") =>
+            Assert.Equal(new ItemTransferResult(false, expected), await _inventory.WithdrawItemsAsync(owner, id, quantities));
+        await Refused("Le sac ne contient que 10 × Poké Ball.", new() { [PokeBall] = 11 });
+        await Refused("Le sac ne contient que 0 × Master Ball.", new() { [PokeBall] = 5, [MasterBall] = 1 });
+        await Refused("Les quantités ne peuvent pas être négatives.", new() { [PokeBall] = -1 });
+        await Refused("Choisis au moins un objet.", []);
+        await Refused("Cette sauvegarde n'existe plus.", new() { [PokeBall] = 1 }, owner: "ondine"); // pas sa sauvegarde
 
         Assert.Equal(new Dictionary<int, int> { [PokeBall] = 10 }, await StoredItems(id));
         Assert.Empty(await InventoryItems());
@@ -422,11 +427,12 @@ public sealed class InventoryServiceTests : IDisposable
         var unknown = await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [BeastBall] = 1 });
         Assert.False(unknown.Ok);
         Assert.Contains("n'existe pas", unknown.Message);
-        var full = await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [PokeBall] = 10 });
-        Assert.False(full.Ok);
-        Assert.Contains("999", full.Message);
-        Assert.False((await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [HyperBall] = 1 })).Ok); // pas dans l'inventaire
-        Assert.False((await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [PokeBall] = 51 })).Ok); // plus que l'inventaire
+        Assert.Equal(new ItemTransferResult(false, "Poké Ball : le sac en contient déjà 990 et en accepte 999 au plus (9 de plus)."),
+            await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [PokeBall] = 10 }));
+        Assert.Equal(new ItemTransferResult(false, "Ton inventaire ne contient que 0 × Hyper Ball."),
+            await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [HyperBall] = 1 })); // pas dans l'inventaire
+        Assert.Equal(new ItemTransferResult(false, "Ton inventaire ne contient que 50 × Poké Ball."),
+            await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [PokeBall] = 51 })); // plus que l'inventaire
 
         Assert.Equal(new Dictionary<int, int> { [PokeBall] = 990 }, await StoredItems(b2));
         Assert.Equal(new Dictionary<int, int> { [PokeBall] = 50, [BeastBall] = 3 }, await InventoryItems());
@@ -546,8 +552,8 @@ public sealed class InventoryServiceTests : IDisposable
         SaveSessionTests.GiveItems(sav, (GrassMail, 1));
         Assert.Empty(SaveBag.ReadItems(sav));
         Assert.Null(SaveBag.CategoryOf(GrassMail));
-        Assert.NotNull(SaveBag.Withdraw(sav, new Dictionary<int, int> { [GrassMail] = 1 }, i => $"{i}"));
-        Assert.NotNull(SaveBag.Deposit(sav, new Dictionary<int, int> { [GrassMail] = 1 }, i => $"{i}", "Noir 2"));
+        Assert.Equal("137 ne peut pas être transféré.", SaveBag.Withdraw(sav, new Dictionary<int, int> { [GrassMail] = 1 }, i => $"{i}"));
+        Assert.Equal("137 ne peut pas être transféré.", SaveBag.Deposit(sav, new Dictionary<int, int> { [GrassMail] = 1 }, i => $"{i}", "Noir 2"));
     }
 
     [Fact]
@@ -595,7 +601,7 @@ public sealed class InventoryServiceTests : IDisposable
             (await _inventory.ListOperationsAsync("sacha")).Single().Details);
 
         // Noir 2 : Séisme y est aussi la CT26 ; Mitra-Poing n'y est apprise par aucune CT.
-        var b2 = await Store(items: [(TM01, 1)]); // CT01 de Noir 2 : Affûtage
+        var b2 = await Store(items: [(TM01, 1)]); // CT01 de Noir 2 : Aiguisage
         Assert.Equal(new Dictionary<int, int> { [SaveBag.MachineKey(HoneClaws)] = 1 }, await StoredItems(b2));
         Assert.True((await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [EarthquakeTM] = 1 })).Ok);
         Assert.Equal(new Dictionary<int, int> { [SaveBag.MachineKey(HoneClaws)] = 1, [EarthquakeTM] = 1 }, await StoredItems(b2));
@@ -620,7 +626,8 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.False(refused.Ok);
         Assert.Contains("1 au plus", refused.Message);
         Assert.True((await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [ToxicTM] = 1 })).Ok);
-        Assert.False((await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [ToxicTM] = 1 })).Ok); // déjà dans le sac
+        Assert.Equal(new ItemTransferResult(false, "CT/DT Toxik : le sac en contient déjà 1 et en accepte 1 au plus (0 de plus)."),
+            await _inventory.DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [ToxicTM] = 1 })); // déjà dans le sac
         Assert.Equal(new Dictionary<int, int> { [ToxicTM] = 2 }, await InventoryItems());
     }
 
@@ -635,7 +642,8 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.Null(SaveBag.Withdraw(sav!, SaveSessionTests.PlatinumSampleMoves, i => $"{i}"));
         var pouch = sav!.Inventory.Pouches.Single(p => p.Type == InventoryType.TMHMs);
         Assert.Equal([(HM01, 1), (HM03, 1), (0, 0)], pouch.Items.Take(3).Select(s => ((int)s.Index, s.Count)));
-        Assert.NotNull(SaveBag.Deposit(sav, new Dictionary<int, int> { [SaveBag.MachineKey(Surf)] = 1 }, i => $"{i}", "Platine"));
+        Assert.Equal("CT Surf : aucune CT ni DT n'apprend cette capacité dans Platine.",
+            SaveBag.Deposit(sav, new Dictionary<int, int> { [SaveBag.MachineKey(Surf)] = 1 }, _ => "CT Surf", "Platine"));
 
         // Éclate-Roc : CT94 de Noir 2 que l'on peut retirer, mais seulement une CS dans Platine.
         var b2 = new SAV5B2W2();
@@ -692,14 +700,15 @@ public sealed class InventoryServiceTests : IDisposable
         var refused = SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 80 }, i => $"{i}", "Émeraude");
         Assert.Contains("limitée à 79 par sauvegarde", refused);
         Assert.Null(SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 79, [FocusPunchTM] = 1 }, i => $"{i}", "Émeraude"));
-        Assert.NotNull(SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, i => $"{i}", "Émeraude")); // jamais jusqu'à 80
+        Assert.Equal("Séisme : la sauvegarde en contient déjà 79, et une CT à usage unique est limitée à 79 par sauvegarde (0 de plus).",
+            SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, _ => "Séisme", "Émeraude")); // jamais jusqu'à 80
         Assert.Empty(SaveBag.LockedMachines(sav));
 
         // 80 exemplaires (venus du jeu) : la CT Séisme est cachée et bloquée dans ce sac, Mitra-Poing ne l'est pas.
         SaveSessionTests.GiveItems(sav, (314, 1)); // CT26 en numérotation de la 3e génération
         Assert.Equal([EarthquakeTM], SaveBag.LockedMachines(sav));
         Assert.Equal(new Dictionary<int, int> { [FocusPunchTM] = 1 }, SaveBag.ReadItems(sav));
-        Assert.NotNull(SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, i => $"{i}"));
+        Assert.Equal("Le sac ne contient que 0 × Séisme.", SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, _ => "Séisme"));
         Assert.Equal(SaveBag.LockedMessage("Séisme"), SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, _ => "Séisme", "Émeraude"));
         Assert.Null(SaveBag.Withdraw(sav, new Dictionary<int, int> { [FocusPunchTM] = 1 }, i => $"{i}"));
         Assert.Contains(sav.Inventory.Pouches.SelectMany(p => p.Items), s => s.Index == 314 && s.Count == 80); // jamais touchée
@@ -758,7 +767,8 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.Equal(3, lucasSource.CountOf(ToxicTM)); // les autres CT de la sauvegarde restent
         Assert.Equal(10, sources.Single(s => s.SaveId == aurore).CountOf(EarthquakeTM));
 
-        Assert.False((await _inventory.WithdrawItemsAsync("sacha", lucas, new Dictionary<int, int> { [EarthquakeTM] = 1 })).Ok);
+        Assert.Equal(new ItemTransferResult(false, "Le sac ne contient que 0 × CT/DT Séisme."), // cachée : comme absente
+            await _inventory.WithdrawItemsAsync("sacha", lucas, new Dictionary<int, int> { [EarthquakeTM] = 1 }));
         Assert.True((await _inventory.WithdrawItemsAsync("sacha", lucas, new Dictionary<int, int> { [ToxicTM] = 3 })).Ok);
         Assert.True((await _inventory.WithdrawItemsAsync("sacha", aurore, new Dictionary<int, int> { [EarthquakeTM] = 10 })).Ok);
 
@@ -816,7 +826,7 @@ public sealed class InventoryServiceTests : IDisposable
         inventory.CopyTo(sav);
         Assert.Null(SaveBag.Deposit(sav, new Dictionary<int, int> { [OranBerry] = 5 }, i => $"{i}", "Émeraude"));
         Assert.Equal(new Dictionary<int, int> { [OranBerry] = 5 }, SaveBag.ReadItems(sav));
-        Assert.NotNull(SaveBag.Withdraw(sav, new Dictionary<int, int> { [EnigmaBerry] = 1 }, i => $"{i}"));
+        Assert.Equal("Le sac ne contient que 0 × Baie Enigma.", SaveBag.Withdraw(sav, new Dictionary<int, int> { [EnigmaBerry] = 1 }, _ => "Baie Enigma"));
         Assert.Null(SaveBag.Withdraw(sav, new Dictionary<int, int> { [OranBerry] = 5 }, i => $"{i}"));
         Assert.Equal([(175, 1), (0, 0)], sav.Inventory.Pouches.Single(p => p.Type == InventoryType.Berries).Items.Take(2).Select(s => ((int)s.Index, s.Count)));
     }
@@ -875,7 +885,7 @@ public sealed class InventoryServiceTests : IDisposable
 
         var refused = SaveBag.Deposit(sav!, new Dictionary<int, int> { [Bicycle] = 1 }, i => $"{i}", "Platine");
         Assert.Contains("objet rare", refused);
-        Assert.NotNull(SaveBag.Withdraw(sav!, new Dictionary<int, int> { [Bicycle] = 1 }, i => $"{i}"));
+        Assert.Equal("Le sac ne contient que 0 × Vélo.", SaveBag.Withdraw(sav!, new Dictionary<int, int> { [Bicycle] = 1 }, _ => "Vélo"));
 
         // Tous les objets retirés : le Vélo et la Lettre restent dans leur poche.
         Assert.Null(SaveBag.Withdraw(sav!, items, i => $"{i}"));
@@ -1032,6 +1042,18 @@ public sealed class InventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void SaveBag_ThirdGeneration_HidesOnlyItsOwnKeyItems()
+    {
+        // Les objets rares de Cristal portent, en numérotation de la 3e génération, les numéros d'objets ordinaires d'Émeraude
+        // (Super Bonbon, Plongée Ball, Baie Ceriz) : seuls les objets rares du jeu lui-même sont mis de côté.
+        const int DiveBall = 7;
+        var sav = new SAV3E();
+        var items = new Dictionary<int, int> { [RareCandy] = 3, [DiveBall] = 4, [CheriBerry] = 2 };
+        Assert.Null(SaveBag.Deposit(sav, items, i => $"{i}", "Émeraude"));
+        Assert.Equal(items, SaveBag.ReadItems(sav));
+    }
+
+    [Fact]
     public void SaveBag_DepositToThePc_CountsWhatThePcHolds_NotTheBag()
     {
         var sav = Red();
@@ -1058,7 +1080,10 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.True(SaveUtil.TryGetSaveFile(SaveSessionTests.CreatePlatinumSave(), out var platinum, "platine.sav"));
         Assert.False(SaveBag.HasPc(platinum!));
         Assert.Empty(SaveBag.Capacity(platinum!, BagPlace.Pc));
-        Assert.NotNull(SaveBag.Deposit(platinum!, new Dictionary<int, int> { [Potion] = 1 }, i => $"{i}", "Platine", BagPlace.Pc));
+        Assert.Equal("Cette sauvegarde n'a pas de PC d'objets.",
+            SaveBag.Deposit(platinum!, new Dictionary<int, int> { [Potion] = 1 }, i => $"{i}", "Platine", BagPlace.Pc));
+        Assert.Equal("Cette sauvegarde n'a pas de PC d'objets.",
+            SaveBag.Withdraw(platinum!, new Dictionary<int, int> { [Potion] = 1 }, i => $"{i}", BagPlace.Pc));
     }
 
     [Fact]
@@ -1073,8 +1098,8 @@ public sealed class InventoryServiceTests : IDisposable
         GiveToPc(sav, (226, 1)); // 80 avec le sac : cachée et bloquée aux deux endroits
         Assert.Equal([EarthquakeTM], SaveBag.LockedMachines(sav));
         Assert.Empty(SaveBag.ReadItems(sav));
-        Assert.NotNull(SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, i => $"{i}"));
-        Assert.NotNull(SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, i => $"{i}", BagPlace.Pc));
+        Assert.Equal("Le sac ne contient que 0 × Séisme.", SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, _ => "Séisme"));
+        Assert.Equal("Le PC ne contient que 0 × Séisme.", SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 1 }, _ => "Séisme", BagPlace.Pc));
     }
 
     [Fact]

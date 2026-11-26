@@ -10,10 +10,30 @@ namespace MonsutaPotaru.Tests;
 /// <summary>Page « Inventaire » : porte-monnaie, retrait d'argent, stockage des objets (onglets, sources, tris, grille), journal.</summary>
 public sealed class InventoryPageTests : PageTestContext
 {
-    private const int PokeBall = 4, Potion = 17, RareCandy = 50, Nugget = 92, OranBerry = 155, Tm01 = 328;
+    private const int PokeBall = 4, Potion = 17, RareCandy = 50, Nugget = 92, OranBerry = 155, Tm01 = 328, HoneClaws = 468; // CT01 de Noir 2 : Aiguisage
+
+    /// <summary>Objets que <see cref="StoreWithItems"/> met dans le sac (clés du site : la CT est rangée par capacité).</summary>
+    private static readonly Dictionary<int, int> SampleItems = new()
+    {
+        [Potion] = 5, [PokeBall] = 12, [RareCandy] = 3, [Nugget] = 2, [OranBerry] = 4, [SaveBag.MachineKey(HoneClaws)] = 1,
+    };
 
     private Task<int> StoreWithItems(string owner = "sacha", string ot = "Ludo") =>
         StoreBw2(owner, ot, 100_000, (Potion, 5), (PokeBall, 12), (RareCandy, 3), (Nugget, 2), (OranBerry, 4), (Tm01, 1));
+
+    private InventoryService InventoryService => Services.GetRequiredService<InventoryService>();
+
+    /// <summary>Inventaire interne de sacha : objet → quantité.</summary>
+    private async Task<Dictionary<int, int>> Stock() =>
+        (await InventoryService.GetItemsAsync("sacha")).ToDictionary(i => i.ItemId, i => i.Count);
+
+    /// <summary>Sac de cette sauvegarde stockée de sacha : objet → quantité.</summary>
+    private async Task<Dictionary<int, int>> SaveItems(int saveId) =>
+        (await InventoryService.ListItemSourcesAsync("sacha")).Single(s => s.SaveId == saveId).Items.ToDictionary(i => i.ItemId, i => i.Count);
+
+    /// <summary>Noms des lignes du tableau affiché, dans l'ordre.</summary>
+    private static List<string> RowNames(IRenderedComponent<Inventory> cut) =>
+        cut.FindAll("tbody tr td:first-child").Select(td => PageTestExtensions.Normalize(td.TextContent)).ToList();
 
     [Fact]
     public async Task Withdraw_MovesMoneyToTheWallet_InThreeSteps()
@@ -79,9 +99,18 @@ public sealed class InventoryPageTests : PageTestContext
         var cut = Render<Inventory>();
         cut.WaitForAssertion(() => Assert.Contains(cut.FindAll("select.inventory-source option"), o => o.GetAttribute("value") == $"sauvegarde-{saveId}"));
 
-        // « Tout » (par défaut) : les objets des sauvegardes, cliquables pour voir où ils sont
-        foreach (var tab in new[] { "Pokéballs", "Baies", "CT", "Objets", "Médicaments" })
-            await cut.FindAll("[role=tab]").First(t => t.TextContent.Contains(tab)).ClickAsync(new());
+        // « Tout » (par défaut) : les objets des sauvegardes, chacun dans son onglet, cliquables pour voir où ils sont
+        Task Tab(string title) => cut.InvokeAsync(() => cut.FindAll("[role=tab]").First(t => t.TextContent.Contains(title)).ClickAsync(new()));
+        await Tab("CT");
+        Assert.Contains("Aiguisage", Assert.Single(RowNames(cut))); // CT01 de Noir 2
+        foreach (var (tab, names) in new (string, string[])[]
+                 {
+                     ("Pokéballs", ["Poké Ball"]), ("Baies", ["Baie Oran"]), ("Objets", ["Pépite"]), ("Médicaments", ["Potion", "Super Bonbon"]),
+                 })
+        {
+            await Tab(tab);
+            Assert.Equal(names, RowNames(cut).Order(StringComparer.Ordinal));
+        }
         Assert.Contains("Lecture seule : clique sur un objet", cut.Text());
         await cut.FindAll("table button.btn-link")[0].ClickAsync(new());
         cut.WaitForText("Total");
@@ -90,18 +119,26 @@ public sealed class InventoryPageTests : PageTestContext
 
         // Recherche sans accents, puis rien trouvé
         await cut.Find("input.inventory-search").InputAsync(new() { Value = "SUPER bonbon" });
-        Assert.Single(cut.FindAll("tbody tr"));
+        Assert.Equal(["Super Bonbon"], RowNames(cut));
         await cut.Find("input.inventory-search").InputAsync(new() { Value = "zzz" });
         cut.WaitForText("Rien ne correspond à « zzz »");
         await cut.Find("input.inventory-search").InputAsync(new() { Value = "" });
 
-        // Tris : nom, quantité, par défaut, chacun dans les deux sens
-        foreach (var sort in new[] { "nom", "quantite", "defaut" })
+        // Tris des médicaments (5 Potion, 3 Super Bonbon) : nom, quantité, par défaut, chacun dans les deux sens
+        Task SortBy(string sort) => cut.Find(".inventory-sort select").ChangeAsync(new() { Value = sort });
+        Task Flip() => cut.Find(".inventory-sort button").ClickAsync(new());
+        foreach (var (sort, ascending) in new[] { ("nom", new[] { "Potion", "Super Bonbon" }), ("quantite", ["Super Bonbon", "Potion"]) })
         {
-            await cut.Find(".inventory-sort select").ChangeAsync(new() { Value = sort });
-            await cut.Find(".inventory-sort button").ClickAsync(new());
-            await cut.Find(".inventory-sort button").ClickAsync(new());
+            await SortBy(sort);
+            Assert.Equal(ascending, RowNames(cut));
+            await Flip();
+            Assert.Equal(ascending.AsEnumerable().Reverse(), RowNames(cut));
+            await Flip();
         }
+        await SortBy("defaut");
+        var byDefault = RowNames(cut);
+        await Flip();
+        Assert.Equal(byDefault.AsEnumerable().Reverse(), RowNames(cut));
 
         // Grille : colonnes au curseur, puis automatiques ; détail depuis une tuile
         await cut.Click("Grille");
@@ -109,6 +146,8 @@ public sealed class InventoryPageTests : PageTestContext
         await cut.Find(".inventory-columns input").InputAsync(new() { Value = "4" });
         Assert.Contains("--item-columns: 4", cut.Markup);
         await cut.FindAll("button").First(b => b.TextContent.Trim() == "Auto").ClickAsync(new());
+        Assert.DoesNotContain("--item-columns", cut.Markup); // colonnes selon la largeur de la fenêtre
+        Assert.Empty(cut.FindAll(".item-grid-fixed"));
         await cut.Find(".item-tile-button").ClickAsync(new());
         cut.WaitForText("Total");
         await cut.Click("Liste");
@@ -136,7 +175,13 @@ public sealed class InventoryPageTests : PageTestContext
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".item-tile")));
         Assert.Contains("--item-columns: 3", cut.Markup);
         Assert.Contains("↓ Décroissant", cut.Text());
+        Assert.Equal(["Potion", "Super Bonbon"], cut.FindAll(".item-tile").Select(t => t.GetAttribute("title"))); // 5 puis 3
+
+        // Colonnes automatiques : le navigateur dit combien il en tient (watchGridColumns), affiché à côté du curseur
+        await cut.FindAll("button").First(b => b.TextContent.Trim() == "Auto").ClickAsync(new());
         await cut.Instance.OnGridColumnsChanged(5);
+        Assert.Equal("Auto (5)", cut.Find(".inventory-columns .fw-semibold").TextContent);
+        Assert.Equal("5", cut.Find(".inventory-columns input").GetAttribute("value"));
     }
 
     [Fact]
@@ -144,9 +189,13 @@ public sealed class InventoryPageTests : PageTestContext
     {
         UpdateUser("sacha", u => u.SortPreferences = "pas du json"); // tris d'origine
         JSInterop.Setup<string?>("localStorage.getItem", "monsuta-potaru.inventaire.affichage").SetException(new Microsoft.JSInterop.JSException("bloqué"));
+        await StoreWithItems();
         var cut = Render<Inventory>();
-        cut.WaitForText("Porte-monnaie");
-        Assert.Contains("Liste", cut.Text());
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("tbody tr")));
+        Assert.Equal("true", cut.Button("Liste").GetAttribute("aria-pressed")); // affichage d'origine : la liste
+        Assert.Empty(cut.FindAll(".item-tile"));
+        Assert.Equal("defaut", cut.Find(".inventory-sort select").GetAttribute("value")); // tri d'origine
+        Assert.Equal("↑ Croissant", cut.Find(".inventory-sort button").TextContent);
         await DisposeComponentsAsync();
     }
 
@@ -231,11 +280,11 @@ public sealed class InventoryPageTests : PageTestContext
         await cut.Click("Suivant");
         await cut.Click("Confirmer le retrait");
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".dialog-panel")));
-        Assert.Contains("alert-success", cut.Markup);
-        var stock = await Services.GetRequiredService<InventoryService>().GetItemsAsync("sacha");
-        Assert.Contains(stock, s => s.ItemId == RareCandy && s.Count == 3);
+        Assert.StartsWith("Retiré de « Jeu de génération 5 — Ludo »", PageTestExtensions.Normalize(cut.Find(".alert-success").TextContent));
+        Assert.Equal(SampleItems, await Stock()); // « Tout » dans chaque onglet : tout le sac
+        Assert.Empty(await SaveItems(saveId));
 
-        // Dépôt : tout l'inventaire retourne dans le sac
+        // Dépôt : « Tout » dans le premier onglet du dialogue, qui retourne dans le sac
         await cut.Find("select.inventory-source").ChangeAsync(new() { Value = "interne" });
         await cut.Click("Déposer dans une sauvegarde");
         cut.WaitForText("Déposer des objets");
@@ -246,7 +295,10 @@ public sealed class InventoryPageTests : PageTestContext
         cut.WaitForText("ton jeu n'a pas encore ces objets");
         await cut.Click("Confirmer le dépôt");
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".dialog-panel")));
-        Assert.Contains(saveId, (await StoredSaves.ListAsync("sacha")).Select(s => s.Id));
+        Assert.StartsWith("Déposé dans « Jeu de génération 5 — Ludo »", PageTestExtensions.Normalize(cut.Find(".alert-success").TextContent));
+        var (stock, inSave) = (await Stock(), await SaveItems(saveId));
+        Assert.NotEmpty(inSave);
+        Assert.All(SampleItems, e => Assert.Equal(e.Value, stock.GetValueOrDefault(e.Key) + inSave.GetValueOrDefault(e.Key))); // rien de perdu ni de créé
     }
 
     [Fact]
@@ -265,20 +317,43 @@ public sealed class InventoryPageTests : PageTestContext
     [Fact]
     public async Task ItemDialog_GenerationThreeSave_HasABagAndAPc()
     {
+        // Vraie partie, à son début : PC vide. On y met 2 Potion (13 en 3e génération), et 3 Poké Ball dans le sac (4 : même numéro).
         var data = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Sauvegardes", "rouge-feu.sav"));
-        Assert.True((await StoredSaves.AddAsync("sacha", "rouge-feu.sav", data)).Ok);
+        Assert.True(PKHeX.Core.SaveUtil.TryGetSaveFile(data, out var sav, "rouge-feu.sav"));
+        SaveSessionTests.GiveItems(sav!, (PokeBall, 3));
+        var bag = sav!.Inventory;
+        Assert.True(bag.GetPouch(PKHeX.Core.InventoryType.PCItems).GiveItem(bag, 13, 2) > 0);
+        bag.CopyTo(sav);
+        Assert.True((await StoredSaves.AddAsync("sacha", "rouge-feu.sav", sav.Write().ToArray())).Ok);
+        var source = (await InventoryService.ListItemSourcesAsync("sacha")).Single();
+        var pcItem = Assert.Single(source.ItemsIn(BagPlace.Pc));
+        Assert.Equal((Potion, 2), (pcItem.ItemId, pcItem.Count));
+        var bagItem = source.ItemsIn(BagPlace.Bag).Single(i => i.ItemId == PokeBall);
+
         var cut = Render<ItemTransferDialog>(p => p.Add(d => d.UserId, "sacha").Add(d => d.Stock, []).Add(d => d.Deposit, false));
         cut.WaitForText("sac");
         await cut.Find(".list-group-item").ClickAsync(new());
         cut.WaitForText("2/3");
-        await cut.FindAll(".nav-pills button").First(b => b.TextContent.Contains("PC")).ClickAsync(new());
-        if (cut.FindAll("input.item-quantity").Count > 0)
-            await cut.Click("Tout");
-        await cut.FindAll(".nav-pills button").First(b => b.TextContent.Contains("Sac")).ClickAsync(new());
-        await cut.Click("Tout");
+        await ChooseAll(cut, "PC", pcItem.Category, pcItem.Name);
+        await ChooseAll(cut, "Sac", bagItem.Category, bagItem.Name);
         await cut.Click("Suivant");
         cut.WaitForText("3/3");
-        Assert.Contains("Sac", cut.Text());
+
+        // Un titre par endroit, et chaque objet avec la quantité de son endroit : PC n → 0, sac n → 0
+        Assert.Equal(["PC", "Sac"], cut.FindAll(".dialog-panel .small.fw-semibold").Select(e => e.TextContent.Trim()).Order());
+        var lines = cut.FindAll(".dialog-panel ul.small li").Select(li => PageTestExtensions.Normalize(li.TextContent)).ToList();
+        Assert.Contains(lines, l => l.StartsWith($"{pcItem.Count} × {pcItem.Name}", StringComparison.Ordinal) && l.Contains($"PC : {pcItem.Count} → 0"));
+        Assert.Contains(lines, l => l.StartsWith($"{bagItem.Count} × {bagItem.Name}", StringComparison.Ordinal) && l.Contains($"sac : {bagItem.Count} → 0"));
+    }
+
+    /// <summary>Étape 2 du dialogue : endroit (« PC » ou « Sac »), onglet de la catégorie, puis « Tout » sur la ligne de l'objet.</summary>
+    private static async Task ChooseAll(IRenderedComponent<ItemTransferDialog> cut, string place, ItemCategory category, string item)
+    {
+        await cut.InvokeAsync(() => cut.FindAll(".nav-pills button").Single(b => b.TextContent.Trim().StartsWith(place, StringComparison.Ordinal)).ClickAsync(new()));
+        var tabTitle = ItemCategories.All.Single(c => c.Category == category).Title;
+        await cut.InvokeAsync(() => cut.FindAll(".nav-tabs button").Single(t => t.TextContent.Trim().StartsWith(tabTitle, StringComparison.Ordinal)).ClickAsync(new()));
+        await cut.InvokeAsync(() => cut.FindAll("tbody tr").Single(r => r.QuerySelector("td")!.TextContent.Trim() == item)
+            .QuerySelector("button")!.ClickAsync(new()));
     }
 
     [Fact]
@@ -307,10 +382,14 @@ public sealed class InventoryPageTests : PageTestContext
     [Fact]
     public void Visitor_HiddenPlayer_ShowsNothing()
     {
+        // Profil privé ou joueur inconnu : même réponse, qui ne dit pas si le joueur existe.
         UpdateUser("ondine", u => u.Audience = ProfileAudience.Nobody);
         var cut = Render<Inventory>(p => p.Add(i => i.Pseudo, "ondine"));
-        cut.WaitForAssertion(() => Assert.DoesNotContain("Porte-monnaie", cut.Text()));
+        cut.WaitForText("Joueur introuvable");
+        Assert.Contains(PlayerService.HiddenMessage, cut.Text());
+        Assert.DoesNotContain("Porte-monnaie", cut.Text());
         var unknown = Render<Inventory>(p => p.Add(i => i.Pseudo, "personne"));
-        unknown.WaitForAssertion(() => Assert.DoesNotContain("Porte-monnaie", unknown.Text()));
+        unknown.WaitForText("Joueur introuvable");
+        Assert.Equal(cut.Text(), unknown.Text());
     }
 }

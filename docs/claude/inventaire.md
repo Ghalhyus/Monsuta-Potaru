@@ -81,7 +81,18 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   un autre joueur n'avait jamais de sauvegarde dans ces tests, ou le transfert en voyait trois), retrait d'un objet réparti
   sur plusieurs emplacements, octets des CT de la 2e génération au-delà de la CT01 (indice 0 : `offset + i` =
   `offset - i`), dépôt dans le PC jugé d'après le nombre du sac, débit concurrent et conflit de version jamais provoqués.
-  Reste : des refus vérifiés sans leur message (`Ok == false` seul : le refus peut venir d'une autre vérification).
+  Puis les refus vérifiés avec leur message exact (`Assert.Equal(new ItemTransferResult(false, "…"), …)` : avec `Ok ==
+  false` seul, le refus pouvait venir d'une autre vérification) et les tests de pages qui passaient toujours.
+- Seconde passe, le même jour : 75,0 % (service 71,7 %, `SaveBag` 79,5 %) ; 80,1 % sans `BuyCollectionSlotsAsync`, contre
+  74,6 % avant. 43 mutants en `Timeout` cette fois (1 la première), sur des lignes sans effet (journalisation, textes) :
+  la machine, pas les tests ; comparés mutant par mutant avec la passe précédente, ceux qui survivaient y sont comptés
+  survivants. Rapports JSON : `StrykerOutput/<date>/reports/mutation-report.json` (`files[].mutants[].status`).
+- Le test de Rouge Feu ne vérifiait le PC que s'il avait des objets : il est vide dans `rouge-feu.sav` (début de partie),
+  le test y met donc 2 Potion. Son ancien `if` attrapait par hasard un autre mutant (objets rares de Cristal pris pour ceux
+  d'Émeraude : Super Bonbon, Plongée Ball et Baie Ceriz cachés) : `SaveBag_ThirdGeneration_HidesOnlyItsOwnKeyItems`.
+- Survivants restants, laissés exprès : textes (messages de réussite, onglets vides, libellés), filtres `> 0` / `>= 0`
+  sur des listes déjà sans zéro, vérifications faites deux fois (PC refusé par le service puis par `SaveBag`), bornes des
+  conversions de numéros, tables des CT de Noir / Blanc, Rubis Oméga, Let's Go et Légendes Z-A (libellé « CT », réutilisable).
 - Autre onglet au milieu d'une opération : `_db.Inventory(intercepteurs)` (`TestDatabase`), avec un `DbCommandInterceptor`
   qui vide l'inventaire juste avant le débit, ou un `SaveChangesInterceptor` qui change la `Version` juste avant
   l'écriture ; les deux agissent dans la transaction du service, annulée avec elle.

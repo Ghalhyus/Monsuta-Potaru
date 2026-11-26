@@ -83,7 +83,14 @@
     Sans `showdown/node_modules`, la passe initiale de toute la suite échoue (combats) : limiter les tests à ceux du sujet
     par un `stryker-config.json` dans `MonsutaPotaru.Tests` de la copie (`"mutate": [...]`, `"test-case-filter":
     "FullyQualifiedName~MonsutaPotaru.Tests.Park"`), plus rapide aussi. Essai du 2026-11-26 sur les trois services du parc :
-    voir `parc.md`, « Tester ».
+    voir `parc.md`, « Tester » ; sur l'inventaire : `inventaire.md`, « Tester ».
+  - **Vérifier le filtre dans les premières minutes** : le journal dit « N mutants got status Ignored. Reason: Removed by
+    mutate filter » puis « N total mutants will be tested » (environ 600 pour deux fichiers). Sans `stryker-config.json`
+    (vu le 2026-11-26 : fichier pas écrit), Stryker part sans erreur sur tout le site (près de 12 000 mutants, des heures) :
+    l'arrêter. La barre de progression ne s'écrit pas dans un journal redirigé.
+  - Des `Timeout` sur des lignes sans effet (journalisation, textes) viennent de la machine (seuil calculé sur la première
+    passe de tests) : Stryker les compte comme tués. Comparer avec une passe précédente, mutant par mutant (fichier, ligne,
+    colonne, mutation), avant de croire à un progrès.
   - Les doublons sont mesurés par SonarCloud (onglet « Duplications »).
   - Les outils de ub-mode (crapper, dryer, mutator, de Robert C. Martin) ne lisent pas le C# : ceux-ci les remplacent.
 - Un nouveau fichier nécessaire au déploiement s'ajoute à l'archive des deux côtés (`publier.ps1` et le workflow ; rappelé
