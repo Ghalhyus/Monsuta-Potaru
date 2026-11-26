@@ -491,9 +491,10 @@ public sealed class HideSeekHub : IDisposable
         foreach (var p in others)
             RequestsChanged?.Invoke(p.UserId);
         previous.Notify(); // les autres écrans de fin voient la proposition
-        return (session, others.Count == 0
-            ? "Nouvelle partie créée avec les mêmes réglages."
-            : $"Nouvelle partie créée avec les mêmes réglages : {string.Join(", ", others.Select(p => p.Pseudo))} {(others.Count == 1 ? "est invité" : "sont invités")}.");
+        if (others.Count == 0)
+            return (session, "Nouvelle partie créée avec les mêmes réglages.");
+        var invited = others.Count == 1 ? "est invité" : "sont invités";
+        return (session, $"Nouvelle partie créée avec les mêmes réglages : {string.Join(", ", others.Select(p => p.Pseudo))} {invited}.");
     }
 
     /// <summary>Proposition de l'hôte de recommencer cette partie finie, adressée à ce joueur et pas encore acceptée.</summary>

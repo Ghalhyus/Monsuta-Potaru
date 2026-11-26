@@ -336,10 +336,16 @@ else
         var distinct = HideSeekDraw.Usable(settings, pool, settings.Landscape);
         var error = HideSeekDraw.Check(settings, pool);
         poolTooSmall = error is not null;
-        poolInfo = error ?? (settings.Pool == HideSeekPool.Random
-            ? $"{distinct} Pokémon différents{settings.MoodNote} peuvent être tirés."
-            : $"{distinct} Pokémon différents dans ce choix{(settings.Landscape is { } where ? $" peuvent vivre {ParkLandscapes.Where(where)}" : "")}{settings.MoodNote}"
-              + FillNote(settings, pool, distinct));
+        poolInfo = error ?? PoolNote(settings, pool, distinct);
+    }
+
+    /// <summary>« 40 Pokémon différents dans ce choix peuvent vivre dans la forêt. » (salle d'attente, chez l'hôte).</summary>
+    private static string PoolNote(HideSeekSettings settings, IReadOnlyList<HideSeekCandidate> pool, int distinct)
+    {
+        if (settings.Pool == HideSeekPool.Random)
+            return $"{distinct} Pokémon différents{settings.MoodNote} peuvent être tirés.";
+        var where = settings.Landscape is { } landscape ? $" peuvent vivre {ParkLandscapes.Where(landscape)}" : "";
+        return $"{distinct} Pokémon différents dans ce choix{where}{settings.MoodNote}" + FillNote(settings, pool, distinct);
     }
 
     /// <summary>Fin de la phrase sur le choix : complété par des Pokémon aléatoires, ou combien de Pokémon le parc aura sans eux.</summary>
@@ -422,40 +428,49 @@ else
     /// </summary>
     private async Task ShowRound()
     {
-        if (boardStarting || session is null || snapshot is not { Round: { } round } shown)
+        if (boardStarting || session is null || snapshot is not { Round: { } round })
             return;
-        if (round.Number != boardRound)
+        if (round.Number != boardRound && !await StartRound(round))
+            return;
+        await FocusTarget();
+    }
+
+    /// <summary>Crée le parc d'un nouveau tour ; faux si l'onglet est fermé ou si un autre tour a commencé entre-temps.</summary>
+    private async Task<bool> StartRound(HideSeekRound round)
+    {
+        boardStarting = true;
+        try
         {
-            boardStarting = true;
-            try
-            {
-                await StartBoard(round);
-            }
-            catch (JSDisconnectedException)
-            {
-                return; // onglet fermé
-            }
-            finally
-            {
-                boardStarting = false;
-            }
-            if (snapshot?.Round?.Number != boardRound)
-            {
-                StateHasChanged(); // un autre tour a commencé pendant le chargement : son parc naîtra au rendu suivant
-                return;
-            }
+            await StartBoard(round);
         }
-        if (board is not null && snapshot?.TargetId != focused)
+        catch (JSDisconnectedException)
         {
-            focused = snapshot?.TargetId;
-            try
-            {
-                await board.InvokeAsync<bool>("focus", focused);
-            }
-            catch (JSDisconnectedException)
-            {
-                // onglet fermé
-            }
+            return false; // onglet fermé
+        }
+        finally
+        {
+            boardStarting = false;
+        }
+        if (snapshot?.Round?.Number == boardRound)
+            return true;
+        StateHasChanged(); // un autre tour a commencé pendant le chargement : son parc naîtra au rendu suivant
+        return false;
+    }
+
+    /// <summary>À la fin du tour, la cible montrée dans le parc ; au tour suivant, plus rien de montré.</summary>
+    private async Task FocusTarget()
+    {
+        var target = snapshot?.TargetId; // relu : la partie a pu changer pendant le chargement du parc
+        if (board is null || target == focused)
+            return;
+        focused = target;
+        try
+        {
+            await board.InvokeAsync<bool>("focus", focused);
+        }
+        catch (JSDisconnectedException)
+        {
+            // onglet fermé
         }
     }
 
@@ -529,19 +544,25 @@ else
     {
         if (!InGame || session is null)
             return;
-        var question = session.Stage == HideSeekStage.Lobby
-            ? session.IsHost(userId)
-                ? "Quitter cette page annule la partie pour tous les joueurs. Continuer ?"
-                : "Quitter cette page te fait sortir de la partie. Continuer ?"
-            : session.IsHost(userId)
-                ? "Quitter cette page arrête la partie pour tous les joueurs. Continuer ?"
-                : "Quitter cette page te fait perdre la partie. Continuer ?";
-        if (!await JS.InvokeAsync<bool>("confirm", question))
+        if (!await JS.InvokeAsync<bool>("confirm", LeavingQuestion(session)))
         {
             context.PreventNavigation();
             return;
         }
         Hub.Leave(session, userId, $"{pseudo} a quitté la partie.");
+    }
+
+    /// <summary>La confirmation avant de quitter la page : ce que le départ fait, selon l'étape et selon qu'on est l'hôte.</summary>
+    private string LeavingQuestion(HideSeekSession s)
+    {
+        var host = s.IsHost(userId);
+        if (s.Stage == HideSeekStage.Lobby)
+            return host
+                ? "Quitter cette page annule la partie pour tous les joueurs. Continuer ?"
+                : "Quitter cette page te fait sortir de la partie. Continuer ?";
+        return host
+            ? "Quitter cette page arrête la partie pour tous les joueurs. Continuer ?"
+            : "Quitter cette page te fait perdre la partie. Continuer ?";
     }
 
     // ---------- Fin ----------
@@ -656,52 +677,16 @@ else
     private RenderFragment Lobby(HideSeekSession s, HideSeekSnapshot shown) => __builder =>
     {
         var host = s.IsHost(userId);
-        var settings = shown.Settings;
         <Block Title="Salle d'attente" Class="hide-seek-lobby" Actions="@(host ? HostActions : PlayerActions)">
             <Help>@Rules</Help>
             <ChildContent>
                 <div class="hide-seek-lobby-grid">
                     <section>
-                        <h3 class="h6">Code de la partie</h3>
-                        <p class="small text-muted mb-1">Donne-le aux autres joueurs, avec ou sans compte : ils le saisissent dans la page du cache-cache.</p>
-                        <div class="chess-code hide-seek-code" aria-label="Code de la partie">@ChessHub.FormatCode(s.Code)</div>
-                        <div class="chess-code-buttons">
-                            <button type="button" class="btn btn-sm btn-outline-primary hide-seek-copy-code" @onclick="() => Copy(s.Code, false)">Copier le code</button>
-                            <button type="button" class="btn btn-sm btn-outline-primary hide-seek-copy-link" @onclick="() => Copy(JoinLink(s.Code), true)">Copier le lien</button>
-                        </div>
-                        <p class="small text-muted">La salle d'attente ferme à @s.ExpiresAt.ToLocalTime().ToString("HH:mm") si la partie n'est pas lancée.</p>
-
-                        <h3 class="h6">Joueurs (@shown.Players.Count / @HideSeekHub.MaxPlayers)</h3>
-                        <ul class="list-unstyled hide-seek-players">
-                            @foreach (var p in shown.Players)
-                            {
-                                <li>@p.Pseudo@(p.UserId == userId ? " (toi)" : "") @if (p.IsHost) { <span class="badge text-bg-secondary ms-1">hôte</span> }</li>
-                            }
-                            @foreach (var p in shown.Invited)
-                            {
-                                <li class="text-muted hide-seek-invited">@p.Pseudo <span class="small">· invité, en attente de sa réponse</span></li>
-                            }
-                        </ul>
+                        @LobbyCode(s)
+                        @LobbyPlayers(shown)
                         @if (host && friends is { } list)
                         {
-                            var available = list.Where(f => shown.Players.All(p => p.UserId != f.UserId) && shown.Invited.All(p => p.UserId != f.UserId)).ToList();
-                            @if (available.Count > 0)
-                            {
-                                <div class="chess-new">
-                                    <select class="form-select hide-seek-friend" aria-label="Ami" value="@friendId" @onchange="e => friendId = e.Value?.ToString() ?? string.Empty">
-                                        <option value="">Choisis un ami…</option>
-                                        @foreach (var f in available)
-                                        {
-                                            <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
-                                        }
-                                    </select>
-                                    <button type="button" class="btn btn-outline-primary hide-seek-invite" disabled="@(friendId.Length == 0)" @onclick="Invite">Inviter</button>
-                                </div>
-                            }
-                            else if (list.Count == 0)
-                            {
-                                <p class="small text-muted">Pour inviter un ami, ajoute-en dans <a href="amis">Amis</a>.</p>
-                            }
+                            @InviteFriends(shown, list)
                         }
                     </section>
 
@@ -709,111 +694,187 @@ else
                         <h3 class="h6">Réglages</h3>
                         @if (host)
                         {
-                            <div class="hide-seek-settings">
-                                <label class="form-label" for="hs-rounds">Nombre de tours</label>
-                                <input id="hs-rounds" type="number" class="form-control hide-seek-rounds" min="@HideSeekSettings.MinRounds" max="@HideSeekSettings.MaxRounds"
-                                       value="@settings.Rounds" @onchange="RoundsChanged" />
-
-                                <label class="form-label" for="hs-seconds">Durée d'un tour (secondes)</label>
-                                <input id="hs-seconds" type="number" class="form-control hide-seek-seconds" min="@HideSeekSettings.MinSeconds" max="@HideSeekSettings.MaxSeconds" step="5"
-                                       value="@settings.RoundSeconds" @onchange="SecondsChanged" />
-
-                                <label class="form-label" for="hs-countdown">Décompte avant chaque tour (secondes)</label>
-                                <input id="hs-countdown" type="number" class="form-control hide-seek-countdown" min="@HideSeekSettings.MinCountdown" max="@HideSeekSettings.MaxCountdown"
-                                       value="@settings.CountdownSeconds" @onchange="CountdownChanged" />
-
-                                <label class="form-label" for="hs-count">Pokémon dans le parc</label>
-                                <input id="hs-count" type="number" class="form-control hide-seek-count" min="@HideSeekSettings.MinCount" max="@HideSeekSettings.MaxCount"
-                                       value="@settings.Count" @onchange="CountChanged" />
-
-                                <label class="form-label" for="hs-pool">Pokémon</label>
-                                <select id="hs-pool" class="form-select hide-seek-pool" value="@settings.Pool" @onchange="PoolChanged">
-                                    @foreach (var pool in Enum.GetValues<HideSeekPool>())
-                                    {
-                                        <option value="@pool">@HideSeekSettings.PoolName(pool)</option>
-                                    }
-                                </select>
-
-                                <label class="form-label" for="hs-landscape">Parc</label>
-                                <select id="hs-landscape" class="form-select hide-seek-landscape" value="@(settings.Landscape?.ToString() ?? "")" @onchange="LandscapeChanged">
-                                    <option value="">Au hasard à chaque tour</option>
-                                    @foreach (var landscape in ParkLandscapes.All)
-                                    {
-                                        <option value="@landscape">@ParkLandscapes.Name(landscape)</option>
-                                    }
-                                </select>
-
-                                <label class="form-label" for="hs-mood">Humeur des Pokémon dans le parc</label>
-                                <select id="hs-mood" class="form-select hide-seek-mood" value="@settings.Mood" @onchange="MoodChanged">
-                                    @foreach (var mood in Enum.GetValues<HideSeekMood>())
-                                    {
-                                        <option value="@mood">@HideSeekSettings.MoodName(mood)</option>
-                                    }
-                                </select>
-
-                                <div class="form-check hide-seek-nicknamed-check">
-                                    <input class="form-check-input hide-seek-nicknamed" type="checkbox" id="hs-nicknamed" checked="@settings.Nicknamed"
-                                           disabled="@(settings.Pool == HideSeekPool.Random)" @onchange="NicknamedChanged" />
-                                    <label class="form-check-label" for="hs-nicknamed">Uniquement des Pokémon avec un surnom</label>
-                                </div>
-                                @if (settings.Pool != HideSeekPool.Random)
-                                {
-                                    <div class="form-check hide-seek-fill-check">
-                                        <input class="form-check-input hide-seek-fill" type="checkbox" id="hs-fill" checked="@settings.FillWithRandom" @onchange="FillChanged" />
-                                        <label class="form-check-label" for="hs-fill">Compléter le parc avec des Pokémon au hasard s'il n'y en a pas assez</label>
-                                    </div>
-                                }
-                            </div>
-                            @if (settings.Mood != HideSeekMood.All)
-                            {
-                                <p class="small text-muted mb-1">Comme au Parc : un Pokémon est heureux quand un habitat qu'il aime couvre plus de la moitié du parc, malheureux quand un habitat qu'il n'aime pas en couvre la moitié. Tous les Pokémon du parc, la cible comprise, ont l'humeur choisie.</p>
-                            }
-                            @if (settings.Pool == HideSeekPool.Random)
-                            {
-                                <p class="small text-muted mb-1">Les Pokémon aléatoires n'ont pas de surnom.</p>
-                            }
-                            @if (settings.Landscape == ParkLandscape.Ocean)
-                            {
-                                <p class="small text-muted mb-1">Dans l'océan, seuls les Pokémon qui nagent (type Eau) sont tirés.</p>
-                            }
-                            @if (poolInfo is not null)
-                            {
-                                <p class="small mb-2 hide-seek-pool-info @(poolTooSmall ? "text-danger" : "text-muted")">@poolInfo</p>
-                            }
+                            @SettingsForm(shown.Settings)
+                            @SettingsNotes(shown.Settings)
                         }
                         else
                         {
-                            <ul class="small hide-seek-settings-summary">
-                                <li>@SettingsLine(settings)</li>
-                                <li>Décompte de @settings.CountdownSeconds s avant chaque tour</li>
-                                <li>@HideSeekSettings.PoolName(settings.Pool)@(settings.Nicknamed ? ", seulement ceux qui ont un surnom" : "")</li>
-                                <li>Parc : @settings.LandscapeName</li>
-                                @if (settings.Mood != HideSeekMood.All)
-                                {
-                                    <li>Humeur des Pokémon : @settings.MoodNote.Trim(' ', '(', ')')</li>
-                                }
-                                @if (!settings.FillWithRandom && settings.Pool != HideSeekPool.Random)
-                                {
-                                    <li>Pas de Pokémon au hasard pour compléter le parc</li>
-                                }
-                            </ul>
+                            @SettingsSummary(shown.Settings)
                         }
                     </section>
                 </div>
-                @if (host)
-                {
-                    <button type="button" class="btn btn-primary hide-seek-start" disabled="@(busy || shown.Players.Count < 2 || poolTooSmall)" @onclick="Start">Lancer la partie</button>
-                    @if (shown.Players.Count < 2)
-                    {
-                        <p class="small text-muted mt-2 mb-0">Il faut au moins un autre joueur pour lancer la partie.</p>
-                    }
-                }
-                else
-                {
-                    <p class="mb-0 hide-seek-waiting">En attente du lancement de la partie par @s.Host.Pseudo…</p>
-                }
+                @LobbyStart(s, shown, host)
             </ChildContent>
         </Block>
+    };
+
+    /// <summary>Salle d'attente : le code de la partie, à copier, et l'heure où la salle ferme.</summary>
+    private RenderFragment LobbyCode(HideSeekSession s) => __builder =>
+    {
+        <h3 class="h6">Code de la partie</h3>
+        <p class="small text-muted mb-1">Donne-le aux autres joueurs, avec ou sans compte : ils le saisissent dans la page du cache-cache.</p>
+        <div class="chess-code hide-seek-code" aria-label="Code de la partie">@ChessHub.FormatCode(s.Code)</div>
+        <div class="chess-code-buttons">
+            <button type="button" class="btn btn-sm btn-outline-primary hide-seek-copy-code" @onclick="() => Copy(s.Code, false)">Copier le code</button>
+            <button type="button" class="btn btn-sm btn-outline-primary hide-seek-copy-link" @onclick="() => Copy(JoinLink(s.Code), true)">Copier le lien</button>
+        </div>
+        <p class="small text-muted">La salle d'attente ferme à @s.ExpiresAt.ToLocalTime().ToString("HH:mm") si la partie n'est pas lancée.</p>
+    };
+
+    /// <summary>Salle d'attente : les joueurs entrés, puis les invités qui n'ont pas encore répondu.</summary>
+    private RenderFragment LobbyPlayers(HideSeekSnapshot shown) => __builder =>
+    {
+        <h3 class="h6">Joueurs (@shown.Players.Count / @HideSeekHub.MaxPlayers)</h3>
+        <ul class="list-unstyled hide-seek-players">
+            @foreach (var p in shown.Players)
+            {
+                <li>@p.Pseudo@(p.UserId == userId ? " (toi)" : "") @if (p.IsHost) { <span class="badge text-bg-secondary ms-1">hôte</span> }</li>
+            }
+            @foreach (var p in shown.Invited)
+            {
+                <li class="text-muted hide-seek-invited">@p.Pseudo <span class="small">· invité, en attente de sa réponse</span></li>
+            }
+        </ul>
+    };
+
+    /// <summary>Salle d'attente, chez l'hôte : inviter un ami qui n'est ni dans la partie ni déjà invité.</summary>
+    private RenderFragment InviteFriends(HideSeekSnapshot shown, List<FriendEntry> list) => __builder =>
+    {
+        var available = list.Where(f => shown.Players.All(p => p.UserId != f.UserId) && shown.Invited.All(p => p.UserId != f.UserId)).ToList();
+        @if (available.Count > 0)
+        {
+            <div class="chess-new">
+                <select class="form-select hide-seek-friend" aria-label="Ami" value="@friendId" @onchange="e => friendId = e.Value?.ToString() ?? string.Empty">
+                    <option value="">Choisis un ami…</option>
+                    @foreach (var f in available)
+                    {
+                        <option value="@f.UserId">@(f.Pseudo ?? FriendService.NoPseudo)</option>
+                    }
+                </select>
+                <button type="button" class="btn btn-outline-primary hide-seek-invite" disabled="@(friendId.Length == 0)" @onclick="Invite">Inviter</button>
+            </div>
+        }
+        else if (list.Count == 0)
+        {
+            <p class="small text-muted">Pour inviter un ami, ajoute-en dans <a href="amis">Amis</a>.</p>
+        }
+    };
+
+    /// <summary>Salle d'attente, chez l'hôte : les champs des réglages.</summary>
+    private RenderFragment SettingsForm(HideSeekSettings settings) => __builder =>
+    {
+        <div class="hide-seek-settings">
+            <label class="form-label" for="hs-rounds">Nombre de tours</label>
+            <input id="hs-rounds" type="number" class="form-control hide-seek-rounds" min="@HideSeekSettings.MinRounds" max="@HideSeekSettings.MaxRounds"
+                   value="@settings.Rounds" @onchange="RoundsChanged" />
+
+            <label class="form-label" for="hs-seconds">Durée d'un tour (secondes)</label>
+            <input id="hs-seconds" type="number" class="form-control hide-seek-seconds" min="@HideSeekSettings.MinSeconds" max="@HideSeekSettings.MaxSeconds" step="5"
+                   value="@settings.RoundSeconds" @onchange="SecondsChanged" />
+
+            <label class="form-label" for="hs-countdown">Décompte avant chaque tour (secondes)</label>
+            <input id="hs-countdown" type="number" class="form-control hide-seek-countdown" min="@HideSeekSettings.MinCountdown" max="@HideSeekSettings.MaxCountdown"
+                   value="@settings.CountdownSeconds" @onchange="CountdownChanged" />
+
+            <label class="form-label" for="hs-count">Pokémon dans le parc</label>
+            <input id="hs-count" type="number" class="form-control hide-seek-count" min="@HideSeekSettings.MinCount" max="@HideSeekSettings.MaxCount"
+                   value="@settings.Count" @onchange="CountChanged" />
+
+            <label class="form-label" for="hs-pool">Pokémon</label>
+            <select id="hs-pool" class="form-select hide-seek-pool" value="@settings.Pool" @onchange="PoolChanged">
+                @foreach (var pool in Enum.GetValues<HideSeekPool>())
+                {
+                    <option value="@pool">@HideSeekSettings.PoolName(pool)</option>
+                }
+            </select>
+
+            <label class="form-label" for="hs-landscape">Parc</label>
+            <select id="hs-landscape" class="form-select hide-seek-landscape" value="@(settings.Landscape?.ToString() ?? "")" @onchange="LandscapeChanged">
+                <option value="">Au hasard à chaque tour</option>
+                @foreach (var landscape in ParkLandscapes.All)
+                {
+                    <option value="@landscape">@ParkLandscapes.Name(landscape)</option>
+                }
+            </select>
+
+            <label class="form-label" for="hs-mood">Humeur des Pokémon dans le parc</label>
+            <select id="hs-mood" class="form-select hide-seek-mood" value="@settings.Mood" @onchange="MoodChanged">
+                @foreach (var mood in Enum.GetValues<HideSeekMood>())
+                {
+                    <option value="@mood">@HideSeekSettings.MoodName(mood)</option>
+                }
+            </select>
+
+            <div class="form-check hide-seek-nicknamed-check">
+                <input class="form-check-input hide-seek-nicknamed" type="checkbox" id="hs-nicknamed" checked="@settings.Nicknamed"
+                       disabled="@(settings.Pool == HideSeekPool.Random)" @onchange="NicknamedChanged" />
+                <label class="form-check-label" for="hs-nicknamed">Uniquement des Pokémon avec un surnom</label>
+            </div>
+            @if (settings.Pool != HideSeekPool.Random)
+            {
+                <div class="form-check hide-seek-fill-check">
+                    <input class="form-check-input hide-seek-fill" type="checkbox" id="hs-fill" checked="@settings.FillWithRandom" @onchange="FillChanged" />
+                    <label class="form-check-label" for="hs-fill">Compléter le parc avec des Pokémon au hasard s'il n'y en a pas assez</label>
+                </div>
+            }
+        </div>
+    };
+
+    /// <summary>Salle d'attente, chez l'hôte : les explications sous les réglages, et combien de Pokémon le choix donne.</summary>
+    private RenderFragment SettingsNotes(HideSeekSettings settings) => __builder =>
+    {
+        @if (settings.Mood != HideSeekMood.All)
+        {
+            <p class="small text-muted mb-1">Comme au Parc : un Pokémon est heureux quand un habitat qu'il aime couvre plus de la moitié du parc, malheureux quand un habitat qu'il n'aime pas en couvre la moitié. Tous les Pokémon du parc, la cible comprise, ont l'humeur choisie.</p>
+        }
+        @if (settings.Pool == HideSeekPool.Random)
+        {
+            <p class="small text-muted mb-1">Les Pokémon aléatoires n'ont pas de surnom.</p>
+        }
+        @if (settings.Landscape == ParkLandscape.Ocean)
+        {
+            <p class="small text-muted mb-1">Dans l'océan, seuls les Pokémon qui nagent (type Eau) sont tirés.</p>
+        }
+        @if (poolInfo is not null)
+        {
+            <p class="small mb-2 hide-seek-pool-info @(poolTooSmall ? "text-danger" : "text-muted")">@poolInfo</p>
+        }
+    };
+
+    /// <summary>Salle d'attente, chez les autres joueurs : les réglages choisis par l'hôte.</summary>
+    private static RenderFragment SettingsSummary(HideSeekSettings settings) => __builder =>
+    {
+        <ul class="small hide-seek-settings-summary">
+            <li>@SettingsLine(settings)</li>
+            <li>Décompte de @settings.CountdownSeconds s avant chaque tour</li>
+            <li>@HideSeekSettings.PoolName(settings.Pool)@(settings.Nicknamed ? ", seulement ceux qui ont un surnom" : "")</li>
+            <li>Parc : @settings.LandscapeName</li>
+            @if (settings.Mood != HideSeekMood.All)
+            {
+                <li>Humeur des Pokémon : @settings.MoodNote.Trim(' ', '(', ')')</li>
+            }
+            @if (!settings.FillWithRandom && settings.Pool != HideSeekPool.Random)
+            {
+                <li>Pas de Pokémon au hasard pour compléter le parc</li>
+            }
+        </ul>
+    };
+
+    /// <summary>Bas de la salle d'attente : le lancement chez l'hôte, l'attente chez les autres.</summary>
+    private RenderFragment LobbyStart(HideSeekSession s, HideSeekSnapshot shown, bool host) => __builder =>
+    {
+        @if (host)
+        {
+            <button type="button" class="btn btn-primary hide-seek-start" disabled="@(busy || shown.Players.Count < 2 || poolTooSmall)" @onclick="Start">Lancer la partie</button>
+            @if (shown.Players.Count < 2)
+            {
+                <p class="small text-muted mt-2 mb-0">Il faut au moins un autre joueur pour lancer la partie.</p>
+            }
+        }
+        else
+        {
+            <p class="mb-0 hide-seek-waiting">En attente du lancement de la partie par @s.Host.Pseudo…</p>
+        }
     };
 
     /// <summary>
@@ -824,88 +885,127 @@ else
     private RenderFragment Game(HideSeekSession s, HideSeekSnapshot shown) => __builder =>
     {
         var round = shown.Round!;
-        var countdown = shown.Stage == HideSeekStage.Playing && shown.Phase == HideSeekPhase.Countdown && SecondsUntil(shown.StartsAt) > 0;
-        var blocked = shown.Stage == HideSeekStage.Playing && shown.Phase != HideSeekPhase.Reveal && SecondsUntil(shown.BlockedUntil) > 0;
-        var revealed = shown.Phase == HideSeekPhase.Reveal || s.IsOver;
+        var countdown = IsCountdown(shown);
         <div class="hide-seek-board park" @ref="boardBlock">
             <div class="park-stage hide-seek-stage" @ref="boardHost"></div>
             @if (countdown && shown.Target is { } announced)
             {
-                <div class="hide-seek-cover">
-                    <div class="hide-seek-announce card" role="dialog" aria-modal="true" aria-label="Cible du tour">
-                        <div class="card-body">
-                            <div class="small text-muted">Tour @shown.RoundNumber sur @shown.Settings.Rounds · @ParkLandscapes.Name(round.Landscape)</div>
-                            <div class="hide-seek-announce-title">Trouve</div>
-                            <img src="@announced.ImageUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
-                            <div class="hide-seek-announce-name">@announced.Name</div>
-                            @if (shown.Settings.Nicknamed && announced.OwnerPseudo is { } announcedOwner)
-                            {
-                                <div class="small text-muted">Pokémon de @announcedOwner</div>
-                            }
-                            <div class="hide-seek-announce-count" aria-live="polite">@SecondsUntil(shown.StartsAt)</div>
-                        </div>
-                    </div>
-                </div>
+                @Announcement(shown, round, announced)
             }
-            else if (blocked)
+            else if (IsBlocked(shown))
             {
                 <div class="hide-seek-blocked">Bloqué @SecondsUntil(shown.BlockedUntil) s</div>
             }
-            <div class="hide-seek-panel">
-                <div class="small text-muted hide-seek-round">Tour @shown.RoundNumber sur @shown.Settings.Rounds · @ParkLandscapes.Name(round.Landscape) · @round.Pokemon.Count Pokémon</div>
-                @if (shown.Target is { } target && !countdown)
-                {
-                    <div class="hide-seek-target @(revealed ? "revealed" : "")">
-                        <img src="@target.ImageUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
-                        <div>
-                            <div class="small text-muted">@(revealed ? "La cible était" : "Trouve")</div>
-                            <div class="hide-seek-target-name">@target.Name</div>
-                            @if (shown.Settings.Nicknamed && target.OwnerPseudo is { } owner)
-                            {
-                                <div class="small text-muted hide-seek-target-owner">Pokémon de @owner</div>
-                            }
-                        </div>
-                    </div>
-                }
-                <div class="chess-status hide-seek-status" aria-live="polite">
-                    <span class="chess-status-text">@StatusText(s, shown)</span>
-                    @if (shown.Stage == HideSeekStage.Playing && shown.Phase != HideSeekPhase.Reveal && !countdown)
+            @Panel(s, shown, round, countdown)
+        </div>
+    };
+
+    /// <summary>Le décompte : la recherche n'a pas commencé.</summary>
+    private bool IsCountdown(HideSeekSnapshot shown) =>
+        shown.Stage == HideSeekStage.Playing && shown.Phase == HideSeekPhase.Countdown && SecondsUntil(shown.StartsAt) > 0;
+
+    /// <summary>Bloqué par un mauvais clic, pendant la recherche.</summary>
+    private bool IsBlocked(HideSeekSnapshot shown) =>
+        shown.Stage == HideSeekStage.Playing && shown.Phase != HideSeekPhase.Reveal && SecondsUntil(shown.BlockedUntil) > 0;
+
+    /// <summary>Pendant le décompte, le pop-up sur le parc caché : la cible annoncée et les secondes qui restent.</summary>
+    private RenderFragment Announcement(HideSeekSnapshot shown, HideSeekRound round, HideSeekMon announced) => __builder =>
+    {
+        <div class="hide-seek-cover">
+            <div class="hide-seek-announce card" role="dialog" aria-modal="true" aria-label="Cible du tour">
+                <div class="card-body">
+                    <div class="small text-muted">Tour @shown.RoundNumber sur @shown.Settings.Rounds · @ParkLandscapes.Name(round.Landscape)</div>
+                    <div class="hide-seek-announce-title">Trouve</div>
+                    <img src="@announced.ImageUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+                    <div class="hide-seek-announce-name">@announced.Name</div>
+                    @if (shown.Settings.Nicknamed && announced.OwnerPseudo is { } announcedOwner)
                     {
-                        var left = SecondsUntil(shown.Deadline);
-                        <span class="chess-timer @(left <= 10 ? "urgent" : "")">@Clock(left)</span>
+                        <div class="small text-muted">Pokémon de @announcedOwner</div>
                     }
+                    <div class="hide-seek-announce-count" aria-live="polite">@SecondsUntil(shown.StartsAt)</div>
                 </div>
-                @* Le dernier clic de ce tour ; à la fin du tour, seulement s'il a trouvé (« Raté » ne servirait plus) *@
-                @if (clickText is not null && clickRound == shown.RoundNumber && shown.Stage == HideSeekStage.Playing
-                     && (clickFound || shown.Phase != HideSeekPhase.Reveal))
-                {
-                    <p class="small hide-seek-click @(clickFound ? "text-success" : "text-danger")">@clickText</p>
-                }
-                @if (shown.Notice is not null)
-                {
-                    <p class="small text-muted hide-seek-notice">@shown.Notice</p>
-                }
+            </div>
+        </div>
+    };
 
-                <ol class="hide-seek-scores" aria-label="Pokémon trouvés">
-                    @foreach (var p in shown.Players.OrderBy(p => p.Left).ThenByDescending(p => p.Found))
-                    {
-                        <li class="@(p.UserId == userId ? "me" : "") @(p.Left ? "left" : "")">
-                            <span>@p.Pseudo@(p.Left ? " (parti)" : "")</span>
-                            <strong>@p.Found</strong>
-                        </li>
-                    }
-                </ol>
+    /// <summary>Le panneau par-dessus le parc : le tour, le rappel de la cible, le temps, le dernier clic, les scores, la suite.</summary>
+    private RenderFragment Panel(HideSeekSession s, HideSeekSnapshot shown, HideSeekRound round, bool countdown) => __builder =>
+    {
+        <div class="hide-seek-panel">
+            <div class="small text-muted hide-seek-round">Tour @shown.RoundNumber sur @shown.Settings.Rounds · @ParkLandscapes.Name(round.Landscape) · @round.Pokemon.Count Pokémon</div>
+            @if (shown.Target is { } target && !countdown)
+            {
+                @TargetReminder(target, shown.Settings, shown.Phase == HideSeekPhase.Reveal || s.IsOver)
+            }
+            <div class="chess-status hide-seek-status" aria-live="polite">
+                <span class="chess-status-text">@StatusText(s, shown)</span>
+                @Timer(shown, countdown)
+            </div>
+            @ClickMessage(shown)
+            @if (shown.Notice is not null)
+            {
+                <p class="small text-muted hide-seek-notice">@shown.Notice</p>
+            }
+            @Scores(shown)
+            @if (shown.Stage == HideSeekStage.Playing)
+            {
+                <button type="button" class="btn btn-sm btn-outline-danger hide-seek-quit" @onclick="Quit">Quitter la partie</button>
+            }
+            else
+            {
+                @EndButtons(s)
+            }
+        </div>
+    };
 
-                @if (shown.Stage == HideSeekStage.Playing)
+    /// <summary>Le rappel de la cible dans le panneau ; à la fin du tour, la cible qu'il fallait trouver.</summary>
+    private static RenderFragment TargetReminder(HideSeekMon target, HideSeekSettings settings, bool revealed) => __builder =>
+    {
+        <div class="hide-seek-target @(revealed ? "revealed" : "")">
+            <img src="@target.ImageUrl" alt="" data-remplacement="images/pokemon/inconnu.png" />
+            <div>
+                <div class="small text-muted">@(revealed ? "La cible était" : "Trouve")</div>
+                <div class="hide-seek-target-name">@target.Name</div>
+                @if (settings.Nicknamed && target.OwnerPseudo is { } owner)
                 {
-                    <button type="button" class="btn btn-sm btn-outline-danger hide-seek-quit" @onclick="Quit">Quitter la partie</button>
-                }
-                else
-                {
-                    @EndButtons(s)
+                    <div class="small text-muted hide-seek-target-owner">Pokémon de @owner</div>
                 }
             </div>
         </div>
+    };
+
+    /// <summary>Le temps qui reste pendant la recherche (rouge les 10 dernières secondes).</summary>
+    private RenderFragment Timer(HideSeekSnapshot shown, bool countdown) => __builder =>
+    {
+        @if (shown.Stage == HideSeekStage.Playing && shown.Phase != HideSeekPhase.Reveal && !countdown)
+        {
+            var left = SecondsUntil(shown.Deadline);
+            <span class="chess-timer @(left <= 10 ? "urgent" : "")">@Clock(left)</span>
+        }
+    };
+
+    /// <summary>Le dernier clic de ce tour ; à la fin du tour, seulement s'il a trouvé (« Raté » ne servirait plus).</summary>
+    private RenderFragment ClickMessage(HideSeekSnapshot shown) => __builder =>
+    {
+        @if (clickText is not null && clickRound == shown.RoundNumber && shown.Stage == HideSeekStage.Playing
+             && (clickFound || shown.Phase != HideSeekPhase.Reveal))
+        {
+            <p class="small hide-seek-click @(clickFound ? "text-success" : "text-danger")">@clickText</p>
+        }
+    };
+
+    /// <summary>Les Pokémon trouvés par chaque joueur, du meilleur au moins bon ; les joueurs partis à la fin.</summary>
+    private RenderFragment Scores(HideSeekSnapshot shown) => __builder =>
+    {
+        <ol class="hide-seek-scores" aria-label="Pokémon trouvés">
+            @foreach (var p in shown.Players.OrderBy(p => p.Left).ThenByDescending(p => p.Found))
+            {
+                <li class="@(p.UserId == userId ? "me" : "") @(p.Left ? "left" : "")">
+                    <span>@p.Pseudo@(p.Left ? " (parti)" : "")</span>
+                    <strong>@p.Found</strong>
+                </li>
+            }
+        </ol>
     };
 
     /// <summary>Écran de fin : la proposition de l'hôte de recommencer, ou son bouton ; une nouvelle partie ; l'accueil.</summary>
@@ -946,10 +1046,16 @@ else
         if (shown.Phase == HideSeekPhase.Countdown && SecondsUntil(shown.StartsAt) > 0)
             return "Prépare-toi…"; // sous le pop-up d'annonce
         if (shown.Phase == HideSeekPhase.Reveal)
-            return shown.FoundBy is { } by
-                ? by == s.PseudoOf(userId) ? "Bravo, tu l'as trouvé !" : $"{by} l'a trouvé."
-                : "Temps écoulé : personne ne l'a trouvé.";
+            return RevealText(s, shown.FoundBy);
         return "Cherche-le dans le parc !";
+    }
+
+    /// <summary>À la fin du tour : qui a trouvé la cible (pseudo), ou personne.</summary>
+    private string RevealText(HideSeekSession s, string? foundBy)
+    {
+        if (foundBy is null)
+            return "Temps écoulé : personne ne l'a trouvé.";
+        return foundBy == s.PseudoOf(userId) ? "Bravo, tu l'as trouvé !" : $"{foundBy} l'a trouvé.";
     }
 
     /// <summary>Les règles, dans l'aide des blocs.</summary>

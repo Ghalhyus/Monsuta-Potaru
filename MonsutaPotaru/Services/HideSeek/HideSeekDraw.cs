@@ -82,12 +82,13 @@ public sealed record HideSeekSettings(
     }
 
     /// <summary>« 1 min 30 », « 45 s », « 2 min ».</summary>
-    public static string Duration(int seconds) => (seconds / 60, seconds % 60) switch
+    public static string Duration(int seconds)
     {
-        (0, var s) => $"{s} s",
-        (var m, 0) => $"{m} min",
-        (var m, var s) => $"{m} min {s:00}",
-    };
+        var (m, s) = (seconds / 60, seconds % 60);
+        if (m == 0)
+            return $"{s} s";
+        return s == 0 ? $"{m} min" : $"{m} min {s:00}";
+    }
 
     /// <summary>Nom du choix de Pokémon (« La collection de l'hôte »...).</summary>
     public static string PoolName(HideSeekPool pool) => pool switch
