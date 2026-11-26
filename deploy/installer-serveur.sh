@@ -5,25 +5,28 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== 1/6 Mise à jour du système"
+echo "== 1/7 Mise à jour du système"
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 sudo apt-get install -y ufw openssl curl cron # cron : absent des images Debian minimales
 sudo systemctl enable --now cron
 
-echo "== 2/6 Pare-feu : seulement SSH, HTTP et HTTPS"
+echo "== 2/7 Pare-feu : seulement SSH, HTTP et HTTPS"
 sudo ufw allow OpenSSH
 sudo ufw allow 80,443/tcp
 sudo ufw --force enable
 
-echo "== 3/6 Docker"
+echo "== 3/7 SSH : fail2ban, réglages resserrés"
+bash deploy/securiser-serveur.sh
+
+echo "== 4/7 Docker"
 if ! command -v docker > /dev/null; then
     # HTTPS exigé, redirections comprises : le script téléchargé est lancé avec sudo.
     curl -fsSL --proto '=https' --tlsv1.2 https://get.docker.com | sudo sh
 fi
 sudo usermod -aG docker "$USER" # docker sans sudo, à partir de la prochaine connexion
 
-echo "== 4/6 Réglages (.env)"
+echo "== 5/7 Réglages (.env)"
 if [[ ! -f .env ]]; then
     read -rp "Nom de domaine (ex. monsuta-potaru.mondomaine.fr ; vide = test en HTTP sur l'adresse IP) : " domain
     read -rp "Pseudo de ton compte, qui sera administrateur (à l'inscription) : " admin
@@ -34,11 +37,11 @@ else
     echo ".env existe déjà : conservé."
 fi
 
-echo "== 5/6 Sauvegarde automatique chaque nuit à 4 h (gardée 14 jours dans ~/sauvegardes)"
+echo "== 6/7 Sauvegarde automatique chaque nuit à 4 h (gardée 14 jours dans ~/sauvegardes)"
 job="0 4 * * * bash $PWD/deploy/sauvegarder.sh >> $HOME/sauvegardes.log 2>&1"
 ( crontab -l 2> /dev/null | grep -v 'deploy/sauvegarder.sh' || true ; echo "$job" ) | crontab -
 
-echo "== 6/6 Construction et démarrage (quelques minutes la première fois)"
+echo "== 7/7 Construction et démarrage (quelques minutes la première fois)"
 sudo docker compose up -d --build
 
 domain=$(grep '^DOMAIN=' .env | cut -d= -f2-)

@@ -95,3 +95,11 @@
   - Les outils de ub-mode (crapper, dryer, mutator, de Robert C. Martin) ne lisent pas le C# : ceux-ci les remplacent.
 - Un nouveau fichier nécessaire au déploiement s'ajoute à l'archive des deux côtés (`publier.ps1` et le workflow ; rappelé
   dans `CLAUDE.md`).
+- **Accès SSH de GitHub** : la clé `github-actions-*` du VPS est bridée par `restrict` (`deploy/securiser-serveur.sh`) :
+  pas de terminal, ni de redirection de ports ou d'agent. `scp`, `ssh ... 'commande'` et `ssh ... "bash -s" <<'SCRIPT'`
+  marchent ; une étape qui aurait besoin d'un terminal (`ssh -t`) ou d'un tunnel (`ssh -L`) échouerait. fail2ban
+  ne bannit que les échecs : les machines de GitHub (adresses Azure et AWS, liste dans `https://api.github.com/meta`,
+  clé `actions`) ne sont pas touchées. Piège de Debian 13 : messages signés `sshd-session`, que le filtre livré
+  ignore (`_daemon` élargi dans `filter.d/sshd.local`) ; le script vérifie avec `fail2ban-regex` sur la dernière
+  demi-heure du journal. Contrôle des connexions par Claude : clé de l'utilisateur à phrase de passe,
+  donc lancé dans son terminal (`run_in_terminal`, avec `powershell -ExecutionPolicy Bypass -File` pour un `.ps1`).

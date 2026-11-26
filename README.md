@@ -1171,7 +1171,8 @@ l'IP du VPS.
 | `Caddyfile` | Réglages de Caddy (le domaine vient de `.env`) : compression des réponses, journal des accès (`docker compose logs caddy`, 3 × 10 Mo au plus par conteneur) ; Caddy redémarre au déploiement s'il a changé |
 | `.env.example` | Modèle des réglages : `DOMAIN`, `INVITE_CODE` (code de départ) et `ADMIN_PSEUDO` (premier administrateur) ; le vrai `.env` est créé sur le serveur |
 | `deploy/publier.cmd` (`publier.ps1`) | Depuis Windows : envoie le code sur le VPS et le met à jour |
-| `deploy/installer-serveur.sh` | Sur le VPS, une seule fois : pare-feu, Docker, `.env`, sauvegarde nocturne, démarrage |
+| `deploy/installer-serveur.sh` | Sur le VPS, une seule fois : pare-feu, sécurisation de SSH, Docker, `.env`, sauvegarde nocturne, démarrage |
+| `deploy/securiser-serveur.sh` | Sur le VPS (lancé par `installer-serveur.sh`, relançable) : fail2ban pour SSH (5 échecs en 10 min : banni 1 h, plus à chaque récidive, une semaine au plus), SSH réservé à l'utilisateur courant (3 essais, 1 min pour s'identifier, sans X11), clé de GitHub bridée (`restrict`). Adresse bannie par erreur : `sudo fail2ban-client set sshd unbanip <IP>`, depuis une autre connexion (partage de connexion du téléphone) ou la console KVM d'OVH |
 | `deploy/sauvegarder.sh` | Sauvegarde du volume de données (lancée chaque nuit par cron, gardée 14 jours) |
 | `deploy/renommer-serveur.cmd` (`.ps1`, `.sh`) | Une seule fois : passage du serveur de « PokeBank » à « Monsuta Potaru » (voir plus bas) |
 | `.github/workflows/ci.yml` | GitHub Actions, CI : tests à chaque push, et analyse SonarCloud (voir « CI/CD ») |
@@ -1239,7 +1240,9 @@ Mise en place (une fois), avec une clé SSH réservée à GitHub (révocable san
 1. Créer la clé, sans phrase de passe (Entrée deux fois) :
    `ssh-keygen -t ed25519 -C github-actions-monsuta-potaru -f "$HOME\.ssh\monsuta-potaru-github"`
 2. L'autoriser sur le VPS :
-   `Get-Content "$HOME\.ssh\monsuta-potaru-github.pub" | ssh ubuntu@IP_DU_VPS "cat >> ~/.ssh/authorized_keys"`
+   `Get-Content "$HOME\.ssh\monsuta-potaru-github.pub" | ssh ubuntu@IP_DU_VPS "cat >> ~/.ssh/authorized_keys"`, puis
+   la brider (ni terminal ni redirection ; `scp` et commandes marchent) :
+   `ssh ubuntu@IP_DU_VPS bash ~/monsuta-potaru/deploy/securiser-serveur.sh`
 3. Lire l'empreinte du VPS que ton PC connaît déjà (lignes sans `#`) : `ssh-keygen -F IP_DU_VPS`
 4. Sur GitHub, « Settings » → « Secrets and variables » → « Actions » → « New repository secret » :
    `VPS_HOST` (IP du VPS), `VPS_USER` (`ubuntu`, `debian`...), `VPS_SSH_KEY` (tout le contenu de
