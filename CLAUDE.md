@@ -34,6 +34,7 @@ dans la session, demander à l'utilisateur de le brancher.
 | Tester dans le navigateur : instance de test, compte, envoi d'un `.sav`, deux comptes, anti-copie | `docs/claude/navigateur.md` |
 | Minecraft (All the Mons, Cobblemon) : format NBT, zip ou dossier du monde (envoi filtré), mondes stockés, mondes séparés | `docs/claude/minecraft.md` |
 | CI/CD : workflows, SonarCloud, déploiement | `docs/claude/ci-cd.md` |
+| Sécurité : règles CA de sécurité, NuGet Audit, `npm audit`, ZAP, audit du code par un plugin | `docs/claude/securite.md` |
 
 Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau sujet : nouvelle fiche, et une ligne ici.
 

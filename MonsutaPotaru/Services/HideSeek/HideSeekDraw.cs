@@ -177,6 +177,8 @@ public sealed record HideSeekRound(int Number, ParkLandscape Landscape, int MapS
 /// des Pokémon aléatoires complètent (sauf si l'hôte l'a refusé : le parc en a moins). Avec une humeur demandée
 /// (<see cref="HideSeekSettings.Mood"/>), tous les Pokémon du parc l'ont, la cible comme les autres.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+    Justification = "Tirage d'un jeu : Random (graine du système, fixée dans les tests) suffit, rien de secret n'en dépend.")]
 public static class HideSeekDraw
 {
     /// <summary>

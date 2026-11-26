@@ -13,6 +13,11 @@
          débogueur de Visual Studio arrêtait à chaque connexion). Le code qui suit une redirection s'exécute : sortir
          (return) juste après, voir IdentityRedirectManager. -->
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Toutes les règles de sécurité des analyseurs .NET (CA2xxx de sécurité, CA3xxx, CA5xxx : injections, crypto
+         faible, désérialisation…), dont beaucoup sont désactivées par défaut : une faille repérée sort en avertissement
+         à la compilation. Exception justifiée dans le code (SuppressMessage) : CA5394 pour les tirages des jeux.
+         NuGet Audit est déjà actif sur les dépendances transitives (NuGetAuditMode = all par défaut avec le SDK 10). -->
+    <AnalysisModeSecurity>All</AnalysisModeSecurity>
   </PropertyGroup>
 
   <ItemGroup>
