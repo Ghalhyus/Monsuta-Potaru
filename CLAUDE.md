@@ -60,6 +60,11 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
   méthode (dans un `.razor`, chaque `RenderFragment` compte à part et ajoute un niveau : découper en petits fragments),
   pas de ternaire imbriqué, ni variable, paramètre ou test de `null` inutile. Après un push de l'utilisateur, vérifier
   sur l'analyse de ce commit qu'aucun nouveau problème ne vient du code écrit.
+- **Guide du joueur, économe en jetons** : `read_doc` renvoie tout le guide en JSON (lourd, pas de lecture par chapitre)
+  et ce JSON resterait relu à chaque tour suivant. Donc : mise à jour en **dernière étape** de la tâche, une fois le code
+  vérifié, confiée à un **sous-agent** (lui donner le chapitre et ce que le joueur voit de nouveau ; il lit la skill
+  `google-workspace`, écrit et ne renvoie qu'un bilan d'une ligne). Pour corriger une phrase existante, `replaceAllText`
+  suffit, sans lire le document.
 - À chaque fonctionnalité, tenir à jour **le guide du joueur** (ce que le joueur voit et peut faire, dans le chapitre de
   son menu) et **le README** (règles que le code doit respecter, en bref ; sauvegardes d'exemple ; tableau « Organisation
   du code »). Le détail technique va dans la fiche du sujet, pas dans le README.
