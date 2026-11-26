@@ -1,6 +1,17 @@
 # Caddy reçoit les visiteurs (ports 80 et 443), obtient et renouvelle tout seul le certificat HTTPS,
 # puis transmet chaque requête à l'application (service « monsuta-potaru » de docker-compose.yml, port 8080).
 # Le nom de domaine vient du fichier .env (DOMAIN=...) : rien à modifier ici.
+# Fichier monté seul dans le conteneur : un déploiement qui le change redémarre Caddy (cd.yml, publier.ps1).
 {$DOMAIN} {
+	# Journal des accès (IP, URL, User-Agent, taille...) vers « docker compose logs caddy » ; taille limitée dans
+	# docker-compose.yml. Caddy y masque les cookies et l'en-tête Authorization.
+	log {
+		output stdout
+		format json
+	}
+
+	# Compresse les réponses (HTML, JSON, CSS, JS) pour réduire le trafic sortant
+	encode zstd gzip
+
 	reverse_proxy monsuta-potaru:8080
 }

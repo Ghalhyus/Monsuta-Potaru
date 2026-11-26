@@ -123,6 +123,12 @@ jobs:
           fi
 
           docker compose up -d --build
+          # Caddyfile monté seul : le tar en écrit un nouveau fichier, que le conteneur ne voit pas. Redémarrage de Caddy
+          # (une seconde de coupure) seulement s'il a changé.
+          if ! docker compose exec -T caddy cat /etc/caddy/Caddyfile | cmp -s - Caddyfile; then
+            echo "Caddyfile modifié : redémarrage de Caddy."
+            docker compose restart caddy
+          fi
           # Anciennes images, et cache de construction de plus de 3 jours : sans ça, chaque déploiement en ajoutait quelques
           # centaines de Mo (20 Go en novembre 2026). Le cache récent reste : restauration NuGet, images du SDK et de Node.
           docker image prune -f > /dev/null

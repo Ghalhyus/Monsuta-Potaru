@@ -1168,7 +1168,7 @@ l'IP du VPS.
 |---|---|
 | `Dockerfile` | Image de l'application |
 | `docker-compose.yml` | Application + Caddy, volume de données `monsuta-potaru_monsuta-potaru-data` |
-| `Caddyfile` | Réglages de Caddy (le domaine vient de `.env`) |
+| `Caddyfile` | Réglages de Caddy (le domaine vient de `.env`) : compression des réponses, journal des accès (`docker compose logs caddy`, 3 × 10 Mo au plus par conteneur) ; Caddy redémarre au déploiement s'il a changé |
 | `.env.example` | Modèle des réglages : `DOMAIN`, `INVITE_CODE` (code de départ) et `ADMIN_PSEUDO` (premier administrateur) ; le vrai `.env` est créé sur le serveur |
 | `deploy/publier.cmd` (`publier.ps1`) | Depuis Windows : envoie le code sur le VPS et le met à jour |
 | `deploy/installer-serveur.sh` | Sur le VPS, une seule fois : pare-feu, Docker, `.env`, sauvegarde nocturne, démarrage |

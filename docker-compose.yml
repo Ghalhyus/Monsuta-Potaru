@@ -2,10 +2,19 @@
 # Réglages dans le fichier .env (voir .env.example). Lancement : docker compose up -d --build
 name: monsuta-potaru # nom fixe : le volume de données s'appelle toujours monsuta-potaru_monsuta-potaru-data
 
+# Journaux (« docker compose logs ») limités à 3 fichiers de 10 Mo par conteneur : le journal des accès de Caddy
+# remplirait sinon le disque.
+x-journaux: &journaux
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   monsuta-potaru:
     build: .
     restart: unless-stopped
+    logging: *journaux
     environment:
       # Code d'invitation de départ : gardé en base au premier démarrage, puis géré depuis la page « Administration ».
       - Bank__InviteCode=${INVITE_CODE:?INVITE_CODE manquant dans .env}
@@ -23,6 +32,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *journaux
     environment:
       # Sans nom de domaine : site en HTTP simple sur l'adresse IP, pour tester uniquement.
       - DOMAIN=${DOMAIN:-:80}
