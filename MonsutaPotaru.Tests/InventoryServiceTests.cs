@@ -1,11 +1,16 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using PKHeX.Core;
 using MonsutaPotaru.Data;
 using MonsutaPotaru.Services;
 
 namespace MonsutaPotaru.Tests;
 
-/// <summary>Porte-monnaie : retrait de Pokédollars depuis une sauvegarde stockée, journal, encadrement de la mise à jour.</summary>
+/// <summary>
+/// Inventaire : porte-monnaie (retrait de Pokédollars, journal, encadrement de la mise à jour), objets (retrait, dépôt,
+/// transfert entre deux sauvegardes, autre onglet au milieu d'une opération) et sac des jeux (<see cref="SaveBag"/>).
+/// </summary>
 public sealed class InventoryServiceTests : IDisposable
 {
     private readonly TestDatabase _db = new("sacha", "ondine");
@@ -127,6 +132,16 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.False((await _inventory.WithdrawFromSaveAsync("sacha", id, 1_000)).Ok);
         Assert.Equal(100_000u, await StoredMoney(id));
         Assert.Equal(0, await _inventory.GetBalanceAsync("sacha"));
+    }
+
+    [Fact]
+    public async Task Sources_ListOnlyThePlayersOwnSaves()
+    {
+        var mine = await Store(items: [(PokeBall, 3)]);
+        await Store(owner: "ondine", ot: "Ondine", items: [(PokeBall, 5)]);
+
+        Assert.Equal(mine, Assert.Single(await _inventory.ListMoneySourcesAsync("sacha")).SaveId);
+        Assert.Equal(mine, Assert.Single(await _inventory.ListItemSourcesAsync("sacha")).SaveId);
     }
 
     [Fact]
@@ -279,6 +294,97 @@ public sealed class InventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task WithdrawingAnItemAlreadyInTheInventory_AddsToIt_ForThatPlayerOnly()
+    {
+        using (var db = _db.NewContext())
+        {
+            db.OwnedItems.Add(new OwnedItem { OwnerId = "ondine", ItemId = PokeBall, Count = 7 });
+            await db.SaveChangesAsync();
+        }
+        var id = await Store(items: [(PokeBall, 20)]);
+
+        Assert.True((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = 5 })).Ok);
+        Assert.True((await _inventory.WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = 3 })).Ok);
+
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 8 }, await InventoryItems());
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 7 }, await InventoryItems("ondine"));
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 12 }, await StoredItems(id));
+    }
+
+    [Fact]
+    public async Task Deposit_OfItemsUsedFromAnotherTabMeanwhile_IsRefused_AndChangesNothing()
+    {
+        var source = await Store(items: [(PokeBall, 10)], ot: "Pierre");
+        Assert.True((await _inventory.WithdrawItemsAsync("sacha", source, new Dictionary<int, int> { [PokeBall] = 10 })).Ok);
+        var b2 = await Store(items: [(PokeBall, 1)]);
+
+        // L'autre onglet dépose les Poké Ball entre la vérification de l'inventaire et son débit.
+        var result = await _db.Inventory(new DrainOwnedItemsBeforeDebit()).DepositItemsAsync("sacha", b2, new Dictionary<int, int> { [PokeBall] = 4 });
+
+        Assert.False(result.Ok);
+        Assert.Equal("Ton inventaire ne contient plus assez de Poké Ball (utilisé depuis un autre onglet ?).", result.Message);
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 1 }, await StoredItems(b2)); // transaction annulée : sac inchangé
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 10 }, await InventoryItems());
+        Assert.Equal([WalletOperationKind.WithdrawItemsFromSave], (await _inventory.ListOperationsAsync("sacha")).Select(o => o.Kind));
+        Assert.False((await _saves.ListAsync("sacha")).Single(s => s.Id == b2).ModifiedOnServer);
+    }
+
+    [Fact]
+    public async Task Withdraw_FromASaveChangedInAnotherTabMeanwhile_IsRefused_AndChangesNothing()
+    {
+        var id = await Store(items: [(PokeBall, 10)]);
+
+        // L'autre onglet enregistre une nouvelle version de la sauvegarde entre sa lecture et son écriture.
+        var result = await _db.Inventory(new BumpSaveVersionBeforeWrite()).WithdrawItemsAsync("sacha", id, new Dictionary<int, int> { [PokeBall] = 4 });
+
+        Assert.False(result.Ok);
+        Assert.Equal(StoredSaveService.ConflictResult().Message, result.Message);
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 10 }, await StoredItems(id));
+        Assert.Empty(await InventoryItems());
+        Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
+        Assert.False(Assert.Single(await _saves.ListAsync("sacha")).ModifiedOnServer);
+    }
+
+    /// <summary>Vide l'inventaire juste avant son débit conditionnel (« un autre onglet a utilisé ces objets »), une seule fois.</summary>
+    private sealed class DrainOwnedItemsBeforeDebit : DbCommandInterceptor
+    {
+        private bool _done;
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var isDebit = command.CommandText.StartsWith("UPDATE \"OwnedItems\"", StringComparison.Ordinal) && command.CommandText.Contains(">=");
+            if (!_done && isDebit)
+            {
+                _done = true;
+                await using var drain = command.Connection!.CreateCommand();
+                drain.Transaction = command.Transaction;
+                drain.CommandText = "UPDATE \"OwnedItems\" SET \"Count\" = 0";
+                await drain.ExecuteNonQueryAsync(cancellationToken);
+            }
+            return result;
+        }
+    }
+
+    /// <summary>Change la version des sauvegardes juste avant leur écriture (« un autre onglet l'a modifiée »), une seule fois.</summary>
+    private sealed class BumpSaveVersionBeforeWrite : SaveChangesInterceptor
+    {
+        private bool _done;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            var context = eventData.Context!;
+            if (!_done && context.ChangeTracker.Entries<StoredSave>().Any(e => e.State == EntityState.Modified))
+            {
+                _done = true;
+                await context.Database.ExecuteSqlRawAsync("UPDATE \"StoredSaves\" SET \"Version\" = \"Version\" + 1", cancellationToken);
+            }
+            return result;
+        }
+    }
+
+    [Fact]
     public async Task DepositBalls_MovesThemFromTheInventoryToAnotherGame()
     {
         // Retirées de Platine, déposées dans Noir 2 : une Super Ball est le même objet d'un jeu à l'autre.
@@ -374,6 +480,21 @@ public sealed class InventoryServiceTests : IDisposable
 
         var slots = sav.Inventory.Pouches.First(p => p.CanContain(HyperBall)).Items; // poche « Objets » en 5e génération
         Assert.Equal([HyperBall, SuperBall, 0], slots.Take(3).Select(s => s.Index));
+    }
+
+    [Fact]
+    public void SaveBag_Withdraw_TakesFromEverySlotOfTheItem()
+    {
+        // 150 Potion dans Émeraude (13 en numérotation de la 3e génération) : 99 au plus par emplacement, donc deux piles.
+        var sav = new SAV3E();
+        var inventory = sav.Inventory;
+        var items = inventory.GetPouch(InventoryType.Items).Items;
+        (items[0].Index, items[0].Count, items[1].Index, items[1].Count) = (13, 99, 13, 51);
+        inventory.CopyTo(sav);
+        Assert.Equal(new Dictionary<int, int> { [Potion] = 150 }, SaveBag.ReadItems(sav));
+
+        Assert.Null(SaveBag.Withdraw(sav, new Dictionary<int, int> { [Potion] = 120 }, i => $"{i}"));
+        Assert.Equal(new Dictionary<int, int> { [Potion] = 30 }, SaveBag.ReadItems(sav));
     }
 
     // ---------- Médicaments ----------
@@ -899,6 +1020,30 @@ public sealed class InventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void SaveBag_SecondGeneration_EmptiesTheByteOfEachWithdrawnMachine()
+    {
+        // La CT01 est le premier octet de la poche : il faut une CT plus loin (CT26 Séisme) pour vérifier lequel est remis à zéro.
+        var sav = new SAV2(LanguageID.French, GameVersion.C);
+        var dynamicPunchTM = SaveBag.MachineKey(DynamicPunch);
+        Assert.Null(SaveBag.Deposit(sav, new Dictionary<int, int> { [EarthquakeTM] = 2, [dynamicPunchTM] = 1 }, i => $"{i}", "Cristal"));
+
+        Assert.Null(SaveBag.Withdraw(sav, new Dictionary<int, int> { [EarthquakeTM] = 2 }, i => $"{i}"));
+        Assert.Equal(new Dictionary<int, int> { [dynamicPunchTM] = 1 }, SaveBag.ReadItems(sav)); // relue en mémoire, comme Red
+    }
+
+    [Fact]
+    public void SaveBag_DepositToThePc_CountsWhatThePcHolds_NotTheBag()
+    {
+        var sav = Red();
+        SaveSessionTests.GiveItems(sav, (20, 1)); // une Potion dans le sac (20 : numéro de Rouge/Bleu)
+        var max = SaveBag.Capacity(sav, BagPlace.Pc)[Potion];
+
+        Assert.Null(SaveBag.Deposit(sav, new Dictionary<int, int> { [Potion] = max }, _ => "Potion", "Rouge / Bleu", BagPlace.Pc));
+        Assert.Equal(new Dictionary<int, int> { [Potion] = max }, SaveBag.ReadItems(sav, BagPlace.Pc));
+        Assert.Equal(new Dictionary<int, int> { [Potion] = 1 }, SaveBag.ReadItems(sav, BagPlace.Bag));
+    }
+
+    [Fact]
     public void SaveBag_ThirdGeneration_ReadsItsPc_ButNeverItsHiddenMachines()
     {
         var sav = new SAV3E();
@@ -1077,6 +1222,21 @@ public sealed class InventoryServiceTests : IDisposable
         Assert.Equal(b2Before, await StoredItems(b2));
         Assert.Empty(await _inventory.ListOperationsAsync("sacha"));
         Assert.All(await _saves.ListAsync("sacha"), s => Assert.False(s.ModifiedOnServer));
+    }
+
+    [Fact]
+    public async Task TransferBetweenSaves_RefusesTheSaveOfAnotherPlayer_EvenWithOnlyOneOfHisOwn()
+    {
+        // Une seule sauvegarde à lui, une à Ondine : deux sauvegardes trouvées si le propriétaire n'était pas vérifié.
+        var mine = await Store(items: [(PokeBall, 3)]);
+        var hers = await Store(owner: "ondine", ot: "Ondine", items: [(PokeBall, 5)]);
+
+        var result = await _inventory.TransferBetweenSavesAsync("sacha", mine, hers, [new(mine, BagPlace.Bag, BagPlace.Bag, PokeBall, 2)]);
+
+        Assert.False(result.Ok);
+        Assert.Equal("Une des deux sauvegardes n'existe plus.", result.Message);
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 5 }, await StoredItems(hers));
+        Assert.Equal(new Dictionary<int, int> { [PokeBall] = 3 }, await StoredItems(mine));
     }
 
     [Fact]

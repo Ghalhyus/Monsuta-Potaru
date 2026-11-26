@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,8 +41,13 @@ public sealed class TestDatabase : IDisposable
     public StoredSaveService StoredSaves() =>
         new(Factory, new PokemonInfo(), Config, new FakeEnvironment(), NullLogger<StoredSaveService>.Instance);
 
-    public InventoryService Inventory() =>
-        new(Factory, StoredSaves(), new PokemonInfo(), NullLogger<InventoryService>.Instance);
+    /// <summary>
+    /// Service de l'inventaire ; avec des <paramref name="interceptors"/> d'EF, pour provoquer ce que ferait un autre onglet au
+    /// milieu d'une opération (voir <c>InventoryServiceTests</c>).
+    /// </summary>
+    public InventoryService Inventory(params IInterceptor[] interceptors) =>
+        new(interceptors.Length == 0 ? Factory : new DbFactory(new DbContextOptionsBuilder<ApplicationDbContext>(Options).AddInterceptors(interceptors).Options),
+            StoredSaves(), new PokemonInfo(), NullLogger<InventoryService>.Instance);
 
     public SyncService Sync() =>
         new(Factory, StoredSaves(), NullLogger<SyncService>.Instance);

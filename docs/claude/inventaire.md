@@ -70,3 +70,21 @@ Même modèle que les Pokéballs, médicaments, baies et CT :
   (`[JSInvokable]`, revérifié). Champ du compteur recréé à chaque saisie (`@key` avec `typed`) : sinon un nombre ramené
   dans les bornes à la même valeur qu'avant reste affiché tel que tapé (Blazor ne réécrit pas un attribut inchangé).
 - Le glisser au doigt n'a pas pu être essayé sur un vrai téléphone (l'émulation du navigateur envoie des clics de souris).
+
+## Tester
+- Test de mutation du 2026-11-26 (Stryker, voir `ci-cd.md`) sur `InventoryService.cs` et `SaveBag.cs`, avec les seuls tests
+  de l'inventaire (`test-case-filter` `FullyQualifiedName~MonsutaPotaru.Tests.Inventory`, 17 min) : 68,9 % (service
+  63,5 %, `SaveBag` 76 %). Les mutants non couverts de `BuyCollectionSlotsAsync` viennent du filtre (testé dans
+  `CollectionCapacityTests`).
+- Trous trouvés ce jour-là, bouchés par un test chacun dans `InventoryServiceTests` : crédit d'un objet déjà dans
+  l'inventaire (`+` → `-` survivait), requêtes des sources et du transfert sans le filtre du propriétaire (`&&` → `||` :
+  un autre joueur n'avait jamais de sauvegarde dans ces tests, ou le transfert en voyait trois), retrait d'un objet réparti
+  sur plusieurs emplacements, octets des CT de la 2e génération au-delà de la CT01 (indice 0 : `offset + i` =
+  `offset - i`), dépôt dans le PC jugé d'après le nombre du sac, débit concurrent et conflit de version jamais provoqués.
+  Reste : des refus vérifiés sans leur message (`Ok == false` seul : le refus peut venir d'une autre vérification).
+- Autre onglet au milieu d'une opération : `_db.Inventory(intercepteurs)` (`TestDatabase`), avec un `DbCommandInterceptor`
+  qui vide l'inventaire juste avant le débit, ou un `SaveChangesInterceptor` qui change la `Version` juste avant
+  l'écriture ; les deux agissent dans la transaction du service, annulée avec elle.
+- Mutants sans doute équivalents : `reusable` des CT de la 5e à la 7e génération (Noir 2 et Soleil / Lune sont vérifiés à
+  1 par sac et le mutant survit : la poche de PKHeX doit déjà s'arrêter à 1, non vérifié), `Version--` au lieu de `++`
+  (le jeton change quand même), journalisation. Celui de Légendes Z-A n'est pas équivalent : aucun test ne lit ses CT.
