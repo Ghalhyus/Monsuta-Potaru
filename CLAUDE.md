@@ -50,6 +50,10 @@ Une fiche fausse ou incomplète : la corriger dans la même tâche. Un nouveau s
   (`innerWidth * devicePixelRatio`), pas en pixels CSS.
 - Vérifier dans un vrai navigateur (instance de test : `docs/claude/navigateur.md`) avant d'annoncer qu'une
   fonctionnalité marche.
+- **Bug** : d'abord un test qui le reproduit et échoue pour la bonne raison, puis la correction. Corriger la cause : un
+  garde-fou qui ne fait que cacher le plantage (`?.`, `try`/`catch` vide, valeur par défaut) n'est pas une correction.
+- **Test inutile** : un test qui passerait encore si toutes les fonctions ne renvoyaient rien (ou leur valeur par
+  défaut) ne vérifie rien ; le réécrire pour qu'il contrôle ce que le joueur voit, ou le supprimer.
 - À chaque fonctionnalité, tenir à jour **le guide du joueur** (ce que le joueur voit et peut faire, dans le chapitre de
   son menu) et **le README** (règles que le code doit respecter, en bref ; sauvegardes d'exemple ; tableau « Organisation
   du code »). Le détail technique va dans la fiche du sujet, pas dans le README.
