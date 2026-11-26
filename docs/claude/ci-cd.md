@@ -6,9 +6,18 @@
   `dotnet sonarscanner begin` (pas de `sonar-project.properties`) ; règles écartées pour `outils/**` par
   `sonar.issue.ignore.multicriteria` : `python:S2245` (aléatoire à graine fixe voulu) et `pythonsecurity:*` (chemins de
   la ligne de commande : scripts lancés à la main). Le reste (complexité...) se corrige dans le code.
-- Problèmes à corriger : l'utilisateur colle le JSON de l'API SonarCloud (`issues` : règle, fichier, ligne). Une
-  refonte de `outils/generer-parc.py`, `generer-plage.py`, `generer-volcan.py` ou `parc_carte.py` se vérifie en comparant ses sorties avant/après (`cmp` : cartes et aperçus
-  identiques octet pour octet, graine fixe).
+- **Lire SonarCloud** (règle de `CLAUDE.md`) : projet public, API sans jeton, lue par Claude lui-même (`curl`) :
+  - Problèmes ouverts d'un fichier ou d'un dossier : la clé du projet, deux-points, le chemin depuis la racine du dépôt
+    dans `componentKeys` :
+    `https://sonarcloud.io/api/issues/search?componentKeys=ghalhyus_monsuta-potaru:MonsutaPotaru/Components/Pages/HideSeek.razor&resolved=false&ps=500`
+    (dans la réponse, `issues[]` : `rule`, `line`, `message`). Tout le projet : `componentKeys=ghalhyus_monsuta-potaru`.
+  - Pièges vérifiés le 2026-11-26 : `files=`, `components=` et `inNewCodePeriod=true` sont ignorés sans erreur (les 95
+    problèmes du projet reviennent) ; `directories=<chemin>` marche aussi, avec `componentKeys=<clé du projet>`.
+  - Quel commit est analysé : `https://sonarcloud.io/api/project_analyses/search?project=ghalhyus_monsuta-potaru&ps=3`
+    (`date`, `revision`). Si ce n'est pas le dernier commit poussé, l'analyse n'a pas encore tourné (ou l'étape a échoué
+    sans faire échouer la CI : `continue-on-error`) : les problèmes lus datent d'avant.
+  - Une refonte de `outils/generer-parc.py`, `generer-plage.py`, `generer-volcan.py` ou `parc_carte.py` se vérifie en
+    comparant ses sorties avant/après (`cmp` : cartes et aperçus identiques octet pour octet, graine fixe).
 - **Couverture** : objectif 70 % (environ 88 % fin 2026-11, 51 % avant les tests de pages), pour information (rien ne
   bloque). Chiffre de SonarCloud = (lignes couvertes + conditions couvertes) / (lignes + conditions), hors `Data/Migrations`,
   `outils`, `deploy` et les scripts de `wwwroot/js` sans tests (`SCRIPTS_SANS_TESTS` dans `ci.yml` : sinon comptés à
